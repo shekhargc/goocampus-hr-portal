@@ -4,305 +4,410 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{% block title %}GooCampus HR Portal{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
+        :root {
+            --orange: #F58220;
+            --orange-dark: #D96E0E;
+            --orange-light: #FFF3E6;
+            --orange-hover: #E0750E;
+            --blue: #4A7AB5;
+            --blue-dark: #3A6299;
+            --blue-light: #E8F0FA;
+            --navy: #1B2A4A;
+            --navy-dark: #0F1B33;
+            --navy-light: #2A3F66;
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1E293B;
+            --gray-900: #0F172A;
+            --success: #10B981;
+            --success-light: #ECFDF5;
+            --danger: #EF4444;
+            --danger-light: #FEF2F2;
+            --warning: #F59E0B;
+            --warning-light: #FEF3C7;
         }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Aptos Narrow', Arial, sans-serif;
-            background: #f8fafc;
-            color: #1e293b;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: var(--gray-50);
+            color: var(--gray-800);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
         }
 
+        /* ===== NAVBAR ===== */
         .navbar {
-            background: #1a56db;
+            background: var(--navy);
             color: white;
-            padding: 0 2rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar-inner {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 0 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
             height: 60px;
         }
-
         .navbar-brand {
-            font-weight: 700;
-            font-size: 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
             text-decoration: none;
             color: white;
         }
-
+        .navbar-brand-logo {
+            width: 34px;
+            height: 34px;
+        }
+        .navbar-brand-text {
+            font-weight: 700;
+            font-size: 1.05rem;
+            line-height: 1.2;
+        }
+        .navbar-brand-text .goo { color: var(--orange); }
+        .navbar-brand-sub {
+            font-size: 0.6rem;
+            opacity: 0.5;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-weight: 400;
+        }
         .navbar-nav {
             display: flex;
-            gap: 2rem;
+            gap: 0.25rem;
             align-items: center;
             list-style: none;
         }
-
         .navbar-nav a {
-            color: white;
+            color: rgba(255,255,255,0.8);
             text-decoration: none;
-            font-size: 0.9rem;
-            transition: opacity 0.2s;
+            font-size: 0.84rem;
+            font-weight: 500;
+            padding: 0.5rem 0.75rem;
+            border-radius: 0.4rem;
+            transition: all 0.15s;
         }
-
         .navbar-nav a:hover {
-            opacity: 0.8;
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
+        .navbar-nav a.active {
+            color: white;
+            background: var(--orange);
+        }
+        .nav-divider {
+            width: 1px;
+            height: 24px;
+            background: rgba(255,255,255,0.15);
+            margin: 0 0.25rem;
         }
 
-        .nav-dropdown {
-            position: relative;
-        }
-
+        /* Dropdown */
+        .nav-dropdown { position: relative; }
         .nav-dropdown-toggle {
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 0.5rem;
+            color: rgba(255,255,255,0.8);
+            padding: 0.45rem 0.65rem;
+            border-radius: 0.4rem;
+            transition: all 0.15s;
+            font-size: 0.84rem;
         }
-
+        .nav-dropdown-toggle:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
         .nav-dropdown-menu {
             display: none;
             position: absolute;
             right: 0;
-            background: white;
+            top: 100%;
+            margin-top: 0.25rem;
+            background: var(--white);
             border-radius: 0.5rem;
-            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
             min-width: 200px;
             z-index: 1000;
+            overflow: hidden;
+            border: 1px solid var(--gray-200);
         }
-
-        .nav-dropdown:hover .nav-dropdown-menu {
-            display: block;
-        }
-
+        .nav-dropdown:hover .nav-dropdown-menu { display: block; }
         .nav-dropdown-menu a {
-            display: block;
-            color: #1e293b;
-            padding: 0.75rem 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
+            color: var(--gray-700) !important;
+            padding: 0.7rem 1rem;
             text-decoration: none;
-            transition: background 0.2s;
+            transition: background 0.15s;
+            border-radius: 0;
+            font-size: 0.85rem;
         }
-
         .nav-dropdown-menu a:hover {
-            background: #f1f5f9;
+            background: var(--orange-light) !important;
+            color: var(--orange-dark) !important;
+        }
+        .nav-dropdown-menu a svg { flex-shrink: 0; }
+
+        /* Approvals Badge */
+        .nav-badge {
+            background: var(--danger);
+            color: white;
+            font-size: 0.65rem;
+            padding: 0.1rem 0.35rem;
+            border-radius: 9999px;
+            font-weight: 700;
+            margin-left: 0.25rem;
+            line-height: 1.3;
         }
 
+        /* ===== CONTAINER ===== */
         .container {
-            max-width: 1200px;
+            max-width: 1400px;
             margin: 0 auto;
-            padding: 2rem;
+            padding: 1.75rem 1.5rem;
+            flex: 1;
         }
 
+        /* ===== FOOTER ===== */
+        .app-footer {
+            background: var(--navy-dark);
+            color: rgba(255,255,255,0.4);
+            text-align: center;
+            padding: 1rem 1.5rem;
+            font-size: 0.75rem;
+            margin-top: auto;
+        }
+        .app-footer span { color: var(--orange); }
+
+        /* ===== ALERTS ===== */
         .alert {
-            padding: 1rem;
-            margin-bottom: 1.5rem;
+            padding: 0.85rem 1.15rem;
+            margin-bottom: 1.25rem;
             border-radius: 0.5rem;
             border-left: 4px solid;
+            font-size: 0.88rem;
+            display: flex;
+            align-items: center;
+            gap: 0.6rem;
         }
-
         .alert-success {
-            background: #ecfdf5;
-            border-color: #10b981;
-            color: #065f46;
+            background: var(--success-light);
+            border-color: var(--success);
+            color: #065F46;
         }
-
         .alert-error {
-            background: #fef2f2;
-            border-color: #ef4444;
-            color: #7f1d1d;
+            background: var(--danger-light);
+            border-color: var(--danger);
+            color: #991B1B;
         }
-
         .alert-info {
-            background: #eff6ff;
-            border-color: #3b82f6;
-            color: #1e40af;
+            background: var(--blue-light);
+            border-color: var(--blue);
+            color: var(--blue-dark);
         }
 
+        /* ===== CARDS ===== */
         .card {
-            background: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            background: var(--white);
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200);
             padding: 1.5rem;
             margin-bottom: 1.5rem;
         }
-
         .card-title {
-            font-size: 1.1rem;
+            font-size: 1.05rem;
             font-weight: 600;
             margin-bottom: 1rem;
-            color: #1e293b;
+            color: var(--navy);
         }
 
+        /* ===== BUTTONS ===== */
         .button {
-            display: inline-block;
-            padding: 0.5rem 1rem;
-            background: #1a56db;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.55rem 1.1rem;
+            background: var(--orange);
             color: white;
             border: none;
             border-radius: 0.5rem;
             cursor: pointer;
-            font-size: 0.9rem;
+            font-size: 0.88rem;
+            font-weight: 500;
             text-decoration: none;
-            transition: background 0.2s;
+            transition: all 0.15s;
+            font-family: inherit;
         }
-
         .button:hover {
-            background: #1e40af;
+            background: var(--orange-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 8px rgba(245,130,32,0.25);
         }
-
         .button-secondary {
-            background: #64748b;
+            background: var(--blue);
         }
-
         .button-secondary:hover {
-            background: #475569;
+            background: var(--blue-dark);
+            box-shadow: 0 4px 8px rgba(74,122,181,0.25);
         }
-
         .button-danger {
-            background: #ef4444;
+            background: var(--danger);
         }
-
         .button-danger:hover {
-            background: #dc2626;
+            background: #DC2626;
+            box-shadow: 0 4px 8px rgba(239,68,68,0.25);
         }
-
         .button-success {
-            background: #10b981;
+            background: var(--success);
         }
-
         .button-success:hover {
             background: #059669;
+            box-shadow: 0 4px 8px rgba(16,185,129,0.25);
         }
-
         .button-small {
-            padding: 0.25rem 0.75rem;
-            font-size: 0.85rem;
+            padding: 0.3rem 0.75rem;
+            font-size: 0.82rem;
         }
 
+        /* ===== FORMS ===== */
         .form-group {
-            margin-bottom: 1.5rem;
+            margin-bottom: 1.25rem;
         }
-
         .form-group label {
             display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 500;
-            color: #1e293b;
+            margin-bottom: 0.4rem;
+            font-weight: 600;
+            color: var(--gray-700);
+            font-size: 0.85rem;
         }
-
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 0.5rem;
-            border: 1px solid #cbd5e1;
+            padding: 0.6rem 0.8rem;
+            border: 2px solid var(--gray-200);
             border-radius: 0.5rem;
             font-family: inherit;
             font-size: 0.9rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: var(--white);
         }
-
         .form-group textarea {
             resize: vertical;
             min-height: 100px;
         }
-
         .form-group input:focus,
         .form-group select:focus,
         .form-group textarea:focus {
             outline: none;
-            border-color: #1a56db;
-            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
         }
 
+        /* ===== TABLES ===== */
         .table {
             width: 100%;
             border-collapse: collapse;
             background: white;
         }
-
         .table thead {
-            background: #f1f5f9;
-            border-bottom: 1px solid #cbd5e1;
+            background: var(--navy);
+            color: white;
         }
-
         .table th {
-            padding: 1rem;
+            padding: 0.85rem 1rem;
             text-align: left;
             font-weight: 600;
-            color: #1e293b;
+            font-size: 0.82rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
-
         .table td {
-            padding: 1rem;
-            border-bottom: 1px solid #e2e8f0;
+            padding: 0.85rem 1rem;
+            border-bottom: 1px solid var(--gray-100);
+            font-size: 0.9rem;
         }
-
         .table tbody tr:hover {
-            background: #f8fafc;
+            background: var(--orange-light);
         }
 
+        /* ===== BADGES ===== */
         .badge {
-            display: inline-block;
+            display: inline-flex;
+            align-items: center;
             padding: 0.25rem 0.75rem;
             border-radius: 9999px;
-            font-size: 0.8rem;
-            font-weight: 500;
+            font-size: 0.78rem;
+            font-weight: 600;
         }
-
         .badge-pending {
-            background: #fef3c7;
-            color: #92400e;
+            background: var(--warning-light);
+            color: #92400E;
         }
-
         .badge-approved {
-            background: #dcfce7;
+            background: var(--success-light);
             color: #166534;
         }
-
         .badge-rejected {
-            background: #fee2e2;
-            color: #991b1b;
+            background: var(--danger-light);
+            color: #991B1B;
         }
 
+        /* ===== SUMMARY CARDS ===== */
         .summary-cards {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
-
         .summary-card {
-            background: white;
-            border-radius: 0.5rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            background: var(--white);
+            border-radius: 0.75rem;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200);
             padding: 1.5rem;
             text-align: center;
-            border-left: 4px solid #1a56db;
+            border-top: 3px solid var(--orange);
         }
-
         .summary-card-value {
             font-size: 2rem;
             font-weight: 700;
-            color: #1a56db;
+            color: var(--navy);
             margin-bottom: 0.5rem;
         }
-
         .summary-card-label {
-            font-size: 0.9rem;
-            color: #64748b;
+            font-size: 0.88rem;
+            color: var(--gray-500);
         }
 
+        /* ===== GRID HELPERS ===== */
         .grid-2 {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1.5rem;
             margin-bottom: 2rem;
         }
-
         .grid-3 {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
@@ -310,107 +415,96 @@
             margin-bottom: 2rem;
         }
 
+        /* ===== CALENDAR ===== */
         .calendar {
-            background: white;
-            border-radius: 0.5rem;
+            background: var(--white);
+            border-radius: 0.75rem;
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200);
         }
-
         .calendar-header {
-            background: #1a56db;
+            background: linear-gradient(135deg, var(--navy), var(--navy-light));
             color: white;
             padding: 1.5rem;
             text-align: center;
         }
-
         .calendar-header h2 {
             font-size: 1.3rem;
             margin-bottom: 1rem;
         }
-
         .calendar-nav {
             display: flex;
             justify-content: space-between;
             gap: 1rem;
         }
-
         .calendar-nav a {
             color: white;
             text-decoration: none;
             padding: 0.5rem 1rem;
-            background: rgba(0, 0, 0, 0.2);
-            border-radius: 0.25rem;
+            background: rgba(255,255,255,0.12);
+            border-radius: 0.4rem;
             transition: background 0.2s;
+            font-size: 0.85rem;
         }
-
         .calendar-nav a:hover {
-            background: rgba(0, 0, 0, 0.3);
+            background: var(--orange);
         }
-
         .calendar-table {
             width: 100%;
             border-collapse: collapse;
         }
-
         .calendar-table th {
-            background: #f1f5f9;
+            background: var(--gray-100);
             padding: 0.75rem;
             text-align: center;
             font-weight: 600;
-            border-bottom: 2px solid #cbd5e1;
+            font-size: 0.82rem;
+            color: var(--navy);
+            border-bottom: 2px solid var(--gray-200);
         }
-
         .calendar-table td {
-            border: 1px solid #e2e8f0;
+            border: 1px solid var(--gray-100);
             height: 100px;
             vertical-align: top;
             padding: 0.5rem;
             position: relative;
         }
-
         .calendar-table td.weekend {
-            background: #f1f5f9;
+            background: #FAFBFC;
         }
-
         .calendar-table td.holiday {
-            background: #fef3c7;
+            background: var(--warning-light);
         }
-
         .calendar-table td.today {
-            border: 2px solid #1a56db;
-            border-width: 2px;
+            border: 2px solid var(--orange);
         }
-
         .calendar-table td.other-month {
-            background: #fafbfc;
-            color: #cbd5e1;
+            background: #FAFBFC;
+            color: var(--gray-300);
         }
-
         .calendar-day-number {
             font-weight: 600;
-            color: #1e293b;
+            color: var(--gray-800);
             margin-bottom: 0.25rem;
         }
-
         .calendar-day-content {
             font-size: 0.8rem;
         }
-
         .holiday-badge {
             display: inline-block;
-            background: #f59e0b;
+            background: var(--orange);
             color: white;
-            padding: 0.25rem 0.5rem;
+            padding: 0.2rem 0.45rem;
             border-radius: 0.25rem;
-            font-size: 0.7rem;
+            font-size: 0.68rem;
             margin-top: 0.25rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
             max-width: 90px;
+            font-weight: 600;
         }
-
         .leave-dot {
             display: inline-block;
             width: 6px;
@@ -418,101 +512,117 @@
             border-radius: 50%;
             margin-right: 0.25rem;
         }
-
-        .leave-annual {
-            background: #1a56db;
-        }
-
-        .leave-sick {
-            background: #10b981;
-        }
-
-        .leave-casual {
-            background: #f59e0b;
-        }
-
+        .leave-annual { background: var(--blue); }
+        .leave-sick { background: var(--success); }
+        .leave-casual { background: var(--orange); }
         .leave-pending {
-            border: 1px dashed #1a56db;
+            border: 1px dashed var(--blue);
             border-radius: 2px;
             padding: 0.25rem;
         }
 
+        /* ===== FORM ROW ===== */
         .form-row {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 1rem;
         }
 
+        /* ===== PAGE HEADER ===== */
+        .page-header {
+            margin-bottom: 1.75rem;
+            padding-bottom: 1rem;
+            border-bottom: 2px solid var(--gray-100);
+        }
+        .page-header h1 {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.2rem;
+        }
+        .page-header p {
+            color: var(--gray-500);
+            font-size: 0.9rem;
+        }
+
+        /* ===== RESPONSIVE ===== */
         @media (max-width: 768px) {
-            .navbar {
-                padding: 0 1rem;
-            }
-
-            .navbar-nav {
-                gap: 1rem;
-            }
-
-            .container {
-                padding: 1rem;
-            }
-
-            .summary-cards {
-                grid-template-columns: 1fr;
-            }
-
-            .calendar-table td {
-                height: auto;
-                min-height: 80px;
-                font-size: 0.8rem;
-            }
-
-            .form-row {
-                grid-template-columns: 1fr;
-            }
+            .navbar-inner { padding: 0 1rem; }
+            .navbar-nav { gap: 0.15rem; }
+            .navbar-nav a { padding: 0.4rem 0.5rem; font-size: 0.78rem; }
+            .container { padding: 1rem; }
+            .summary-cards { grid-template-columns: 1fr; }
+            .calendar-table td { height: auto; min-height: 80px; font-size: 0.8rem; }
+            .form-row { grid-template-columns: 1fr; }
+            .navbar-brand-sub { display: none; }
         }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
 <body>
     <nav class="navbar">
-        <a href="/" class="navbar-brand">GooCampus HR Portal</a>
-        <ul class="navbar-nav">
-            {% if session.get('is_admin') %}
-                <li><a href="/admin/dashboard">Dashboard</a></li>
-                <li><a href="/admin/calendar">Calendar</a></li>
-                <li><a href="/admin/add-leave">Add Leave</a></li>
-                <li><a href="/admin/bulk-leave">Bulk Leave</a></li>
-                <li><a href="/admin/manage-employees">Employees</a></li>
-                <li><a href="/admin/org-chart">Org Chart</a></li>
-                <li><a href="/admin/monthly-report">Monthly Report</a></li>
-                <li><a href="/admin/holidays">Holidays</a></li>
-            {% else %}
-                <li><a href="/dashboard">Dashboard</a></li>
-                <li><a href="/calendar">Calendar</a></li>
-                <li><a href="/apply-leave">Apply Leave</a></li>
-                {% if is_manager %}
-                <li><a href="/approvals" style="position: relative;">
-                    Approvals
-                    {% if pending_team_count > 0 %}
-                    <span style="background: #ef4444; color: white; font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 9999px; position: absolute; top: -5px; right: -10px;">{{ pending_team_count }}</span>
-                    {% endif %}
-                </a></li>
-                {% endif %}
-            {% endif %}
-
-            {% if session.get('user_id') %}
-            <li class="nav-dropdown">
-                <span class="nav-dropdown-toggle">
-                    ☰
-                </span>
-                <div class="nav-dropdown-menu">
-                    <a href="/profile">Profile</a>
-                    <a href="/change-password">Change Password</a>
-                    <a href="/logout">Logout</a>
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">
+                <svg class="navbar-brand-logo" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="8" width="19" height="19" rx="2.5" stroke="#4A7AB5" stroke-width="2.5" fill="none"/>
+                    <rect x="12" y="0" width="19" height="19" rx="2.5" stroke="#F58220" stroke-width="2.5" fill="none"/>
+                    <text x="17" y="15" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="800" fill="#F58220">G</text>
+                </svg>
+                <div>
+                    <div class="navbar-brand-text"><span class="goo">Goo</span>Campus HR</div>
+                    <div class="navbar-brand-sub">Edu Solutions Pvt Ltd</div>
                 </div>
-            </li>
-            {% endif %}
-        </ul>
+            </a>
+            <ul class="navbar-nav">
+                {% if session.get('is_admin') %}
+                    <li><a href="/admin/dashboard">Dashboard</a></li>
+                    <li><a href="/admin/calendar">Calendar</a></li>
+                    <li><a href="/admin/add-leave">Add Leave</a></li>
+                    <li><a href="/admin/bulk-leave">Bulk Leave</a></li>
+                    <li><a href="/admin/manage-employees">Employees</a></li>
+                    <li><a href="/admin/org-chart">Org Chart</a></li>
+                    <li><a href="/admin/monthly-report">Reports</a></li>
+                    <li><a href="/admin/holidays">Holidays</a></li>
+                {% else %}
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/calendar">Calendar</a></li>
+                    <li><a href="/apply-leave">Apply Leave</a></li>
+                    {% if is_manager %}
+                    <li><a href="/approvals" style="position: relative;">
+                        Approvals
+                        {% if pending_team_count > 0 %}
+                        <span class="nav-badge">{{ pending_team_count }}</span>
+                        {% endif %}
+                    </a></li>
+                    {% endif %}
+                {% endif %}
+
+                {% if session.get('user_id') %}
+                <li class="nav-divider"></li>
+                <li class="nav-dropdown">
+                    <span class="nav-dropdown-toggle">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                        Account
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                    </span>
+                    <div class="nav-dropdown-menu">
+                        <a href="/profile">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                            My Profile
+                        </a>
+                        <a href="/change-password">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+                            Change Password
+                        </a>
+                        <a href="/logout" style="border-top: 1px solid var(--gray-100);">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="var(--danger)" stroke-width="2"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+                            <span style="color: var(--danger);">Logout</span>
+                        </a>
+                    </div>
+                </li>
+                {% endif %}
+            </ul>
+        </div>
     </nav>
 
     <div class="container">
@@ -526,5 +636,9 @@
 
         {% block content %}{% endblock %}
     </div>
+
+    <footer class="app-footer">
+        &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;|&nbsp; Bangalore, India &nbsp;|&nbsp; GSTIN: 29AAHCG2048J1ZE
+    </footer>
 </body>
 </html>
