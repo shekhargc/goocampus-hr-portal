@@ -1,0 +1,187 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Employees - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 1rem; }
+    .emp-card {
+        background: white; border-radius: 0.75rem; padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0;
+        transition: box-shadow 0.2s, transform 0.15s; position: relative;
+    }
+    .emp-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.12); transform: translateY(-2px); }
+    .emp-card-top { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .emp-avatar { width: 48px; height: 48px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; flex-shrink: 0; }
+    .emp-avatar-init {
+        width: 48px; height: 48px; border-radius: 50%; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.1rem; color: white; flex-shrink: 0;
+    }
+    .emp-name { font-weight: 600; font-size: 0.95rem; color: #1e293b; text-decoration: none; }
+    .emp-name:hover { color: #1a56db; }
+    .emp-meta { font-size: 0.8rem; color: #64748b; margin-top: 0.15rem; }
+    .emp-details { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem; }
+    .emp-tag { font-size: 0.75rem; padding: 0.2rem 0.5rem; border-radius: 0.25rem; background: #f1f5f9; color: #475569; }
+    .emp-actions { position: absolute; top: 1rem; right: 1rem; display: flex; gap: 0.4rem; }
+    .icon-btn {
+        width: 32px; height: 32px; border-radius: 0.375rem; border: 1px solid #e2e8f0;
+        background: white; cursor: pointer; display: flex; align-items: center; justify-content: center;
+        transition: all 0.15s; font-size: 0.85rem; color: #64748b;
+    }
+    .icon-btn:hover { background: #f1f5f9; color: #1e293b; }
+    .icon-btn.danger:hover { background: #fef2f2; color: #ef4444; border-color: #fecaca; }
+    .dept-section { margin-bottom: 2rem; }
+    .dept-header {
+        display: flex; align-items: center; gap: 0.75rem; margin-bottom: 1rem;
+        padding-bottom: 0.5rem; border-bottom: 2px solid #e2e8f0;
+    }
+    .dept-badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 28px; height: 28px; border-radius: 50%; font-size: 0.8rem; font-weight: 700; color: white;
+    }
+    .modal-overlay {
+        display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.4); z-index: 999; align-items: center; justify-content: center;
+    }
+    .modal-overlay.active { display: flex; }
+    .modal {
+        background: white; border-radius: 0.75rem; padding: 2rem; width: 480px;
+        max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.2); max-height: 90vh; overflow-y: auto;
+    }
+    .modal h2 { margin-bottom: 1.5rem; font-size: 1.2rem; }
+    .modal .form-group { margin-bottom: 1rem; }
+    .modal .form-group label { font-size: 0.85rem; }
+    .modal .form-group input, .modal .form-group select { padding: 0.6rem 0.75rem; font-size: 0.9rem; }
+    .modal-actions { display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem; }
+    .page-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
+    .search-bar {
+        padding: 0.6rem 1rem; border: 1px solid #cbd5e1; border-radius: 0.5rem;
+        font-size: 0.9rem; width: 280px; background: white;
+    }
+    .search-bar:focus { outline: none; border-color: #1a56db; box-shadow: 0 0 0 3px rgba(26,86,219,0.1); }
+    .stat-row { display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat-pill {
+        display: flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem;
+        background: white; border-radius: 2rem; border: 1px solid #e2e8f0; font-size: 0.85rem;
+    }
+    .stat-pill strong { color: #1a56db; }
+    .inactive-card { opacity: 0.5; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div>
+        <h1 style="margin-bottom: 0.25rem;">Employees</h1>
+        <p style="color: #64748b; font-size: 0.9rem;">{{ employees | length }} team members across {{ dept_employees | length }} departments</p>
+    </div>
+    <div style="display: flex; gap: 0.75rem; align-items: center;">
+        <input type="text" class="search-bar" placeholder="Search employees..." id="searchInput" onkeyup="filterEmployees()">
+        <button class="button" onclick="document.getElementById('addModal').classList.add('active')">+ Add Employee</button>
+    </div>
+</div>
+
+<div class="stat-row">
+    {% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
+    {% for dept in dept_employees %}
+    <div class="stat-pill">
+        <div style="width: 10px; height: 10px; border-radius: 50%; background: {{ dept_colors.get(dept, '#94a3b8') }};"></div>
+        {{ dept }} <strong>{{ dept_employees[dept] | length }}</strong>
+    </div>
+    {% endfor %}
+</div>
+
+{% for dept in dept_employees %}
+{% set color = dept_colors.get(dept, '#94a3b8') %}
+<div class="dept-section" data-dept="{{ dept }}">
+    <div class="dept-header">
+        <div class="dept-badge" style="background: {{ color }};">{{ dept_employees[dept] | length }}</div>
+        <h2 style="font-size: 1.1rem; font-weight: 600;">{{ dept }}</h2>
+    </div>
+    <div class="emp-grid">
+        {% for emp in dept_employees[dept] %}
+        <div class="emp-card {% if not emp.is_active %}inactive-card{% endif %}" data-name="{{ emp.name | lower }}">
+            <div class="emp-actions">
+                <a href="/admin/employee/{{ emp.id }}/edit" class="icon-btn" title="Edit">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                </a>
+                <form method="POST" action="/admin/delete-employee/{{ emp.id }}" style="display:inline;">
+                    <button type="submit" class="icon-btn danger" title="Delete" onclick="return confirm('Delete {{ emp.name }}?');">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                    </button>
+                </form>
+            </div>
+            <div class="emp-card-top">
+                {% if emp.photo_url %}
+                <img src="/static/photos/{{ emp.photo_url }}" class="emp-avatar" alt="{{ emp.name }}">
+                {% else %}
+                <div class="emp-avatar-init" style="background: {{ color }};">{{ emp.name[0] }}</div>
+                {% endif %}
+                <div>
+                    <a href="/admin/employee/{{ emp.id }}" class="emp-name">{{ emp.name }}</a>
+                    <div class="emp-meta">{{ emp.designation or emp.emp_code }}</div>
+                </div>
+            </div>
+            <div class="emp-details">
+                {% if emp.email %}<div class="emp-tag">{{ emp.email }}</div>{% endif %}
+                {% if emp.joining_date %}<div class="emp-tag">Joined {{ emp.joining_date }}</div>{% endif %}
+                {% if not emp.is_active %}<div class="emp-tag" style="background:#fee2e2;color:#991b1b;">Inactive</div>{% endif %}
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+<!-- Add Employee Modal -->
+<div class="modal-overlay" id="addModal">
+    <div class="modal">
+        <h2>Add New Employee</h2>
+        <form method="POST">
+            <div class="form-group">
+                <label for="name">Full Name *</label>
+                <input type="text" id="name" name="name" required>
+            </div>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;">
+                <div class="form-group">
+                    <label for="emp_code">Employee Code *</label>
+                    <input type="text" id="emp_code" name="emp_code" required>
+                </div>
+                <div class="form-group">
+                    <label for="department">Department *</label>
+                    <select id="department" name="department" required>
+                        {% for dept in departments %}
+                        <option value="{{ dept }}">{{ dept }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label for="email">Email</label>
+                <input type="email" id="email" name="email">
+            </div>
+            <div class="modal-actions">
+                <button type="button" class="button button-secondary" onclick="document.getElementById('addModal').classList.remove('active')">Cancel</button>
+                <button type="submit" class="button">Add Employee</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function filterEmployees() {
+    const query = document.getElementById('searchInput').value.toLowerCase();
+    document.querySelectorAll('.emp-card').forEach(card => {
+        card.style.display = card.dataset.name.includes(query) ? '' : 'none';
+    });
+    document.querySelectorAll('.dept-section').forEach(section => {
+        const visible = section.querySelectorAll('.emp-card:not([style*="display: none"])');
+        section.style.display = visible.length > 0 ? '' : 'none';
+    });
+}
+// Close modal on overlay click
+document.getElementById('addModal').addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('active');
+});
+</script>
+{% endblock %}

@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Pending Approvals - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<h1>Pending Leave Approvals</h1>
+
+<div class="card">
+    {% if pending_leaves %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Requested</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in pending_leaves %}
+            <tr>
+                <td><strong>{{ leave.name }}</strong></td>
+                <td>{{ leave.emp_code }}</td>
+                <td>{{ leave.leave_date }}</td>
+                <td>{{ leave.leave_type.capitalize() }}</td>
+                <td>
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day
+                    {% endif %}
+                </td>
+                <td>{{ leave.reason or '-' }}</td>
+                <td>{{ leave.created_at.split(' ')[0] }}</td>
+                <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <form method="POST" action="/admin/approve-leave/{{ leave.id }}" style="display: inline;">
+                            <button type="submit" class="button button-success button-small">Approve</button>
+                        </form>
+                        <form method="POST" action="/admin/reject-leave/{{ leave.id }}" style="display: inline;">
+                            <button type="submit" class="button button-danger button-small">Reject</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #64748b; text-align: center; padding: 2rem;">No pending leave requests.</p>
+    {% endif %}
+</div>
+{% endblock %}

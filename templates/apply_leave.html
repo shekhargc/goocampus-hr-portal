@@ -1,0 +1,168 @@
+{% extends "base.html" %}
+
+{% block title %}Apply for Leave - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .leave-form { max-width: 560px; }
+    .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .portion-row { display: none; margin-top: 0.5rem; }
+    .portion-row.visible { display: block; }
+    .day-summary {
+        display: none; padding: 0.75rem 1rem; background: #eff6ff; border-radius: 0.5rem;
+        border: 1px solid #bfdbfe; margin-bottom: 1rem; font-size: 0.9rem; color: #1e40af;
+    }
+    .day-summary.visible { display: flex; align-items: center; gap: 0.5rem; }
+    .day-summary .count { font-weight: 700; font-size: 1.1rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h1 class="card-title">Apply for Leave</h1>
+
+    <form method="POST" class="leave-form">
+        <div class="form-group">
+            <label for="leave_type">Leave Type</label>
+            <select id="leave_type" name="leave_type" required>
+                <option value="">Select a type</option>
+                <option value="annual">Annual Leave</option>
+                <option value="sick">Sick Leave</option>
+                <option value="casual">Casual Leave</option>
+            </select>
+        </div>
+
+        <div class="date-row">
+            <div class="form-group">
+                <label for="from_date">From Date</label>
+                <input type="date" id="from_date" name="from_date" required onchange="updateDateUI()">
+            </div>
+            <div class="form-group">
+                <label for="to_date">To Date <span style="font-weight: 400; color: #94a3b8; font-size: 0.8rem;">(optional)</span></label>
+                <input type="date" id="to_date" name="to_date" onchange="updateDateUI()">
+            </div>
+        </div>
+
+        <!-- Single day / same day portion -->
+        <div class="form-group portion-row" id="singleDayPortion">
+            <label for="day_portion">Duration</label>
+            <select id="day_portion" name="day_portion">
+                <option value="full">Full Day</option>
+                <option value="first_half">First Half (0.5 day)</option>
+                <option value="second_half">Second Half (0.5 day)</option>
+            </select>
+        </div>
+
+        <!-- Multi-day: last day portion -->
+        <div class="form-group portion-row" id="lastDayPortion">
+            <label for="last_day_portion">Last Day Duration</label>
+            <select id="last_day_portion" name="last_day_portion">
+                <option value="full">Full Day</option>
+                <option value="first_half">First Half (0.5 day)</option>
+                <option value="second_half">Second Half (0.5 day)</option>
+            </select>
+            <p style="font-size: 0.78rem; color: #64748b; margin-top: 0.25rem;">All other days in the range will be counted as full days.</p>
+        </div>
+
+        <div class="day-summary" id="daySummary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="summaryText"></span>
+        </div>
+
+        <div class="form-group">
+            <label for="reason">Reason</label>
+            <textarea id="reason" name="reason" required placeholder="Please provide a reason for your leave request..."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button">Submit Request</button>
+            <a href="/dashboard" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <div style="margin-top: 2rem; padding: 1rem; background: #eff6ff; border-radius: 0.5rem; border-left: 4px solid #3b82f6;">
+        <p><strong>Note:</strong> Leave requests require approval from your reporting manager. Working days are Monday to Friday. Weekends and company holidays are automatically excluded from the date range.</p>
+    </div>
+</div>
+
+<script>
+function updateDateUI() {
+    const fromDate = document.getElementById('from_date').value;
+    const toDate = document.getElementById('to_date').value;
+    const singlePortion = document.getElementById('singleDayPortion');
+    const lastPortion = document.getElementById('lastDayPortion');
+    const summary = document.getElementById('daySummary');
+    const summaryText = document.getElementById('summaryText');
+
+    singlePortion.classList.remove('visible');
+    lastPortion.classList.remove('visible');
+    summary.classList.remove('visible');
+
+    if (!fromDate) return;
+
+    const from = new Date(fromDate);
+    const to = toDate ? new Date(toDate) : from;
+
+    if (to < from) {
+        summaryText.textContent = 'To date cannot be before from date';
+        summary.classList.add('visible');
+        summary.style.background = '#fef2f2';
+        summary.style.borderColor = '#fecaca';
+        summary.style.color = '#991b1b';
+        return;
+    }
+
+    summary.style.background = '#eff6ff';
+    summary.style.borderColor = '#bfdbfe';
+    summary.style.color = '#1e40af';
+
+    // Count working days (exclude weekends)
+    let workDays = 0;
+    let current = new Date(from);
+    while (current <= to) {
+        const dow = current.getDay();
+        if (dow !== 0 && dow !== 6) workDays++;
+        current.setDate(current.getDate() + 1);
+    }
+
+    if (!toDate || fromDate === toDate) {
+        // Single day
+        singlePortion.classList.add('visible');
+        if (workDays > 0) {
+            summaryText.textContent = '1 working day selected (holidays excluded server-side)';
+            summary.classList.add('visible');
+        }
+    } else if (workDays > 1) {
+        // Multi-day range
+        lastPortion.classList.add('visible');
+        summaryText.textContent = workDays + ' working days selected (holidays excluded server-side)';
+        summary.classList.add('visible');
+    } else if (workDays === 1) {
+        singlePortion.classList.add('visible');
+        summaryText.textContent = '1 working day in range (weekends excluded)';
+        summary.classList.add('visible');
+    } else {
+        summaryText.textContent = 'No working days in selected range';
+        summary.classList.add('visible');
+        summary.style.background = '#fef3c7';
+        summary.style.borderColor = '#fde68a';
+        summary.style.color = '#92400e';
+    }
+}
+
+// Set min date to today
+document.addEventListener('DOMContentLoaded', function() {
+    const today = new Date().toISOString().split('T')[0];
+    document.getElementById('from_date').setAttribute('min', today);
+    document.getElementById('to_date').setAttribute('min', today);
+
+    // Sync to_date min with from_date
+    document.getElementById('from_date').addEventListener('change', function() {
+        document.getElementById('to_date').setAttribute('min', this.value);
+        if (document.getElementById('to_date').value && document.getElementById('to_date').value < this.value) {
+            document.getElementById('to_date').value = '';
+        }
+    });
+});
+</script>
+{% endblock %}

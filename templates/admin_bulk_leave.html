@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+
+{% block title %}Bulk Add Leave - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px;">
+    <h1 class="card-title">Bulk Add Leave</h1>
+    <p style="color: #64748b; margin-bottom: 1.5rem;">Add the same leave to all employees in a department.</p>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="department">Department</label>
+            <select id="department" name="department" required>
+                <option value="">Select a department</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}">{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="leave_type">Leave Type</label>
+            <select id="leave_type" name="leave_type" required>
+                <option value="">Select a type</option>
+                <option value="annual">Annual Leave</option>
+                <option value="sick">Sick Leave</option>
+                <option value="casual">Casual Leave</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="leave_date">Date</label>
+            <input type="date" id="leave_date" name="leave_date" required>
+        </div>
+
+        <div class="form-group">
+            <label for="days">Number of Days</label>
+            <input type="number" id="days" name="days" step="0.5" min="0.5" required>
+        </div>
+
+        <div class="form-group">
+            <label for="reason">Reason (Optional)</label>
+            <textarea id="reason" name="reason"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button">Add Leave to Department</button>
+            <a href="/admin/dashboard" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

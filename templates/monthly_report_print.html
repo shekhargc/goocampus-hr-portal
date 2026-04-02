@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Monthly Salary Deduction Report</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: white;
+        }
+        .header {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .header h1 {
+            margin: 0;
+            font-size: 24px;
+        }
+        .header p {
+            margin: 5px 0;
+            color: #666;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        thead {
+            background-color: #1a56db;
+            color: white;
+        }
+        th {
+            padding: 12px;
+            text-align: left;
+            font-weight: bold;
+            border: 1px solid #ddd;
+        }
+        td {
+            padding: 10px 12px;
+            border: 1px solid #ddd;
+        }
+        tbody tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        tbody tr.deduction {
+            background-color: #fee2e2;
+        }
+        tfoot {
+            background-color: #1a56db;
+            color: white;
+            font-weight: bold;
+        }
+        tfoot td {
+            padding: 12px;
+        }
+        .text-center {
+            text-align: center;
+        }
+        .text-right {
+            text-align: right;
+        }
+        .note {
+            font-size: 12px;
+            color: #666;
+            margin-top: 20px;
+            padding: 10px;
+            background-color: #f5f5f5;
+            border-left: 4px solid #1a56db;
+        }
+        @media print {
+            body {
+                margin: 0;
+            }
+            .header {
+                margin-bottom: 20px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>Monthly Salary Deduction Report</h1>
+        <p>GooCampus Leave Management System</p>
+        <p>Generated: {{ range(1, 2)|list|first }}</p>
+    </div>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Employee Name</th>
+                <th>Code</th>
+                <th>Department</th>
+                <th class="text-center">Annual Balance (Start)</th>
+                <th class="text-center">Annual Taken</th>
+                <th class="text-center">Sick Taken</th>
+                <th class="text-center">Casual Taken</th>
+                <th class="text-center">Total Deduction</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set total_deductions = 0 %}
+            {% for item in report_data %}
+            <tr {% if item['has_deduction'] %}class="deduction"{% endif %}>
+                <td><strong>{{ item['emp']['name'] }}</strong></td>
+                <td>{{ item['emp']['emp_code'] }}</td>
+                <td>{{ item['emp']['department'] or '-' }}</td>
+                <td class="text-center">{{ item['annual_balance_start']|round(1) }}</td>
+                <td class="text-center">{{ item['annual_taken']|round(1) }}</td>
+                <td class="text-center">{{ item['sick_taken']|round(1) }}</td>
+                <td class="text-center">{{ item['casual_taken']|round(1) }}</td>
+                <td class="text-center"><strong>{{ item['total_deductions']|round(1) }}</strong></td>
+            </tr>
+            {% set total_deductions = total_deductions + item['total_deductions'] %}
+            {% endfor %}
+        </tbody>
+        <tfoot>
+            <tr>
+                <td colspan="7" class="text-right">TOTAL DEDUCTION DAYS:</td>
+                <td class="text-center">{{ total_deductions|round(1) }}</td>
+            </tr>
+        </tfoot>
+    </table>
+
+    <div class="note">
+        <strong>Note:</strong> Total Deduction shows excess leave days taken beyond available balance. Rows highlighted in red have deductions.
+    </div>
+
+    <script>
+        window.print();
+    </script>
+</body>
+</html>

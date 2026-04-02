@@ -1,0 +1,291 @@
+{% extends "base.html" %}
+
+{% block title %}Organisation Chart - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .org-container { padding: 1rem 0; }
+
+    /* Tree styles */
+    .tree { display: flex; flex-direction: column; align-items: center; padding: 2rem 0; overflow-x: auto; }
+    .tree-level { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; position: relative; }
+    .tree-node { display: flex; flex-direction: column; align-items: center; position: relative; }
+    .tree-card {
+        background: white; border-radius: 0.75rem; padding: 1rem 1.25rem; text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 2px solid #e2e8f0;
+        min-width: 170px; position: relative; z-index: 1; cursor: default;
+        transition: box-shadow 0.2s, transform 0.15s;
+    }
+    .tree-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.14); transform: translateY(-2px); }
+    .tree-card.ceo { border-color: #1a56db; background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); color: white; min-width: 200px; }
+    .tree-card.ceo .role { color: rgba(255,255,255,0.8); }
+    .tree-card.mgmt { border-color: #1a56db; }
+    .tree-card.lead { border-color: #0891b2; }
+    .tree-card img, .tree-card .tree-init {
+        width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
+        margin: 0 auto 0.5rem; display: block; border: 3px solid #e2e8f0;
+    }
+    .tree-card.ceo img, .tree-card.ceo .tree-init { border-color: rgba(255,255,255,0.4); }
+    .tree-card.mgmt img, .tree-card.mgmt .tree-init { border-color: #93c5fd; }
+    .tree-init {
+        display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 1.2rem; color: white;
+    }
+    .tree-card .name { font-weight: 600; font-size: 0.85rem; }
+    .tree-card .role { font-size: 0.72rem; color: #64748b; margin-top: 0.15rem; }
+    .tree-card .dept-tag {
+        display: inline-block; font-size: 0.65rem; padding: 0.15rem 0.5rem;
+        border-radius: 1rem; margin-top: 0.35rem; font-weight: 500;
+    }
+
+    /* Connectors */
+    .connector-down {
+        width: 2px; height: 28px; background: #cbd5e1; margin: 0 auto;
+    }
+    .connector-split {
+        display: flex; justify-content: center; position: relative;
+        padding-top: 28px; margin-bottom: 0;
+    }
+    .connector-split::before {
+        content: ''; position: absolute; top: 0; left: 50%; width: 2px;
+        height: 28px; background: #cbd5e1;
+    }
+    .connector-h-bar {
+        position: absolute; top: 28px; height: 2px; background: #cbd5e1;
+    }
+    .branch-group {
+        display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
+        position: relative; padding-top: 28px;
+    }
+    .branch-group > .tree-node::before {
+        content: ''; position: absolute; top: -28px; left: 50%;
+        width: 2px; height: 28px; background: #cbd5e1;
+    }
+
+    /* Expand/collapse */
+    .toggle-btn {
+        width: 24px; height: 24px; border-radius: 50%; border: 2px solid #cbd5e1;
+        background: white; cursor: pointer; display: flex; align-items: center;
+        justify-content: center; margin: 4px auto; font-size: 0.75rem; color: #64748b;
+        z-index: 2; position: relative; transition: all 0.15s;
+    }
+    .toggle-btn:hover { border-color: #1a56db; color: #1a56db; background: #eff6ff; }
+
+    /* Department view */
+    .org-dept {
+        margin-bottom: 2.5rem; background: white; border-radius: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; overflow: hidden;
+    }
+    .org-dept-header {
+        padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.75rem;
+        border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+    }
+    .org-dept-dot { width: 12px; height: 12px; border-radius: 50%; }
+    .org-dept-name { font-weight: 600; font-size: 1rem; }
+    .org-dept-count { font-size: 0.85rem; color: #64748b; margin-left: auto; }
+    .org-members {
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        gap: 0; padding: 0;
+    }
+    .org-member {
+        display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem;
+        border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9;
+        transition: background 0.15s;
+    }
+    .org-member:hover { background: #f8fafc; }
+    .org-photo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; flex-shrink: 0; }
+    .org-photo-init {
+        width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 1rem; color: white; flex-shrink: 0;
+    }
+    .org-info { min-width: 0; }
+    .org-name { font-weight: 600; font-size: 0.9rem; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-title { font-size: 0.78rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-reports-to { font-size: 0.72rem; color: #94a3b8; }
+
+    .tab-bar { display: flex; gap: 0; margin-bottom: 2rem; border-bottom: 2px solid #e2e8f0; }
+    .tab-btn {
+        padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer;
+        font-size: 0.9rem; font-weight: 500; color: #64748b; border-bottom: 2px solid transparent;
+        margin-bottom: -2px; transition: all 0.2s;
+    }
+    .tab-btn.active { color: #1a56db; border-bottom-color: #1a56db; }
+    .tab-btn:hover { color: #1e293b; }
+    .tab-content { display: none; }
+    .tab-content.active { display: block; }
+
+    @media (max-width: 768px) {
+        .tree-level, .branch-group { gap: 0.75rem; }
+        .tree-card { min-width: 140px; padding: 0.75rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+{% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
+
+<div style="margin-bottom: 1.5rem;">
+    <h1>Organisation Structure</h1>
+    <p style="color: #64748b; font-size: 0.9rem; margin-top: 0.25rem;">{{ employees | length }} team members across {{ departments | length }} departments</p>
+</div>
+
+<div class="tab-bar">
+    <button class="tab-btn active" onclick="switchTab('hierarchy')">Hierarchy</button>
+    <button class="tab-btn" onclick="switchTab('departments')">By Department</button>
+</div>
+
+<!-- Hierarchy View -->
+<div class="tab-content active" id="tab-hierarchy">
+    <div class="tree">
+        <!-- Admin/Owner at top -->
+        {% if admin_user %}
+        <div class="tree-node">
+            <div class="tree-card ceo">
+                {% if admin_user.photo_url %}
+                <img src="/static/photos/{{ admin_user.photo_url }}" alt="{{ admin_user.name }}">
+                {% else %}
+                <div class="tree-init" style="background: rgba(255,255,255,0.25);">{{ admin_user.name[0] }}</div>
+                {% endif %}
+                <div class="name">{{ admin_user.name }}</div>
+                <div class="role">{{ admin_user.designation or 'Administrator' }}</div>
+            </div>
+        </div>
+        <div class="connector-down"></div>
+        {% endif %}
+
+        <!-- Management Level -->
+        {% set mgmt = [] %}
+        {% for emp in employees if emp.department == 'Management' %}
+            {% if mgmt.append(emp) %}{% endif %}
+        {% endfor %}
+
+        {% if mgmt %}
+        <div class="tree-level">
+            {% for emp in mgmt %}
+            <div class="tree-node">
+                <div class="tree-card mgmt">
+                    {% if emp.photo_url %}
+                    <img src="/static/photos/{{ emp.photo_url }}" alt="{{ emp.name }}">
+                    {% else %}
+                    <div class="tree-init" style="background: #1a56db;">{{ emp.name[0] }}</div>
+                    {% endif %}
+                    <div class="name">{{ emp.name }}</div>
+                    <div class="role">{{ emp.designation or 'Management' }}</div>
+                </div>
+
+                <!-- Direct reports of this management member -->
+                {% set reports = [] %}
+                {% for r in employees if r.reporting_to == emp.id and r.department != 'Management' %}
+                    {% if reports.append(r) %}{% endif %}
+                {% endfor %}
+
+                {% if reports %}
+                <div class="connector-down"></div>
+                <button class="toggle-btn" onclick="toggleBranch(this)" title="Expand/Collapse">−</button>
+                <div class="branch-group">
+                    {% for report in reports %}
+                    <div class="tree-node">
+                        {% set color = dept_colors.get(report.department, '#94a3b8') %}
+                        <div class="tree-card lead">
+                            {% if report.photo_url %}
+                            <img src="/static/photos/{{ report.photo_url }}" alt="{{ report.name }}">
+                            {% else %}
+                            <div class="tree-init" style="background: {{ color }};">{{ report.name[0] }}</div>
+                            {% endif %}
+                            <div class="name">{{ report.name }}</div>
+                            <div class="role">{{ report.designation or report.emp_code }}</div>
+                            <div class="dept-tag" style="background: {{ color }}20; color: {{ color }};">{{ report.department }}</div>
+                        </div>
+
+                        <!-- Sub-reports (team members reporting to this person) -->
+                        {% set sub_reports = [] %}
+                        {% for sr in employees if sr.reporting_to == report.id %}
+                            {% if sub_reports.append(sr) %}{% endif %}
+                        {% endfor %}
+
+                        {% if sub_reports %}
+                        <div class="connector-down"></div>
+                        <button class="toggle-btn" onclick="toggleBranch(this)" title="Expand/Collapse">−</button>
+                        <div class="branch-group">
+                            {% for sr in sub_reports %}
+                            <div class="tree-node">
+                                {% set sr_color = dept_colors.get(sr.department, '#94a3b8') %}
+                                <div class="tree-card">
+                                    {% if sr.photo_url %}
+                                    <img src="/static/photos/{{ sr.photo_url }}" alt="{{ sr.name }}">
+                                    {% else %}
+                                    <div class="tree-init" style="background: {{ sr_color }};">{{ sr.name[0] }}</div>
+                                    {% endif %}
+                                    <div class="name">{{ sr.name }}</div>
+                                    <div class="role">{{ sr.designation or sr.emp_code }}</div>
+                                    <div class="dept-tag" style="background: {{ sr_color }}20; color: {{ sr_color }};">{{ sr.department }}</div>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Department View -->
+<div class="tab-content" id="tab-departments">
+    {% for dept in departments %}
+    {% set color = dept_colors.get(dept.department, '#94a3b8') %}
+    <div class="org-dept">
+        <div class="org-dept-header">
+            <div class="org-dept-dot" style="background: {{ color }};"></div>
+            <div class="org-dept-name">{{ dept.department }}</div>
+            <div class="org-dept-count">{{ dept.count }} member{{ 's' if dept.count > 1 }}</div>
+        </div>
+        <div class="org-members">
+            {% for emp in employees if emp.department == dept.department %}
+            <div class="org-member">
+                {% if emp.photo_url %}
+                <img src="/static/photos/{{ emp.photo_url }}" class="org-photo" alt="{{ emp.name }}">
+                {% else %}
+                <div class="org-photo-init" style="background: {{ color }};">{{ emp.name[0] }}</div>
+                {% endif %}
+                <div class="org-info">
+                    <div class="org-name">{{ emp.name }}</div>
+                    <div class="org-title">{{ emp.designation or emp.emp_code }}</div>
+                    {% if emp.manager_name %}
+                    <div class="org-reports-to">Reports to {{ emp.manager_name }}</div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endfor %}
+</div>
+
+<script>
+function switchTab(tab) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    event.target.classList.add('active');
+}
+
+function toggleBranch(btn) {
+    const branch = btn.nextElementSibling;
+    if (branch && branch.classList.contains('branch-group')) {
+        if (branch.style.display === 'none') {
+            branch.style.display = 'flex';
+            btn.textContent = '−';
+        } else {
+            branch.style.display = 'none';
+            btn.textContent = '+';
+        }
+    }
+}
+</script>
+{% endblock %}

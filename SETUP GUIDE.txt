@@ -1,0 +1,103 @@
+╔══════════════════════════════════════════════════════╗
+║  GooCampus Leave Dashboard - Setup Guide (Mac)       ║
+╚══════════════════════════════════════════════════════╝
+
+
+STEP 1: CHECK IF PYTHON IS INSTALLED
+─────────────────────────────────────
+Open "Terminal" app (search for it in Spotlight) and type:
+
+    python3 --version
+
+If you see something like "Python 3.x.x" → you're good, go to Step 2.
+
+If you get an error → Install Python:
+  • Go to https://www.python.org/downloads/
+  • Click the big yellow "Download" button
+  • Open the downloaded file and follow the installer
+  • After installing, close and reopen Terminal, then try again
+
+
+STEP 2: ONE-TIME SETUP
+───────────────────────
+1. Open Finder and go to the "goocampus-leave-dashboard" folder
+2. Double-click "setup.command"
+3. If Mac says "can't be opened because it's from unidentified developer":
+   → Right-click the file → Click "Open" → Click "Open" again
+4. Wait for it to finish (about 30 seconds)
+5. You should see "SETUP COMPLETE!"
+
+
+STEP 3: START THE DASHBOARD
+────────────────────────────
+1. Double-click "start.command" (same right-click trick if needed)
+2. Your browser will open automatically to the dashboard
+3. Keep the Terminal window open while you use it
+4. To stop: close the Terminal window or press Ctrl+C
+
+
+STEP 4: ACCESS FROM OTHER DEVICES (PHONES, OTHER COMPUTERS)
+─────────────────────────────────────────────────────────────
+When you start the dashboard, the Terminal will show an IP address like:
+    http://192.168.x.x:5000
+
+Type that address in the browser of any phone or computer
+on the SAME Wi-Fi network.
+
+
+LOGIN
+─────
+Admin:
+    Code: admin
+    Password: goocampus2026
+
+Employees:
+    Code: their first name in lowercase
+    Password: same as their code
+    Examples: deepak/deepak, harish/harish, alfiya/alfiya
+    (Employees can change their password after first login)
+
+
+DAILY USAGE
+───────────
+As admin, when someone takes leave:
+  1. Log in as admin
+  2. Click "Add Leave" in the top menu
+  3. Select the employee, pick the leave type, date, and days
+  4. Click "Add Leave Record"
+  That's it! Balances update automatically.
+
+For bulk entry (e.g., multiple people on same day):
+  1. Click "Bulk Entry" in the top menu
+  2. Set the date and leave type
+  3. Enter days for each person who took leave
+  4. Submit
+
+
+BACKUP
+──────
+Your data is stored in one file: leave_manager.db
+Copy this file somewhere safe periodically (like Google Drive).
+If anything goes wrong, you can always put this file back.
+
+
+TROUBLESHOOTING
+───────────────
+"Can't open setup.command":
+  → Right-click → Open → Open
+
+"Python not found":
+  → Install from python.org (see Step 1)
+
+"Port 5000 already in use":
+  → Another app is using port 5000. Close it, or
+    change the port in app.py (last line) to 5001
+
+Dashboard not loading from other devices:
+  → Make sure all devices are on the same Wi-Fi
+  → Check your Mac's firewall: System Settings → Network → Firewall
+    → Make sure it allows incoming connections for Python
+
+Need to reset everything:
+  → Delete leave_manager.db
+  → Double-click setup.command again

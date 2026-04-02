@@ -1,0 +1,246 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .dash-welcome {
+        display: flex; align-items: center; gap: 1.5rem; margin-bottom: 2rem;
+        background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%);
+        padding: 1.5rem 2rem; border-radius: 0.75rem; color: white;
+    }
+    .dash-photo { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+    .dash-photo-init {
+        width: 72px; height: 72px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-size: 1.8rem; font-weight: 700; background: rgba(255,255,255,0.2);
+        color: white; flex-shrink: 0;
+    }
+    .dash-name { font-size: 1.4rem; font-weight: 700; }
+    .dash-role { opacity: 0.8; font-size: 0.9rem; margin-top: 0.2rem; }
+    .dash-actions { margin-left: auto; display: flex; gap: 0.75rem; }
+    .dash-action-btn {
+        padding: 0.6rem 1.25rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.3);
+        color: white; text-decoration: none; font-size: 0.9rem; font-weight: 500;
+        transition: all 0.15s; background: rgba(255,255,255,0.1);
+    }
+    .dash-action-btn:hover { background: rgba(255,255,255,0.2); }
+    .dash-action-btn.primary { background: white; color: #1a56db; border-color: white; }
+    .dash-action-btn.primary:hover { background: #f1f5f9; }
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    .stat-card {
+        background: white; border-radius: 0.75rem; padding: 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid #e2e8f0;
+        text-align: center;
+    }
+    .stat-val { font-size: 1.8rem; font-weight: 700; line-height: 1; }
+    .stat-lbl { font-size: 0.8rem; color: #64748b; margin-top: 0.35rem; }
+    .grid-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem; }
+    .panel {
+        background: white; border-radius: 0.75rem; border: 1px solid #e2e8f0;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden;
+    }
+    .panel-header {
+        padding: 1rem 1.25rem; border-bottom: 1px solid #e2e8f0;
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .panel-title { font-weight: 600; font-size: 0.95rem; }
+    .panel-body { padding: 1rem 1.25rem; }
+    .leave-row {
+        display: flex; align-items: center; gap: 0.75rem; padding: 0.6rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .leave-row:last-child { border-bottom: none; }
+    .team-member {
+        display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 0;
+        border-bottom: 1px solid #f1f5f9;
+    }
+    .team-member:last-child { border-bottom: none; }
+    .team-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; flex-shrink: 0; }
+    .team-avatar-init {
+        width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; flex-shrink: 0;
+    }
+    .team-info { flex: 1; min-width: 0; }
+    .team-name { font-weight: 600; font-size: 0.9rem; }
+    .team-detail { font-size: 0.78rem; color: #64748b; }
+    .team-stats { text-align: right; }
+    .team-stat-val { font-weight: 600; font-size: 0.85rem; }
+    .team-stat-lbl { font-size: 0.72rem; color: #94a3b8; }
+    .alert-strip {
+        display: flex; align-items: center; gap: 0.75rem; padding: 0.75rem 1rem;
+        border-radius: 0.5rem; margin-bottom: 0.75rem; font-size: 0.85rem;
+    }
+    @media (max-width: 768px) {
+        .stat-cards { grid-template-columns: repeat(2, 1fr); }
+        .grid-2col { grid-template-columns: 1fr; }
+        .dash-welcome { flex-wrap: wrap; }
+        .dash-actions { margin-left: 0; width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Welcome Banner -->
+<div class="dash-welcome">
+    {% if user.photo_url %}
+    <img src="/static/photos/{{ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
+    {% else %}
+    <div class="dash-photo-init">{{ user.name[0] }}</div>
+    {% endif %}
+    <div>
+        <div class="dash-name">Welcome, {{ user.name }}!</div>
+        <div class="dash-role">{{ user.department }} &middot; {{ user.designation or 'Employee' }}</div>
+    </div>
+    <div class="dash-actions">
+        <a href="/apply-leave" class="dash-action-btn primary">+ Apply Leave</a>
+        {% if is_manager %}
+        <a href="/approvals" class="dash-action-btn">
+            Approvals {% if pending_team_count > 0 %}({{ pending_team_count }}){% endif %}
+        </a>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Stats -->
+<div class="stat-cards">
+    <div class="stat-card">
+        <div class="stat-val" style="color: #1a56db;">{{ available_balance }}</div>
+        <div class="stat-lbl">Available Balance</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-val" style="color: #f59e0b;">{{ days_taken }}</div>
+        <div class="stat-lbl">Days Taken (FY)</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-val" style="color: {% if pending_count > 0 %}#ef4444{% else %}#10b981{% endif %};">{{ pending_count }}</div>
+        <div class="stat-lbl">Pending Requests</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-val" style="color: #0891b2;">{{ monthly_allocation }}</div>
+        <div class="stat-lbl">Monthly Allocation</div>
+    </div>
+</div>
+
+{% if team_on_leave %}
+<div class="alert-strip" style="background: #fef3c7; border: 1px solid #fde68a;">
+    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+    <span style="color: #92400e;">
+        <strong>{{ team_on_leave | length }}</strong> team member{{ 's' if team_on_leave | length > 1 }} on leave today:
+        {% for emp in team_on_leave %}{{ emp.name }}{% if not loop.last %}, {% endif %}{% endfor %}
+    </span>
+</div>
+{% endif %}
+
+<!-- Upcoming Holidays -->
+{% if upcoming_holidays %}
+<div class="panel" style="margin-bottom: 1.5rem;">
+    <div class="panel-header">
+        <div class="panel-title">Upcoming Holidays &mdash; {{ current_month_name }}</div>
+        <a href="/calendar" style="font-size: 0.8rem; color: #1a56db; text-decoration: none;">Calendar</a>
+    </div>
+    <div class="panel-body">
+        <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+            {% for h in upcoming_holidays %}
+            <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 1rem; background: #fef3c7; border-radius: 0.5rem; border: 1px solid #fde68a;">
+                <div style="text-align: center; min-width: 36px;">
+                    <div style="font-size: 1.1rem; font-weight: 700; color: #92400e; line-height: 1;">{{ h.holiday_date[8:] | int }}</div>
+                    <div style="font-size: 0.65rem; color: #b45309; text-transform: uppercase;">{{ current_month_name[:3] }}</div>
+                </div>
+                <div>
+                    <div style="font-weight: 600; font-size: 0.85rem; color: #78350f;">{{ h.name }}</div>
+                    <div style="font-size: 0.72rem; color: #92400e;">{{ h.holiday_type }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<div class="grid-2col">
+    <!-- Recent Leave History -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Recent Leave History</div>
+            <a href="/calendar" style="font-size: 0.8rem; color: #1a56db; text-decoration: none;">Calendar</a>
+        </div>
+        <div class="panel-body">
+            {% if recent_leaves %}
+            {% for leave in recent_leaves[:8] %}
+            <div class="leave-row">
+                <div style="flex: 1;">
+                    <div style="font-weight: 500; font-size: 0.9rem;">{{ leave.leave_date }}</div>
+                    <div style="font-size: 0.78rem; color: #64748b;">{{ leave.leave_type | capitalize }} &middot;
+                        {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}
+                    </div>
+                </div>
+                {% if leave.status == 'pending' %}
+                <span class="badge badge-pending">Pending</span>
+                {% elif leave.status == 'approved' %}
+                <span class="badge badge-approved">Approved</span>
+                {% else %}
+                <span class="badge badge-rejected">Rejected</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: #94a3b8; text-align: center; padding: 2rem 0;">No leave history yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- My Team (if manager) / Profile Info -->
+    {% if direct_reports %}
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">My Team ({{ direct_reports | length }})</div>
+            {% if pending_team_count > 0 %}
+            <a href="/approvals" style="font-size: 0.8rem; color: #ef4444; text-decoration: none; font-weight: 500;">{{ pending_team_count }} pending</a>
+            {% endif %}
+        </div>
+        <div class="panel-body">
+            {% for report in direct_reports %}
+            <div class="team-member">
+                {% if report.photo_url %}
+                <img src="/static/photos/{{ report.photo_url }}" class="team-avatar" alt="{{ report.name }}">
+                {% else %}
+                <div class="team-avatar-init" style="background: #1a56db;">{{ report.name[0] }}</div>
+                {% endif %}
+                <div class="team-info">
+                    <div class="team-name">{{ report.name }}</div>
+                    <div class="team-detail">{{ report.designation or report.department }}</div>
+                </div>
+                <div class="team-stats">
+                    <div class="team-stat-val" style="color: {% if report.pending_leaves > 0 %}#ef4444{% else %}#10b981{% endif %};">
+                        {% if report.pending_leaves > 0 %}{{ report.pending_leaves }} pending{% else %}OK{% endif %}
+                    </div>
+                    <div class="team-stat-lbl">{{ report.total_taken or 0 }} days taken</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% else %}
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">My Info</div>
+            <a href="/profile" style="font-size: 0.8rem; color: #1a56db; text-decoration: none;">Edit Profile</a>
+        </div>
+        <div class="panel-body">
+            <div style="display: grid; grid-template-columns: auto 1fr; gap: 0.75rem 1.25rem; font-size: 0.9rem;">
+                <span style="color: #64748b;">Department</span>
+                <span style="font-weight: 500;">{{ user.department or '-' }}</span>
+                <span style="color: #64748b;">Designation</span>
+                <span style="font-weight: 500;">{{ user.designation or '-' }}</span>
+                <span style="color: #64748b;">Email</span>
+                <span style="font-weight: 500;">{{ user.email or '-' }}</span>
+                <span style="color: #64748b;">Joined</span>
+                <span style="font-weight: 500;">{{ user.joining_date or '-' }}</span>
+                <span style="color: #64748b;">Carry Forward</span>
+                <span style="font-weight: 500;">{{ user.carry_forward }} days</span>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

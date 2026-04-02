@@ -1,0 +1,120 @@
+{% extends "base.html" %}
+
+{% block title %}{{ employee.name }} - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="/admin/manage-employees" class="button button-secondary" style="margin-bottom: 1rem;">← Back to Employees</a>
+    <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1rem;">
+        {% if employee.photo_url %}
+        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 50%; border: 3px solid #1a56db;">
+        {% else %}
+        <div style="width: 80px; height: 80px; border-radius: 50%; background: #1a56db; color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; flex-shrink: 0;">
+            {{ employee.name[0] }}
+        </div>
+        {% endif %}
+        <div>
+            <h1>{{ employee.name }}</h1>
+            <p style="color: #64748b; margin-top: 0.25rem;">{{ employee.emp_code }} - {{ employee.department }}</p>
+            <p style="color: #94a3b8; font-size: 0.85rem;">{{ employee.designation or '' }}</p>
+        </div>
+    </div>
+</div>
+
+<div class="summary-cards">
+    <div class="summary-card">
+        <div class="summary-card-value">{{ total_allocation }}</div>
+        <div class="summary-card-label">Total Allocation</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-card-value">{{ days_taken }}</div>
+        <div class="summary-card-label">Days Taken</div>
+    </div>
+    <div class="summary-card">
+        <div class="summary-card-value">{{ available_balance }}</div>
+        <div class="summary-card-label">Available Balance</div>
+    </div>
+</div>
+
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+    <div class="card">
+        <h2 class="card-title">Employee Details</h2>
+        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem; font-size: 0.9rem;">
+            <dt style="font-weight: 600;">Employee Code:</dt>
+            <dd>{{ employee.emp_code }}</dd>
+
+            <dt style="font-weight: 600;">Email:</dt>
+            <dd>{{ employee.email or '-' }}</dd>
+
+            <dt style="font-weight: 600;">Phone:</dt>
+            <dd>{{ employee.phone or '-' }}</dd>
+
+            <dt style="font-weight: 600;">Department:</dt>
+            <dd>{{ employee.department or '-' }}</dd>
+
+            <dt style="font-weight: 600;">Designation:</dt>
+            <dd>{{ employee.designation or '-' }}</dd>
+
+            <dt style="font-weight: 600;">Joining Date:</dt>
+            <dd>{{ employee.joining_date or '-' }}</dd>
+
+            <dt style="font-weight: 600;">Carry Forward:</dt>
+            <dd>{{ employee.carry_forward }}</dd>
+
+            <dt style="font-weight: 600;">Active:</dt>
+            <dd>{% if employee.is_active %}Yes{% else %}No{% endif %}</dd>
+        </dl>
+
+        <div style="margin-top: 1.5rem;">
+            <a href="/admin/employee/{{ employee.id }}/edit" class="button">Edit</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2 class="card-title">Leave History</h2>
+        {% if leaves %}
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in leaves[:10] %}
+                <tr>
+                    <td>{{ leave.leave_date }}</td>
+                    <td>{{ leave.leave_type.capitalize() }}</td>
+                    <td>
+                        {% if leave.day_portion == 'first_half' %}First Half
+                        {% elif leave.day_portion == 'second_half' %}Second Half
+                        {% else %}Full Day
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if leave.status == 'pending' %}
+                        <span class="badge badge-pending">Pending</span>
+                        {% elif leave.status == 'approved' %}
+                        <span class="badge badge-approved">Approved</span>
+                        {% else %}
+                        <span class="badge badge-rejected">Rejected</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <form method="POST" action="/admin/delete-leave/{{ leave.id }}" style="display: inline;">
+                            <button type="submit" class="button button-danger button-small" onclick="return confirm('Delete this leave record?');">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <p style="color: #64748b;">No leave records.</p>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

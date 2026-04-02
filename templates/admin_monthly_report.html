@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Report - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<h1>Monthly Salary Deduction Report</h1>
+<p style="color: #64748b; margin-bottom: 2rem;">Report for {{ month_name }} {{ year }}</p>
+
+<div style="display: flex; gap: 1rem; margin-bottom: 2rem; flex-wrap: wrap;">
+    <form method="GET" style="display: flex; gap: 1rem;">
+        <div>
+            <label for="month">Month:</label>
+            <select id="month" name="month">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div>
+            <label for="year">Year:</label>
+            <select id="year" name="year">
+                {% for y in range(2024, 2027) %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button">View Report</button>
+    </form>
+    <a href="/admin/monthly-report/download?month={{ month }}&year={{ year }}&format=xlsx" class="button button-success">Download XLSX</a>
+</div>
+
+<div class="card">
+    {% if report_data %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Department</th>
+                <th>Monthly Allocation</th>
+                <th>Balance Start</th>
+                <th>Balance Available</th>
+                <th>Days Taken</th>
+                <th>Salary Deduction</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_data %}
+            <tr>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.emp_code }}</td>
+                <td>{{ row.department }}</td>
+                <td>{{ row.monthly_allocation }}</td>
+                <td>{{ row.balance_start }}</td>
+                <td>{{ row.balance_available }}</td>
+                <td>{{ row.days_taken }}</td>
+                <td>
+                    {% if row.deduction > 0 %}
+                    <strong style="color: #ef4444;">{{ row.deduction }} days</strong>
+                    {% else %}
+                    -
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 1.5rem; padding: 1rem; background: #f1f5f9; border-radius: 0.5rem;">
+        <h3 style="margin-bottom: 0.5rem;">Summary</h3>
+        {% set total_deductions = report_data | map(attribute='deduction') | sum %}
+        <p>Total Salary Deductions: <strong>{{ total_deductions }}</strong> days</p>
+        {% set deduction_count = report_data | selectattr('deduction', 'gt', 0) | list | length %}
+        <p>Employees with Deductions: <strong>{{ deduction_count }}</strong></p>
+    </div>
+    {% else %}
+    <p style="color: #64748b;">No data available.</p>
+    {% endif %}
+</div>
+{% endblock %}

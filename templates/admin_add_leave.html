@@ -1,0 +1,56 @@
+{% extends "base.html" %}
+
+{% block title %}Add Leave - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="card" style="max-width: 600px;">
+    <h1 class="card-title">Add Leave Manually</h1>
+    <p style="color: #64748b; margin-bottom: 1.5rem;">Admin-added leaves are automatically marked as approved.</p>
+
+    <form method="POST">
+        <div class="form-group">
+            <label for="employee_id">Employee</label>
+            <select id="employee_id" name="employee_id" required>
+                <option value="">Select an employee</option>
+                {% for emp in employees %}
+                <option value="{{ emp.id }}">{{ emp.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="leave_type">Leave Type</label>
+            <select id="leave_type" name="leave_type" required>
+                <option value="">Select a type</option>
+                <option value="annual">Annual Leave</option>
+                <option value="sick">Sick Leave</option>
+                <option value="casual">Casual Leave</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="leave_date">Date</label>
+            <input type="date" id="leave_date" name="leave_date" required>
+        </div>
+
+        <div class="form-group">
+            <label for="day_portion">Duration</label>
+            <select id="day_portion" name="day_portion" required>
+                <option value="full">Full Day (1 day)</option>
+                <option value="first_half">First Half (0.5 day)</option>
+                <option value="second_half">Second Half (0.5 day)</option>
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="reason">Reason (Optional)</label>
+            <textarea id="reason" name="reason"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button">Add Leave</button>
+            <a href="/admin/dashboard" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

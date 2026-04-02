@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Master Calendar - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="calendar">
+    <div class="calendar-header">
+        <h2>Master Calendar - {{ month_name }} {{ year }}</h2>
+        <div class="calendar-nav">
+            <a href="/admin/calendar?month={{ prev_month }}&year={{ prev_year }}">← Previous</a>
+            <a href="/admin/calendar">Today</a>
+            <a href="/admin/calendar?month={{ next_month }}&year={{ next_year }}">Next →</a>
+        </div>
+    </div>
+
+    <table class="calendar-table">
+        <thead>
+            <tr>
+                <th>Monday</th>
+                <th>Tuesday</th>
+                <th>Wednesday</th>
+                <th>Thursday</th>
+                <th>Friday</th>
+                <th style="background: #64748b;">Saturday</th>
+                <th style="background: #64748b;">Sunday</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for week in month_days %}
+            <tr>
+                {% for day in week %}
+                {% set day_index = loop.index0 %}
+                {% set is_weekend = (day_index >= 5) %}
+                {% set date_str = '%04d-%02d-%02d' % (year, month, day) if day else '' %}
+                {% set is_holiday = (date_str in holidays) %}
+                {% set is_today = (date_str == today) %}
+                <td class="{% if not day %}other-month{% elif is_holiday %}holiday{% elif is_weekend %}weekend{% endif %} {% if is_today and day %}today{% endif %}"
+                    style="height: 120px; overflow-y: auto;">
+                    {% if day %}
+                    <div class="calendar-day-number">{{ day }}</div>
+                    <div class="calendar-day-content" style="font-size: 0.75rem;">
+                        {% if is_holiday %}
+                        <div class="holiday-badge" style="max-width: 100%;">{{ holidays[date_str].name }}</div>
+                        {% endif %}
+
+                        {% if is_weekend and not is_holiday %}
+                        <div style="font-size: 0.7rem; color: #94a3b8; font-style: italic;">Weekend</div>
+                        {% endif %}
+
+                        {% if date_str in leave_dates %}
+                        {% for leave in leave_dates[date_str] %}
+                        <div style="margin-top: 0.25rem; display: flex; align-items: center; gap: 0.25rem;">
+                            <span class="leave-dot" style="background: {% if leave.leave_type == 'annual' %}#1a56db{% elif leave.leave_type == 'sick' %}#10b981{% else %}#f59e0b{% endif %}; flex-shrink: 0;"></span>
+                            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">
+                                {{ leave.name }}
+                                {% if leave.days < 1 %}
+                                ({% if leave.day_portion == 'first_half' %}1H{% elif leave.day_portion == 'second_half' %}2H{% else %}½{% endif %})
+                                {% endif %}
+                            </span>
+                        </div>
+                        {% endfor %}
+                        {% endif %}
+                    </div>
+                    {% endif %}
+                </td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<div style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+    <div style="background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin-bottom: 1rem;">Legend</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem;">
+            <div><span class="leave-dot" style="background: #1a56db;"></span> Annual Leave</div>
+            <div><span class="leave-dot" style="background: #10b981;"></span> Sick Leave</div>
+            <div><span class="leave-dot" style="background: #f59e0b;"></span> Casual Leave</div>
+            <div style="background: #fef3c7; padding: 0.25rem 0.5rem; border-radius: 0.25rem; display: inline-block; max-width: fit-content;">Holiday</div>
+            <div style="background: #f1f5f9; padding: 0.25rem 0.5rem; border-radius: 0.25rem; display: inline-block; max-width: fit-content;">Weekend (Sat-Sun)</div>
+            <div style="font-size: 0.8rem; color: #64748b; margin-top: 0.5rem;">1H = First Half | 2H = Second Half</div>
+        </div>
+        <p style="margin-top: 1rem; font-size: 0.8rem; color: #94a3b8;">Working days: Monday to Friday</p>
+    </div>
+</div>
+{% endblock %}

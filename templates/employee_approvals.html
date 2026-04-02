@@ -1,0 +1,124 @@
+{% extends "base.html" %}
+
+{% block title %}Team Approvals - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<h1>Team Leave Approvals</h1>
+
+<!-- Direct Reports -->
+<div class="card">
+    <h2 class="card-title">My Team ({{ direct_reports|length }} members)</h2>
+    {% if direct_reports %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
+        {% for emp in direct_reports %}
+        <div style="background: #f8fafc; padding: 1rem; border-radius: 0.5rem; border-left: 4px solid #1a56db;">
+            <div style="font-weight: 600;">{{ emp.name }}</div>
+            <div style="color: #64748b; font-size: 0.85rem;">{{ emp.emp_code }} - {{ emp.department }}</div>
+            <div style="color: #94a3b8; font-size: 0.8rem;">{{ emp.designation or 'Employee' }}</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <p style="color: #64748b;">No direct reports assigned.</p>
+    {% endif %}
+</div>
+
+<!-- Pending Approvals -->
+<div class="card">
+    <h2 class="card-title" style="display: flex; align-items: center; gap: 0.5rem;">
+        Pending Leave Requests
+        {% if pending_leaves %}
+        <span style="background: #ef4444; color: white; font-size: 0.8rem; padding: 0.2rem 0.6rem; border-radius: 9999px;">{{ pending_leaves|length }}</span>
+        {% endif %}
+    </h2>
+
+    {% if pending_leaves %}
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Department</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Requested On</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in pending_leaves %}
+            <tr>
+                <td><strong>{{ leave.name }}</strong><br><span style="font-size: 0.8rem; color: #64748b;">{{ leave.emp_code }}</span></td>
+                <td>{{ leave.department }}</td>
+                <td>{{ leave.leave_date }}</td>
+                <td>{{ leave.leave_type.capitalize() }}</td>
+                <td>
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day
+                    {% endif %}
+                </td>
+                <td>{{ leave.reason or '-' }}</td>
+                <td style="font-size: 0.85rem; color: #64748b;">{{ leave.created_at.split(' ')[0] }}</td>
+                <td>
+                    <div style="display: flex; gap: 0.5rem;">
+                        <form method="POST" action="/approve/{{ leave.id }}" style="display: inline;">
+                            <button type="submit" class="button button-success button-small">Approve</button>
+                        </form>
+                        <form method="POST" action="/reject/{{ leave.id }}" style="display: inline;">
+                            <button type="submit" class="button button-danger button-small">Reject</button>
+                        </form>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="color: #64748b; text-align: center; padding: 2rem;">No pending leave requests from your team.</p>
+    {% endif %}
+</div>
+
+<!-- Recent Actions -->
+{% if recent_actions %}
+<div class="card">
+    <h2 class="card-title">Recently Actioned</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Status</th>
+                <th>Actioned On</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in recent_actions %}
+            <tr>
+                <td><strong>{{ leave.name }}</strong></td>
+                <td>{{ leave.leave_date }}</td>
+                <td>{{ leave.leave_type.capitalize() }}</td>
+                <td>
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.status == 'approved' %}
+                    <span class="badge badge-approved">Approved</span>
+                    {% else %}
+                    <span class="badge badge-rejected">Rejected</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.85rem; color: #64748b;">{{ leave.approved_at.split(' ')[0] if leave.approved_at else '-' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

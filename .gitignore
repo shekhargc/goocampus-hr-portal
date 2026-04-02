@@ -1,0 +1,23 @@
+# Database
+*.db
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+venv/
+.env
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporary files
+cookies.txt
+emp_cookies.txt
+*.command
+
+# Migration scripts (not needed in production)
+update_employees.py
+add_management.py
+import_photos.py

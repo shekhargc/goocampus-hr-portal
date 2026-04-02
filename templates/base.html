@@ -1,0 +1,530 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}GooCampus HR Portal{% endblock %}</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Aptos Narrow', Arial, sans-serif;
+            background: #f8fafc;
+            color: #1e293b;
+        }
+
+        .navbar {
+            background: #1a56db;
+            color: white;
+            padding: 0 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 60px;
+        }
+
+        .navbar-brand {
+            font-weight: 700;
+            font-size: 1.2rem;
+            text-decoration: none;
+            color: white;
+        }
+
+        .navbar-nav {
+            display: flex;
+            gap: 2rem;
+            align-items: center;
+            list-style: none;
+        }
+
+        .navbar-nav a {
+            color: white;
+            text-decoration: none;
+            font-size: 0.9rem;
+            transition: opacity 0.2s;
+        }
+
+        .navbar-nav a:hover {
+            opacity: 0.8;
+        }
+
+        .nav-dropdown {
+            position: relative;
+        }
+
+        .nav-dropdown-toggle {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .nav-dropdown-menu {
+            display: none;
+            position: absolute;
+            right: 0;
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            min-width: 200px;
+            z-index: 1000;
+        }
+
+        .nav-dropdown:hover .nav-dropdown-menu {
+            display: block;
+        }
+
+        .nav-dropdown-menu a {
+            display: block;
+            color: #1e293b;
+            padding: 0.75rem 1rem;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .nav-dropdown-menu a:hover {
+            background: #f1f5f9;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+        }
+
+        .alert {
+            padding: 1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.5rem;
+            border-left: 4px solid;
+        }
+
+        .alert-success {
+            background: #ecfdf5;
+            border-color: #10b981;
+            color: #065f46;
+        }
+
+        .alert-error {
+            background: #fef2f2;
+            border-color: #ef4444;
+            color: #7f1d1d;
+        }
+
+        .alert-info {
+            background: #eff6ff;
+            border-color: #3b82f6;
+            color: #1e40af;
+        }
+
+        .card {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: #1e293b;
+        }
+
+        .button {
+            display: inline-block;
+            padding: 0.5rem 1rem;
+            background: #1a56db;
+            color: white;
+            border: none;
+            border-radius: 0.5rem;
+            cursor: pointer;
+            font-size: 0.9rem;
+            text-decoration: none;
+            transition: background 0.2s;
+        }
+
+        .button:hover {
+            background: #1e40af;
+        }
+
+        .button-secondary {
+            background: #64748b;
+        }
+
+        .button-secondary:hover {
+            background: #475569;
+        }
+
+        .button-danger {
+            background: #ef4444;
+        }
+
+        .button-danger:hover {
+            background: #dc2626;
+        }
+
+        .button-success {
+            background: #10b981;
+        }
+
+        .button-success:hover {
+            background: #059669;
+        }
+
+        .button-small {
+            padding: 0.25rem 0.75rem;
+            font-size: 0.85rem;
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 500;
+            color: #1e293b;
+        }
+
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            width: 100%;
+            padding: 0.5rem;
+            border: 1px solid #cbd5e1;
+            border-radius: 0.5rem;
+            font-family: inherit;
+            font-size: 0.9rem;
+        }
+
+        .form-group textarea {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: #1a56db;
+            box-shadow: 0 0 0 3px rgba(26, 86, 219, 0.1);
+        }
+
+        .table {
+            width: 100%;
+            border-collapse: collapse;
+            background: white;
+        }
+
+        .table thead {
+            background: #f1f5f9;
+            border-bottom: 1px solid #cbd5e1;
+        }
+
+        .table th {
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            color: #1e293b;
+        }
+
+        .table td {
+            padding: 1rem;
+            border-bottom: 1px solid #e2e8f0;
+        }
+
+        .table tbody tr:hover {
+            background: #f8fafc;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 0.25rem 0.75rem;
+            border-radius: 9999px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .badge-pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .badge-approved {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-rejected {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .summary-card {
+            background: white;
+            border-radius: 0.5rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+            padding: 1.5rem;
+            text-align: center;
+            border-left: 4px solid #1a56db;
+        }
+
+        .summary-card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: #1a56db;
+            margin-bottom: 0.5rem;
+        }
+
+        .summary-card-label {
+            font-size: 0.9rem;
+            color: #64748b;
+        }
+
+        .grid-2 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .grid-3 {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .calendar {
+            background: white;
+            border-radius: 0.5rem;
+            overflow: hidden;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+        }
+
+        .calendar-header {
+            background: #1a56db;
+            color: white;
+            padding: 1.5rem;
+            text-align: center;
+        }
+
+        .calendar-header h2 {
+            font-size: 1.3rem;
+            margin-bottom: 1rem;
+        }
+
+        .calendar-nav {
+            display: flex;
+            justify-content: space-between;
+            gap: 1rem;
+        }
+
+        .calendar-nav a {
+            color: white;
+            text-decoration: none;
+            padding: 0.5rem 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 0.25rem;
+            transition: background 0.2s;
+        }
+
+        .calendar-nav a:hover {
+            background: rgba(0, 0, 0, 0.3);
+        }
+
+        .calendar-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+
+        .calendar-table th {
+            background: #f1f5f9;
+            padding: 0.75rem;
+            text-align: center;
+            font-weight: 600;
+            border-bottom: 2px solid #cbd5e1;
+        }
+
+        .calendar-table td {
+            border: 1px solid #e2e8f0;
+            height: 100px;
+            vertical-align: top;
+            padding: 0.5rem;
+            position: relative;
+        }
+
+        .calendar-table td.weekend {
+            background: #f1f5f9;
+        }
+
+        .calendar-table td.holiday {
+            background: #fef3c7;
+        }
+
+        .calendar-table td.today {
+            border: 2px solid #1a56db;
+            border-width: 2px;
+        }
+
+        .calendar-table td.other-month {
+            background: #fafbfc;
+            color: #cbd5e1;
+        }
+
+        .calendar-day-number {
+            font-weight: 600;
+            color: #1e293b;
+            margin-bottom: 0.25rem;
+        }
+
+        .calendar-day-content {
+            font-size: 0.8rem;
+        }
+
+        .holiday-badge {
+            display: inline-block;
+            background: #f59e0b;
+            color: white;
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+            font-size: 0.7rem;
+            margin-top: 0.25rem;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 90px;
+        }
+
+        .leave-dot {
+            display: inline-block;
+            width: 6px;
+            height: 6px;
+            border-radius: 50%;
+            margin-right: 0.25rem;
+        }
+
+        .leave-annual {
+            background: #1a56db;
+        }
+
+        .leave-sick {
+            background: #10b981;
+        }
+
+        .leave-casual {
+            background: #f59e0b;
+        }
+
+        .leave-pending {
+            border: 1px dashed #1a56db;
+            border-radius: 2px;
+            padding: 0.25rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        @media (max-width: 768px) {
+            .navbar {
+                padding: 0 1rem;
+            }
+
+            .navbar-nav {
+                gap: 1rem;
+            }
+
+            .container {
+                padding: 1rem;
+            }
+
+            .summary-cards {
+                grid-template-columns: 1fr;
+            }
+
+            .calendar-table td {
+                height: auto;
+                min-height: 80px;
+                font-size: 0.8rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="navbar">
+        <a href="/" class="navbar-brand">GooCampus HR Portal</a>
+        <ul class="navbar-nav">
+            {% if session.get('is_admin') %}
+                <li><a href="/admin/dashboard">Dashboard</a></li>
+                <li><a href="/admin/calendar">Calendar</a></li>
+                <li><a href="/admin/add-leave">Add Leave</a></li>
+                <li><a href="/admin/bulk-leave">Bulk Leave</a></li>
+                <li><a href="/admin/manage-employees">Employees</a></li>
+                <li><a href="/admin/org-chart">Org Chart</a></li>
+                <li><a href="/admin/monthly-report">Monthly Report</a></li>
+                <li><a href="/admin/holidays">Holidays</a></li>
+            {% else %}
+                <li><a href="/dashboard">Dashboard</a></li>
+                <li><a href="/calendar">Calendar</a></li>
+                <li><a href="/apply-leave">Apply Leave</a></li>
+                {% if is_manager %}
+                <li><a href="/approvals" style="position: relative;">
+                    Approvals
+                    {% if pending_team_count > 0 %}
+                    <span style="background: #ef4444; color: white; font-size: 0.7rem; padding: 0.15rem 0.4rem; border-radius: 9999px; position: absolute; top: -5px; right: -10px;">{{ pending_team_count }}</span>
+                    {% endif %}
+                </a></li>
+                {% endif %}
+            {% endif %}
+
+            {% if session.get('user_id') %}
+            <li class="nav-dropdown">
+                <span class="nav-dropdown-toggle">
+                    ☰
+                </span>
+                <div class="nav-dropdown-menu">
+                    <a href="/profile">Profile</a>
+                    <a href="/change-password">Change Password</a>
+                    <a href="/logout">Logout</a>
+                </div>
+            </li>
+            {% endif %}
+        </ul>
+    </nav>
+
+    <div class="container">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="alert alert-{{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Employee - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 2rem;">
+    <a href="/admin/employee/{{ employee.id }}" class="button button-secondary" style="margin-bottom: 1rem;">← Back to Employee</a>
+    <h1>Edit Employee: {{ employee.name }}</h1>
+</div>
+
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 900px;">
+
+<!-- Photo Upload Card -->
+<div class="card" style="text-align: center;">
+    <h2 class="card-title">Employee Photo</h2>
+    <div style="margin-bottom: 1rem;">
+        {% if employee.photo_url %}
+        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid #1a56db;">
+        {% else %}
+        <div style="width: 150px; height: 150px; border-radius: 50%; background: #1a56db; color: white; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 700; margin: 0 auto;">
+            {{ employee.name[0] }}
+        </div>
+        {% endif %}
+    </div>
+    <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data">
+        <div class="form-group">
+            <input type="file" name="photo" accept="image/*" style="font-size: 0.85rem;">
+        </div>
+        <button type="submit" class="button" style="width: 100%;">Upload Photo</button>
+    </form>
+</div>
+
+<!-- Employee Info -->
+<div class="card">
+    <h2 class="card-title">Employee Info</h2>
+    <div style="font-size: 0.9rem; color: #64748b;">
+        <p><strong>Code:</strong> {{ employee.emp_code }}</p>
+        <p><strong>Department:</strong> {{ employee.department or '-' }}</p>
+        <p><strong>Designation:</strong> {{ employee.designation or '-' }}</p>
+        <p><strong>Joined:</strong> {{ employee.joining_date or '-' }}</p>
+        <p><strong>Email:</strong> {{ employee.email or '-' }}</p>
+    </div>
+</div>
+
+</div>
+
+<div class="card" style="max-width: 600px; margin-top: 1.5rem;">
+    <form method="POST">
+        <div class="form-group">
+            <label for="name">Name</label>
+            <input type="text" id="name" name="name" value="{{ employee.name }}" required>
+        </div>
+
+        <div class="form-group">
+            <label>Employee Code</label>
+            <input type="text" value="{{ employee.emp_code }}" disabled style="background: #f1f5f9; color: #64748b;">
+        </div>
+
+        <div class="form-group">
+            <label for="email">Email</label>
+            <input type="email" id="email" name="email" value="{{ employee.email or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="phone">Phone</label>
+            <input type="tel" id="phone" name="phone" value="{{ employee.phone or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="dob">Date of Birth</label>
+            <input type="date" id="dob" name="dob" value="{{ employee.dob or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="address">Address</label>
+            <textarea id="address" name="address">{{ employee.address or '' }}</textarea>
+        </div>
+
+        <div class="form-group">
+            <label for="department">Department</label>
+            <select id="department" name="department">
+                {% for dept in departments %}
+                <option value="{{ dept }}" {% if employee.department == dept %}selected{% endif %}>{{ dept }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="designation">Designation</label>
+            <input type="text" id="designation" name="designation" value="{{ employee.designation or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="joining_date">Joining Date</label>
+            <input type="date" id="joining_date" name="joining_date" value="{{ employee.joining_date or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="reporting_to">Reporting To</label>
+            <select id="reporting_to" name="reporting_to">
+                <option value="">-- None --</option>
+                {% for mgr in managers %}
+                <option value="{{ mgr.id }}" {% if employee.reporting_to == mgr.id %}selected{% endif %}>{{ mgr.name }} ({{ mgr.emp_code }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="carry_forward">Carry Forward</label>
+            <input type="number" id="carry_forward" name="carry_forward" value="{{ employee.carry_forward or 0 }}" step="0.5" min="0">
+        </div>
+
+        <h2 style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1.1rem;">Emergency Contact</h2>
+
+        <div class="form-group">
+            <label for="emergency_contact_name">Name</label>
+            <input type="text" id="emergency_contact_name" name="emergency_contact_name" value="{{ employee.emergency_contact_name or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="emergency_contact_phone">Phone</label>
+            <input type="tel" id="emergency_contact_phone" name="emergency_contact_phone" value="{{ employee.emergency_contact_phone or '' }}">
+        </div>
+
+        <div class="form-group">
+            <label for="emergency_contact_relation">Relation</label>
+            <input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}">
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button">Save Changes</button>
+            <a href="/admin/employee/{{ employee.id }}" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
