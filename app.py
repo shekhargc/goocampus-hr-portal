@@ -1783,6 +1783,44 @@ def mark_single_notification_read(notif_id):
     return jsonify({'status': 'ok'})
 
 
+@app.route('/notifications')
+@login_required
+def notifications_page():
+    """Dedicated notifications page with all notifications."""
+    user = get_user()
+    conn = get_db()
+
+    if user['is_admin']:
+        notifications = conn.execute('''
+            SELECT * FROM notifications
+            WHERE (target_user_id = ? OR target_user_id IS NULL)
+            AND (target_role IN ('all', 'admin'))
+            ORDER BY created_at DESC LIMIT 100
+        ''', (user['id'],)).fetchall()
+    else:
+        mgr = is_manager(user['id'])
+        if mgr:
+            notifications = conn.execute('''
+                SELECT * FROM notifications
+                WHERE (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role IN ('all', 'manager'))
+                ORDER BY created_at DESC LIMIT 100
+            ''', (user['id'],)).fetchall()
+        else:
+            notifications = conn.execute('''
+                SELECT * FROM notifications
+                WHERE (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role = 'all')
+                ORDER BY created_at DESC LIMIT 100
+            ''', (user['id'],)).fetchall()
+
+    # Count unread
+    unread_count = sum(1 for n in notifications if n['is_read'] == 0)
+
+    conn.close()
+    return render_template('notifications.html', user=user, notifications=notifications, unread_count=unread_count)
+
+
 @app.route('/announcements')
 @login_required
 def announcements():

@@ -808,6 +808,9 @@
                         <div class="notif-panel-body" id="notif-list">
                             <div style="text-align:center; padding: 1.5rem; color: var(--gray-400);">Loading...</div>
                         </div>
+                        <div style="padding: 0.65rem 1.15rem; border-top: 1px solid var(--gray-200); text-align: center; background: var(--gray-50);">
+                            <a href="/notifications" style="font-size: 0.82rem; color: var(--blue); font-weight: 600; text-decoration: none;">View all notifications</a>
+                        </div>
                     </div>
                 </li>
                 <li class="nav-divider"></li>
@@ -933,13 +936,24 @@
                     return;
                 }
                 let html = '';
-                data.forEach(n => {
+                const typeLabels = {
+                    'birthday': 'Birthday',
+                    'anniversary': 'Anniversary',
+                    'announcement': 'Announcement',
+                    'holiday': 'Holiday',
+                    'leave_request': 'Leave Request'
+                };
+                data.slice(0, 10).forEach(n => {
                     const readClass = n.is_read ? '' : ' unread';
+                    const typeLabel = typeLabels[n.type] || n.type;
                     html += `
-                        <div class="notif-item${readClass}" onclick="markRead(${n.id}, this)">
+                        <div class="notif-item${readClass}" onclick="openNotification(${n.id}, this)">
                             <div class="notif-icon ${n.type}">${getIcon(n.type)}</div>
                             <div class="notif-content">
-                                <div class="notif-title">${n.title}</div>
+                                <div style="display:flex; justify-content:space-between; align-items:center;">
+                                    <div class="notif-title">${n.title}</div>
+                                    <span style="font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:0.25rem; background:var(--gray-100); color:var(--gray-500); font-weight:600; flex-shrink:0; margin-left:0.5rem;">${typeLabel}</span>
+                                </div>
                                 <div class="notif-msg">${n.message}</div>
                                 <div class="notif-time">${timeAgo(n.created_at)}</div>
                             </div>
@@ -953,18 +967,18 @@
             });
     }
 
-    function markRead(id, el) {
+    function openNotification(id, el) {
         if (el.classList.contains('unread')) {
-            fetch(`/api/notifications/${id}/read`, {method: 'POST'});
-            el.classList.remove('unread');
-            updateBadge(-1);
+            fetch('/api/notifications/' + id + '/read', {method: 'POST'});
         }
+        window.location.href = '/notifications';
     }
 
     function markAllRead(e) {
         e.preventDefault();
         e.stopPropagation();
         fetch('/api/notifications/mark-read', {method: 'POST'})
+            .then(r => r.json())
             .then(() => {
                 document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
                 updateBadge(0, true);

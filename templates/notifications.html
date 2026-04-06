@@ -1,0 +1,200 @@
+{% extends "base.html" %}
+
+{% block title %}Notifications - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .notif-page { max-width: 800px; margin: 0 auto; }
+    .notif-page-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 1.25rem;
+    }
+    .notif-page-title { font-size: 1.2rem; font-weight: 700; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
+    .notif-page-actions { display: flex; gap: 0.75rem; align-items: center; }
+    .notif-filter {
+        padding: 0.4rem 0.85rem; border: 1px solid var(--gray-300); border-radius: 0.4rem;
+        font-size: 0.82rem; font-family: 'Inter', sans-serif; color: var(--gray-600);
+        background: var(--white); cursor: pointer;
+    }
+    .notif-filter:focus { outline: none; border-color: var(--blue); }
+    .notif-mark-all {
+        padding: 0.4rem 0.85rem; border: 1px solid var(--orange); border-radius: 0.4rem;
+        font-size: 0.82rem; font-family: 'Inter', sans-serif; color: var(--orange);
+        background: transparent; cursor: pointer; font-weight: 600; transition: all 0.15s;
+    }
+    .notif-mark-all:hover { background: var(--orange); color: white; }
+
+    .notif-card {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    .notif-row {
+        padding: 1rem 1.25rem; border-bottom: 1px solid var(--gray-100);
+        display: flex; gap: 0.85rem; align-items: flex-start;
+        transition: background 0.15s; cursor: pointer;
+    }
+    .notif-row:last-child { border-bottom: none; }
+    .notif-row:hover { background: var(--gray-50); }
+    .notif-row.unread { background: #f0f7ff; border-left: 3px solid var(--orange); }
+    .notif-row.unread:hover { background: #e6f0fb; }
+
+    .notif-row-icon {
+        width: 38px; height: 38px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; font-size: 1.1rem;
+    }
+    .notif-row-icon.birthday { background: #fef3c7; }
+    .notif-row-icon.anniversary { background: #ede9fe; }
+    .notif-row-icon.announcement { background: #dbeafe; }
+    .notif-row-icon.holiday { background: #d1fae5; }
+    .notif-row-icon.leave_request { background: #fce7f3; }
+
+    .notif-row-body { flex: 1; min-width: 0; }
+    .notif-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
+    .notif-row-title { font-weight: 600; font-size: 0.9rem; color: var(--navy); }
+    .notif-row-type {
+        display: inline-block; padding: 0.12rem 0.5rem; border-radius: 0.3rem;
+        font-size: 0.68rem; font-weight: 600; text-transform: capitalize; flex-shrink: 0;
+    }
+    .notif-row-type.birthday { background: rgba(245,158,11,0.12); color: #b45309; }
+    .notif-row-type.anniversary { background: rgba(139,92,246,0.12); color: #6d28d9; }
+    .notif-row-type.announcement { background: rgba(59,130,246,0.12); color: #1d4ed8; }
+    .notif-row-type.holiday { background: rgba(16,185,129,0.12); color: #059669; }
+    .notif-row-type.leave_request { background: rgba(236,72,153,0.12); color: #be185d; }
+
+    .notif-row-msg { font-size: 0.84rem; color: var(--gray-600); line-height: 1.5; margin-top: 0.15rem; }
+    .notif-row-time { font-size: 0.72rem; color: var(--gray-400); margin-top: 0.35rem; }
+
+    .notif-empty-page {
+        text-align: center; padding: 3rem 2rem; color: var(--gray-400);
+    }
+    .notif-empty-page svg { margin-bottom: 1rem; opacity: 0.4; }
+    .notif-empty-page p { font-size: 0.95rem; }
+
+    .notif-date-group { padding: 0.6rem 1.25rem; background: var(--gray-50); font-size: 0.78rem; font-weight: 600; color: var(--gray-500); border-bottom: 1px solid var(--gray-200); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="notif-page">
+    <div class="notif-page-header">
+        <div class="notif-page-title">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+            Notifications
+            {% if unread_count > 0 %}
+            <span style="background: var(--danger); color: white; font-size: 0.7rem; padding: 0.1rem 0.45rem; border-radius: 9999px; font-weight: 700;">{{ unread_count }}</span>
+            {% endif %}
+        </div>
+        <div class="notif-page-actions">
+            <select class="notif-filter" id="notif-type-filter" onchange="filterNotifications()">
+                <option value="all">All Types</option>
+                <option value="announcement">Announcements</option>
+                <option value="birthday">Birthdays</option>
+                <option value="anniversary">Anniversaries</option>
+                <option value="holiday">Holidays</option>
+                <option value="leave_request">Leave Requests</option>
+            </select>
+            {% if unread_count > 0 %}
+            <button class="notif-mark-all" onclick="markAllReadPage()">Mark all as read</button>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="notif-card" id="notif-card">
+        {% if notifications %}
+            {% set current_date = namespace(val='') %}
+            {% for n in notifications %}
+                {% set notif_date = n.created_at.strftime('%B %d, %Y') if n.created_at is not string else n.created_at[:10] %}
+                {% if notif_date != current_date.val %}
+                    {% set current_date.val = notif_date %}
+                    <div class="notif-date-group">{{ notif_date }}</div>
+                {% endif %}
+                <div class="notif-row {{ 'unread' if n.is_read == 0 else '' }}" data-type="{{ n.type }}" data-id="{{ n.id }}" onclick="markReadRow(this, {{ n.id }})">
+                    <div class="notif-row-icon {{ n.type }}">
+                        {% if n.type == 'birthday' %}🎂{% elif n.type == 'anniversary' %}🌟{% elif n.type == 'announcement' %}📢{% elif n.type == 'holiday' %}🏖️{% elif n.type == 'leave_request' %}📋{% else %}🔔{% endif %}
+                    </div>
+                    <div class="notif-row-body">
+                        <div class="notif-row-top">
+                            <div class="notif-row-title">{{ n.title }}</div>
+                            <span class="notif-row-type {{ n.type }}">{{ n.type | replace('_', ' ') }}</span>
+                        </div>
+                        <div class="notif-row-msg">{{ n.message }}</div>
+                        <div class="notif-row-time">{{ n.created_at.strftime('%B %d, %Y at %I:%M %p') if n.created_at is not string else n.created_at }}</div>
+                    </div>
+                </div>
+            {% endfor %}
+        {% else %}
+            <div class="notif-empty-page">
+                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+                <p>No notifications yet</p>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+function filterNotifications() {
+    const filter = document.getElementById('notif-type-filter').value;
+    const rows = document.querySelectorAll('.notif-row');
+    const groups = document.querySelectorAll('.notif-date-group');
+
+    rows.forEach(row => {
+        if (filter === 'all' || row.dataset.type === filter) {
+            row.style.display = '';
+        } else {
+            row.style.display = 'none';
+        }
+    });
+
+    // Hide date group headers that have no visible rows after them
+    groups.forEach(group => {
+        let next = group.nextElementSibling;
+        let hasVisible = false;
+        while (next && !next.classList.contains('notif-date-group')) {
+            if (next.style.display !== 'none' && next.classList.contains('notif-row')) {
+                hasVisible = true;
+                break;
+            }
+            next = next.nextElementSibling;
+        }
+        group.style.display = hasVisible ? '' : 'none';
+    });
+}
+
+function markReadRow(el, id) {
+    if (el.classList.contains('unread')) {
+        fetch('/api/notifications/' + id + '/read', {method: 'POST'})
+            .then(r => r.json())
+            .then(() => {
+                el.classList.remove('unread');
+                // Update badge in navbar
+                const badge = document.getElementById('notif-badge');
+                if (badge) {
+                    let count = parseInt(badge.textContent) - 1;
+                    if (count <= 0) {
+                        badge.style.display = 'none';
+                    } else {
+                        badge.textContent = count;
+                    }
+                }
+            });
+    }
+}
+
+function markAllReadPage() {
+    fetch('/api/notifications/mark-read', {method: 'POST'})
+        .then(r => r.json())
+        .then(() => {
+            document.querySelectorAll('.notif-row.unread').forEach(el => el.classList.remove('unread'));
+            const badge = document.getElementById('notif-badge');
+            if (badge) badge.style.display = 'none';
+            // Hide the mark all button
+            const btn = document.querySelector('.notif-mark-all');
+            if (btn) btn.style.display = 'none';
+            // Remove unread count badge in header
+            const headerBadge = document.querySelector('.notif-page-title span[style*="danger"]');
+            if (headerBadge) headerBadge.style.display = 'none';
+        });
+}
+</script>
+{% endblock %}
