@@ -352,7 +352,7 @@
             {% for ann in announcements %}
             <div class="ann-item">
                 <div class="ann-title">{{ ann.title }}</div>
-                <div class="ann-meta">By {{ ann.posted_by_name }} · {{ ann.created_at[:10] }}</div>
+                <div class="ann-meta">By {{ ann.posted_by_name }} · {{ ann.created_at.strftime('%Y-%m-%d') if ann.created_at is not string else ann.created_at[:10] }}</div>
                 <div class="ann-msg">{{ ann.message[:150] }}{% if ann.message | length > 150 %}...{% endif %}</div>
             </div>
             {% endfor %}
