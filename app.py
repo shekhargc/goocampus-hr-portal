@@ -819,6 +819,32 @@ def admin_dashboard():
         ORDER BY holiday_date
     ''', (now.strftime('%Y-%m-%d'), month_end)).fetchall()
 
+    # Birthdays this month
+    current_mm = str(now.month).zfill(2)
+    birthdays_this_month = conn.execute('''
+        SELECT name, dob, photo_url, department FROM employees
+        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        AND strftime('%m', dob) = ?
+        ORDER BY strftime('%d', dob)
+    ''', (current_mm,)).fetchall()
+
+    # Work anniversaries this month
+    anniversaries_this_month = conn.execute('''
+        SELECT name, joining_date, photo_url, department FROM employees
+        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        AND strftime('%m', joining_date) = ?
+        AND strftime('%Y', joining_date) != ?
+        ORDER BY strftime('%d', joining_date)
+    ''', (current_mm, str(now.year))).fetchall()
+
+    # Recent announcements
+    announcements = conn.execute('''
+        SELECT a.*, e.name as posted_by_name FROM announcements a
+        JOIN employees e ON a.posted_by = e.id
+        WHERE a.is_active = 1
+        ORDER BY a.created_at DESC LIMIT 5
+    ''', ()).fetchall()
+
     conn.close()
 
     return render_template('admin_dashboard.html',
@@ -832,7 +858,11 @@ def admin_dashboard():
                          recent_leaves=recent,
                          upcoming_holidays=upcoming_holidays,
                          current_month_name=calendar.month_name[now.month],
-                         current_year=now.year)
+                         current_year=now.year,
+                         birthdays_this_month=birthdays_this_month,
+                         anniversaries_this_month=anniversaries_this_month,
+                         announcements=announcements,
+                         can_announce=can_post_announcements(user))
 
 @app.route('/admin/org-chart')
 @admin_required

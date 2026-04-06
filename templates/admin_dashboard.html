@@ -89,10 +89,31 @@
         .stat-cards { grid-template-columns: repeat(2, 1fr); }
         .grid-row { grid-template-columns: 1fr; }
     }
+    /* Celebration sections */
+    .grid-3col { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.5rem; margin-bottom: 2rem; }
+    .celebrate-item {
+        display: flex; align-items: center; gap: 0.85rem; padding: 0.75rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .celebrate-item:last-child { border-bottom: none; }
+    .celebrate-avatar { width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; flex-shrink: 0; }
+    .celebrate-name { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .celebrate-detail { font-size: 0.78rem; color: var(--gray-500); margin-top: 0.1rem; }
+    .ann-item { padding: 0.85rem 0; border-bottom: 1px solid var(--gray-100); }
+    .ann-item:last-child { border-bottom: none; }
+    .ann-title { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .ann-meta { font-size: 0.75rem; color: var(--gray-400); margin-top: 0.2rem; }
+    .ann-msg { font-size: 0.85rem; color: var(--gray-600); margin-top: 0.4rem; line-height: 1.5; }
+
     @media (max-width: 768px) {
         .stat-cards { grid-template-columns: 1fr; }
         .quick-links { grid-template-columns: repeat(2, 1fr); }
+        .grid-3col { grid-template-columns: 1fr; }
         .dash-header h1 { font-size: 1.6rem; }
+    }
+    @media (min-width: 769px) and (max-width: 1024px) {
+        .grid-3col { grid-template-columns: 1fr 1fr; }
     }
 </style>
 {% endblock %}
@@ -262,6 +283,85 @@
     </div>
 </div>
 {% endif %}
+
+<!-- Birthdays, Anniversaries & Announcements -->
+<div class="grid-3col">
+    <!-- Birthdays This Month -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.1rem;">🎂</span> Birthdays — {{ current_month_name }}
+            </div>
+        </div>
+        <div class="panel-body">
+            {% if birthdays_this_month %}
+            {% for b in birthdays_this_month %}
+            <div class="celebrate-item">
+                <div class="celebrate-avatar" style="background: linear-gradient(135deg, #ec4899, #f97316);">{{ b.name[0] }}</div>
+                <div>
+                    <div class="celebrate-name">{{ b.name }}</div>
+                    <div class="celebrate-detail">{{ b.department }} · {{ b.dob[8:] | int }}
+                        {% set bm = b.dob[5:7] | int %}
+                        {% if bm == 1 %}Jan{% elif bm == 2 %}Feb{% elif bm == 3 %}Mar{% elif bm == 4 %}Apr{% elif bm == 5 %}May{% elif bm == 6 %}Jun{% elif bm == 7 %}Jul{% elif bm == 8 %}Aug{% elif bm == 9 %}Sep{% elif bm == 10 %}Oct{% elif bm == 11 %}Nov{% elif bm == 12 %}Dec{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--gray-400); text-align: center; padding: 1.5rem 0; font-size: 0.9rem;">No birthdays this month</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Work Anniversaries -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.1rem;">🌟</span> Work Anniversaries — {{ current_month_name }}
+            </div>
+        </div>
+        <div class="panel-body">
+            {% if anniversaries_this_month %}
+            {% for a in anniversaries_this_month %}
+            <div class="celebrate-item">
+                <div class="celebrate-avatar" style="background: linear-gradient(135deg, #8b5cf6, #3b82f6);">{{ a.name[0] }}</div>
+                <div>
+                    <div class="celebrate-name">{{ a.name }}</div>
+                    <div class="celebrate-detail">{{ a.department }} · Joined {{ a.joining_date }}</div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--gray-400); text-align: center; padding: 1.5rem 0; font-size: 0.9rem;">No work anniversaries this month</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Announcements -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title" style="display: flex; align-items: center; gap: 0.5rem;">
+                <span style="font-size: 1.1rem;">📢</span> Announcements
+            </div>
+            {% if can_announce %}
+            <a href="/announcements" class="view-all-link">Manage &rarr;</a>
+            {% endif %}
+        </div>
+        <div class="panel-body">
+            {% if announcements %}
+            {% for ann in announcements %}
+            <div class="ann-item">
+                <div class="ann-title">{{ ann.title }}</div>
+                <div class="ann-meta">By {{ ann.posted_by_name }} · {{ ann.created_at[:10] }}</div>
+                <div class="ann-msg">{{ ann.message[:150] }}{% if ann.message | length > 150 %}...{% endif %}</div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <p style="color: var(--gray-400); text-align: center; padding: 1.5rem 0; font-size: 0.9rem;">No announcements yet</p>
+            {% endif %}
+        </div>
+    </div>
+</div>
 
 <!-- Quick Actions -->
 <div class="panel">
