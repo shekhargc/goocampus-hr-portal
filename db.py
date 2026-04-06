@@ -69,6 +69,13 @@ class DatabaseConnection:
             sql
         )
 
+        # strftime('%d', column) or strftime('%d', table.column) -> TO_CHAR(column::date, 'DD')
+        sql = re.sub(
+            r"strftime\('%d',\s*([\w.]+)\)",
+            r"TO_CHAR(\1::date, 'DD')",
+            sql
+        )
+
         return sql
 
     def commit(self):
