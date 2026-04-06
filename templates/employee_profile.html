@@ -2,24 +2,30 @@
 
 {% block title %}Profile - GooCampus HR Portal{% endblock %}
 
-{% block content %}
-<div class="card">
-    <h1 class="card-title">My Profile</h1>
+{% block extra_css %}
+<style>
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+</style>
+{% endblock %}
 
-    <form method="POST" style="max-width: 600px;">
+{% block content %}
+<h1 class="page-title">My Profile</h1>
+<div class="card">
+
+    <form method="POST" style="max-width: 650px;">
         <div class="form-group">
             <label>Name</label>
-            <input type="text" value="{{ user.name }}" disabled style="background: #f1f5f9; color: #64748b;">
+            <input type="text" value="{{ user.name }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
         </div>
 
         <div class="form-group">
             <label>Employee Code</label>
-            <input type="text" value="{{ user.emp_code }}" disabled style="background: #f1f5f9; color: #64748b;">
+            <input type="text" value="{{ user.emp_code }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
         </div>
 
         <div class="form-group">
             <label>Department</label>
-            <input type="text" value="{{ user.department or '-' }}" disabled style="background: #f1f5f9; color: #64748b;">
+            <input type="text" value="{{ user.department or '-' }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
         </div>
 
         <div class="form-group">
@@ -42,7 +48,7 @@
             <textarea name="address">{{ user.address or '' }}</textarea>
         </div>
 
-        <h2 style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1.1rem;">Emergency Contact</h2>
+        <h2 style="margin-top: 3rem; margin-bottom: 2rem; font-size: 1.3rem; font-weight: 600; color: var(--navy);">Emergency Contact</h2>
 
         <div class="form-group">
             <label>Name</label>
@@ -59,7 +65,7 @@
             <input type="text" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}">
         </div>
 
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1.25rem; margin-top: 2.5rem;">
             <button type="submit" class="button">Save Changes</button>
             <a href="/dashboard" class="button button-secondary">Cancel</a>
         </div>

@@ -4,119 +4,121 @@
 
 {% block extra_css %}
 <style>
-    .org-container { padding: 1rem 0; }
+    .org-container { padding: 2rem 0; }
 
     /* Tree styles */
-    .tree { display: flex; flex-direction: column; align-items: center; padding: 2rem 0; overflow-x: auto; }
-    .tree-level { display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap; position: relative; }
+    .tree { display: flex; flex-direction: column; align-items: center; padding: 3rem 0; overflow-x: auto; }
+    .tree-level { display: flex; justify-content: center; gap: 2.5rem; flex-wrap: wrap; position: relative; }
     .tree-node { display: flex; flex-direction: column; align-items: center; position: relative; }
     .tree-card {
-        background: white; border-radius: 0.75rem; padding: 1rem 1.25rem; text-align: center;
-        box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 2px solid #e2e8f0;
-        min-width: 170px; position: relative; z-index: 1; cursor: default;
+        background: var(--white); border-radius: 1rem; padding: 1.5rem 1.75rem; text-align: center;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08); border: 2px solid var(--gray-200);
+        min-width: 200px; position: relative; z-index: 1; cursor: default;
         transition: box-shadow 0.2s, transform 0.15s;
     }
-    .tree-card:hover { box-shadow: 0 4px 16px rgba(0,0,0,0.14); transform: translateY(-2px); }
-    .tree-card.ceo { border-color: #1a56db; background: linear-gradient(135deg, #1a56db 0%, #1e40af 100%); color: white; min-width: 200px; }
-    .tree-card.ceo .role { color: rgba(255,255,255,0.8); }
-    .tree-card.mgmt { border-color: #1a56db; }
+    .tree-card:hover { box-shadow: 0 6px 20px rgba(0,0,0,0.15); transform: translateY(-3px); }
+    .tree-card.ceo { border-color: var(--blue); background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%); color: var(--white); min-width: 220px; }
+    .tree-card.ceo .role { color: rgba(255,255,255,0.85); }
+    .tree-card.mgmt { border-color: var(--blue); }
     .tree-card.lead { border-color: #0891b2; }
     .tree-card img, .tree-card .tree-init {
-        width: 52px; height: 52px; border-radius: 50%; object-fit: cover;
-        margin: 0 auto 0.5rem; display: block; border: 3px solid #e2e8f0;
+        width: 60px; height: 60px; border-radius: 50%; object-fit: cover;
+        margin: 0 auto 0.75rem; display: block; border: 3px solid var(--gray-200);
     }
     .tree-card.ceo img, .tree-card.ceo .tree-init { border-color: rgba(255,255,255,0.4); }
     .tree-card.mgmt img, .tree-card.mgmt .tree-init { border-color: #93c5fd; }
     .tree-init {
         display: flex; align-items: center; justify-content: center;
-        font-weight: 700; font-size: 1.2rem; color: white;
+        font-weight: 700; font-size: 1.35rem; color: var(--white);
     }
-    .tree-card .name { font-weight: 600; font-size: 0.85rem; }
-    .tree-card .role { font-size: 0.72rem; color: #64748b; margin-top: 0.15rem; }
+    .tree-card .name { font-weight: 600; font-size: 0.95rem; }
+    .tree-card .role { font-size: 0.8rem; color: var(--gray-500); margin-top: 0.25rem; }
     .tree-card .dept-tag {
-        display: inline-block; font-size: 0.65rem; padding: 0.15rem 0.5rem;
-        border-radius: 1rem; margin-top: 0.35rem; font-weight: 500;
+        display: inline-block; font-size: 0.7rem; padding: 0.2rem 0.65rem;
+        border-radius: 1rem; margin-top: 0.5rem; font-weight: 600;
     }
 
     /* Connectors */
     .connector-down {
-        width: 2px; height: 28px; background: #cbd5e1; margin: 0 auto;
+        width: 2px; height: 32px; background: var(--gray-300); margin: 0 auto;
     }
     .connector-split {
         display: flex; justify-content: center; position: relative;
-        padding-top: 28px; margin-bottom: 0;
+        padding-top: 32px; margin-bottom: 0;
     }
     .connector-split::before {
         content: ''; position: absolute; top: 0; left: 50%; width: 2px;
-        height: 28px; background: #cbd5e1;
+        height: 32px; background: var(--gray-300);
     }
     .connector-h-bar {
-        position: absolute; top: 28px; height: 2px; background: #cbd5e1;
+        position: absolute; top: 32px; height: 2px; background: var(--gray-300);
     }
     .branch-group {
-        display: flex; justify-content: center; gap: 1.5rem; flex-wrap: wrap;
-        position: relative; padding-top: 28px;
+        display: flex; justify-content: center; gap: 2.5rem; flex-wrap: wrap;
+        position: relative; padding-top: 32px;
     }
     .branch-group > .tree-node::before {
-        content: ''; position: absolute; top: -28px; left: 50%;
-        width: 2px; height: 28px; background: #cbd5e1;
+        content: ''; position: absolute; top: -32px; left: 50%;
+        width: 2px; height: 32px; background: var(--gray-300);
     }
 
     /* Expand/collapse */
     .toggle-btn {
-        width: 24px; height: 24px; border-radius: 50%; border: 2px solid #cbd5e1;
-        background: white; cursor: pointer; display: flex; align-items: center;
-        justify-content: center; margin: 4px auto; font-size: 0.75rem; color: #64748b;
+        width: 28px; height: 28px; border-radius: 50%; border: 2px solid var(--gray-300);
+        background: var(--white); cursor: pointer; display: flex; align-items: center;
+        justify-content: center; margin: 6px auto; font-size: 0.85rem; color: var(--gray-500);
         z-index: 2; position: relative; transition: all 0.15s;
+        box-shadow: 0 2px 6px rgba(0,0,0,0.08);
     }
-    .toggle-btn:hover { border-color: #1a56db; color: #1a56db; background: #eff6ff; }
+    .toggle-btn:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-light); }
 
     /* Department view */
     .org-dept {
-        margin-bottom: 2.5rem; background: white; border-radius: 0.75rem;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.08); border: 1px solid #e2e8f0; overflow: hidden;
+        margin-bottom: 3rem; background: var(--white); border-radius: 1rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200); overflow: hidden;
     }
     .org-dept-header {
-        padding: 1rem 1.5rem; display: flex; align-items: center; gap: 0.75rem;
-        border-bottom: 1px solid #e2e8f0; background: #f8fafc;
+        padding: 1.5rem 2rem; display: flex; align-items: center; gap: 1rem;
+        border-bottom: 1px solid var(--gray-200); background: var(--gray-50);
     }
-    .org-dept-dot { width: 12px; height: 12px; border-radius: 50%; }
-    .org-dept-name { font-weight: 600; font-size: 1rem; }
-    .org-dept-count { font-size: 0.85rem; color: #64748b; margin-left: auto; }
+    .org-dept-dot { width: 14px; height: 14px; border-radius: 50%; }
+    .org-dept-name { font-weight: 600; font-size: 1.1rem; }
+    .org-dept-count { font-size: 0.9rem; color: var(--gray-500); margin-left: auto; }
     .org-members {
-        display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+        display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
         gap: 0; padding: 0;
     }
     .org-member {
-        display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.5rem;
-        border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9;
+        display: flex; align-items: center; gap: 1rem; padding: 1.25rem 2rem;
+        border-bottom: 1px solid var(--gray-100); border-right: 1px solid var(--gray-100);
         transition: background 0.15s;
     }
-    .org-member:hover { background: #f8fafc; }
-    .org-photo { width: 44px; height: 44px; border-radius: 50%; object-fit: cover; border: 2px solid #e2e8f0; flex-shrink: 0; }
+    .org-member:hover { background: var(--gray-50); }
+    .org-photo { width: 50px; height: 50px; border-radius: 50%; object-fit: cover; border: 2px solid var(--gray-200); flex-shrink: 0; }
     .org-photo-init {
-        width: 44px; height: 44px; border-radius: 50%; display: flex; align-items: center;
-        justify-content: center; font-weight: 700; font-size: 1rem; color: white; flex-shrink: 0;
+        width: 50px; height: 50px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 1.1rem; color: var(--white); flex-shrink: 0;
     }
     .org-info { min-width: 0; }
-    .org-name { font-weight: 600; font-size: 0.9rem; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .org-title { font-size: 0.78rem; color: #64748b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .org-reports-to { font-size: 0.72rem; color: #94a3b8; }
+    .org-name { font-weight: 600; font-size: 0.95rem; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-title { font-size: 0.85rem; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .org-reports-to { font-size: 0.8rem; color: var(--gray-400); margin-top: 0.25rem; }
 
-    .tab-bar { display: flex; gap: 0; margin-bottom: 2rem; border-bottom: 2px solid #e2e8f0; }
+    .tab-bar { display: flex; gap: 0; margin-bottom: 3rem; border-bottom: 2px solid var(--gray-200); }
     .tab-btn {
-        padding: 0.75rem 1.5rem; border: none; background: none; cursor: pointer;
-        font-size: 0.9rem; font-weight: 500; color: #64748b; border-bottom: 2px solid transparent;
+        padding: 1rem 2rem; border: none; background: none; cursor: pointer;
+        font-size: 1rem; font-weight: 600; color: var(--gray-500); border-bottom: 2px solid transparent;
         margin-bottom: -2px; transition: all 0.2s;
     }
-    .tab-btn.active { color: #1a56db; border-bottom-color: #1a56db; }
-    .tab-btn:hover { color: #1e293b; }
+    .tab-btn.active { color: var(--blue); border-bottom-color: var(--blue); }
+    .tab-btn:hover { color: var(--navy); }
     .tab-content { display: none; }
     .tab-content.active { display: block; }
 
     @media (max-width: 768px) {
-        .tree-level, .branch-group { gap: 0.75rem; }
-        .tree-card { min-width: 140px; padding: 0.75rem; }
+        .tree-level, .branch-group { gap: 1.5rem; }
+        .tree-card { min-width: 160px; padding: 1.25rem; }
+        .tab-btn { padding: 0.85rem 1.25rem; font-size: 0.9rem; }
     }
 </style>
 {% endblock %}
@@ -124,9 +126,9 @@
 {% block content %}
 {% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
 
-<div style="margin-bottom: 1.5rem;">
+<div class="page-header">
     <h1>Organisation Structure</h1>
-    <p style="color: #64748b; font-size: 0.9rem; margin-top: 0.25rem;">{{ employees | length }} team members across {{ departments | length }} departments</p>
+    <p>{{ employees | length }} team members across {{ departments | length }} departments</p>
 </div>
 
 <div class="tab-bar">
@@ -167,7 +169,7 @@
                     {% if emp.photo_url %}
                     <img src="/static/photos/{{ emp.photo_url }}" alt="{{ emp.name }}">
                     {% else %}
-                    <div class="tree-init" style="background: #1a56db;">{{ emp.name[0] }}</div>
+                    <div class="tree-init" style="background: var(--blue);">{{ emp.name[0] }}</div>
                     {% endif %}
                     <div class="name">{{ emp.name }}</div>
                     <div class="role">{{ emp.designation or 'Management' }}</div>

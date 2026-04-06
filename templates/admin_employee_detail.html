@@ -4,19 +4,19 @@
 
 {% block content %}
 <div style="margin-bottom: 2rem;">
-    <a href="/admin/manage-employees" class="button button-secondary" style="margin-bottom: 1rem;">← Back to Employees</a>
-    <div style="display: flex; align-items: center; gap: 1.5rem; margin-top: 1rem;">
+    <a href="/admin/manage-employees" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Employees</a>
+    <div style="display: flex; align-items: center; gap: 2rem; margin-top: 1.5rem;">
         {% if employee.photo_url %}
-        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 80px; height: 80px; object-fit: cover; border-radius: 50%; border: 3px solid #1a56db;">
+        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
         {% else %}
-        <div style="width: 80px; height: 80px; border-radius: 50%; background: #1a56db; color: white; display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 700; flex-shrink: 0;">
+        <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 700; flex-shrink: 0;">
             {{ employee.name[0] }}
         </div>
         {% endif %}
         <div>
-            <h1>{{ employee.name }}</h1>
-            <p style="color: #64748b; margin-top: 0.25rem;">{{ employee.emp_code }} - {{ employee.department }}</p>
-            <p style="color: #94a3b8; font-size: 0.85rem;">{{ employee.designation or '' }}</p>
+            <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">{{ employee.name }}</h1>
+            <p style="color: var(--gray-600); margin-bottom: 0.35rem; font-size: 1rem;">{{ employee.emp_code }} - {{ employee.department }}</p>
+            <p style="color: var(--gray-500); font-size: 0.95rem;">{{ employee.designation or '' }}</p>
         </div>
     </div>
 </div>
@@ -36,42 +36,42 @@
     </div>
 </div>
 
-<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 1.5rem;">
+<div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 2rem; margin-bottom: 2rem;">
     <div class="card">
-        <h2 class="card-title">Employee Details</h2>
-        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1rem; font-size: 0.9rem;">
-            <dt style="font-weight: 600;">Employee Code:</dt>
-            <dd>{{ employee.emp_code }}</dd>
+        <h2 class="card-title">Employee Information</h2>
+        <dl style="display: grid; grid-template-columns: auto 1fr; gap: 1.25rem; font-size: 0.95rem;">
+            <dt style="font-weight: 600; color: var(--navy);">Employee Code:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.emp_code }}</dd>
 
-            <dt style="font-weight: 600;">Email:</dt>
-            <dd>{{ employee.email or '-' }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Email:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.email or '-' }}</dd>
 
-            <dt style="font-weight: 600;">Phone:</dt>
-            <dd>{{ employee.phone or '-' }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Phone:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.phone or '-' }}</dd>
 
-            <dt style="font-weight: 600;">Department:</dt>
-            <dd>{{ employee.department or '-' }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Department:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.department or '-' }}</dd>
 
-            <dt style="font-weight: 600;">Designation:</dt>
-            <dd>{{ employee.designation or '-' }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Designation:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.designation or '-' }}</dd>
 
-            <dt style="font-weight: 600;">Joining Date:</dt>
-            <dd>{{ employee.joining_date or '-' }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Joining Date:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.joining_date or '-' }}</dd>
 
-            <dt style="font-weight: 600;">Carry Forward:</dt>
-            <dd>{{ employee.carry_forward }}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Carry Forward:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.carry_forward }}</dd>
 
-            <dt style="font-weight: 600;">Active:</dt>
-            <dd>{% if employee.is_active %}Yes{% else %}No{% endif %}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Active:</dt>
+            <dd style="color: var(--gray-700);">{% if employee.is_active %}<span style="color: var(--success);">Yes</span>{% else %}<span style="color: var(--danger);">No</span>{% endif %}</dd>
         </dl>
 
-        <div style="margin-top: 1.5rem;">
-            <a href="/admin/employee/{{ employee.id }}/edit" class="button">Edit</a>
+        <div style="margin-top: 2rem;">
+            <a href="/admin/employee/{{ employee.id }}/edit" class="button">Edit Employee</a>
         </div>
     </div>
 
     <div class="card">
-        <h2 class="card-title">Leave History</h2>
+        <h2 class="card-title">Recent Leave History</h2>
         {% if leaves %}
         <table class="table">
             <thead>
@@ -113,7 +113,7 @@
             </tbody>
         </table>
         {% else %}
-        <p style="color: #64748b;">No leave records.</p>
+        <p style="color: var(--gray-500); padding: 2rem; text-align: center;">No leave records found.</p>
         {% endif %}
     </div>
 </div>

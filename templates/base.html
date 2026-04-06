@@ -51,39 +51,39 @@
         .navbar {
             background: var(--navy);
             color: white;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.15);
+            box-shadow: 0 2px 16px rgba(0,0,0,0.18);
             position: sticky;
             top: 0;
             z-index: 100;
         }
         .navbar-inner {
-            max-width: 1400px;
+            max-width: 1440px;
             margin: 0 auto;
-            padding: 0 1.5rem;
+            padding: 0 2.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
-            height: 60px;
+            height: 70px;
         }
         .navbar-brand {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
+            gap: 0.75rem;
             text-decoration: none;
             color: white;
         }
         .navbar-brand-logo {
-            width: 34px;
-            height: 34px;
+            width: 38px;
+            height: 38px;
         }
         .navbar-brand-text {
             font-weight: 700;
-            font-size: 1.05rem;
+            font-size: 1.2rem;
             line-height: 1.2;
         }
         .navbar-brand-text .goo { color: var(--orange); }
         .navbar-brand-sub {
-            font-size: 0.6rem;
+            font-size: 0.65rem;
             opacity: 0.5;
             letter-spacing: 0.5px;
             text-transform: uppercase;
@@ -91,18 +91,18 @@
         }
         .navbar-nav {
             display: flex;
-            gap: 0.25rem;
+            gap: 0.35rem;
             align-items: center;
             list-style: none;
         }
         .navbar-nav a {
             color: rgba(255,255,255,0.8);
             text-decoration: none;
-            font-size: 0.84rem;
+            font-size: 0.9rem;
             font-weight: 500;
-            padding: 0.5rem 0.75rem;
-            border-radius: 0.4rem;
-            transition: all 0.15s;
+            padding: 0.55rem 1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
         }
         .navbar-nav a:hover {
             color: white;
@@ -114,9 +114,9 @@
         }
         .nav-divider {
             width: 1px;
-            height: 24px;
+            height: 28px;
             background: rgba(255,255,255,0.15);
-            margin: 0 0.25rem;
+            margin: 0 0.4rem;
         }
 
         /* Dropdown */
@@ -127,10 +127,10 @@
             align-items: center;
             gap: 0.5rem;
             color: rgba(255,255,255,0.8);
-            padding: 0.45rem 0.65rem;
-            border-radius: 0.4rem;
-            transition: all 0.15s;
-            font-size: 0.84rem;
+            padding: 0.55rem 0.85rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+            font-size: 0.9rem;
         }
         .nav-dropdown-toggle:hover {
             color: white;
@@ -141,11 +141,11 @@
             position: absolute;
             right: 0;
             top: 100%;
-            margin-top: 0.25rem;
+            margin-top: 0.35rem;
             background: var(--white);
-            border-radius: 0.5rem;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.15);
-            min-width: 200px;
+            border-radius: 0.65rem;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
+            min-width: 220px;
             z-index: 1000;
             overflow: hidden;
             border: 1px solid var(--gray-200);
@@ -154,13 +154,13 @@
         .nav-dropdown-menu a {
             display: flex;
             align-items: center;
-            gap: 0.6rem;
+            gap: 0.7rem;
             color: var(--gray-700) !important;
-            padding: 0.7rem 1rem;
+            padding: 0.85rem 1.15rem;
             text-decoration: none;
             transition: background 0.15s;
             border-radius: 0;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
         .nav-dropdown-menu a:hover {
             background: var(--orange-light) !important;
@@ -182,33 +182,91 @@
 
         /* ===== CONTAINER ===== */
         .container {
-            max-width: 1400px;
+            max-width: 1440px;
             margin: 0 auto;
-            padding: 1.75rem 1.5rem;
+            padding: 2.5rem 3rem;
             flex: 1;
+            width: 100%;
         }
 
         /* ===== FOOTER ===== */
-        .app-footer {
+        .site-footer {
             background: var(--navy-dark);
-            color: rgba(255,255,255,0.4);
-            text-align: center;
-            padding: 1rem 1.5rem;
-            font-size: 0.75rem;
+            color: rgba(255,255,255,0.5);
             margin-top: auto;
         }
-        .app-footer span { color: var(--orange); }
+        .site-footer-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2.5rem 3rem;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 3rem;
+        }
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+        }
+        .footer-brand-text {
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: white;
+        }
+        .footer-brand-text .goo { color: var(--orange); }
+        .footer-desc {
+            font-size: 0.85rem;
+            line-height: 1.6;
+            max-width: 380px;
+            color: rgba(255,255,255,0.45);
+        }
+        .footer-heading {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.8px;
+            color: rgba(255,255,255,0.65);
+            margin-bottom: 1rem;
+        }
+        .footer-links {
+            list-style: none;
+        }
+        .footer-links li {
+            margin-bottom: 0.55rem;
+        }
+        .footer-links a {
+            color: rgba(255,255,255,0.45);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .footer-links a:hover {
+            color: var(--orange);
+        }
+        .footer-bottom {
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding: 1.25rem 3rem;
+            text-align: center;
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.35);
+        }
+        .footer-bottom span { color: var(--orange); }
+        .footer-bottom-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+        }
 
         /* ===== ALERTS ===== */
         .alert {
-            padding: 0.85rem 1.15rem;
-            margin-bottom: 1.25rem;
-            border-radius: 0.5rem;
+            padding: 1rem 1.35rem;
+            margin-bottom: 1.75rem;
+            border-radius: 0.65rem;
             border-left: 4px solid;
-            font-size: 0.88rem;
+            font-size: 0.92rem;
             display: flex;
             align-items: center;
-            gap: 0.6rem;
+            gap: 0.7rem;
         }
         .alert-success {
             background: var(--success-light);
@@ -229,16 +287,16 @@
         /* ===== CARDS ===== */
         .card {
             background: var(--white);
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border-radius: 1rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
             border: 1px solid var(--gray-200);
-            padding: 1.5rem;
-            margin-bottom: 1.5rem;
+            padding: 2rem;
+            margin-bottom: 2rem;
         }
         .card-title {
-            font-size: 1.05rem;
+            font-size: 1.15rem;
             font-weight: 600;
-            margin-bottom: 1rem;
+            margin-bottom: 1.25rem;
             color: var(--navy);
         }
 
@@ -246,76 +304,76 @@
         .button {
             display: inline-flex;
             align-items: center;
-            gap: 0.4rem;
-            padding: 0.55rem 1.1rem;
+            gap: 0.5rem;
+            padding: 0.7rem 1.4rem;
             background: var(--orange);
             color: white;
             border: none;
-            border-radius: 0.5rem;
+            border-radius: 0.6rem;
             cursor: pointer;
-            font-size: 0.88rem;
-            font-weight: 500;
+            font-size: 0.92rem;
+            font-weight: 600;
             text-decoration: none;
-            transition: all 0.15s;
+            transition: all 0.2s;
             font-family: inherit;
         }
         .button:hover {
             background: var(--orange-dark);
             transform: translateY(-1px);
-            box-shadow: 0 4px 8px rgba(245,130,32,0.25);
+            box-shadow: 0 6px 12px rgba(245,130,32,0.25);
         }
         .button-secondary {
             background: var(--blue);
         }
         .button-secondary:hover {
             background: var(--blue-dark);
-            box-shadow: 0 4px 8px rgba(74,122,181,0.25);
+            box-shadow: 0 6px 12px rgba(74,122,181,0.25);
         }
         .button-danger {
             background: var(--danger);
         }
         .button-danger:hover {
             background: #DC2626;
-            box-shadow: 0 4px 8px rgba(239,68,68,0.25);
+            box-shadow: 0 6px 12px rgba(239,68,68,0.25);
         }
         .button-success {
             background: var(--success);
         }
         .button-success:hover {
             background: #059669;
-            box-shadow: 0 4px 8px rgba(16,185,129,0.25);
+            box-shadow: 0 6px 12px rgba(16,185,129,0.25);
         }
         .button-small {
-            padding: 0.3rem 0.75rem;
-            font-size: 0.82rem;
+            padding: 0.4rem 0.9rem;
+            font-size: 0.85rem;
         }
 
         /* ===== FORMS ===== */
         .form-group {
-            margin-bottom: 1.25rem;
+            margin-bottom: 1.5rem;
         }
         .form-group label {
             display: block;
-            margin-bottom: 0.4rem;
+            margin-bottom: 0.5rem;
             font-weight: 600;
             color: var(--gray-700);
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
         .form-group input,
         .form-group select,
         .form-group textarea {
             width: 100%;
-            padding: 0.6rem 0.8rem;
+            padding: 0.75rem 1rem;
             border: 2px solid var(--gray-200);
-            border-radius: 0.5rem;
+            border-radius: 0.6rem;
             font-family: inherit;
-            font-size: 0.9rem;
+            font-size: 0.95rem;
             transition: border-color 0.2s, box-shadow 0.2s;
             background: var(--white);
         }
         .form-group textarea {
             resize: vertical;
-            min-height: 100px;
+            min-height: 120px;
         }
         .form-group input:focus,
         .form-group select:focus,
@@ -336,17 +394,17 @@
             color: white;
         }
         .table th {
-            padding: 0.85rem 1rem;
+            padding: 1rem 1.25rem;
             text-align: left;
             font-weight: 600;
-            font-size: 0.82rem;
+            font-size: 0.85rem;
             text-transform: uppercase;
             letter-spacing: 0.5px;
         }
         .table td {
-            padding: 0.85rem 1rem;
+            padding: 1rem 1.25rem;
             border-bottom: 1px solid var(--gray-100);
-            font-size: 0.9rem;
+            font-size: 0.95rem;
         }
         .table tbody tr:hover {
             background: var(--orange-light);
@@ -356,9 +414,9 @@
         .badge {
             display: inline-flex;
             align-items: center;
-            padding: 0.25rem 0.75rem;
+            padding: 0.3rem 0.85rem;
             border-radius: 9999px;
-            font-size: 0.78rem;
+            font-size: 0.82rem;
             font-weight: 600;
         }
         .badge-pending {
@@ -377,61 +435,61 @@
         /* ===== SUMMARY CARDS ===== */
         .summary-cards {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+            gap: 1.75rem;
+            margin-bottom: 2.5rem;
         }
         .summary-card {
             background: var(--white);
-            border-radius: 0.75rem;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            border-radius: 1rem;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
             border: 1px solid var(--gray-200);
-            padding: 1.5rem;
+            padding: 2rem;
             text-align: center;
             border-top: 3px solid var(--orange);
         }
         .summary-card-value {
-            font-size: 2rem;
+            font-size: 2.25rem;
             font-weight: 700;
             color: var(--navy);
             margin-bottom: 0.5rem;
         }
         .summary-card-label {
-            font-size: 0.88rem;
+            font-size: 0.95rem;
             color: var(--gray-500);
         }
 
         /* ===== GRID HELPERS ===== */
         .grid-2 {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.5rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.75rem;
+            margin-bottom: 2.5rem;
         }
         .grid-3 {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 1rem;
-            margin-bottom: 2rem;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1.25rem;
+            margin-bottom: 2.5rem;
         }
 
         /* ===== CALENDAR ===== */
         .calendar {
             background: var(--white);
-            border-radius: 0.75rem;
+            border-radius: 1rem;
             overflow: hidden;
-            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
             border: 1px solid var(--gray-200);
         }
         .calendar-header {
             background: linear-gradient(135deg, var(--navy), var(--navy-light));
             color: white;
-            padding: 1.5rem;
+            padding: 2rem;
             text-align: center;
         }
         .calendar-header h2 {
-            font-size: 1.3rem;
-            margin-bottom: 1rem;
+            font-size: 1.5rem;
+            margin-bottom: 1.25rem;
         }
         .calendar-nav {
             display: flex;
@@ -441,11 +499,11 @@
         .calendar-nav a {
             color: white;
             text-decoration: none;
-            padding: 0.5rem 1rem;
+            padding: 0.6rem 1.25rem;
             background: rgba(255,255,255,0.12);
-            border-radius: 0.4rem;
+            border-radius: 0.5rem;
             transition: background 0.2s;
-            font-size: 0.85rem;
+            font-size: 0.9rem;
         }
         .calendar-nav a:hover {
             background: var(--orange);
@@ -456,18 +514,18 @@
         }
         .calendar-table th {
             background: var(--gray-100);
-            padding: 0.75rem;
+            padding: 0.85rem 1rem;
             text-align: center;
             font-weight: 600;
-            font-size: 0.82rem;
+            font-size: 0.85rem;
             color: var(--navy);
             border-bottom: 2px solid var(--gray-200);
         }
         .calendar-table td {
             border: 1px solid var(--gray-100);
-            height: 100px;
+            height: 110px;
             vertical-align: top;
-            padding: 0.5rem;
+            padding: 0.6rem;
             position: relative;
         }
         .calendar-table td.weekend {
@@ -486,75 +544,94 @@
         .calendar-day-number {
             font-weight: 600;
             color: var(--gray-800);
-            margin-bottom: 0.25rem;
+            margin-bottom: 0.3rem;
         }
         .calendar-day-content {
-            font-size: 0.8rem;
+            font-size: 0.82rem;
         }
         .holiday-badge {
             display: inline-block;
             background: var(--orange);
             color: white;
-            padding: 0.2rem 0.45rem;
-            border-radius: 0.25rem;
-            font-size: 0.68rem;
-            margin-top: 0.25rem;
+            padding: 0.2rem 0.5rem;
+            border-radius: 0.3rem;
+            font-size: 0.7rem;
+            margin-top: 0.3rem;
             white-space: nowrap;
             overflow: hidden;
             text-overflow: ellipsis;
-            max-width: 90px;
+            max-width: 100px;
             font-weight: 600;
         }
         .leave-dot {
             display: inline-block;
-            width: 6px;
-            height: 6px;
+            width: 7px;
+            height: 7px;
             border-radius: 50%;
-            margin-right: 0.25rem;
+            margin-right: 0.3rem;
         }
         .leave-annual { background: var(--blue); }
         .leave-sick { background: var(--success); }
         .leave-casual { background: var(--orange); }
         .leave-pending {
             border: 1px dashed var(--blue);
-            border-radius: 2px;
-            padding: 0.25rem;
+            border-radius: 3px;
+            padding: 0.3rem;
         }
 
         /* ===== FORM ROW ===== */
         .form-row {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1rem;
+            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+            gap: 1.25rem;
         }
 
         /* ===== PAGE HEADER ===== */
         .page-header {
-            margin-bottom: 1.75rem;
-            padding-bottom: 1rem;
+            margin-bottom: 2.25rem;
+            padding-bottom: 1.25rem;
             border-bottom: 2px solid var(--gray-100);
         }
         .page-header h1 {
-            font-size: 1.5rem;
+            font-size: 1.85rem;
             font-weight: 700;
             color: var(--navy);
-            margin-bottom: 0.2rem;
+            margin-bottom: 0.35rem;
         }
         .page-header p {
             color: var(--gray-500);
-            font-size: 0.9rem;
+            font-size: 1rem;
+        }
+
+        /* ===== SECTION SPACING ===== */
+        .section {
+            margin-bottom: 3rem;
+        }
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 1.25rem;
         }
 
         /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .container { padding: 2rem; }
+            .navbar-inner { padding: 0 1.5rem; }
+            .site-footer-inner { padding: 2rem 1.5rem; grid-template-columns: 1fr 1fr; gap: 2rem; }
+            .footer-bottom { padding: 1rem 1.5rem; }
+        }
         @media (max-width: 768px) {
-            .navbar-inner { padding: 0 1rem; }
+            .navbar-inner { padding: 0 1rem; height: 60px; }
             .navbar-nav { gap: 0.15rem; }
-            .navbar-nav a { padding: 0.4rem 0.5rem; font-size: 0.78rem; }
-            .container { padding: 1rem; }
+            .navbar-nav a { padding: 0.4rem 0.6rem; font-size: 0.82rem; }
+            .container { padding: 1.25rem; }
             .summary-cards { grid-template-columns: 1fr; }
-            .calendar-table td { height: auto; min-height: 80px; font-size: 0.8rem; }
+            .calendar-table td { height: auto; min-height: 80px; font-size: 0.82rem; }
             .form-row { grid-template-columns: 1fr; }
             .navbar-brand-sub { display: none; }
+            .site-footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
+            .page-header h1 { font-size: 1.5rem; }
         }
     </style>
     {% block extra_css %}{% endblock %}
@@ -637,8 +714,48 @@
         {% block content %}{% endblock %}
     </div>
 
-    <footer class="app-footer">
-        &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;|&nbsp; Bangalore, India &nbsp;|&nbsp; GSTIN: 29AAHCG2048J1ZE
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <div>
+                <div class="footer-brand">
+                    <svg width="30" height="30" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="8" width="19" height="19" rx="2.5" stroke="#4A7AB5" stroke-width="2.5" fill="none"/>
+                        <rect x="12" y="0" width="19" height="19" rx="2.5" stroke="#F58220" stroke-width="2.5" fill="none"/>
+                        <text x="17" y="15" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="800" fill="#F58220">G</text>
+                    </svg>
+                    <span class="footer-brand-text"><span class="goo">Goo</span>Campus HR</span>
+                </div>
+                <p class="footer-desc">Employee leave management and HR operations portal for GooCampus Edu Solutions Pvt Ltd. Streamlining workforce management across all departments.</p>
+            </div>
+            <div>
+                <h4 class="footer-heading">Quick Links</h4>
+                <ul class="footer-links">
+                    {% if session.get('is_admin') %}
+                    <li><a href="/admin/dashboard">Dashboard</a></li>
+                    <li><a href="/admin/manage-employees">Employees</a></li>
+                    <li><a href="/admin/calendar">Calendar</a></li>
+                    <li><a href="/admin/holidays">Holidays</a></li>
+                    {% else %}
+                    <li><a href="/dashboard">Dashboard</a></li>
+                    <li><a href="/calendar">Calendar</a></li>
+                    <li><a href="/apply-leave">Apply Leave</a></li>
+                    {% endif %}
+                </ul>
+            </div>
+            <div>
+                <h4 class="footer-heading">Contact</h4>
+                <ul class="footer-links">
+                    <li><a href="mailto:info@goocampus.in">info@goocampus.in</a></li>
+                    <li><a href="https://goocampus.in" target="_blank">goocampus.in</a></li>
+                    <li><a href="#">Bangalore, India</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-bottom-inner">
+                &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;&middot;&nbsp; GSTIN: 29AAHCG2048J1ZE &nbsp;&middot;&nbsp; All rights reserved
+            </div>
+        </div>
     </footer>
 </body>
 </html>

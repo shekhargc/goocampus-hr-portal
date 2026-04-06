@@ -15,7 +15,3 @@ if project_home not in sys.path:
 os.environ['DB_PATH'] = os.path.join(project_home, 'leave_manager.db')
 
 from app import app as application
-
-# Initialize the database on first run
-from app import init_db
-init_db()

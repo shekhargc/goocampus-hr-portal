@@ -4,22 +4,23 @@
 
 {% block extra_css %}
 <style>
-    .leave-form { max-width: 560px; }
-    .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
-    .portion-row { display: none; margin-top: 0.5rem; }
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+    .leave-form { max-width: 650px; }
+    .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .portion-row { display: none; margin-top: 1rem; }
     .portion-row.visible { display: block; }
     .day-summary {
-        display: none; padding: 0.75rem 1rem; background: #eff6ff; border-radius: 0.5rem;
-        border: 1px solid #bfdbfe; margin-bottom: 1rem; font-size: 0.9rem; color: #1e40af;
+        display: none; padding: 1rem 1.25rem; background: var(--blue-light); border-radius: 0.6rem;
+        border: 1px solid var(--blue); margin-bottom: 1.5rem; font-size: 0.95rem; color: var(--blue-dark);
     }
-    .day-summary.visible { display: flex; align-items: center; gap: 0.5rem; }
-    .day-summary .count { font-weight: 700; font-size: 1.1rem; }
+    .day-summary.visible { display: flex; align-items: center; gap: 0.75rem; }
+    .day-summary .count { font-weight: 700; font-size: 1.2rem; }
 </style>
 {% endblock %}
 
 {% block content %}
+<h1 class="page-title">Apply for Leave</h1>
 <div class="card">
-    <h1 class="card-title">Apply for Leave</h1>
 
     <form method="POST" class="leave-form">
         <div class="form-group">
@@ -61,7 +62,7 @@
                 <option value="first_half">First Half (0.5 day)</option>
                 <option value="second_half">Second Half (0.5 day)</option>
             </select>
-            <p style="font-size: 0.78rem; color: #64748b; margin-top: 0.25rem;">All other days in the range will be counted as full days.</p>
+            <p style="font-size: 0.85rem; color: var(--gray-500); margin-top: 0.5rem;">All other days in the range will be counted as full days.</p>
         </div>
 
         <div class="day-summary" id="daySummary">
@@ -74,14 +75,14 @@
             <textarea id="reason" name="reason" required placeholder="Please provide a reason for your leave request..."></textarea>
         </div>
 
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1.25rem; margin-top: 2.5rem;">
             <button type="submit" class="button">Submit Request</button>
             <a href="/dashboard" class="button button-secondary">Cancel</a>
         </div>
     </form>
 
-    <div style="margin-top: 2rem; padding: 1rem; background: #eff6ff; border-radius: 0.5rem; border-left: 4px solid #3b82f6;">
-        <p><strong>Note:</strong> Leave requests require approval from your reporting manager. Working days are Monday to Friday. Weekends and company holidays are automatically excluded from the date range.</p>
+    <div style="margin-top: 3rem; padding: 1.75rem; background: var(--blue-light); border-radius: 0.6rem; border-left: 4px solid var(--blue);">
+        <p style="font-size: 0.95rem; color: var(--blue-dark);"><strong style="font-weight: 600;">Note:</strong> Leave requests require approval from your reporting manager. Working days are Monday to Friday. Weekends and company holidays are automatically excluded from the date range.</p>
     </div>
 </div>
 
@@ -106,15 +107,15 @@ function updateDateUI() {
     if (to < from) {
         summaryText.textContent = 'To date cannot be before from date';
         summary.classList.add('visible');
-        summary.style.background = '#fef2f2';
-        summary.style.borderColor = '#fecaca';
+        summary.style.background = 'var(--danger-light)';
+        summary.style.borderColor = 'var(--danger)';
         summary.style.color = '#991b1b';
         return;
     }
 
-    summary.style.background = '#eff6ff';
-    summary.style.borderColor = '#bfdbfe';
-    summary.style.color = '#1e40af';
+    summary.style.background = 'var(--blue-light)';
+    summary.style.borderColor = 'var(--blue)';
+    summary.style.color = 'var(--blue-dark)';
 
     // Count working days (exclude weekends)
     let workDays = 0;
@@ -144,8 +145,8 @@ function updateDateUI() {
     } else {
         summaryText.textContent = 'No working days in selected range';
         summary.classList.add('visible');
-        summary.style.background = '#fef3c7';
-        summary.style.borderColor = '#fde68a';
+        summary.style.background = 'var(--warning-light)';
+        summary.style.borderColor = 'var(--warning)';
         summary.style.color = '#92400e';
     }
 }

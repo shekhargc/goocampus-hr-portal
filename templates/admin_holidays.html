@@ -3,9 +3,12 @@
 {% block title %}Holidays - GooCampus HR Portal{% endblock %}
 
 {% block content %}
-<h1>Manage Holidays</h1>
+<div class="page-header">
+    <h1>Manage Holidays</h1>
+    <p>Create and manage company holidays for the calendar year</p>
+</div>
 
-<div class="card" style="margin-bottom: 2rem;">
+<div class="card" style="margin-bottom: 3rem;">
     <h2 class="card-title">Add Holiday</h2>
     <form method="POST" style="max-width: 500px;">
         <div class="form-group">
@@ -32,7 +35,7 @@
 </div>
 
 <div class="card">
-    <h2 class="card-title">Holidays</h2>
+    <h2 class="card-title">All Holidays</h2>
     {% if holidays %}
     <table class="table">
         <thead>
@@ -50,7 +53,7 @@
                 <td>{{ holiday.name }}</td>
                 <td>
                     {% if holiday.holiday_type %}
-                    <span class="badge" style="background: #e0e7ff; color: #3730a3;">{{ holiday.holiday_type }}</span>
+                    <span class="badge" style="background: var(--blue-light); color: var(--blue-dark);">{{ holiday.holiday_type }}</span>
                     {% else %}
                     -
                     {% endif %}
@@ -65,7 +68,7 @@
         </tbody>
     </table>
     {% else %}
-    <p style="color: #64748b;">No holidays found.</p>
+    <p style="color: var(--gray-500); text-align: center; padding: 2.5rem;">No holidays found. Add your first holiday using the form above.</p>
     {% endif %}
 </div>
 {% endblock %}

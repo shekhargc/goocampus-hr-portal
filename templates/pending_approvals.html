@@ -3,10 +3,14 @@
 {% block title %}Pending Approvals - GooCampus HR Portal{% endblock %}
 
 {% block content %}
-<h1>Pending Leave Approvals</h1>
+<div class="page-header">
+    <h1>Pending Leave Approvals</h1>
+    <p>Review and approve pending leave requests from employees</p>
+</div>
 
 <div class="card">
     {% if pending_leaves %}
+    <h2 class="card-title">Leave Requests Awaiting Approval</h2>
     <table class="table">
         <thead>
             <tr>
@@ -36,7 +40,7 @@
                 <td>{{ leave.reason or '-' }}</td>
                 <td>{{ leave.created_at.split(' ')[0] }}</td>
                 <td>
-                    <div style="display: flex; gap: 0.5rem;">
+                    <div style="display: flex; gap: 0.75rem;">
                         <form method="POST" action="/admin/approve-leave/{{ leave.id }}" style="display: inline;">
                             <button type="submit" class="button button-success button-small">Approve</button>
                         </form>
@@ -50,7 +54,7 @@
         </tbody>
     </table>
     {% else %}
-    <p style="color: #64748b; text-align: center; padding: 2rem;">No pending leave requests.</p>
+    <p style="color: var(--gray-500); text-align: center; padding: 3rem;">No pending leave requests. All leave requests have been reviewed.</p>
     {% endif %}
 </div>
 {% endblock %}

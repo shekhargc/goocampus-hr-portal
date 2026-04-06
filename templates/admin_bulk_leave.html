@@ -3,10 +3,12 @@
 {% block title %}Bulk Add Leave - GooCampus HR Portal{% endblock %}
 
 {% block content %}
-<div class="card" style="max-width: 600px;">
-    <h1 class="card-title">Bulk Add Leave</h1>
-    <p style="color: #64748b; margin-bottom: 1.5rem;">Add the same leave to all employees in a department.</p>
+<div class="page-header">
+    <h1>Bulk Add Leave</h1>
+    <p>Add the same leave record to all employees within a department</p>
+</div>
 
+<div class="card" style="max-width: 650px;">
     <form method="POST">
         <div class="form-group">
             <label for="department">Department</label>
@@ -43,7 +45,7 @@
             <textarea id="reason" name="reason"></textarea>
         </div>
 
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
             <button type="submit" class="button">Add Leave to Department</button>
             <a href="/admin/dashboard" class="button button-secondary">Cancel</a>
         </div>

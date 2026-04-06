@@ -4,27 +4,27 @@
 
 {% block content %}
 <div style="margin-bottom: 2rem;">
-    <a href="/admin/employee/{{ employee.id }}" class="button button-secondary" style="margin-bottom: 1rem;">← Back to Employee</a>
-    <h1>Edit Employee: {{ employee.name }}</h1>
+    <a href="/admin/employee/{{ employee.id }}" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Employee</a>
+    <h1 style="font-size: 2rem;">Edit Employee: {{ employee.name }}</h1>
 </div>
 
-<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 900px;">
+<div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; max-width: 1000px; margin-bottom: 3rem;">
 
 <!-- Photo Upload Card -->
 <div class="card" style="text-align: center;">
     <h2 class="card-title">Employee Photo</h2>
-    <div style="margin-bottom: 1rem;">
+    <div style="margin-bottom: 1.5rem;">
         {% if employee.photo_url %}
-        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 150px; height: 150px; object-fit: cover; border-radius: 50%; border: 3px solid #1a56db;">
+        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
         {% else %}
-        <div style="width: 150px; height: 150px; border-radius: 50%; background: #1a56db; color: white; display: flex; align-items: center; justify-content: center; font-size: 3rem; font-weight: 700; margin: 0 auto;">
+        <div style="width: 160px; height: 160px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: 700; margin: 0 auto;">
             {{ employee.name[0] }}
         </div>
         {% endif %}
     </div>
     <form method="POST" action="/admin/employee/{{ employee.id }}/upload-photo" enctype="multipart/form-data">
         <div class="form-group">
-            <input type="file" name="photo" accept="image/*" style="font-size: 0.85rem;">
+            <input type="file" name="photo" accept="image/*" style="font-size: 0.9rem;">
         </div>
         <button type="submit" class="button" style="width: 100%;">Upload Photo</button>
     </form>
@@ -32,28 +32,29 @@
 
 <!-- Employee Info -->
 <div class="card">
-    <h2 class="card-title">Employee Info</h2>
-    <div style="font-size: 0.9rem; color: #64748b;">
-        <p><strong>Code:</strong> {{ employee.emp_code }}</p>
-        <p><strong>Department:</strong> {{ employee.department or '-' }}</p>
-        <p><strong>Designation:</strong> {{ employee.designation or '-' }}</p>
-        <p><strong>Joined:</strong> {{ employee.joining_date or '-' }}</p>
-        <p><strong>Email:</strong> {{ employee.email or '-' }}</p>
+    <h2 class="card-title">Current Information</h2>
+    <div style="font-size: 0.95rem; color: var(--gray-600);">
+        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Code:</strong> {{ employee.emp_code }}</p>
+        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Department:</strong> {{ employee.department or '-' }}</p>
+        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Designation:</strong> {{ employee.designation or '-' }}</p>
+        <p style="margin-bottom: 1rem;"><strong style="color: var(--navy);">Joined:</strong> {{ employee.joining_date or '-' }}</p>
+        <p style="margin-bottom: 0;"><strong style="color: var(--navy);">Email:</strong> {{ employee.email or '-' }}</p>
     </div>
 </div>
 
 </div>
 
-<div class="card" style="max-width: 600px; margin-top: 1.5rem;">
+<div class="card" style="max-width: 700px; margin-bottom: 3rem;">
+    <h2 class="card-title">Personal Information</h2>
     <form method="POST">
         <div class="form-group">
-            <label for="name">Name</label>
+            <label for="name">Full Name</label>
             <input type="text" id="name" name="name" value="{{ employee.name }}" required>
         </div>
 
         <div class="form-group">
             <label>Employee Code</label>
-            <input type="text" value="{{ employee.emp_code }}" disabled style="background: #f1f5f9; color: #64748b;">
+            <input type="text" value="{{ employee.emp_code }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
         </div>
 
         <div class="form-group">
@@ -76,18 +77,23 @@
             <textarea id="address" name="address">{{ employee.address or '' }}</textarea>
         </div>
 
-        <div class="form-group">
-            <label for="department">Department</label>
-            <select id="department" name="department">
-                {% for dept in departments %}
-                <option value="{{ dept }}" {% if employee.department == dept %}selected{% endif %}>{{ dept }}</option>
-                {% endfor %}
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="designation">Designation</label>
-            <input type="text" id="designation" name="designation" value="{{ employee.designation or '' }}">
+        <div style="display: flex; gap: 2rem; margin: 2rem 0;">
+            <div style="flex: 1;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="department">Department</label>
+                    <select id="department" name="department">
+                        {% for dept in departments %}
+                        <option value="{{ dept }}" {% if employee.department == dept %}selected{% endif %}>{{ dept }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="flex: 1;">
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label for="designation">Designation</label>
+                    <input type="text" id="designation" name="designation" value="{{ employee.designation or '' }}">
+                </div>
+            </div>
         </div>
 
         <div class="form-group">
@@ -110,7 +116,7 @@
             <input type="number" id="carry_forward" name="carry_forward" value="{{ employee.carry_forward or 0 }}" step="0.5" min="0">
         </div>
 
-        <h2 style="margin-top: 2rem; margin-bottom: 1rem; font-size: 1.1rem;">Emergency Contact</h2>
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Emergency Contact</h2>
 
         <div class="form-group">
             <label for="emergency_contact_name">Name</label>
@@ -127,7 +133,7 @@
             <input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}">
         </div>
 
-        <div style="display: flex; gap: 1rem;">
+        <div style="display: flex; gap: 1rem; margin-top: 2rem;">
             <button type="submit" class="button">Save Changes</button>
             <a href="/admin/employee/{{ employee.id }}" class="button button-secondary">Cancel</a>
         </div>

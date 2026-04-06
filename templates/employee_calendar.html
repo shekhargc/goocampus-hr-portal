@@ -2,10 +2,17 @@
 
 {% block title %}Calendar - GooCampus HR Portal{% endblock %}
 
+{% block extra_css %}
+<style>
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+</style>
+{% endblock %}
+
 {% block content %}
+<h1 class="page-title">Leave Calendar</h1>
 <div class="calendar">
     <div class="calendar-header">
-        <h2>{{ month_name }} {{ year }}</h2>
+        <h2 style="font-size: 1.6rem; margin-bottom: 1.5rem;">{{ month_name }} {{ year }}</h2>
         <div class="calendar-nav">
             <a href="/calendar?month={{ prev_month }}&year={{ prev_year }}">← Previous</a>
             <a href="/calendar">Today</a>
@@ -43,16 +50,16 @@
                         {% endif %}
 
                         {% if is_weekend and not is_holiday %}
-                        <div style="font-size: 0.7rem; color: #94a3b8; font-style: italic;">Weekend</div>
+                        <div style="font-size: 0.8rem; color: var(--gray-400); font-style: italic;">Weekend</div>
                         {% endif %}
 
                         {% if date_str in leave_dates %}
                         {% for leave in leave_dates[date_str] %}
-                        <div style="font-size: 0.8rem; margin-top: 0.25rem;">
-                            <span class="leave-dot" style="background: {% if leave.leave_type == 'annual' %}#1a56db{% elif leave.leave_type == 'sick' %}#10b981{% else %}#f59e0b{% endif %};"></span>
-                            <span>{{ leave.leave_type.capitalize() }}</span>
+                        <div style="font-size: 0.85rem; margin-top: 0.35rem;">
+                            <span class="leave-dot" style="background: {% if leave.leave_type == 'annual' %}var(--blue){% elif leave.leave_type == 'sick' %}var(--success){% else %}var(--warning){% endif %};"></span>
+                            <span style="color: var(--navy);">{{ leave.leave_type.capitalize() }}</span>
                             {% if leave.days < 1 %}
-                            <span style="font-size: 0.7rem; color: #64748b;">
+                            <span style="font-size: 0.75rem; color: var(--gray-500);">
                                 ({% if leave.day_portion == 'first_half' %}1st Half{% elif leave.day_portion == 'second_half' %}2nd Half{% else %}Half{% endif %})
                             </span>
                             {% endif %}
@@ -69,17 +76,17 @@
     </table>
 </div>
 
-<div style="margin-top: 2rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1rem;">
-    <div style="background: white; padding: 1rem; border-radius: 0.5rem; box-shadow: 0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin-bottom: 1rem;">Legend</h3>
-        <div style="display: flex; flex-direction: column; gap: 0.5rem; font-size: 0.9rem;">
-            <div><span class="leave-dot" style="background: #1a56db;"></span> Annual Leave</div>
-            <div><span class="leave-dot" style="background: #10b981;"></span> Sick Leave</div>
-            <div><span class="leave-dot" style="background: #f59e0b;"></span> Casual Leave</div>
-            <div style="background: #fef3c7; padding: 0.25rem 0.5rem; border-radius: 0.25rem; display: inline-block; max-width: fit-content;">Holiday</div>
-            <div style="background: #f1f5f9; padding: 0.25rem 0.5rem; border-radius: 0.25rem; display: inline-block; max-width: fit-content;">Weekend (Sat-Sun)</div>
+<div style="margin-top: 3rem; display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 2rem;">
+    <div style="background: var(--white); padding: 2rem; border-radius: 1rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);">
+        <h3 style="margin-bottom: 1.5rem; font-size: 1.1rem; font-weight: 600; color: var(--navy);">Legend</h3>
+        <div style="display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.95rem;">
+            <div style="display: flex; align-items: center; gap: 0.75rem;"><span class="leave-dot" style="background: var(--blue);"></span> <span style="color: var(--navy);">Annual Leave</span></div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;"><span class="leave-dot" style="background: var(--success);"></span> <span style="color: var(--navy);">Sick Leave</span></div>
+            <div style="display: flex; align-items: center; gap: 0.75rem;"><span class="leave-dot" style="background: var(--warning);"></span> <span style="color: var(--navy);">Casual Leave</span></div>
+            <div style="background: var(--warning-light); padding: 0.4rem 0.8rem; border-radius: 0.4rem; display: inline-block; max-width: fit-content; color: var(--navy); font-weight: 500;">Holiday</div>
+            <div style="background: var(--gray-100); padding: 0.4rem 0.8rem; border-radius: 0.4rem; display: inline-block; max-width: fit-content; color: var(--navy); font-weight: 500;">Weekend (Sat-Sun)</div>
         </div>
-        <p style="margin-top: 1rem; font-size: 0.8rem; color: #94a3b8;">Working days: Monday to Friday</p>
+        <p style="margin-top: 1.5rem; font-size: 0.85rem; color: var(--gray-500);">Working days: Monday to Friday</p>
     </div>
 </div>
 {% endblock %}

@@ -4,76 +4,142 @@
     <meta charset="UTF-8">
     <title>Monthly Salary Deduction Report</title>
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: white;
+        :root {
+            --orange: #F58220;
+            --orange-dark: #D96E0E;
+            --orange-light: #FFF3E6;
+            --blue: #4A7AB5;
+            --blue-dark: #3A6299;
+            --blue-light: #E8F0FA;
+            --navy: #1B2A4A;
+            --navy-dark: #0F1B33;
+            --navy-light: #2A3F66;
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-900: #0F172A;
+            --danger: #EF4444;
+            --danger-light: #FEF2F2;
         }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', Arial, sans-serif;
+            margin: 2.5rem;
+            background-color: var(--white);
+            color: var(--gray-900);
+        }
+
         .header {
             text-align: center;
-            margin-bottom: 30px;
+            margin-bottom: 3rem;
         }
+
         .header h1 {
-            margin: 0;
-            font-size: 24px;
+            margin: 0 0 0.75rem 0;
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--navy);
         }
+
         .header p {
-            margin: 5px 0;
-            color: #666;
+            margin: 0.5rem 0;
+            color: var(--gray-600);
+            font-size: 1rem;
         }
+
         table {
             width: 100%;
             border-collapse: collapse;
-            margin-bottom: 20px;
+            margin-bottom: 2.5rem;
         }
+
         thead {
-            background-color: #1a56db;
-            color: white;
+            background-color: var(--navy);
+            color: var(--white);
         }
+
         th {
-            padding: 12px;
+            padding: 1rem 1.25rem;
             text-align: left;
-            font-weight: bold;
-            border: 1px solid #ddd;
+            font-weight: 600;
+            border: 1px solid var(--gray-300);
+            font-size: 0.95rem;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
         }
+
         td {
-            padding: 10px 12px;
-            border: 1px solid #ddd;
+            padding: 1rem 1.25rem;
+            border: 1px solid var(--gray-200);
+            font-size: 0.95rem;
         }
+
         tbody tr:nth-child(even) {
-            background-color: #f9f9f9;
+            background-color: var(--gray-50);
         }
+
         tbody tr.deduction {
-            background-color: #fee2e2;
+            background-color: var(--danger-light);
         }
+
+        tbody tr.deduction td {
+            color: #991B1B;
+            font-weight: 500;
+        }
+
         tfoot {
-            background-color: #1a56db;
-            color: white;
-            font-weight: bold;
+            background-color: var(--navy);
+            color: var(--white);
+            font-weight: 600;
         }
+
         tfoot td {
-            padding: 12px;
+            padding: 1rem 1.25rem;
+            border: 1px solid var(--navy-light);
         }
+
         .text-center {
             text-align: center;
         }
+
         .text-right {
             text-align: right;
         }
+
         .note {
-            font-size: 12px;
-            color: #666;
-            margin-top: 20px;
-            padding: 10px;
-            background-color: #f5f5f5;
-            border-left: 4px solid #1a56db;
+            font-size: 0.9rem;
+            color: var(--gray-700);
+            margin-top: 2rem;
+            padding: 1.5rem;
+            background-color: var(--gray-50);
+            border-left: 4px solid var(--navy);
+            border-radius: 0.5rem;
         }
+
+        .note strong {
+            color: var(--navy);
+        }
+
         @media print {
             body {
                 margin: 0;
             }
             .header {
-                margin-bottom: 20px;
+                margin-bottom: 2rem;
+            }
+            table {
+                margin-bottom: 1.5rem;
             }
         }
     </style>
