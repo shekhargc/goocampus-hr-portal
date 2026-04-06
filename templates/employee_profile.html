@@ -1,73 +1,282 @@
 {% extends "base.html" %}
 
-{% block title %}Profile - GooCampus HR Portal{% endblock %}
+{% block title %}My Profile - GooCampus HR Portal{% endblock %}
 
 {% block extra_css %}
 <style>
-    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+    .profile-page { max-width: 850px; margin: 0 auto; }
+
+    /* Photo Section */
+    .profile-header {
+        display: flex; align-items: center; gap: 1.75rem; padding: 2rem;
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.5rem;
+    }
+    .profile-photo-wrap { position: relative; flex-shrink: 0; }
+    .profile-photo {
+        width: 110px; height: 110px; border-radius: 50%; object-fit: cover;
+        border: 3px solid var(--gray-200);
+    }
+    .profile-photo-init {
+        width: 110px; height: 110px; border-radius: 50%;
+        background: var(--navy); color: white; font-size: 2.5rem; font-weight: 700;
+        display: flex; align-items: center; justify-content: center;
+        border: 3px solid var(--gray-200);
+    }
+    .photo-upload-btn {
+        position: absolute; bottom: 2px; right: 2px;
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--orange); color: white; border: 2px solid white;
+        display: flex; align-items: center; justify-content: center;
+        cursor: pointer; transition: background 0.15s;
+    }
+    .photo-upload-btn:hover { background: var(--orange-dark); }
+    .photo-upload-btn input { display: none; }
+    .profile-header-info h1 { font-size: 1.4rem; font-weight: 700; color: var(--navy); margin: 0 0 0.25rem; }
+    .profile-header-meta { font-size: 0.88rem; color: var(--gray-500); display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: center; }
+    .profile-header-meta span { display: flex; align-items: center; gap: 0.3rem; }
+    .profile-badge {
+        display: inline-block; padding: 0.15rem 0.55rem; border-radius: 0.3rem;
+        font-size: 0.72rem; font-weight: 600;
+    }
+    .profile-badge.admin { background: rgba(239,68,68,0.1); color: #dc2626; }
+    .profile-badge.mgmt { background: rgba(59,130,246,0.1); color: #2563eb; }
+    .profile-badge.emp { background: rgba(16,185,129,0.1); color: #059669; }
+
+    /* Section Cards */
+    .profile-section {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); margin-bottom: 1.25rem; overflow: hidden;
+    }
+    .profile-section-header {
+        padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .profile-section-title { font-weight: 600; font-size: 0.95rem; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
+    .profile-section-body { padding: 1.25rem 1.5rem; }
+
+    /* Field Grid */
+    .field-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    .field-grid .field-full { grid-column: 1 / -1; }
+    .field-label { font-size: 0.78rem; font-weight: 600; color: var(--gray-500); margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em; }
+    .field-value { font-size: 0.92rem; color: var(--navy); line-height: 1.5; }
+    .field-value.empty { color: var(--gray-400); font-style: italic; }
+
+    /* Editable Fields */
+    .field-input {
+        width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.45rem; font-size: 0.88rem; font-family: 'Inter', sans-serif;
+        transition: border-color 0.15s; box-sizing: border-box;
+    }
+    .field-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(74,122,181,0.1); }
+    .field-input:disabled, .field-input[readonly] {
+        background: var(--gray-50); color: var(--gray-500); cursor: not-allowed;
+    }
+    textarea.field-input { min-height: 70px; resize: vertical; }
+    .field-lock-icon { color: var(--gray-400); font-size: 0.75rem; margin-left: 0.3rem; }
+    .field-hint { font-size: 0.7rem; color: var(--gray-400); margin-top: 0.2rem; }
+
+    /* Buttons */
+    .profile-save-btn {
+        background: var(--orange); color: white; border: none; padding: 0.65rem 1.75rem;
+        border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+        font-family: 'Inter', sans-serif; transition: background 0.15s;
+    }
+    .profile-save-btn:hover { background: var(--orange-dark); }
+    .profile-cancel-btn {
+        background: transparent; color: var(--gray-500); border: 1px solid var(--gray-300);
+        padding: 0.65rem 1.75rem; border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600;
+        cursor: pointer; font-family: 'Inter', sans-serif; transition: all 0.15s;
+        text-decoration: none; display: inline-flex; align-items: center;
+    }
+    .profile-cancel-btn:hover { background: var(--gray-50); }
+
+    @media (max-width: 768px) {
+        .profile-header { flex-direction: column; text-align: center; }
+        .field-grid { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<h1 class="page-title">My Profile</h1>
-<div class="card">
+<div class="profile-page">
 
-    <form method="POST" style="max-width: 650px;">
-        <div class="form-group">
-            <label>Name</label>
-            <input type="text" value="{{ user.name }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
+    <!-- Profile Header with Photo -->
+    <div class="profile-header">
+        <div class="profile-photo-wrap">
+            {% if user.photo_url %}
+            <img src="/static/photos/{{ user.photo_url }}" class="profile-photo" alt="{{ user.name }}">
+            {% else %}
+            <div class="profile-photo-init">{{ user.name[0] }}</div>
+            {% endif %}
+            <form id="photo-form" method="POST" action="/profile/upload-photo" enctype="multipart/form-data">
+                <label class="photo-upload-btn" title="Change photo">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                    <input type="file" name="photo" accept="image/*" onchange="document.getElementById('photo-form').submit();">
+                </label>
+            </form>
+        </div>
+        <div class="profile-header-info">
+            <h1>{{ user.name }}</h1>
+            <div class="profile-header-meta">
+                <span>{{ user.emp_code }}</span>
+                <span>&middot;</span>
+                <span>{{ user.designation or 'No Designation' }}</span>
+                <span>&middot;</span>
+                <span>{{ user.department or 'No Department' }}</span>
+                {% if user.is_admin %}
+                <span class="profile-badge admin">Admin</span>
+                {% elif user.emp_code in ['GC001','GC002','GC003'] %}
+                <span class="profile-badge mgmt">Management</span>
+                {% else %}
+                <span class="profile-badge emp">Employee</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <form method="POST" action="/profile">
+        <!-- Work Information -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
+                    Work Information
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <div class="field-grid">
+                    <div>
+                        <div class="field-label">Employee Code</div>
+                        <div class="field-value">{{ user.emp_code }}</div>
+                    </div>
+                    <div>
+                        <div class="field-label">Employee ID</div>
+                        <div class="field-value {% if not user.employee_id_number %}empty{% endif %}">{{ user.employee_id_number or 'Not assigned' }}</div>
+                    </div>
+                    <div>
+                        <div class="field-label">Department</div>
+                        <div class="field-value {% if not user.department %}empty{% endif %}">{{ user.department or 'Not assigned' }}</div>
+                    </div>
+                    <div>
+                        <div class="field-label">Designation {% if user.designation %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                        {% if not user.designation %}
+                        <input type="text" name="designation" class="field-input" value="" placeholder="Enter your designation">
+                        <div class="field-hint">You can set this once. It will be locked after saving.</div>
+                        {% else %}
+                        <div class="field-value">{{ user.designation }}</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="field-label">Date of Joining {% if user.joining_date %}<span class="field-lock-icon" title="Locked after first save">🔒</span>{% endif %}</div>
+                        {% if not user.joining_date %}
+                        <input type="date" name="joining_date" class="field-input" value="">
+                        <div class="field-hint">You can set this once. It will be locked after saving.</div>
+                        {% else %}
+                        <div class="field-value">{{ user.joining_date }}</div>
+                        {% endif %}
+                    </div>
+                    <div>
+                        <div class="field-label">Reporting To</div>
+                        <div class="field-value {% if not reporting_manager %}empty{% endif %}">{{ reporting_manager or 'Not assigned' }}</div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>Employee Code</label>
-            <input type="text" value="{{ user.emp_code }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
+        <!-- Personal Information -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                    Personal Information
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <div class="field-grid">
+                    <div>
+                        <div class="field-label">Full Name</div>
+                        <div class="field-value">{{ user.name }}</div>
+                    </div>
+                    <div>
+                        <div class="field-label">Date of Birth</div>
+                        <input type="date" name="dob" class="field-input" value="{{ user.dob or '' }}">
+                    </div>
+                    <div>
+                        <div class="field-label">Email</div>
+                        <input type="email" name="email" class="field-input" value="{{ user.email or '' }}" placeholder="your.email@goocampus.in">
+                    </div>
+                    <div>
+                        <div class="field-label">Phone</div>
+                        <input type="tel" name="phone" class="field-input" value="{{ user.phone or '' }}" placeholder="+91 XXXXX XXXXX">
+                    </div>
+                    <div class="field-full">
+                        <div class="field-label">Address</div>
+                        <textarea name="address" class="field-input" placeholder="Your full address">{{ user.address or '' }}</textarea>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>Department</label>
-            <input type="text" value="{{ user.department or '-' }}" disabled style="background: var(--gray-100); color: var(--gray-500);">
+        <!-- Emergency Contact -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                    Emergency Contact
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <div class="field-grid">
+                    <div>
+                        <div class="field-label">Contact Name</div>
+                        <input type="text" name="emergency_contact_name" class="field-input" value="{{ user.emergency_contact_name or '' }}" placeholder="Contact person name">
+                    </div>
+                    <div>
+                        <div class="field-label">Relation</div>
+                        <input type="text" name="emergency_contact_relation" class="field-input" value="{{ user.emergency_contact_relation or '' }}" placeholder="e.g. Spouse, Parent">
+                    </div>
+                    <div>
+                        <div class="field-label">Phone Number</div>
+                        <input type="tel" name="emergency_contact_phone" class="field-input" value="{{ user.emergency_contact_phone or '' }}" placeholder="+91 XXXXX XXXXX">
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>Email</label>
-            <input type="email" name="email" value="{{ user.email or '' }}">
+        <!-- Leave Information -->
+        <div class="profile-section">
+            <div class="profile-section-header">
+                <div class="profile-section-title">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Leave Information
+                </div>
+            </div>
+            <div class="profile-section-body">
+                <div class="field-grid">
+                    <div>
+                        <div class="field-label">Carry Forward</div>
+                        <div class="field-value">{{ user.carry_forward or 0 }} days</div>
+                    </div>
+                    <div>
+                        <div class="field-label">Account Status</div>
+                        <div class="field-value">
+                            {% if user.is_active == 1 %}
+                            <span style="color: #059669; font-weight: 600;">Active</span>
+                            {% else %}
+                            <span style="color: var(--danger); font-weight: 600;">Inactive</span>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label>Phone</label>
-            <input type="tel" name="phone" value="{{ user.phone or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label>Date of Birth</label>
-            <input type="date" name="dob" value="{{ user.dob or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label>Address</label>
-            <textarea name="address">{{ user.address or '' }}</textarea>
-        </div>
-
-        <h2 style="margin-top: 3rem; margin-bottom: 2rem; font-size: 1.3rem; font-weight: 600; color: var(--navy);">Emergency Contact</h2>
-
-        <div class="form-group">
-            <label>Name</label>
-            <input type="text" name="emergency_contact_name" value="{{ user.emergency_contact_name or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label>Phone</label>
-            <input type="tel" name="emergency_contact_phone" value="{{ user.emergency_contact_phone or '' }}">
-        </div>
-
-        <div class="form-group">
-            <label>Relation</label>
-            <input type="text" name="emergency_contact_relation" value="{{ user.emergency_contact_relation or '' }}">
-        </div>
-
-        <div style="display: flex; gap: 1.25rem; margin-top: 2.5rem;">
-            <button type="submit" class="button">Save Changes</button>
-            <a href="/dashboard" class="button button-secondary">Cancel</a>
+        <!-- Save -->
+        <div style="display: flex; gap: 1rem; margin-top: 0.5rem; margin-bottom: 2rem;">
+            <button type="submit" class="profile-save-btn">Save Changes</button>
+            <a href="/dashboard" class="profile-cancel-btn">Cancel</a>
         </div>
     </form>
 </div>

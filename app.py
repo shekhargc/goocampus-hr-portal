@@ -395,20 +395,88 @@ def profile():
         emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         emergency_contact_relation = request.form.get('emergency_contact_relation', '').strip()
 
-        conn.execute('''
+        # Handle lock-once fields: designation and joining_date
+        # Only update if the field is currently empty (not yet set)
+        designation = request.form.get('designation', '').strip()
+        joining_date = request.form.get('joining_date', '').strip()
+
+        update_fields = '''
             UPDATE employees
             SET email = ?, phone = ?, dob = ?, address = ?,
                 emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?
-            WHERE id = ?
-        ''', (email, phone, dob, address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation, user['id']))
+        '''
+        params = [email, phone, dob, address, emergency_contact_name, emergency_contact_phone, emergency_contact_relation]
+
+        # Only allow setting designation if not already set
+        if designation and not user.get('designation'):
+            update_fields += ', designation = ?'
+            params.append(designation)
+
+        # Only allow setting joining_date if not already set
+        if joining_date and not user.get('joining_date'):
+            update_fields += ', joining_date = ?'
+            params.append(joining_date)
+
+        update_fields += ' WHERE id = ?'
+        params.append(user['id'])
+
+        conn.execute(update_fields, tuple(params))
         conn.commit()
         conn.close()
 
         flash('Profile updated successfully', 'success')
         return redirect(url_for('profile'))
 
+    # Get reporting manager name
+    reporting_manager = None
+    if user.get('reporting_to'):
+        mgr = conn.execute('SELECT name FROM employees WHERE id = ?', (user['reporting_to'],)).fetchone()
+        if mgr:
+            reporting_manager = mgr['name']
+
     conn.close()
-    return render_template('employee_profile.html', user=user)
+    return render_template('employee_profile.html', user=user, reporting_manager=reporting_manager)
+
+
+@app.route('/profile/upload-photo', methods=['POST'])
+@login_required
+def profile_upload_photo():
+    """Allow employees to upload their own profile photo."""
+    user = get_user()
+
+    if 'photo' not in request.files:
+        flash('No photo selected', 'error')
+        return redirect(url_for('profile'))
+
+    file = request.files['photo']
+    if file.filename == '':
+        flash('No photo selected', 'error')
+        return redirect(url_for('profile'))
+
+    if file and allowed_file(file.filename):
+        ext = file.filename.rsplit('.', 1)[1].lower()
+        filename = f"{user['emp_code']}.{ext}"
+        filepath = os.path.join(PHOTO_FOLDER, filename)
+
+        # Remove old photos with different extensions
+        for old_ext in ALLOWED_EXTENSIONS:
+            old_path = os.path.join(PHOTO_FOLDER, f"{user['emp_code']}.{old_ext}")
+            if os.path.exists(old_path) and old_path != filepath:
+                os.remove(old_path)
+
+        file.save(filepath)
+
+        # Update photo_url in database
+        conn = get_db()
+        conn.execute('UPDATE employees SET photo_url = ? WHERE id = ?', (filename, user['id']))
+        conn.commit()
+        conn.close()
+
+        flash('Photo updated successfully', 'success')
+    else:
+        flash('Invalid file type. Allowed: png, jpg, jpeg, gif, webp', 'error')
+
+    return redirect(url_for('profile'))
 
 @app.route('/apply-leave', methods=['GET', 'POST'])
 @login_required
