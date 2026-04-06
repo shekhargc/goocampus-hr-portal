@@ -302,6 +302,35 @@ def dashboard():
         ORDER BY holiday_date
     ''', (today.strftime('%Y-%m-%d'), month_end)).fetchall()
 
+    # Month-wise leave report for the full FY
+    monthly_leave_data = []
+    for m in range(12):
+        # FY months: April(4) to March(3)
+        report_month = ((m + 3) % 12) + 1  # 4,5,6,7,8,9,10,11,12,1,2,3
+        report_year = fy_year if report_month >= 4 else fy_year + 1
+
+        month_leaves_data = conn.execute('''
+            SELECT SUM(days) as total_days,
+                   SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
+                   SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
+                   SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual,
+                   COUNT(*) as count
+            FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
+
+        monthly_leave_data.append({
+            'month': calendar.month_name[report_month],
+            'month_short': calendar.month_abbr[report_month],
+            'year': report_year,
+            'total': month_leaves_data['total_days'] or 0,
+            'annual': month_leaves_data['annual'] or 0,
+            'sick': month_leaves_data['sick'] or 0,
+            'casual': month_leaves_data['casual'] or 0,
+            'count': month_leaves_data['count'] or 0
+        })
+
     conn.close()
 
     return render_template('employee_dashboard.html',
@@ -318,7 +347,8 @@ def dashboard():
                          direct_reports=direct_reports,
                          team_on_leave=team_on_leave,
                          upcoming_holidays=upcoming_holidays,
-                         current_month_name=calendar.month_name[current_month])
+                         current_month_name=calendar.month_name[current_month],
+                         monthly_leave_data=monthly_leave_data)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -607,6 +637,15 @@ def calendar_view():
                          next_month=next_month,
                          next_year=next_year,
                          today=today)
+
+@app.route('/holidays')
+@login_required
+def employee_holidays():
+    user = get_user()
+    conn = get_db()
+    holidays = conn.execute('SELECT * FROM holidays ORDER BY holiday_date').fetchall()
+    conn.close()
+    return render_template('employee_holidays.html', user=user, holidays=holidays)
 
 @app.route('/admin/dashboard')
 @admin_required

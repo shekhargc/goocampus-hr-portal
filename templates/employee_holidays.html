@@ -1,0 +1,337 @@
+{% extends "base.html" %}
+
+{% block title %}Company Holidays - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .holidays-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 1.75rem;
+        margin-bottom: 3rem;
+    }
+
+    .holiday-summary-card {
+        background: linear-gradient(135deg, var(--blue) 0%, var(--blue-dark) 100%);
+        border-radius: 1rem;
+        padding: 2.5rem 2rem;
+        color: white;
+        box-shadow: 0 4px 12px rgba(74, 122, 181, 0.15);
+        text-align: center;
+    }
+
+    .holiday-summary-value {
+        font-size: 2.8rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+        line-height: 1;
+    }
+
+    .holiday-summary-label {
+        font-size: 0.95rem;
+        opacity: 0.9;
+    }
+
+    .holiday-summary-subtext {
+        font-size: 0.8rem;
+        opacity: 0.75;
+        margin-top: 0.75rem;
+    }
+
+    .holidays-section {
+        margin-bottom: 3rem;
+    }
+
+    .holidays-section-title {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .holidays-section-title::before {
+        content: '';
+        width: 4px;
+        height: 1.5rem;
+        background: var(--orange);
+        border-radius: 2px;
+    }
+
+    .holidays-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+        gap: 1.75rem;
+    }
+
+    .holiday-card {
+        background: var(--white);
+        border-radius: 1rem;
+        border: 1px solid var(--gray-200);
+        padding: 1.75rem;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .holiday-card:hover {
+        box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
+        border-color: var(--blue);
+        transform: translateY(-2px);
+    }
+
+    .holiday-card.past {
+        opacity: 0.6;
+    }
+
+    .holiday-card-date {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.5rem;
+    }
+
+    .holiday-card-day {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 1rem;
+    }
+
+    .holiday-card-name {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.75rem;
+        line-height: 1.3;
+    }
+
+    .holiday-card-type {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.4rem 0.9rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        margin-top: auto;
+    }
+
+    .holiday-type-festival {
+        background: var(--orange-light);
+        color: var(--orange-dark);
+    }
+
+    .holiday-type-national {
+        background: var(--blue-light);
+        color: var(--blue-dark);
+    }
+
+    .holiday-type-other {
+        background: var(--gray-100);
+        color: var(--gray-600);
+    }
+
+    .no-holidays {
+        text-align: center;
+        padding: 3rem;
+        color: var(--gray-500);
+        background: var(--gray-50);
+        border-radius: 1rem;
+        border: 1px dashed var(--gray-300);
+    }
+
+    .no-holidays-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        opacity: 0.3;
+    }
+
+    .no-holidays-text {
+        font-size: 0.95rem;
+    }
+
+    .upcoming-badge {
+        display: inline-block;
+        background: var(--success-light);
+        color: #166534;
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.3px;
+    }
+
+    .past-badge {
+        display: inline-block;
+        background: var(--gray-200);
+        color: var(--gray-600);
+        padding: 0.2rem 0.6rem;
+        border-radius: 4px;
+        font-size: 0.7rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        margin-bottom: 0.75rem;
+        letter-spacing: 0.3px;
+    }
+
+    @media (max-width: 768px) {
+        .holidays-grid {
+            grid-template-columns: 1fr;
+        }
+
+        .holiday-summary-card {
+            padding: 2rem;
+        }
+
+        .holiday-summary-value {
+            font-size: 2.2rem;
+        }
+
+        .holidays-section-title {
+            font-size: 1.1rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <h1>Company Holidays</h1>
+    <p>Public holidays and company-observed holidays for the year</p>
+</div>
+
+<!-- Summary Card -->
+<div class="holidays-summary">
+    <div class="holiday-summary-card">
+        <div class="holiday-summary-value" id="total-holidays">{{ holidays | length }}</div>
+        <div class="holiday-summary-label">Total Holidays</div>
+        <div class="holiday-summary-subtext">
+            {% set upcoming = [] %}
+            {% set past = [] %}
+            {% for h in holidays %}
+                {% if h.holiday_date > today_date %}
+                    {% set _ = upcoming.append(h) %}
+                {% else %}
+                    {% set _ = past.append(h) %}
+                {% endif %}
+            {% endfor %}
+            <span id="upcoming-count">{{ upcoming | length }}</span> upcoming
+        </div>
+    </div>
+</div>
+
+<!-- Upcoming Holidays Section -->
+{% if upcoming %}
+<div class="holidays-section">
+    <h2 class="holidays-section-title">Upcoming Holidays</h2>
+    <div class="holidays-grid">
+        {% for holiday in holidays %}
+            {% if holiday.holiday_date > today_date %}
+            <div class="holiday-card">
+                <span class="upcoming-badge">Upcoming</span>
+                <div class="holiday-card-date" data-date="{{ holiday.holiday_date }}">
+                    <span id="day-{{ loop.index }}"></span>
+                </div>
+                <div class="holiday-card-day" id="datenum-{{ loop.index }}"></div>
+                <div class="holiday-card-name">{{ holiday.name }}</div>
+                <div class="holiday-card-type {% if holiday.holiday_type == 'Festival' %}holiday-type-festival{% elif holiday.holiday_type == 'National' %}holiday-type-national{% else %}holiday-type-other{% endif %}">
+                    {{ holiday.holiday_type or 'Holiday' }}
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Past Holidays Section -->
+{% if past %}
+<div class="holidays-section">
+    <h2 class="holidays-section-title">Past Holidays</h2>
+    <div class="holidays-grid">
+        {% for holiday in holidays %}
+            {% if holiday.holiday_date <= today_date %}
+            <div class="holiday-card past">
+                <span class="past-badge">Observed</span>
+                <div class="holiday-card-date" data-date="{{ holiday.holiday_date }}">
+                    <span id="day-{{ loop.index }}"></span>
+                </div>
+                <div class="holiday-card-day" id="datenum-{{ loop.index }}"></div>
+                <div class="holiday-card-name">{{ holiday.name }}</div>
+                <div class="holiday-card-type {% if holiday.holiday_type == 'Festival' %}holiday-type-festival{% elif holiday.holiday_type == 'National' %}holiday-type-national{% else %}holiday-type-other{% endif %}">
+                    {{ holiday.holiday_type or 'Holiday' }}
+                </div>
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
+
+<!-- Empty State -->
+{% if not holidays %}
+<div class="no-holidays">
+    <div class="no-holidays-icon">📅</div>
+    <div class="no-holidays-text">No holidays are currently scheduled. Check back later for holiday information.</div>
+</div>
+{% endif %}
+
+<script>
+    // Format dates nicely (e.g., "Mon, 26 Jan")
+    function formatDateCard() {
+        const dateElements = document.querySelectorAll('[data-date]');
+
+        dateElements.forEach((elem) => {
+            const dateStr = elem.getAttribute('data-date');
+            const date = new Date(dateStr + 'T00:00:00Z');
+
+            // Get day name
+            const dayName = new Intl.DateTimeFormat('en-US', { weekday: 'short' }).format(date);
+
+            // Get date number and month
+            const dateNum = date.getUTCDate();
+            const monthName = new Intl.DateTimeFormat('en-US', { month: 'short' }).format(date);
+
+            // Update the day text
+            const dayElem = elem.querySelector('span');
+            if (dayElem) {
+                dayElem.textContent = `${dayName}, ${dateNum} ${monthName}`;
+            }
+        });
+    }
+
+    // Format the date numbers in the cards
+    function formatDateNumbers() {
+        const cards = document.querySelectorAll('[data-date]');
+
+        cards.forEach((elem) => {
+            const dateStr = elem.getAttribute('data-date');
+            const date = new Date(dateStr + 'T00:00:00Z');
+            const dateNum = date.getUTCDate();
+
+            // Find the adjacent datenum element
+            const parent = elem.closest('.holiday-card');
+            if (parent) {
+                const dateNumElem = parent.querySelector('[id^="datenum-"]');
+                if (dateNumElem) {
+                    dateNumElem.textContent = dateNum;
+                }
+            }
+        });
+    }
+
+    // Initialize on page load
+    document.addEventListener('DOMContentLoaded', () => {
+        formatDateCard();
+        formatDateNumbers();
+    });
+</script>
+{% endblock %}
