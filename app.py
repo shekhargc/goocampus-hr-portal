@@ -249,15 +249,22 @@ def dashboard():
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
 
-    # Days taken this FY
+    # Days taken this FY - with type breakdown
     leaves = conn.execute('''
-        SELECT SUM(days) as total_days FROM leave_records
+        SELECT SUM(days) as total_days,
+               SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual_taken,
+               SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick_taken,
+               SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual_taken
+        FROM leave_records
         WHERE employee_id = ? AND status = 'approved'
         AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
              OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
     ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
 
     days_taken = leaves['total_days'] if leaves['total_days'] else 0
+    annual_taken = leaves['annual_taken'] if leaves['annual_taken'] else 0
+    sick_taken = leaves['sick_taken'] if leaves['sick_taken'] else 0
+    casual_taken = leaves['casual_taken'] if leaves['casual_taken'] else 0
     available_balance = total_allocation - days_taken
 
     # Pending requests
@@ -313,8 +320,12 @@ def dashboard():
 
     return render_template('employee_dashboard.html',
                          user=user,
+                         total_allocation=total_allocation,
                          available_balance=round(available_balance, 2),
                          days_taken=days_taken,
+                         annual_taken=annual_taken,
+                         sick_taken=sick_taken,
+                         casual_taken=casual_taken,
                          pending_count=pending['count'],
                          monthly_allocation=round(total_allocation / 12, 2),
                          recent_leaves=recent,
@@ -678,8 +689,11 @@ def my_leave_report():
         ORDER BY leave_date DESC
     ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchall()
 
-    # Days taken
+    # Days taken - with type breakdown
     total_taken = sum(m['total'] for m in monthly_leave_data)
+    annual_total = sum(m['annual'] for m in monthly_leave_data)
+    sick_total = sum(m['sick'] for m in monthly_leave_data)
+    casual_total = sum(m['casual'] for m in monthly_leave_data)
     available_balance = total_allocation - total_taken
 
     conn.close()
@@ -691,6 +705,9 @@ def my_leave_report():
                          fy_year=fy_year,
                          total_allocation=total_allocation,
                          total_taken=total_taken,
+                         annual_total=annual_total,
+                         sick_total=sick_total,
+                         casual_total=casual_total,
                          available_balance=round(available_balance, 2))
 
 @app.route('/admin/dashboard')

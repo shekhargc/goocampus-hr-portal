@@ -37,21 +37,37 @@
 
 <!-- Summary Stats -->
 <div class="report-summary">
-    <div class="report-stat">
+    <div class="report-stat" style="border-top: 3px solid var(--navy);">
         <div class="report-stat-val" style="color: var(--navy);">{{ total_allocation }}</div>
-        <div class="report-stat-lbl">Total Allocation</div>
+        <div class="report-stat-lbl">Total Sanctioned Leaves</div>
     </div>
-    <div class="report-stat">
+    <div class="report-stat" style="border-top: 3px solid var(--warning);">
         <div class="report-stat-val" style="color: var(--warning);">{{ total_taken }}</div>
-        <div class="report-stat-lbl">Days Taken</div>
+        <div class="report-stat-lbl">Total Days Taken</div>
     </div>
-    <div class="report-stat">
+    <div class="report-stat" style="border-top: 3px solid var(--success);">
         <div class="report-stat-val" style="color: var(--success);">{{ available_balance }}</div>
         <div class="report-stat-lbl">Available Balance</div>
     </div>
-    <div class="report-stat">
-        <div class="report-stat-val" style="color: var(--blue);">{{ all_leaves | length }}</div>
+    <div class="report-stat" style="border-top: 3px solid var(--gray-400);">
+        <div class="report-stat-val" style="color: var(--gray-600);">{{ all_leaves | length }}</div>
         <div class="report-stat-lbl">Total Records</div>
+    </div>
+</div>
+
+<!-- Leave Type Breakdown -->
+<div class="report-summary" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="report-stat" style="border-top: 3px solid var(--blue);">
+        <div class="report-stat-val" style="color: var(--blue);">{{ annual_total }}</div>
+        <div class="report-stat-lbl">Annual Leave Taken</div>
+    </div>
+    <div class="report-stat" style="border-top: 3px solid var(--success);">
+        <div class="report-stat-val" style="color: var(--success);">{{ sick_total }}</div>
+        <div class="report-stat-lbl">Sick Leave Taken</div>
+    </div>
+    <div class="report-stat" style="border-top: 3px solid var(--orange);">
+        <div class="report-stat-val" style="color: var(--orange);">{{ casual_total }}</div>
+        <div class="report-stat-lbl">Casual Leave Taken</div>
     </div>
 </div>
 

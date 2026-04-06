@@ -26,7 +26,7 @@
     .dash-action-btn:hover { background: rgba(255,255,255,0.22); }
     .dash-action-btn.primary { background: white; color: var(--blue); border-color: white; }
     .dash-action-btn.primary:hover { background: var(--gray-100); }
-    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.75rem; margin-bottom: 3rem; }
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 3rem; }
     .stat-card {
         background: var(--white); border-radius: 1rem; padding: 2rem;
         box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);
@@ -70,6 +70,9 @@
         display: flex; align-items: center; gap: 1rem; padding: 1rem 1.5rem;
         border-radius: 0.6rem; margin-bottom: 1.5rem; font-size: 0.95rem;
     }
+    @media (max-width: 1024px) {
+        .stat-cards { grid-template-columns: repeat(4, 1fr); }
+    }
     @media (max-width: 768px) {
         .stat-cards { grid-template-columns: repeat(2, 1fr); }
         .grid-2col { grid-template-columns: 1fr; }
@@ -101,21 +104,41 @@
     </div>
 </div>
 
-<!-- Stats -->
+<!-- Stats Row 1: Leave Balance Overview -->
 <div class="stat-cards">
-    <div class="stat-card">
+    <div class="stat-card" style="border-top: 3px solid var(--navy);">
+        <div class="stat-val" style="color: var(--navy);">{{ total_allocation }}</div>
+        <div class="stat-lbl">Total Leaves (FY)</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid var(--blue);">
         <div class="stat-val" style="color: var(--blue);">{{ available_balance }}</div>
         <div class="stat-lbl">Available Balance</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-top: 3px solid var(--warning);">
         <div class="stat-val" style="color: var(--warning);">{{ days_taken }}</div>
         <div class="stat-lbl">Days Taken (FY)</div>
     </div>
-    <div class="stat-card">
+    <div class="stat-card" style="border-top: 3px solid {% if pending_count > 0 %}var(--danger){% else %}var(--success){% endif %};">
         <div class="stat-val" style="color: {% if pending_count > 0 %}var(--danger){% else %}var(--success){% endif %};">{{ pending_count }}</div>
         <div class="stat-lbl">Pending Requests</div>
     </div>
-    <div class="stat-card">
+</div>
+
+<!-- Stats Row 2: Leave Type Breakdown -->
+<div class="stat-cards" style="grid-template-columns: repeat(4, 1fr);">
+    <div class="stat-card" style="border-top: 3px solid var(--blue);">
+        <div class="stat-val" style="color: var(--blue);">{{ annual_taken }}</div>
+        <div class="stat-lbl">Annual Leave Taken</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid var(--success);">
+        <div class="stat-val" style="color: var(--success);">{{ sick_taken }}</div>
+        <div class="stat-lbl">Sick Leave Taken</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid var(--orange);">
+        <div class="stat-val" style="color: var(--orange);">{{ casual_taken }}</div>
+        <div class="stat-lbl">Casual Leave Taken</div>
+    </div>
+    <div class="stat-card" style="border-top: 3px solid #0891b2;">
         <div class="stat-val" style="color: #0891b2;">{{ monthly_allocation }}</div>
         <div class="stat-lbl">Monthly Allocation</div>
     </div>
