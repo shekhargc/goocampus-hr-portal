@@ -710,6 +710,12 @@ def my_leave_report():
     casual_total = sum(m['casual'] for m in monthly_leave_data)
     available_balance = total_allocation - total_taken
 
+    # Pending requests count
+    pending_count = conn.execute(
+        'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
+        (user['id'], 'pending')
+    ).fetchone()['cnt']
+
     conn.close()
 
     return render_template('employee_leave_report.html',
@@ -724,6 +730,7 @@ def my_leave_report():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
+                         pending_count=pending_count,
                          available_balance=round(available_balance, 2))
 
 @app.route('/admin/dashboard')
