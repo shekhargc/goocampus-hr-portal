@@ -381,6 +381,87 @@ def send_announcement_email(
     return send_email(recipient_emails, subject, html_body)
 
 
+def send_happy_birthday_email(
+    birthday_person_name: str,
+    birthday_person_email: str
+) -> bool:
+    """
+    Send a warm happy birthday email directly to the birthday person
+    from the entire GooCampus team.
+
+    Args:
+        birthday_person_name: Name of the birthday person.
+        birthday_person_email: Email of the birthday person.
+
+    Returns:
+        True if email was sent successfully, False otherwise.
+    """
+    if not birthday_person_email:
+        logger.error("Cannot send happy birthday email: no email address")
+        return False
+
+    subject = f"Happy Birthday, {birthday_person_name}! 🎂"
+
+    first_name = birthday_person_name.split()[0] if birthday_person_name else birthday_person_name
+
+    html_body = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 0;">
+            {_get_email_header_html()}
+
+            <div style="padding: 30px; background-color: white; margin: 0;">
+                <div style="text-align: center; margin-bottom: 20px;">
+                    <p style="font-size: 48px; margin: 0;">🎂🎉🎈</p>
+                </div>
+
+                <h2 style="color: {BRAND_NAVY}; text-align: center; margin-top: 0;">
+                    Happy Birthday, <span style="color: {BRAND_ORANGE};">{first_name}!</span>
+                </h2>
+
+                <p style="font-size: 16px; margin: 20px 0; text-align: center;">
+                    Dear <strong>{birthday_person_name}</strong>,
+                </p>
+
+                <div style="background: linear-gradient(135deg, #fff5eb, #fef3e6); border-left: 4px solid {BRAND_ORANGE}; padding: 20px; margin: 20px 0; border-radius: 0 8px 8px 0;">
+                    <p style="font-size: 15px; margin: 0; line-height: 1.8;">
+                        On behalf of the entire <strong style="color: {BRAND_NAVY};">GooCampus</strong> family,
+                        we wish you a very happy birthday! 🥳
+                    </p>
+                    <p style="font-size: 15px; margin: 12px 0 0 0; line-height: 1.8;">
+                        Your hard work, dedication, and positive energy make our workplace better every day.
+                        We are truly grateful to have you as part of our team.
+                    </p>
+                    <p style="font-size: 15px; margin: 12px 0 0 0; line-height: 1.8;">
+                        May this special day bring you endless joy, good health, and all the happiness
+                        you deserve. Here's to another wonderful year ahead!
+                    </p>
+                </div>
+
+                <div style="text-align: center; margin: 30px 0;">
+                    <p style="font-size: 36px; margin: 0;">
+                        🎊 🎁 🌟 🎈 🎂
+                    </p>
+                </div>
+
+                <p style="font-size: 14px; margin: 20px 0; color: #666; text-align: center;">
+                    With warm wishes from all of us,<br>
+                    <strong style="color: {BRAND_NAVY};">The GooCampus Team</strong> 🧡
+                </p>
+            </div>
+
+            {_get_email_footer_html()}
+        </body>
+    </html>
+    """
+
+    logger.info(
+        f"Sending happy birthday email to {birthday_person_name} "
+        f"({birthday_person_email})"
+    )
+
+    return send_email([birthday_person_email], subject, html_body)
+
+
 if __name__ == "__main__":
     # Example usage (for testing)
     logger.info("Email utilities module loaded successfully")

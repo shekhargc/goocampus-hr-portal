@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import calendar
 from db import get_db
-from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email
+from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
@@ -493,6 +493,33 @@ def apply_leave():
 
         conn.commit()
         conn.close()
+
+        conn2 = get_db()
+        # Notify the reporting manager
+        reporting_mgr = conn2.execute('SELECT reporting_to FROM employees WHERE id = ?', (user['id'],)).fetchone()
+        if reporting_mgr and reporting_mgr['reporting_to']:
+            try:
+                create_notification(conn2, 'leave_request',
+                    f"Leave Request from {user['name']}",
+                    f"{user['name']} has applied for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date})",
+                    target_user_id=reporting_mgr['reporting_to'], target_role='manager')
+                conn2.commit()
+            except Exception as e:
+                logging.error(f"Failed to create leave notification for manager: {e}")
+
+        # Notify admin
+        admins = conn2.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1', ()).fetchall()
+        for adm in admins:
+            if not reporting_mgr or adm['id'] != reporting_mgr.get('reporting_to'):
+                try:
+                    create_notification(conn2, 'leave_request',
+                        f"Leave Request from {user['name']}",
+                        f"{user['name']} has applied for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date})",
+                        target_user_id=adm['id'], target_role='admin')
+                    conn2.commit()
+                except Exception as e:
+                    logging.error(f"Failed to create leave notification for admin: {e}")
+        conn2.close()
 
         day_label = 'day' if total_days == 1 else 'days'
         flash(f'Leave request submitted for {total_days:.1f} {day_label} ({len(leave_days)} working day{"s" if len(leave_days) > 1 else ""})', 'success')
@@ -1619,6 +1646,143 @@ def api_employee_name():
 
     return jsonify({'name': emp['name']})
 
+# ===== NOTIFICATION HELPERS =====
+
+def create_notification(conn, ntype, title, message, target_user_id=None, target_role='all', reference_id=None):
+    """Create a notification record.
+    target_user_id: specific user (for leave notifications)
+    target_role: 'all', 'admin', 'manager' for broader targeting
+    """
+    conn.execute('''
+        INSERT INTO notifications (type, title, message, target_user_id, target_role, reference_id, is_read, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
+    ''', (ntype, title, message, target_user_id, target_role, reference_id,
+          datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+
+
+def get_unread_count(user_id, is_admin=False):
+    """Get unread notification count for a user."""
+    conn = get_db()
+    # Notifications targeted to this specific user OR to 'all' OR to their role
+    if is_admin:
+        count = conn.execute('''
+            SELECT COUNT(*) as cnt FROM notifications
+            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
+            AND (target_role IN ('all', 'admin'))
+        ''', (user_id,)).fetchone()
+    else:
+        count = conn.execute('''
+            SELECT COUNT(*) as cnt FROM notifications
+            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
+            AND (target_role = 'all')
+        ''', (user_id,)).fetchone()
+    conn.close()
+    return count['cnt'] if count else 0
+
+
+@app.context_processor
+def inject_notification_count():
+    """Make unread notification count available in all templates."""
+    if 'user_id' in session:
+        is_admin = session.get('is_admin', False)
+        count = get_unread_count(session['user_id'], is_admin)
+        return {'unread_notification_count': count}
+    return {'unread_notification_count': 0}
+
+
+@app.route('/api/notifications')
+@login_required
+def get_notifications():
+    """Get notifications for the current user."""
+    user = get_user()
+    conn = get_db()
+
+    if user['is_admin']:
+        notifications = conn.execute('''
+            SELECT * FROM notifications
+            WHERE (target_user_id = ? OR target_user_id IS NULL)
+            AND (target_role IN ('all', 'admin'))
+            ORDER BY created_at DESC LIMIT 30
+        ''', (user['id'],)).fetchall()
+    else:
+        # Check if user is a manager
+        mgr = is_manager(user['id'])
+        if mgr:
+            notifications = conn.execute('''
+                SELECT * FROM notifications
+                WHERE (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role IN ('all', 'manager'))
+                ORDER BY created_at DESC LIMIT 30
+            ''', (user['id'],)).fetchall()
+        else:
+            notifications = conn.execute('''
+                SELECT * FROM notifications
+                WHERE (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role = 'all')
+                ORDER BY created_at DESC LIMIT 30
+            ''', (user['id'],)).fetchall()
+
+    conn.close()
+
+    result = []
+    for n in notifications:
+        result.append({
+            'id': n['id'],
+            'type': n['type'],
+            'title': n['title'],
+            'message': n['message'],
+            'is_read': n['is_read'],
+            'created_at': str(n['created_at'])
+        })
+
+    return jsonify(result)
+
+
+@app.route('/api/notifications/mark-read', methods=['POST'])
+@login_required
+def mark_notifications_read():
+    """Mark all notifications as read for the current user."""
+    user = get_user()
+    conn = get_db()
+
+    if user['is_admin']:
+        conn.execute('''
+            UPDATE notifications SET is_read = 1
+            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
+            AND (target_role IN ('all', 'admin'))
+        ''', (user['id'],))
+    else:
+        mgr = is_manager(user['id'])
+        if mgr:
+            conn.execute('''
+                UPDATE notifications SET is_read = 1
+                WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role IN ('all', 'manager'))
+            ''', (user['id'],))
+        else:
+            conn.execute('''
+                UPDATE notifications SET is_read = 1
+                WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
+                AND (target_role = 'all')
+            ''', (user['id'],))
+
+    conn.commit()
+    conn.close()
+
+    return jsonify({'status': 'ok'})
+
+
+@app.route('/api/notifications/<int:notif_id>/read', methods=['POST'])
+@login_required
+def mark_single_notification_read(notif_id):
+    """Mark a single notification as read."""
+    conn = get_db()
+    conn.execute('UPDATE notifications SET is_read = 1 WHERE id = ?', (notif_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'status': 'ok'})
+
+
 @app.route('/announcements')
 @login_required
 def announcements():
@@ -1660,6 +1824,15 @@ def create_announcement():
     ''', (title, message, user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     conn.commit()
 
+    # Create notification for all users
+    try:
+        create_notification(conn, 'announcement', title,
+                          f"New announcement by {user['name']}: {message[:100]}",
+                          target_role='all')
+        conn.commit()
+    except Exception as e:
+        logging.error(f"Failed to create announcement notification: {e}")
+
     # Send email to all active employees with email addresses
     recipients = conn.execute('''
         SELECT email FROM employees WHERE is_active = 1 AND email IS NOT NULL AND email != ''
@@ -1699,6 +1872,8 @@ def daily_notifications():
     """
     API endpoint to send birthday and anniversary reminder emails.
     Call this daily via cron job. Sends reminders for tomorrow's events.
+    Also sends a happy birthday email directly to the birthday person.
+    Creates in-app notifications for all users.
     """
     conn = get_db()
     tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
@@ -1712,7 +1887,7 @@ def daily_notifications():
     ''', ()).fetchall()
     recipient_emails = [e['email'] for e in all_employees]
 
-    results = {'birthdays_sent': 0, 'anniversaries_sent': 0, 'errors': []}
+    results = {'birthdays_sent': 0, 'birthday_wishes_sent': 0, 'anniversaries_sent': 0, 'notifications_created': 0, 'errors': []}
 
     if not recipient_emails:
         conn.close()
@@ -1720,21 +1895,40 @@ def daily_notifications():
 
     # Birthday reminders for tomorrow
     birthday_people = conn.execute('''
-        SELECT name, dob FROM employees
+        SELECT name, dob, email FROM employees
         WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
         AND strftime('%m', dob) = ? AND strftime('%d', dob) = ?
     ''', (tomorrow_mm, tomorrow_dd)).fetchall()
 
     for person in birthday_people:
+        # Send team reminder email
         try:
             send_birthday_reminder(person['name'], tomorrow, recipient_emails)
             results['birthdays_sent'] += 1
         except Exception as e:
-            results['errors'].append(f"Birthday email for {person['name']}: {str(e)}")
+            results['errors'].append(f"Birthday reminder for {person['name']}: {str(e)}")
+
+        # Send happy birthday email directly to the person
+        if person['email']:
+            try:
+                send_happy_birthday_email(person['name'], person['email'])
+                results['birthday_wishes_sent'] += 1
+            except Exception as e:
+                results['errors'].append(f"Happy birthday email for {person['name']}: {str(e)}")
+
+        # Create in-app notification for everyone
+        try:
+            create_notification(conn, 'birthday',
+                f"🎂 {person['name']}'s Birthday Tomorrow!",
+                f"Tomorrow is {person['name']}'s birthday! Join us in wishing them a wonderful day.",
+                target_role='all')
+            results['notifications_created'] += 1
+        except Exception as e:
+            results['errors'].append(f"Birthday notification for {person['name']}: {str(e)}")
 
     # Anniversary reminders for tomorrow
     anniversary_people = conn.execute('''
-        SELECT name, joining_date FROM employees
+        SELECT name, joining_date, email FROM employees
         WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
         AND strftime('%m', joining_date) = ? AND strftime('%d', joining_date) = ?
         AND strftime('%Y', joining_date) != ?
@@ -1744,13 +1938,42 @@ def daily_notifications():
         try:
             join_year = int(person['joining_date'][:4])
             years = current_year - join_year
-            if tomorrow_mm + tomorrow_dd < person['joining_date'][5:7] + person['joining_date'][8:10]:
-                years = years  # same year math is fine since we match mm-dd
             send_anniversary_reminder(person['name'], years, tomorrow, recipient_emails)
             results['anniversaries_sent'] += 1
         except Exception as e:
             results['errors'].append(f"Anniversary email for {person['name']}: {str(e)}")
 
+        # Create in-app notification for everyone
+        try:
+            join_year = int(person['joining_date'][:4])
+            years = current_year - join_year
+            yr_text = f"{years} year{'s' if years != 1 else ''}"
+            create_notification(conn, 'anniversary',
+                f"🌟 {person['name']}'s Work Anniversary!",
+                f"Tomorrow marks {person['name']}'s {yr_text} at GooCampus! Congratulations!",
+                target_role='all')
+            results['notifications_created'] += 1
+        except Exception as e:
+            results['errors'].append(f"Anniversary notification for {person['name']}: {str(e)}")
+
+    # Create notifications for upcoming holidays (next 2 days)
+    day_after = (datetime.now() + timedelta(days=2)).strftime('%Y-%m-%d')
+    upcoming = conn.execute('''
+        SELECT holiday_name, holiday_date, holiday_type FROM holidays
+        WHERE holiday_date = ? OR holiday_date = ?
+    ''', (tomorrow, day_after)).fetchall()
+
+    for holiday in upcoming:
+        try:
+            create_notification(conn, 'holiday',
+                f"🏖️ Holiday: {holiday['holiday_name']}",
+                f"Upcoming holiday on {holiday['holiday_date']} — {holiday['holiday_name']} ({holiday['holiday_type']})",
+                target_role='all')
+            results['notifications_created'] += 1
+        except Exception as e:
+            results['errors'].append(f"Holiday notification: {str(e)}")
+
+    conn.commit()
     conn.close()
     return jsonify({'status': 'ok', **results})
 
