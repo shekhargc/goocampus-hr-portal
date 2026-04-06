@@ -82,6 +82,17 @@ def seed_production_db():
             )
         ''')
 
+        c.execute('''
+            CREATE TABLE IF NOT EXISTS announcements (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                message TEXT NOT NULL,
+                posted_by INTEGER NOT NULL REFERENCES employees(id),
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        ''')
+
         # Insert admin user
         admin_created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         c.execute('''

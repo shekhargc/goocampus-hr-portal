@@ -71,6 +71,18 @@ def init_db():
         )
     ''')
 
+    c.execute('''
+        CREATE TABLE announcements (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            posted_by INTEGER NOT NULL,
+            is_active INTEGER DEFAULT 1,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (posted_by) REFERENCES employees(id)
+        )
+    ''')
+
     # Insert admin user
     admin_created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     c.execute('''
@@ -142,6 +154,7 @@ def init_db():
     print("Admin user created: emp_code='admin', password='admin'")
     print("20 employees created with password = first name (lowercase)")
     print("12 holidays for 2026 created")
+    print("announcements table created")
 
 if __name__ == '__main__':
     init_db()

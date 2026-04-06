@@ -1,5 +1,6 @@
 import os
 import hashlib
+import logging
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
@@ -8,6 +9,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import calendar
 from db import get_db
+from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
@@ -44,6 +46,13 @@ def admin_required(f):
             return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return decorated_function
+
+# Management codes that can post announcements (along with admin)
+MANAGEMENT_CODES = ['GC001', 'GC002', 'GC003']
+
+def can_post_announcements(user):
+    """Check if user is admin or management team."""
+    return user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
 
 def get_user():
     if 'user_id' not in session:
@@ -316,6 +325,32 @@ def dashboard():
         ORDER BY holiday_date
     ''', (today.strftime('%Y-%m-%d'), next_month_end)).fetchall()
 
+    # Birthdays this month (employees who have DOB set, matching current month)
+    current_mm = str(current_month).zfill(2)
+    birthdays_this_month = conn.execute('''
+        SELECT name, dob, photo_url, department FROM employees
+        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        AND strftime('%m', dob) = ?
+        ORDER BY strftime('%d', dob)
+    ''', (current_mm,)).fetchall()
+
+    # Work anniversaries this month (employees with joining_date matching current month, excluding current year joins)
+    anniversaries_this_month = conn.execute('''
+        SELECT name, joining_date, photo_url, department FROM employees
+        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        AND strftime('%m', joining_date) = ?
+        AND strftime('%Y', joining_date) != ?
+        ORDER BY strftime('%d', joining_date)
+    ''', (current_mm, str(current_year))).fetchall()
+
+    # Recent announcements (last 5 active)
+    announcements = conn.execute('''
+        SELECT a.*, e.name as posted_by_name FROM announcements a
+        JOIN employees e ON a.posted_by = e.id
+        WHERE a.is_active = 1
+        ORDER BY a.created_at DESC LIMIT 5
+    ''', ()).fetchall()
+
     conn.close()
 
     return render_template('employee_dashboard.html',
@@ -337,7 +372,13 @@ def dashboard():
                          team_on_leave=team_on_leave,
                          upcoming_holidays=upcoming_holidays,
                          current_month_name=calendar.month_name[current_month],
-                         next_month_name=next_month_name)
+                         next_month_name=next_month_name,
+                         carry_forward=carry_forward,
+                         current_month_available=round(calculate_monthly_balance(user['id'], fy_year, current_month), 2),
+                         birthdays_this_month=birthdays_this_month,
+                         anniversaries_this_month=anniversaries_this_month,
+                         announcements=announcements,
+                         can_announce=can_post_announcements(user))
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -1547,6 +1588,142 @@ def api_employee_name():
         return jsonify({'error': 'Employee not found'}), 404
 
     return jsonify({'name': emp['name']})
+
+@app.route('/announcements')
+@login_required
+def announcements():
+    user = get_user()
+    if not can_post_announcements(user):
+        flash('You do not have permission to manage announcements', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    all_announcements = conn.execute('''
+        SELECT a.*, e.name as posted_by_name FROM announcements a
+        JOIN employees e ON a.posted_by = e.id
+        ORDER BY a.created_at DESC
+    ''', ()).fetchall()
+    conn.close()
+
+    return render_template('announcements.html', user=user, announcements=all_announcements)
+
+
+@app.route('/announcements/create', methods=['POST'])
+@login_required
+def create_announcement():
+    user = get_user()
+    if not can_post_announcements(user):
+        flash('You do not have permission to post announcements', 'error')
+        return redirect(url_for('dashboard'))
+
+    title = request.form.get('title', '').strip()
+    message = request.form.get('message', '').strip()
+
+    if not title or not message:
+        flash('Title and message are required', 'error')
+        return redirect(url_for('announcements'))
+
+    conn = get_db()
+    conn.execute('''
+        INSERT INTO announcements (title, message, posted_by, is_active, created_at)
+        VALUES (?, ?, ?, 1, ?)
+    ''', (title, message, user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+    conn.commit()
+
+    # Send email to all active employees with email addresses
+    recipients = conn.execute('''
+        SELECT email FROM employees WHERE is_active = 1 AND email IS NOT NULL AND email != ''
+    ''', ()).fetchall()
+    conn.close()
+
+    recipient_emails = [r['email'] for r in recipients]
+    if recipient_emails:
+        try:
+            send_announcement_email(title, message, user['name'], recipient_emails)
+        except Exception as e:
+            logging.error(f"Failed to send announcement email: {e}")
+
+    flash('Announcement posted successfully', 'success')
+    return redirect(url_for('announcements'))
+
+
+@app.route('/announcements/delete/<int:ann_id>', methods=['POST'])
+@login_required
+def delete_announcement(ann_id):
+    user = get_user()
+    if not can_post_announcements(user):
+        flash('You do not have permission to delete announcements', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    conn.execute('UPDATE announcements SET is_active = 0 WHERE id = ?', (ann_id,))
+    conn.commit()
+    conn.close()
+
+    flash('Announcement removed', 'success')
+    return redirect(url_for('announcements'))
+
+
+@app.route('/api/daily-notifications')
+def daily_notifications():
+    """
+    API endpoint to send birthday and anniversary reminder emails.
+    Call this daily via cron job. Sends reminders for tomorrow's events.
+    """
+    conn = get_db()
+    tomorrow = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    tomorrow_mm = tomorrow[5:7]
+    tomorrow_dd = tomorrow[8:10]
+    current_year = datetime.now().year
+
+    # Get all active employee emails for recipients
+    all_employees = conn.execute('''
+        SELECT email FROM employees WHERE is_active = 1 AND email IS NOT NULL AND email != ''
+    ''', ()).fetchall()
+    recipient_emails = [e['email'] for e in all_employees]
+
+    results = {'birthdays_sent': 0, 'anniversaries_sent': 0, 'errors': []}
+
+    if not recipient_emails:
+        conn.close()
+        return jsonify({'status': 'ok', 'message': 'No recipients with email addresses', **results})
+
+    # Birthday reminders for tomorrow
+    birthday_people = conn.execute('''
+        SELECT name, dob FROM employees
+        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        AND strftime('%m', dob) = ? AND strftime('%d', dob) = ?
+    ''', (tomorrow_mm, tomorrow_dd)).fetchall()
+
+    for person in birthday_people:
+        try:
+            send_birthday_reminder(person['name'], tomorrow, recipient_emails)
+            results['birthdays_sent'] += 1
+        except Exception as e:
+            results['errors'].append(f"Birthday email for {person['name']}: {str(e)}")
+
+    # Anniversary reminders for tomorrow
+    anniversary_people = conn.execute('''
+        SELECT name, joining_date FROM employees
+        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        AND strftime('%m', joining_date) = ? AND strftime('%d', joining_date) = ?
+        AND strftime('%Y', joining_date) != ?
+    ''', (tomorrow_mm, tomorrow_dd, str(current_year))).fetchall()
+
+    for person in anniversary_people:
+        try:
+            join_year = int(person['joining_date'][:4])
+            years = current_year - join_year
+            if tomorrow_mm + tomorrow_dd < person['joining_date'][5:7] + person['joining_date'][8:10]:
+                years = years  # same year math is fine since we match mm-dd
+            send_anniversary_reminder(person['name'], years, tomorrow, recipient_emails)
+            results['anniversaries_sent'] += 1
+        except Exception as e:
+            results['errors'].append(f"Anniversary email for {person['name']}: {str(e)}")
+
+    conn.close()
+    return jsonify({'status': 'ok', **results})
+
 
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))

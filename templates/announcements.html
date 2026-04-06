@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+
+{% block title %}Announcements - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .ann-page { max-width: 800px; margin: 0 auto; }
+    .ann-form-card {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); padding: 1.5rem; margin-bottom: 1.75rem;
+    }
+    .ann-form-title { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin-bottom: 1.25rem; display: flex; align-items: center; gap: 0.5rem; }
+    .ann-input {
+        width: 100%; padding: 0.65rem 0.85rem; border: 1px solid var(--gray-300);
+        border-radius: 0.5rem; font-size: 0.9rem; font-family: 'Inter', sans-serif;
+        transition: border-color 0.15s; box-sizing: border-box;
+    }
+    .ann-input:focus { outline: none; border-color: var(--blue); box-shadow: 0 0 0 3px rgba(74,122,181,0.1); }
+    textarea.ann-input { min-height: 100px; resize: vertical; }
+    .ann-label { display: block; font-weight: 600; font-size: 0.85rem; color: var(--gray-600); margin-bottom: 0.4rem; }
+    .ann-field { margin-bottom: 1rem; }
+    .ann-submit {
+        background: var(--orange); color: white; border: none; padding: 0.65rem 1.5rem;
+        border-radius: 0.5rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+        font-family: 'Inter', sans-serif; transition: background 0.15s;
+    }
+    .ann-submit:hover { background: var(--orange-dark); }
+
+    .ann-list-card {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    .ann-list-header {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        font-weight: 600; font-size: 1rem; color: var(--navy);
+    }
+    .ann-entry {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-100);
+        display: flex; align-items: flex-start; gap: 1rem;
+    }
+    .ann-entry:last-child { border-bottom: none; }
+    .ann-entry-body { flex: 1; }
+    .ann-entry-title { font-weight: 600; font-size: 0.95rem; color: var(--navy); }
+    .ann-entry-meta { font-size: 0.78rem; color: var(--gray-400); margin-top: 0.2rem; }
+    .ann-entry-msg { font-size: 0.88rem; color: var(--gray-600); margin-top: 0.5rem; line-height: 1.55; white-space: pre-wrap; }
+    .ann-badge-active { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 0.3rem; font-size: 0.72rem; font-weight: 600; background: rgba(16,185,129,0.1); color: #059669; }
+    .ann-badge-inactive { display: inline-block; padding: 0.15rem 0.55rem; border-radius: 0.3rem; font-size: 0.72rem; font-weight: 600; background: rgba(148,163,184,0.15); color: var(--gray-500); }
+    .ann-delete-btn {
+        background: none; border: 1px solid var(--gray-300); padding: 0.35rem 0.7rem;
+        border-radius: 0.4rem; font-size: 0.78rem; color: var(--gray-500); cursor: pointer;
+        font-family: 'Inter', sans-serif; transition: all 0.15s; flex-shrink: 0; margin-top: 0.2rem;
+    }
+    .ann-delete-btn:hover { border-color: var(--danger); color: var(--danger); background: rgba(239,68,68,0.05); }
+    .ann-empty { padding: 2rem; text-align: center; color: var(--gray-400); font-size: 0.9rem; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="ann-page">
+    <!-- Post New Announcement -->
+    <div class="ann-form-card">
+        <div class="ann-form-title"><span style="font-size: 1.15rem;">📢</span> Post New Announcement</div>
+        <form method="POST" action="/announcements/create">
+            <div class="ann-field">
+                <label class="ann-label">Title</label>
+                <input type="text" name="title" class="ann-input" placeholder="Announcement title..." required maxlength="200">
+            </div>
+            <div class="ann-field">
+                <label class="ann-label">Message</label>
+                <textarea name="message" class="ann-input" placeholder="Write your announcement here..." required maxlength="2000"></textarea>
+            </div>
+            <ann-submit>
+                <button type="submit" class="ann-submit">Post Announcement</button>
+            </ann-submit>
+        </form>
+    </div>
+
+    <!-- All Announcements -->
+    <div class="ann-list-card">
+        <div class="ann-list-header">All Announcements</div>
+        {% if announcements %}
+        {% for ann in announcements %}
+        <div class="ann-entry">
+            <div class="ann-entry-body">
+                <div style="display: flex; align-items: center; gap: 0.6rem;">
+                    <div class="ann-entry-title">{{ ann.title }}</div>
+                    {% if ann.is_active == 1 %}
+                    <span class="ann-badge-active">Active</span>
+                    {% else %}
+                    <span class="ann-badge-inactive">Hidden</span>
+                    {% endif %}
+                </div>
+                <div class="ann-entry-meta">Posted by {{ ann.posted_by_name }} · {{ ann.created_at[:16] }}</div>
+                <div class="ann-entry-msg">{{ ann.message }}</div>
+            </div>
+            {% if ann.is_active == 1 %}
+            <form method="POST" action="/announcements/delete/{{ ann.id }}" onsubmit="return confirm('Remove this announcement?');">
+                <button type="submit" class="ann-delete-btn">Remove</button>
+            </form>
+            {% endif %}
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="ann-empty">No announcements have been posted yet.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}
