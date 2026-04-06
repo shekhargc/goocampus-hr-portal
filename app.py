@@ -248,6 +248,11 @@ def dashboard():
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
+    monthly_alloc = round(total_allocation / 12, 2)
+
+    # Current month available balance (opening balance + this month's allocation)
+    balance_start = get_available_balance(user['id'], current_year, current_month)
+    current_month_available = round(balance_start + monthly_alloc, 2)
 
     # Days taken this FY - with type breakdown
     leaves = conn.execute('''
@@ -321,13 +326,15 @@ def dashboard():
     return render_template('employee_dashboard.html',
                          user=user,
                          total_allocation=total_allocation,
+                         carry_forward=carry_forward,
                          available_balance=round(available_balance, 2),
                          days_taken=days_taken,
                          annual_taken=annual_taken,
                          sick_taken=sick_taken,
                          casual_taken=casual_taken,
                          pending_count=pending['count'],
-                         monthly_allocation=round(total_allocation / 12, 2),
+                         monthly_allocation=monthly_alloc,
+                         current_month_available=current_month_available,
                          recent_leaves=recent,
                          current_year=current_year,
                          current_month=current_month,
@@ -651,9 +658,11 @@ def my_leave_report():
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
+    monthly_alloc = round(total_allocation / 12, 2)
 
-    # Month-wise leave report for the full FY
+    # Month-wise leave report for the full FY with running balance
     monthly_leave_data = []
+    running_balance = 0
     for m in range(12):
         report_month = ((m + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
@@ -669,15 +678,20 @@ def my_leave_report():
             AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
+        month_total = month_data['total_days'] or 0
+        running_balance = running_balance + monthly_alloc - month_total
+
         monthly_leave_data.append({
             'month': calendar.month_name[report_month],
             'month_short': calendar.month_abbr[report_month],
             'year': report_year,
-            'total': month_data['total_days'] or 0,
+            'total': month_total,
             'annual': month_data['annual'] or 0,
             'sick': month_data['sick'] or 0,
             'casual': month_data['casual'] or 0,
-            'count': month_data['count'] or 0
+            'count': month_data['count'] or 0,
+            'monthly_alloc': monthly_alloc,
+            'balance': round(running_balance, 2)
         })
 
     # All leave records for the FY
@@ -704,6 +718,8 @@ def my_leave_report():
                          all_leaves=all_leaves,
                          fy_year=fy_year,
                          total_allocation=total_allocation,
+                         carry_forward=carry_forward,
+                         monthly_alloc=monthly_alloc,
                          total_taken=total_taken,
                          annual_total=annual_total,
                          sick_total=sick_total,
