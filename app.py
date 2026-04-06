@@ -647,13 +647,21 @@ def my_leave_report():
     current_month = today.month
     fy_year = today.year if current_month >= 4 else today.year - 1
 
-    # Total balance
+    # Total balance and carry forward
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
+    monthly_alloc = round(total_allocation / 12, 2)
 
-    # Month-wise leave report for the full FY
+    # Pending requests count
+    pending_count = conn.execute(
+        'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
+        (user['id'], 'pending')
+    ).fetchone()['cnt']
+
+    # Month-wise leave report for the full FY with running balance
     monthly_leave_data = []
+    running_balance = 0
     for m in range(12):
         report_month = ((m + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
@@ -669,15 +677,20 @@ def my_leave_report():
             AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
+        month_total = month_data['total_days'] or 0
+        running_balance = round(running_balance + monthly_alloc - month_total, 2)
+
         monthly_leave_data.append({
             'month': calendar.month_name[report_month],
             'month_short': calendar.month_abbr[report_month],
             'year': report_year,
-            'total': month_data['total_days'] or 0,
+            'total': month_total,
             'annual': month_data['annual'] or 0,
             'sick': month_data['sick'] or 0,
             'casual': month_data['casual'] or 0,
-            'count': month_data['count'] or 0
+            'count': month_data['count'] or 0,
+            'monthly_alloc': monthly_alloc,
+            'balance': running_balance
         })
 
     # All leave records for the FY
@@ -708,7 +721,10 @@ def my_leave_report():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
-                         available_balance=round(available_balance, 2))
+                         available_balance=round(available_balance, 2),
+                         pending_count=pending_count,
+                         carry_forward=carry_forward,
+                         monthly_alloc=monthly_alloc)
 
 @app.route('/admin/dashboard')
 @admin_required
