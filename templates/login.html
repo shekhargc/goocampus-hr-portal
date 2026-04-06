@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>GooCampus Edu Solutions - HR Portal Login</title>
+    <title>GooCampus Edu Solutions Pvt Ltd &mdash; HR Portal</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -20,10 +20,12 @@
             --gray-50: #F8FAFC;
             --gray-100: #F1F5F9;
             --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
             --gray-400: #94A3B8;
             --gray-500: #64748B;
             --gray-600: #475569;
             --gray-700: #334155;
+            --gray-800: #1E293B;
             --gray-900: #0F172A;
             --success: #10B981;
             --danger: #EF4444;
@@ -34,338 +36,822 @@
 
         body {
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 50%, var(--navy-light) 100%);
-            color: var(--gray-900);
+            background: var(--gray-50);
+            color: var(--gray-800);
             min-height: 100vh;
             display: flex;
             flex-direction: column;
+        }
+
+        /* ===== TOP BAR ===== */
+        .top-bar {
+            background: var(--navy-dark);
+            color: rgba(255,255,255,0.6);
+            font-size: 0.78rem;
+            padding: 0.5rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.06);
+        }
+        .top-bar-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 3rem;
+            display: flex;
+            justify-content: space-between;
             align-items: center;
-            justify-content: center;
-            padding: 2rem;
+        }
+        .top-bar a {
+            color: rgba(255,255,255,0.6);
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .top-bar a:hover { color: var(--orange); }
+        .top-bar-right {
+            display: flex;
+            gap: 1.5rem;
+            align-items: center;
+        }
+        .top-bar-right span {
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
         }
 
-        /* Background decorative elements */
-        body::before {
-            content: '';
-            position: fixed;
-            top: -50%;
-            right: -20%;
-            width: 800px;
-            height: 800px;
-            border-radius: 50%;
-            background: radial-gradient(circle, rgba(245,130,32,0.08) 0%, transparent 70%);
-            pointer-events: none;
-            z-index: 1;
+        /* ===== NAVBAR ===== */
+        .navbar {
+            background: var(--navy);
+            box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .navbar-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 3rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            height: 70px;
+        }
+        .navbar-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            text-decoration: none;
+            color: white;
+        }
+        .navbar-brand-text {
+            font-weight: 700;
+            font-size: 1.25rem;
+            line-height: 1.2;
+            color: white;
+        }
+        .navbar-brand-text .goo { color: var(--orange); }
+        .navbar-brand-sub {
+            font-size: 0.65rem;
+            opacity: 0.5;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            font-weight: 400;
+            color: white;
+        }
+        .navbar-nav {
+            display: flex;
+            gap: 0.25rem;
+            align-items: center;
+            list-style: none;
+        }
+        .navbar-nav a {
+            color: rgba(255,255,255,0.75);
+            text-decoration: none;
+            font-size: 0.9rem;
+            font-weight: 500;
+            padding: 0.55rem 1.1rem;
+            border-radius: 0.5rem;
+            transition: all 0.2s;
+        }
+        .navbar-nav a:hover {
+            color: white;
+            background: rgba(255,255,255,0.1);
+        }
+        .navbar-nav .nav-login {
+            background: var(--orange);
+            color: white;
+            font-weight: 600;
+        }
+        .navbar-nav .nav-login:hover {
+            background: var(--orange-dark);
         }
 
-        body::after {
+        /* ===== HERO ===== */
+        .hero {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 60%, var(--blue-dark) 100%);
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .hero::before {
             content: '';
-            position: fixed;
-            bottom: -30%;
-            left: -10%;
+            position: absolute;
+            top: -40%;
+            right: -10%;
             width: 700px;
             height: 700px;
             border-radius: 50%;
-            background: radial-gradient(circle, rgba(74,122,181,0.06) 0%, transparent 70%);
+            background: radial-gradient(circle, rgba(245,130,32,0.1) 0%, transparent 70%);
             pointer-events: none;
-            z-index: 1;
         }
-
-        .login-container {
-            width: 100%;
-            max-width: 500px;
+        .hero::after {
+            content: '';
+            position: absolute;
+            bottom: -30%;
+            left: -5%;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(74,122,181,0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        .hero-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 4rem 3rem;
+            display: grid;
+            grid-template-columns: 1fr 420px;
+            gap: 4rem;
+            align-items: center;
             position: relative;
             z-index: 2;
         }
-
-        /* Logo & Branding */
-        .brand-section {
-            text-align: center;
-            margin-bottom: 3.5rem;
-            color: var(--white);
-        }
-
-        .brand-icon {
-            width: 64px;
-            height: 64px;
-            margin: 0 auto 1.5rem;
-        }
-
-        .brand-name {
-            font-size: 2rem;
+        .hero-content h1 {
+            font-size: 2.75rem;
             font-weight: 800;
-            line-height: 1.2;
-            margin-bottom: 0.5rem;
+            line-height: 1.15;
+            margin-bottom: 1.25rem;
         }
-
-        .brand-name .goo {
+        .hero-content h1 .highlight {
             color: var(--orange);
         }
-
-        .brand-name .campus {
-            color: var(--white);
+        .hero-content p {
+            font-size: 1.1rem;
+            line-height: 1.7;
+            color: rgba(255,255,255,0.75);
+            max-width: 520px;
+            margin-bottom: 2rem;
+        }
+        .hero-stats {
+            display: flex;
+            gap: 2.5rem;
+        }
+        .hero-stat-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--orange);
+        }
+        .hero-stat-label {
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.55);
+            margin-top: 0.2rem;
         }
 
-        .brand-tagline {
-            font-size: 0.95rem;
-            color: rgba(255,255,255,0.7);
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: 500;
-        }
-
-        /* Login Card */
+        /* ===== LOGIN CARD (in hero) ===== */
         .login-card {
             background: var(--white);
             border-radius: 1rem;
-            box-shadow: 0 25px 80px rgba(0,0,0,0.35);
-            padding: 3rem;
-            width: 100%;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            padding: 2.5rem;
         }
-
         .login-card-header {
-            margin-bottom: 2.5rem;
-        }
-
-        .login-card-title {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.5rem;
-        }
-
-        .login-card-subtitle {
-            font-size: 1rem;
-            color: var(--gray-500);
-        }
-
-        /* Form Styles */
-        .form-group {
             margin-bottom: 2rem;
         }
-
+        .login-card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.35rem;
+        }
+        .login-card-subtitle {
+            font-size: 0.92rem;
+            color: var(--gray-500);
+        }
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
         .form-group label {
             display: block;
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.5rem;
             font-weight: 600;
-            font-size: 0.95rem;
+            font-size: 0.85rem;
             color: var(--gray-700);
             text-transform: uppercase;
-            letter-spacing: 0.5px;
+            letter-spacing: 0.4px;
         }
-
         .form-input {
             width: 100%;
-            padding: 1rem 1.25rem;
+            padding: 0.85rem 1.1rem;
             border: 2px solid var(--gray-200);
-            border-radius: 0.75rem;
+            border-radius: 0.6rem;
             font-family: inherit;
-            font-size: 1rem;
-            transition: border-color 0.3s, box-shadow 0.3s, background 0.3s;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
             background: var(--gray-50);
         }
-
-        .form-input::placeholder {
-            color: var(--gray-400);
-        }
-
+        .form-input::placeholder { color: var(--gray-400); }
         .form-input:focus {
             outline: none;
             border-color: var(--orange);
-            box-shadow: 0 0 0 4px rgba(245,130,32,0.2);
+            box-shadow: 0 0 0 3px rgba(245,130,32,0.15);
             background: var(--white);
         }
-
-        /* Alerts */
-        .alert {
-            padding: 1rem 1.25rem;
-            margin-bottom: 2rem;
-            border-radius: 0.75rem;
-            border-left: 4px solid;
+        .login-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+            color: var(--white);
+            border: none;
+            border-radius: 0.6rem;
+            cursor: pointer;
             font-size: 0.95rem;
+            font-weight: 600;
+            font-family: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 6px 20px rgba(245,130,32,0.3);
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
         }
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(245,130,32,0.4);
+        }
+        .login-btn:active { transform: translateY(0); }
 
+        .alert {
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.6rem;
+            border-left: 4px solid;
+            font-size: 0.9rem;
+        }
         .alert-error {
             background: #FEF2F2;
             border-color: var(--danger);
             color: #991B1B;
         }
-
         .alert-success {
             background: #ECFDF5;
             border-color: var(--success);
             color: #065F46;
         }
 
-        /* Login Button */
-        .login-btn {
-            width: 100%;
-            padding: 1.15rem 1.5rem;
-            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
-            color: var(--white);
-            border: none;
-            border-radius: 0.75rem;
-            cursor: pointer;
-            font-size: 1rem;
-            font-weight: 600;
-            font-family: inherit;
+        /* ===== FEATURES ===== */
+        .features {
+            padding: 5rem 0;
+            background: var(--white);
+        }
+        .features-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 3rem;
+        }
+        .features-header {
+            text-align: center;
+            margin-bottom: 3.5rem;
+        }
+        .features-header h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.75rem;
+        }
+        .features-header p {
+            font-size: 1.05rem;
+            color: var(--gray-500);
+            max-width: 560px;
+            margin: 0 auto;
+        }
+        .features-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+            gap: 2rem;
+        }
+        .feature-card {
+            background: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 1rem;
+            padding: 2rem;
             transition: transform 0.2s, box-shadow 0.2s;
-            box-shadow: 0 8px 24px rgba(245,130,32,0.35);
-            letter-spacing: 0.3px;
-            text-transform: uppercase;
+        }
+        .feature-card:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 12px 32px rgba(0,0,0,0.08);
+        }
+        .feature-icon {
+            width: 52px;
+            height: 52px;
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 1.25rem;
+        }
+        .feature-icon.orange { background: var(--orange-light); }
+        .feature-icon.blue { background: var(--blue-light); }
+        .feature-icon.green { background: #ECFDF5; }
+        .feature-card h3 {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 0.6rem;
+        }
+        .feature-card p {
+            font-size: 0.9rem;
+            color: var(--gray-500);
+            line-height: 1.6;
         }
 
-        .login-btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 12px 32px rgba(245,130,32,0.45);
+        /* ===== ABOUT SECTION ===== */
+        .about {
+            padding: 5rem 0;
+            background: var(--gray-50);
         }
-
-        .login-btn:active {
-            transform: translateY(0);
+        .about-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 0 3rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 4rem;
+            align-items: center;
         }
-
-        /* Divider */
-        .login-divider {
+        .about-content h2 {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 1rem;
+        }
+        .about-content p {
+            font-size: 1rem;
+            color: var(--gray-600);
+            line-height: 1.7;
+            margin-bottom: 1.5rem;
+        }
+        .about-highlights {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.25rem;
+        }
+        .about-highlight {
+            display: flex;
+            align-items: flex-start;
+            gap: 0.75rem;
+        }
+        .about-highlight-icon {
+            width: 36px;
+            height: 36px;
+            border-radius: 0.5rem;
+            background: var(--orange-light);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            margin-top: 0.1rem;
+        }
+        .about-highlight h4 {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 0.2rem;
+        }
+        .about-highlight p {
+            font-size: 0.82rem;
+            color: var(--gray-500);
+            line-height: 1.5;
+            margin-bottom: 0;
+        }
+        .about-visual {
+            background: linear-gradient(135deg, var(--navy), var(--navy-light));
+            border-radius: 1rem;
+            padding: 3rem;
+            color: white;
+            position: relative;
+            overflow: hidden;
+        }
+        .about-visual::before {
+            content: '';
+            position: absolute;
+            top: -30%;
+            right: -20%;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(245,130,32,0.15) 0%, transparent 70%);
+        }
+        .about-visual-item {
             display: flex;
             align-items: center;
             gap: 1rem;
-            margin: 2.5rem 0;
-            color: var(--gray-400);
-            font-size: 0.9rem;
-            font-weight: 500;
+            padding: 1.25rem 0;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
+            position: relative;
+            z-index: 1;
         }
-
-        .login-divider::before,
-        .login-divider::after {
-            content: '';
-            flex: 1;
-            height: 1px;
-            background: var(--gray-200);
-        }
-
-        /* Demo Info */
-        .demo-info {
-            text-align: center;
-            color: var(--gray-600);
-            font-size: 0.95rem;
-            line-height: 1.8;
-        }
-
-        .demo-info strong {
-            color: var(--navy);
+        .about-visual-item:last-child { border-bottom: none; }
+        .about-visual-num {
+            width: 44px;
+            height: 44px;
+            border-radius: 0.6rem;
+            background: rgba(245,130,32,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-weight: 700;
+            color: var(--orange);
+            font-size: 1.1rem;
+            flex-shrink: 0;
+        }
+        .about-visual-text h4 {
+            font-size: 0.95rem;
+            font-weight: 600;
+            margin-bottom: 0.2rem;
+        }
+        .about-visual-text p {
+            font-size: 0.82rem;
+            color: rgba(255,255,255,0.55);
+            line-height: 1.4;
         }
 
-        .demo-label {
-            display: block;
-            color: var(--gray-500);
-            font-weight: 500;
+        /* ===== FOOTER ===== */
+        .site-footer {
+            background: var(--navy-dark);
+            color: rgba(255,255,255,0.5);
+            margin-top: auto;
+        }
+        .site-footer-inner {
+            max-width: 1440px;
+            margin: 0 auto;
+            padding: 2.5rem 3rem;
+            display: grid;
+            grid-template-columns: 2fr 1fr 1fr;
+            gap: 3rem;
+        }
+        .footer-brand {
+            display: flex;
+            align-items: center;
+            gap: 0.65rem;
+            margin-bottom: 1rem;
+        }
+        .footer-brand-text {
+            font-weight: 700;
+            font-size: 1.15rem;
+            color: white;
+        }
+        .footer-brand-text .goo { color: var(--orange); }
+        .footer-desc {
             font-size: 0.85rem;
+            line-height: 1.6;
+            max-width: 380px;
+            color: rgba(255,255,255,0.45);
+        }
+        .footer-heading {
+            font-size: 0.8rem;
+            font-weight: 600;
             text-transform: uppercase;
-            letter-spacing: 0.5px;
-            margin-bottom: 0.5rem;
+            letter-spacing: 0.8px;
+            color: rgba(255,255,255,0.65);
+            margin-bottom: 1rem;
+        }
+        .footer-links { list-style: none; }
+        .footer-links li { margin-bottom: 0.55rem; }
+        .footer-links a {
+            color: rgba(255,255,255,0.45);
+            text-decoration: none;
+            font-size: 0.85rem;
+            transition: color 0.2s;
+        }
+        .footer-links a:hover { color: var(--orange); }
+        .footer-bottom {
+            border-top: 1px solid rgba(255,255,255,0.08);
+            padding: 1.25rem 3rem;
+            text-align: center;
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.35);
+        }
+        .footer-bottom span { color: var(--orange); }
+        .footer-bottom-inner {
+            max-width: 1440px;
+            margin: 0 auto;
         }
 
-        /* Responsive */
-        @media (max-width: 640px) {
-            body {
-                padding: 1.5rem;
-            }
-
-            .login-container {
-                max-width: 100%;
-            }
-
-            .brand-section {
-                margin-bottom: 3rem;
-            }
-
-            .brand-icon {
-                width: 56px;
-                height: 56px;
-                margin-bottom: 1rem;
-            }
-
-            .brand-name {
-                font-size: 1.75rem;
-            }
-
-            .login-card {
-                padding: 2rem;
-            }
-
-            .login-card-title {
-                font-size: 1.5rem;
-            }
-
-            .form-group {
-                margin-bottom: 1.75rem;
-            }
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 1024px) {
+            .hero-inner { grid-template-columns: 1fr; gap: 3rem; padding: 3rem 2rem; }
+            .login-card { max-width: 420px; }
+            .hero-content h1 { font-size: 2.25rem; }
+            .features-inner, .about-inner { padding: 0 2rem; }
+            .features-grid { grid-template-columns: repeat(2, 1fr); }
+            .about-inner { grid-template-columns: 1fr; gap: 2.5rem; }
+            .site-footer-inner { padding: 2rem 1.5rem; grid-template-columns: 1fr 1fr; gap: 2rem; }
+            .footer-bottom { padding: 1rem 1.5rem; }
+            .top-bar-inner { padding: 0 2rem; }
+            .navbar-inner { padding: 0 2rem; }
+        }
+        @media (max-width: 768px) {
+            .top-bar { display: none; }
+            .navbar-inner { height: 60px; padding: 0 1rem; }
+            .navbar-nav a { padding: 0.4rem 0.7rem; font-size: 0.82rem; }
+            .hero-inner { padding: 2.5rem 1.25rem; }
+            .hero-content h1 { font-size: 1.75rem; }
+            .hero-stats { gap: 1.5rem; }
+            .hero-stat-value { font-size: 1.5rem; }
+            .login-card { padding: 2rem; max-width: 100%; }
+            .features { padding: 3rem 0; }
+            .features-grid { grid-template-columns: 1fr; }
+            .features-inner { padding: 0 1.25rem; }
+            .about { padding: 3rem 0; }
+            .about-inner { padding: 0 1.25rem; }
+            .about-highlights { grid-template-columns: 1fr; }
+            .site-footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
+            .navbar-brand-sub { display: none; }
         }
     </style>
 </head>
 <body>
 
-    <div class="login-container">
-        <!-- Branding -->
-        <div class="brand-section">
-            <svg class="brand-icon" viewBox="0 0 44 44" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <rect x="4" y="10" width="24" height="24" rx="3" stroke="#F58220" stroke-width="3" fill="none"/>
-                <rect x="16" y="0" width="24" height="24" rx="3" stroke="#4A7AB5" stroke-width="3" fill="none"/>
-                <text x="22" y="19" text-anchor="middle" font-family="Inter, sans-serif" font-size="14" font-weight="800" fill="#F58220">G</text>
-            </svg>
-            <div class="brand-name">
-                <span class="goo">Goo</span><span class="campus">Campus</span>
-            </div>
-            <div class="brand-tagline">HR Portal</div>
-        </div>
-
-        <!-- Login Card -->
-        <div class="login-card">
-            <div class="login-card-header">
-                <h1 class="login-card-title">Sign In</h1>
-                <p class="login-card-subtitle">Access your HR portal account</p>
-            </div>
-
-            <!-- Flash Messages -->
-            {% with messages = get_flashed_messages(with_categories=true) %}
-                {% if messages %}
-                    {% for category, message in messages %}
-                        <div class="alert alert-{{ category }}">{{ message }}</div>
-                    {% endfor %}
-                {% endif %}
-            {% endwith %}
-
-            <!-- Login Form -->
-            <form method="POST">
-                <div class="form-group">
-                    <label for="emp_code">Employee Code</label>
-                    <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required autofocus>
-                </div>
-
-                <div class="form-group">
-                    <label for="password">Password</label>
-                    <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
-                </div>
-
-                <button type="submit" class="login-btn">Sign In</button>
-            </form>
-
-            <!-- Divider -->
-            <div class="login-divider">or</div>
-
-            <!-- Demo Credentials -->
-            <div class="demo-info">
-                <span class="demo-label">Demo Credentials</span>
-                <div style="margin-bottom: 1rem;">
-                    <strong>Admin:</strong> admin / admin
-                </div>
-                <div>
-                    <strong>Employee:</strong> emp_code / emp_code
-                </div>
+    <!-- Top info bar -->
+    <div class="top-bar">
+        <div class="top-bar-inner">
+            <span>GSTIN: 29AAHCG2048J1ZE</span>
+            <div class="top-bar-right">
+                <span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    <a href="mailto:info@goocampus.in">info@goocampus.in</a>
+                </span>
+                <span>
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                    Bangalore, India
+                </span>
             </div>
         </div>
     </div>
+
+    <!-- Navigation -->
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/" class="navbar-brand">
+                <svg width="38" height="38" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <rect x="3" y="8" width="19" height="19" rx="2.5" stroke="#4A7AB5" stroke-width="2.5" fill="none"/>
+                    <rect x="12" y="0" width="19" height="19" rx="2.5" stroke="#F58220" stroke-width="2.5" fill="none"/>
+                    <text x="17" y="15" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="800" fill="#F58220">G</text>
+                </svg>
+                <div>
+                    <div class="navbar-brand-text"><span class="goo">Goo</span>Campus</div>
+                    <div class="navbar-brand-sub">Edu Solutions Pvt Ltd</div>
+                </div>
+            </a>
+            <ul class="navbar-nav">
+                <li><a href="#features">Features</a></li>
+                <li><a href="#about">About</a></li>
+                <li><a href="mailto:info@goocampus.in">Contact</a></li>
+                <li><a href="#login" class="nav-login">Employee Login</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    <!-- Hero with Login -->
+    <section class="hero" id="login">
+        <div class="hero-inner">
+            <div class="hero-content">
+                <h1>Streamlined <span class="highlight">HR Operations</span> for GooCampus</h1>
+                <p>A unified portal for leave management, attendance tracking, holiday calendars, and employee records &mdash; built to keep our teams organised and empowered across every department.</p>
+                <div class="hero-stats">
+                    <div>
+                        <div class="hero-stat-value">6+</div>
+                        <div class="hero-stat-label">Departments</div>
+                    </div>
+                    <div>
+                        <div class="hero-stat-value">25</div>
+                        <div class="hero-stat-label">Days Annual Leave</div>
+                    </div>
+                    <div>
+                        <div class="hero-stat-value">12</div>
+                        <div class="hero-stat-label">Public Holidays</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Login Form -->
+            <div class="login-card">
+                <div class="login-card-header">
+                    <h2 class="login-card-title">Employee Sign In</h2>
+                    <p class="login-card-subtitle">Access your HR portal account</p>
+                </div>
+
+                {% with messages = get_flashed_messages(with_categories=true) %}
+                    {% if messages %}
+                        {% for category, message in messages %}
+                            <div class="alert alert-{{ category }}">{{ message }}</div>
+                        {% endfor %}
+                    {% endif %}
+                {% endwith %}
+
+                <form method="POST">
+                    <div class="form-group">
+                        <label for="emp_code">Employee Code</label>
+                        <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required autofocus>
+                    </div>
+                    <div class="form-group">
+                        <label for="password">Password</label>
+                        <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
+                    </div>
+                    <button type="submit" class="login-btn">Sign In</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <!-- Features -->
+    <section class="features" id="features">
+        <div class="features-inner">
+            <div class="features-header">
+                <h2>Everything You Need in One Place</h2>
+                <p>Our HR portal centralises employee management, leave tracking, and organisational oversight into a single, easy-to-use platform.</p>
+            </div>
+            <div class="features-grid">
+                <div class="feature-card">
+                    <div class="feature-icon orange">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    </div>
+                    <h3>Leave Management</h3>
+                    <p>Apply for annual, sick, or casual leave with a streamlined approval workflow. Managers can review and approve requests in real time.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3A6299" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                    </div>
+                    <h3>Employee Directory</h3>
+                    <p>Browse the full employee roster with department filters, role information, and contact details. Search and find anyone instantly.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon green">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+                    </div>
+                    <h3>Monthly Reports</h3>
+                    <p>Generate detailed monthly leave reports with salary deduction calculations, exportable to Excel for payroll processing.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon orange">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    </div>
+                    <h3>Holiday Calendar</h3>
+                    <p>View company-wide holidays, team leave patterns, and plan ahead with an interactive calendar showing all leave events at a glance.</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon blue">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#3A6299" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+                    </div>
+                    <h3>Leave Balance Tracking</h3>
+                    <p>Real-time visibility into your available leave balance, with carry-forward calculations aligned to the financial year (April&ndash;March).</p>
+                </div>
+                <div class="feature-card">
+                    <div class="feature-icon green">
+                        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                    </div>
+                    <h3>Org Chart</h3>
+                    <p>Visualise the organisational structure with an interactive chart showing reporting lines, departments, and team hierarchies.</p>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- About -->
+    <section class="about" id="about">
+        <div class="about-inner">
+            <div class="about-content">
+                <h2>About GooCampus Edu Solutions</h2>
+                <p>GooCampus Edu Solutions Pvt Ltd is a Bangalore-based education services company helping students navigate global medical education pathways. Our HR portal supports the internal team with modern tools for workforce management.</p>
+                <div class="about-highlights">
+                    <div class="about-highlight">
+                        <div class="about-highlight-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                        </div>
+                        <div>
+                            <h4>Automated Workflows</h4>
+                            <p>Leave approvals flow through the right managers automatically.</p>
+                        </div>
+                    </div>
+                    <div class="about-highlight">
+                        <div class="about-highlight-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                        </div>
+                        <div>
+                            <h4>Secure Access</h4>
+                            <p>Role-based authentication keeps data private and access controlled.</p>
+                        </div>
+                    </div>
+                    <div class="about-highlight">
+                        <div class="about-highlight-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                        </div>
+                        <div>
+                            <h4>Fully Responsive</h4>
+                            <p>Works seamlessly on desktops, tablets, and mobile devices.</p>
+                        </div>
+                    </div>
+                    <div class="about-highlight">
+                        <div class="about-highlight-icon">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#D96E0E" stroke-width="2"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+                        </div>
+                        <div>
+                            <h4>Real-time Analytics</h4>
+                            <p>Dashboard insights for admins on department-wise leave trends.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="about-visual">
+                <div class="about-visual-item">
+                    <div class="about-visual-num">1</div>
+                    <div class="about-visual-text">
+                        <h4>Employee applies for leave</h4>
+                        <p>Select dates, leave type, and submit with a reason</p>
+                    </div>
+                </div>
+                <div class="about-visual-item">
+                    <div class="about-visual-num">2</div>
+                    <div class="about-visual-text">
+                        <h4>Manager reviews and approves</h4>
+                        <p>Notification sent, manager can approve or reject</p>
+                    </div>
+                </div>
+                <div class="about-visual-item">
+                    <div class="about-visual-num">3</div>
+                    <div class="about-visual-text">
+                        <h4>Balance updates automatically</h4>
+                        <p>Leave balance recalculated in real time</p>
+                    </div>
+                </div>
+                <div class="about-visual-item">
+                    <div class="about-visual-num">4</div>
+                    <div class="about-visual-text">
+                        <h4>Reports generated for payroll</h4>
+                        <p>Monthly deduction reports exported to Excel</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+        <div class="site-footer-inner">
+            <div>
+                <div class="footer-brand">
+                    <svg width="30" height="30" viewBox="0 0 34 34" fill="none" xmlns="http://www.w3.org/2000/svg">
+                        <rect x="3" y="8" width="19" height="19" rx="2.5" stroke="#4A7AB5" stroke-width="2.5" fill="none"/>
+                        <rect x="12" y="0" width="19" height="19" rx="2.5" stroke="#F58220" stroke-width="2.5" fill="none"/>
+                        <text x="17" y="15" text-anchor="middle" font-family="Inter, sans-serif" font-size="11" font-weight="800" fill="#F58220">G</text>
+                    </svg>
+                    <span class="footer-brand-text"><span class="goo">Goo</span>Campus HR</span>
+                </div>
+                <p class="footer-desc">Employee leave management and HR operations portal for GooCampus Edu Solutions Pvt Ltd. Streamlining workforce management across all departments.</p>
+            </div>
+            <div>
+                <h4 class="footer-heading">Quick Links</h4>
+                <ul class="footer-links">
+                    <li><a href="#features">Features</a></li>
+                    <li><a href="#about">About</a></li>
+                    <li><a href="#login">Employee Login</a></li>
+                    <li><a href="mailto:info@goocampus.in">Contact Us</a></li>
+                </ul>
+            </div>
+            <div>
+                <h4 class="footer-heading">Contact</h4>
+                <ul class="footer-links">
+                    <li><a href="mailto:info@goocampus.in">info@goocampus.in</a></li>
+                    <li><a href="https://goocampus.in" target="_blank">goocampus.in</a></li>
+                    <li><a href="#">Bangalore, India</a></li>
+                </ul>
+            </div>
+        </div>
+        <div class="footer-bottom">
+            <div class="footer-bottom-inner">
+                &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;&middot;&nbsp; GSTIN: 29AAHCG2048J1ZE &nbsp;&middot;&nbsp; All rights reserved
+            </div>
+        </div>
+    </footer>
+
+    <script>
+        // Smooth scroll for anchor links
+        document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
+            anchor.addEventListener('click', function(e) {
+                e.preventDefault();
+                var target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+    </script>
 
 </body>
 </html>
