@@ -95,91 +95,41 @@ def seed_production_db():
         admin_result = c.fetchone()
         admin_id = admin_result[0] if admin_result else 1
 
-        # Insert employees
+        # Insert employees with GC-format codes
+        # Format: (full_name, emp_code, first_name_password, carry_forward, email, department, designation, joining_date)
         employees_data = [
-            ("Deepak Pandey", "deepak", 0, "deepak@goocampus.in", "Admin", "Senior Executive - Administration", "2020-05-01", admin_id),
-            ("Harish", "harish", 12.5, "harish@goocampus.in", "Admin", "Office Assistant", "2020-11-09", admin_id),
-            ("Robin", "robin", 0, "", "Sales", "", "", admin_id),
-            ("Vipin Vijayaraghavan", "vipin", 0, "vipin@goocampus.in", "Operations", "Team Lead - Customer Success & Delivery", "2020-11-01", admin_id),
-            ("Ralph Leander D'cruz", "ralph", 0, "ralph@goocampus.in", "Operations", "Customer Success Manager", "2021-08-01", 5),  # vipin id=5
-            ("Poornima", "poornima", 0, "poornima@goocampus.in", "Admin", "Executive - Front Office", "2022-01-05", admin_id),
-            ("Nandu C", "nandu", 9.5, "nandu@goocampus.in", "Marketing", "Senior Video Production Specialist", "2022-11-21", admin_id),
-            ("Gopi", "gopi", 0, "", "Sales", "", "", admin_id),
-            ("Jacob", "jacob", 0, "", "Operations", "", "", 5),  # vipin id=5
-            ("Arun Kannan", "arun", 0, "arunkannan@goocampus.in", "Operations", "Customer Success Specialist", "2023-09-01", 5),  # vipin id=5
-            ("Praveen L", "praveen", 4.5, "praveen@goocampus.in", "Marketing", "Senior Graphic Designer", "2024-02-01", admin_id),
-            ("Alfiya", "alfiya", 0, "", "Operations", "", "", 5),  # vipin id=5
-            ("Varsha M", "varsha", 0, "varsha.m@goocampus.in", "Operations", "Operations Executive", "2024-08-01", admin_id),
-            ("Lanciya Lalu Philip", "lanciya", 0, "lanciya@goocampus.in", "Operations", "Business Development Executive", "2024-10-21", admin_id),
-            ("Shaju", "shaju", 0, "", "Sales", "", "", admin_id),
-            ("Manya BM", "manya", 3.0, "manya.bm@goocampus.in", "Marketing", "Content Writer", "2025-04-07", admin_id),
-            ("Nikhil Shyamraj", "nikhil", 0, "nikhil.s@goocampus.in", "Marketing", "Content Creator & Video Editor", "2025-04-02", admin_id),
+            ("Santosh Shekhar", "GC001", "santosh", 0, "", "Management", "", ""),
+            ("Ashwini S", "GC002", "ashwini", 0, "", "HR", "", ""),
+            ("Maheen Ejaz", "GC003", "maheen", 0, "", "Marketing", "", ""),
+            ("Robin Johnson", "GC006", "robin", 0, "", "Marketing", "", ""),
+            ("Deepak Kumar Pandey", "GC011", "deepak", 0, "deepak@goocampus.in", "Admin", "Senior Executive - Administration", "2020-05-01"),
+            ("Vipin Vijaya Raghavan", "GC012", "vipin", 0, "vipin@goocampus.in", "Operations", "Team Lead - Customer Success & Delivery", "2020-11-01"),
+            ("Ralph Leander D Cruz", "GC021", "ralph", 0, "ralph@goocampus.in", "Operations", "Customer Success Manager", "2021-08-01"),
+            ("Jeswin Jacob", "GC024", "jeswin", 0, "", "Marketing", "", ""),
+            ("Gopi Krishnan A", "GC032", "gopi", 0, "", "Operations", "", ""),
+            ("Poornima S", "GC033", "poornima", 0, "poornima@goocampus.in", "Admin", "Executive - Front Office", "2022-01-05"),
+            ("Nandu C", "GC044", "nandu", 9.5, "nandu@goocampus.in", "Marketing", "Senior Video Production Specialist", "2022-11-21"),
+            ("Harish S", "GC046", "harish", 12.5, "harish@goocampus.in", "Admin", "Office Assistant", "2020-11-09"),
+            ("Jeswin Shaju", "GC050", "jeswin", 0, "", "Marketing", "", ""),
+            ("Arun Kannan", "GC061", "arun", 0, "arunkannan@goocampus.in", "Operations", "Customer Success Specialist", "2023-09-01"),
+            ("Praveen L", "GC067", "praveen", 4.5, "praveen@goocampus.in", "Marketing", "Senior Graphic Designer", "2024-02-01"),
+            ("Varsha M", "GC074", "varsha", 0, "varsha.m@goocampus.in", "Operations", "Operations Executive", "2024-08-01"),
+            ("Alfiya Naaz", "GC075", "alfiya", 0, "", "HR", "", ""),
+            ("Lanciya Lulu Philip", "GC080", "lanciya", 0, "lanciya@goocampus.in", "Sales", "Business Development Executive", "2024-10-21"),
+            ("Nikhil Shyamraj", "GC083", "nikhil", 0, "nikhil.s@goocampus.in", "Marketing", "Content Creator & Video Editor", "2025-04-02"),
+            ("Manya B M", "GC092", "manya", 3.0, "manya.bm@goocampus.in", "Marketing", "Content Writer", "2025-04-07"),
         ]
 
         created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-        for name, emp_code, carry_forward, email, department, designation, joining_date, reporting_to in employees_data:
+        for name, emp_code, first_name_pwd, carry_forward, email, department, designation, joining_date in employees_data:
             c.execute('''
                 INSERT INTO employees (name, emp_code, password, email, department, designation,
                                       carry_forward, joining_date, reporting_to, is_active, created_at)
                 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
                 ON CONFLICT (emp_code) DO NOTHING
-            ''', (name, emp_code, hash_password(emp_code), email or None, department,
-                  designation or None, carry_forward, joining_date or None, reporting_to, created_at))
-
-        # Add management team
-        management_data = [
-            ("Ashwini Suryanarayana", "ashwini", "ashwini.s@goocampus.in", "Co-founder & CEO", "2018-01-01", admin_id),
-            ("Santosh Shekhar", "santosh", "shekhar@goocampus.in", "Co-founder & COO", "2018-01-01", admin_id),
-            ("Maheen Ejaz", "ejaz", "maheenejaz@goocampus.in", "Co-founder & CMO", "2018-01-01", admin_id),
-        ]
-
-        for name, emp_code, email, designation, joining_date, reporting_to in management_data:
-            c.execute('''
-                INSERT INTO employees (name, emp_code, password, email, department, designation,
-                                      joining_date, reporting_to, is_active, carry_forward, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 1, 0, %s)
-                ON CONFLICT (emp_code) DO NOTHING
-            ''', (name, emp_code, hash_password(emp_code), email, "Management",
-                  designation, joining_date, reporting_to, created_at))
-
-        # Now update reporting_to relationships for employees based on new IDs
-        # Get the actual IDs first
-        c.execute('SELECT id FROM employees WHERE emp_code = %s', ('deepak',))
-        deepak_id = c.fetchone()[0] if c.fetchone() else 2
-
-        c.execute('SELECT id FROM employees WHERE emp_code = %s', ('santosh',))
-        santosh_id = c.fetchone()[0] if c.fetchone() else 20
-
-        c.execute('SELECT id FROM employees WHERE emp_code = %s', ('ashwini',))
-        ashwini_id = c.fetchone()[0] if c.fetchone() else 19
-
-        c.execute('SELECT id FROM employees WHERE emp_code = %s', ('ejaz',))
-        ejaz_id = c.fetchone()[0] if c.fetchone() else 21
-
-        c.execute('SELECT id FROM employees WHERE emp_code = %s', ('vipin',))
-        vipin_id = c.fetchone()[0] if c.fetchone() else 5
-
-        # Update reporting_to relationships
-        reporting_updates = [
-            ("deepak", deepak_id, admin_id),  # deepak reports to admin
-            ("harish", harish_id, admin_id),  # harish reports to admin
-            ("robin", robin_id, santosh_id),  # robin reports to santosh
-            ("vipin", vipin_id, ashwini_id),  # vipin reports to ashwini
-            ("ralph", ralph_id, vipin_id),  # ralph reports to vipin
-            ("poornima", poornima_id, santosh_id),  # poornima reports to santosh
-            ("nandu", nandu_id, ejaz_id),  # nandu reports to ejaz
-            ("gopi", gopi_id, santosh_id),  # gopi reports to santosh
-            ("jacob", jacob_id, vipin_id),  # jacob reports to vipin
-            ("arun", arun_id, vipin_id),  # arun reports to vipin
-            ("praveen", praveen_id, ejaz_id),  # praveen reports to ejaz
-            ("alfiya", alfiya_id, vipin_id),  # alfiya reports to vipin
-            ("varsha", varsha_id, santosh_id),  # varsha reports to santosh
-            ("lanciya", lanciya_id, ashwini_id),  # lanciya reports to ashwini
-            ("shaju", shaju_id, santosh_id),  # shaju reports to santosh
-            ("manya", manya_id, ejaz_id),  # manya reports to ejaz
-            ("nikhil", nikhil_id, ejaz_id),  # nikhil reports to ejaz
-        ]
+            ''', (name, emp_code, hash_password(first_name_pwd), email or None, department,
+                  designation or None, carry_forward, joining_date or None, admin_id, created_at))
 
         # Insert holidays for 2026
         holidays_data = [
@@ -208,7 +158,7 @@ def seed_production_db():
 
         print("Production database seeded successfully!")
         print(f"Admin user: emp_code='admin', password='admin'")
-        print(f"All other employees: password = emp_code")
+        print(f"All other employees: username = GC code, password = first name (lowercase)")
         return True
 
     except Exception as e:

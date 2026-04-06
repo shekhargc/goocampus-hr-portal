@@ -80,35 +80,38 @@ def init_db():
 
     admin_id = c.lastrowid
 
-    # Insert employees with Airtable-verified data
-    # Format: (full_name, emp_code, carry_forward, email, department, designation, joining_date)
+    # Insert employees with updated GC-format codes
+    # Format: (full_name, emp_code, first_name_password, carry_forward, email, department, designation, joining_date)
     employees_data = [
-        ("Deepak Pandey", "deepak", 0, "deepak@goocampus.in", "Admin", "Senior Executive - Administration", "2020-05-01"),
-        ("Harish", "harish", 12.5, "harish@goocampus.in", "Admin", "Office Assistant", "2020-11-09"),
-        ("Robin", "robin", 0, "", "Marketing", "", ""),
-        ("Vipin Vijayaraghavan", "vipin", 0, "vipin@goocampus.in", "Operations", "Team Lead - Customer Success & Delivery", "2020-11-01"),
-        ("Ralph Leander D'cruz", "ralph", 0, "ralph@goocampus.in", "Operations", "Customer Success Manager", "2021-08-01"),
-        ("Poornima", "poornima", 0, "poornima@goocampus.in", "Admin", "Executive - Front Office", "2022-01-05"),
-        ("Nandu C", "nandu", 9.5, "nandu@goocampus.in", "Marketing", "Senior Video Production Specialist", "2022-11-21"),
-        ("Gopi", "gopi", 0, "", "Operations", "", ""),
-        ("Jacob", "jacob", 0, "", "Marketing", "", ""),
-        ("Arun Kannan", "arun", 0, "arunkannan@goocampus.in", "Operations", "Customer Success Specialist", "2023-09-01"),
-        ("Praveen L", "praveen", 4.5, "praveen@goocampus.in", "Marketing", "Senior Graphic Designer", "2024-02-01"),
-        ("Alfiya", "alfiya", 0, "", "HR", "", ""),
-        ("Varsha M", "varsha", 0, "varsha.m@goocampus.in", "Operations", "Operations Executive", "2024-08-01"),
-        ("Lanciya Lalu Philip", "lanciya", 0, "lanciya@goocampus.in", "Sales", "Business Development Executive", "2024-10-21"),
-        ("Shaju", "shaju", 0, "", "Marketing", "", ""),
-        ("Manya BM", "manya", 3.0, "manya.bm@goocampus.in", "Marketing", "Content Writer", "2025-04-07"),
-        ("Nikhil Shyamraj", "nikhil", 0, "nikhil.s@goocampus.in", "Marketing", "Content Creator & Video Editor", "2025-04-02"),
+        ("Santosh Shekhar", "GC001", "santosh", 0, "", "Management", "", ""),
+        ("Ashwini S", "GC002", "ashwini", 0, "", "HR", "", ""),
+        ("Maheen Ejaz", "GC003", "maheen", 0, "", "Marketing", "", ""),
+        ("Robin Johnson", "GC006", "robin", 0, "", "Marketing", "", ""),
+        ("Deepak Kumar Pandey", "GC011", "deepak", 0, "deepak@goocampus.in", "Admin", "Senior Executive - Administration", "2020-05-01"),
+        ("Vipin Vijaya Raghavan", "GC012", "vipin", 0, "vipin@goocampus.in", "Operations", "Team Lead - Customer Success & Delivery", "2020-11-01"),
+        ("Ralph Leander D Cruz", "GC021", "ralph", 0, "ralph@goocampus.in", "Operations", "Customer Success Manager", "2021-08-01"),
+        ("Jeswin Jacob", "GC024", "jeswin", 0, "", "Marketing", "", ""),
+        ("Gopi Krishnan A", "GC032", "gopi", 0, "", "Operations", "", ""),
+        ("Poornima S", "GC033", "poornima", 0, "poornima@goocampus.in", "Admin", "Executive - Front Office", "2022-01-05"),
+        ("Nandu C", "GC044", "nandu", 9.5, "nandu@goocampus.in", "Marketing", "Senior Video Production Specialist", "2022-11-21"),
+        ("Harish S", "GC046", "harish", 12.5, "harish@goocampus.in", "Admin", "Office Assistant", "2020-11-09"),
+        ("Jeswin Shaju", "GC050", "jeswin", 0, "", "Marketing", "", ""),
+        ("Arun Kannan", "GC061", "arun", 0, "arunkannan@goocampus.in", "Operations", "Customer Success Specialist", "2023-09-01"),
+        ("Praveen L", "GC067", "praveen", 4.5, "praveen@goocampus.in", "Marketing", "Senior Graphic Designer", "2024-02-01"),
+        ("Varsha M", "GC074", "varsha", 0, "varsha.m@goocampus.in", "Operations", "Operations Executive", "2024-08-01"),
+        ("Alfiya Naaz", "GC075", "alfiya", 0, "", "HR", "", ""),
+        ("Lanciya Lulu Philip", "GC080", "lanciya", 0, "lanciya@goocampus.in", "Sales", "Business Development Executive", "2024-10-21"),
+        ("Nikhil Shyamraj", "GC083", "nikhil", 0, "nikhil.s@goocampus.in", "Marketing", "Content Creator & Video Editor", "2025-04-02"),
+        ("Manya B M", "GC092", "manya", 3.0, "manya.bm@goocampus.in", "Marketing", "Content Writer", "2025-04-07"),
     ]
 
     created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
 
-    for name, emp_code, carry_forward, email, department, designation, joining_date in employees_data:
+    for name, emp_code, first_name_pwd, carry_forward, email, department, designation, joining_date in employees_data:
         c.execute('''
             INSERT INTO employees (name, emp_code, password, email, department, designation, carry_forward, joining_date, reporting_to, is_active, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?)
-        ''', (name, emp_code, hash_password(emp_code), email or None, department, designation or None, carry_forward, joining_date or None, admin_id, created_at))
+        ''', (name, emp_code, hash_password(first_name_pwd), email or None, department, designation or None, carry_forward, joining_date or None, admin_id, created_at))
 
     # Insert holidays for 2026
     holidays_data = [
@@ -137,7 +140,7 @@ def init_db():
 
     print(f"Database initialized at {DB_PATH}")
     print("Admin user created: emp_code='admin', password='admin'")
-    print("17 employees created with password = emp_code")
+    print("20 employees created with password = first name (lowercase)")
     print("12 holidays for 2026 created")
 
 if __name__ == '__main__':
