@@ -132,19 +132,22 @@
 {% endif %}
 
 <!-- Upcoming Holidays -->
-{% if upcoming_holidays %}
 <div class="panel" style="margin-bottom: 2rem;">
     <div class="panel-header">
-        <div class="panel-title">Upcoming Holidays &mdash; {{ current_month_name }}</div>
+        <div class="panel-title">Upcoming Holidays &mdash; {{ current_month_name }} &amp; {{ next_month_name }}</div>
         <a href="/holidays" style="font-size: 0.9rem; color: var(--blue); text-decoration: none; font-weight: 500;">View All Holidays</a>
     </div>
     <div class="panel-body">
+        {% if upcoming_holidays %}
         <div style="display: flex; flex-wrap: wrap; gap: 1rem;">
             {% for h in upcoming_holidays %}
-            <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: var(--warning-light); border-radius: 0.6rem; border: 1px solid var(--warning);">
+            <div style="display: flex; align-items: center; gap: 1rem; padding: 1rem 1.25rem; background: var(--warning-light); border-radius: 0.6rem; border: 1px solid var(--warning); min-width: 220px;">
                 <div style="text-align: center; min-width: 50px;">
                     <div style="font-size: 1.3rem; font-weight: 700; color: #92400e; line-height: 1;">{{ h.holiday_date[8:] | int }}</div>
-                    <div style="font-size: 0.75rem; color: #b45309; text-transform: uppercase; margin-top: 0.2rem;">{{ current_month_name[:3] }}</div>
+                    <div style="font-size: 0.75rem; color: #b45309; text-transform: uppercase; margin-top: 0.2rem;">
+                        {% set m = h.holiday_date[5:7] | int %}
+                        {% if m == 1 %}Jan{% elif m == 2 %}Feb{% elif m == 3 %}Mar{% elif m == 4 %}Apr{% elif m == 5 %}May{% elif m == 6 %}Jun{% elif m == 7 %}Jul{% elif m == 8 %}Aug{% elif m == 9 %}Sep{% elif m == 10 %}Oct{% elif m == 11 %}Nov{% elif m == 12 %}Dec{% endif %}
+                    </div>
                 </div>
                 <div>
                     <div style="font-weight: 600; font-size: 0.95rem; color: #78350f;">{{ h.name }}</div>
@@ -153,50 +156,9 @@
             </div>
             {% endfor %}
         </div>
-    </div>
-</div>
-{% endif %}
-
-<!-- Month-wise Leave Report -->
-<div class="panel" style="margin-bottom: 2rem;">
-    <div class="panel-header">
-        <div class="panel-title">My Leave Report &mdash; FY {{ monthly_leave_data[0].year }}&ndash;{{ monthly_leave_data[11].year }}</div>
-    </div>
-    <div class="panel-body" style="padding: 0;">
-        <table class="table" style="margin: 0;">
-            <thead>
-                <tr>
-                    <th>Month</th>
-                    <th style="text-align: center;">Annual</th>
-                    <th style="text-align: center;">Sick</th>
-                    <th style="text-align: center;">Casual</th>
-                    <th style="text-align: center;">Total Days</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% set ns = namespace(fy_total=0, fy_annual=0, fy_sick=0, fy_casual=0) %}
-                {% for m in monthly_leave_data %}
-                <tr style="{% if m.total > 0 %}background: var(--orange-light);{% endif %}">
-                    <td style="font-weight: 600; color: var(--navy);">{{ m.month }} {{ m.year }}</td>
-                    <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '&mdash;' }}</td>
-                    <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '&mdash;' }}</td>
-                    <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '&mdash;' }}</td>
-                    <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '&mdash;' }}</td>
-                </tr>
-                {% set ns.fy_total = ns.fy_total + m.total %}
-                {% set ns.fy_annual = ns.fy_annual + m.annual %}
-                {% set ns.fy_sick = ns.fy_sick + m.sick %}
-                {% set ns.fy_casual = ns.fy_casual + m.casual %}
-                {% endfor %}
-                <tr style="background: var(--navy); color: white;">
-                    <td style="font-weight: 700; color: white; border: none;">FY Total</td>
-                    <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_annual }}</td>
-                    <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_sick }}</td>
-                    <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>
-                    <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_total }}</td>
-                </tr>
-            </tbody>
-        </table>
+        {% else %}
+        <p style="color: var(--gray-400); text-align: center; padding: 1.5rem 0;">No upcoming holidays this month or next</p>
+        {% endif %}
     </div>
 </div>
 
@@ -205,7 +167,7 @@
     <div class="panel">
         <div class="panel-header">
             <div class="panel-title">Recent Leave History</div>
-            <a href="/calendar" style="font-size: 0.9rem; color: var(--blue); text-decoration: none; font-weight: 500;">Calendar</a>
+            <a href="/my-leave-report" style="font-size: 0.9rem; color: var(--blue); text-decoration: none; font-weight: 500;">Full Report</a>
         </div>
         <div class="panel-body">
             {% if recent_leaves %}

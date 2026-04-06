@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}My Leave Report - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-summary {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2.5rem;
+    }
+    .report-stat {
+        background: var(--white); border-radius: 1rem; padding: 1.75rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);
+        text-align: center;
+    }
+    .report-stat-val { font-size: 2rem; font-weight: 700; line-height: 1; margin-bottom: 0.4rem; }
+    .report-stat-lbl { font-size: 0.88rem; color: var(--gray-500); font-weight: 500; }
+    .report-panel {
+        background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 2.5rem;
+    }
+    .report-panel-header {
+        padding: 1.5rem 2rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .report-panel-title { font-weight: 600; font-size: 1.1rem; color: var(--navy); }
+    @media (max-width: 768px) {
+        .report-summary { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>My Leave Report</h1>
+    <p>Financial Year {{ fy_year }}&ndash;{{ fy_year + 1 }} (April {{ fy_year }} to March {{ fy_year + 1 }})</p>
+</div>
+
+<!-- Summary Stats -->
+<div class="report-summary">
+    <div class="report-stat">
+        <div class="report-stat-val" style="color: var(--navy);">{{ total_allocation }}</div>
+        <div class="report-stat-lbl">Total Allocation</div>
+    </div>
+    <div class="report-stat">
+        <div class="report-stat-val" style="color: var(--warning);">{{ total_taken }}</div>
+        <div class="report-stat-lbl">Days Taken</div>
+    </div>
+    <div class="report-stat">
+        <div class="report-stat-val" style="color: var(--success);">{{ available_balance }}</div>
+        <div class="report-stat-lbl">Available Balance</div>
+    </div>
+    <div class="report-stat">
+        <div class="report-stat-val" style="color: var(--blue);">{{ all_leaves | length }}</div>
+        <div class="report-stat-lbl">Total Records</div>
+    </div>
+</div>
+
+<!-- Month-wise Breakdown -->
+<div class="report-panel">
+    <div class="report-panel-header">
+        <div class="report-panel-title">Month-wise Breakdown</div>
+    </div>
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th style="text-align: center;">Annual</th>
+                <th style="text-align: center;">Sick</th>
+                <th style="text-align: center;">Casual</th>
+                <th style="text-align: center;">Total Days</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set ns = namespace(fy_annual=0, fy_sick=0, fy_casual=0) %}
+            {% for m in monthly_leave_data %}
+            <tr style="{% if m.total > 0 %}background: var(--orange-light);{% endif %}">
+                <td style="font-weight: 600; color: var(--navy);">{{ m.month }} {{ m.year }}</td>
+                <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '&mdash;' }}</td>
+                <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '&mdash;' }}</td>
+                <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '&mdash;' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '&mdash;' }}</td>
+            </tr>
+            {% set ns.fy_annual = ns.fy_annual + m.annual %}
+            {% set ns.fy_sick = ns.fy_sick + m.sick %}
+            {% set ns.fy_casual = ns.fy_casual + m.casual %}
+            {% endfor %}
+            <tr style="background: var(--navy); color: white;">
+                <td style="font-weight: 700; color: white; border: none;">FY Total</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_annual }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_sick }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+
+<!-- All Leave Records -->
+<div class="report-panel">
+    <div class="report-panel-header">
+        <div class="report-panel-title">All Leave Records</div>
+        <span style="font-size: 0.88rem; color: var(--gray-500);">{{ all_leaves | length }} records</span>
+    </div>
+    {% if all_leaves %}
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in all_leaves %}
+            <tr>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date }}</td>
+                <td>
+                    {% if leave.leave_type == 'annual' %}
+                    <span style="color: var(--blue); font-weight: 600;">Annual</span>
+                    {% elif leave.leave_type == 'sick' %}
+                    <span style="color: var(--success); font-weight: 600;">Sick</span>
+                    {% else %}
+                    <span style="color: var(--orange); font-weight: 600;">Casual</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day{% endif %}
+                </td>
+                <td style="color: var(--gray-600); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '&mdash;' }}</td>
+                <td>
+                    {% if leave.status == 'pending' %}
+                    <span class="badge badge-pending">Pending</span>
+                    {% elif leave.status == 'approved' %}
+                    <span class="badge badge-approved">Approved</span>
+                    {% else %}
+                    <span class="badge badge-rejected">Rejected</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--gray-400);">
+        No leave records found for this financial year
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -294,42 +294,20 @@ def dashboard():
         WHERE e.reporting_to = ? AND lr.leave_date = ? AND lr.status = 'approved'
     ''', (user['id'], today_str)).fetchall()
 
-    # Upcoming holidays this month
-    month_end = today.strftime('%Y-%m-') + str(calendar.monthrange(today.year, today.month)[1])
+    # Upcoming holidays - current month + next month
+    next_month = today.month + 1
+    next_month_year = today.year
+    if next_month > 12:
+        next_month = 1
+        next_month_year += 1
+    next_month_end = '{}-{}-{}'.format(next_month_year, str(next_month).zfill(2), calendar.monthrange(next_month_year, next_month)[1])
+    next_month_name = calendar.month_name[next_month]
+
     upcoming_holidays = conn.execute('''
         SELECT * FROM holidays
         WHERE holiday_date >= ? AND holiday_date <= ?
         ORDER BY holiday_date
-    ''', (today.strftime('%Y-%m-%d'), month_end)).fetchall()
-
-    # Month-wise leave report for the full FY
-    monthly_leave_data = []
-    for m in range(12):
-        # FY months: April(4) to March(3)
-        report_month = ((m + 3) % 12) + 1  # 4,5,6,7,8,9,10,11,12,1,2,3
-        report_year = fy_year if report_month >= 4 else fy_year + 1
-
-        month_leaves_data = conn.execute('''
-            SELECT SUM(days) as total_days,
-                   SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
-                   SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
-                   SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual,
-                   COUNT(*) as count
-            FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-        ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
-
-        monthly_leave_data.append({
-            'month': calendar.month_name[report_month],
-            'month_short': calendar.month_abbr[report_month],
-            'year': report_year,
-            'total': month_leaves_data['total_days'] or 0,
-            'annual': month_leaves_data['annual'] or 0,
-            'sick': month_leaves_data['sick'] or 0,
-            'casual': month_leaves_data['casual'] or 0,
-            'count': month_leaves_data['count'] or 0
-        })
+    ''', (today.strftime('%Y-%m-%d'), next_month_end)).fetchall()
 
     conn.close()
 
@@ -348,7 +326,7 @@ def dashboard():
                          team_on_leave=team_on_leave,
                          upcoming_holidays=upcoming_holidays,
                          current_month_name=calendar.month_name[current_month],
-                         monthly_leave_data=monthly_leave_data)
+                         next_month_name=next_month_name)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -645,7 +623,75 @@ def employee_holidays():
     conn = get_db()
     holidays = conn.execute('SELECT * FROM holidays ORDER BY holiday_date').fetchall()
     conn.close()
-    return render_template('employee_holidays.html', user=user, holidays=holidays)
+    today_date = datetime.now().strftime('%Y-%m-%d')
+    return render_template('employee_holidays.html', user=user, holidays=holidays, today_date=today_date)
+
+@app.route('/my-leave-report')
+@login_required
+def my_leave_report():
+    user = get_user()
+    conn = get_db()
+
+    today = datetime.now()
+    current_month = today.month
+    fy_year = today.year if current_month >= 4 else today.year - 1
+
+    # Total balance
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    total_allocation = 25 + carry_forward
+
+    # Month-wise leave report for the full FY
+    monthly_leave_data = []
+    for m in range(12):
+        report_month = ((m + 3) % 12) + 1
+        report_year = fy_year if report_month >= 4 else fy_year + 1
+
+        month_data = conn.execute('''
+            SELECT SUM(days) as total_days,
+                   SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
+                   SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
+                   SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual,
+                   COUNT(*) as count
+            FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
+
+        monthly_leave_data.append({
+            'month': calendar.month_name[report_month],
+            'month_short': calendar.month_abbr[report_month],
+            'year': report_year,
+            'total': month_data['total_days'] or 0,
+            'annual': month_data['annual'] or 0,
+            'sick': month_data['sick'] or 0,
+            'casual': month_data['casual'] or 0,
+            'count': month_data['count'] or 0
+        })
+
+    # All leave records for the FY
+    all_leaves = conn.execute('''
+        SELECT * FROM leave_records
+        WHERE employee_id = ?
+        AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+             OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+        ORDER BY leave_date DESC
+    ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchall()
+
+    # Days taken
+    total_taken = sum(m['total'] for m in monthly_leave_data)
+    available_balance = total_allocation - total_taken
+
+    conn.close()
+
+    return render_template('employee_leave_report.html',
+                         user=user,
+                         monthly_leave_data=monthly_leave_data,
+                         all_leaves=all_leaves,
+                         fy_year=fy_year,
+                         total_allocation=total_allocation,
+                         total_taken=total_taken,
+                         available_balance=round(available_balance, 2))
 
 @app.route('/admin/dashboard')
 @admin_required
