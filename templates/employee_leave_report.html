@@ -75,10 +75,10 @@
             {% for m in monthly_leave_data %}
             <tr style="{% if m.total > 0 %}background: var(--orange-light);{% endif %}">
                 <td style="font-weight: 600; color: var(--navy);">{{ m.month }} {{ m.year }}</td>
-                <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '&mdash;' }}</td>
-                <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '&mdash;' }}</td>
-                <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '&mdash;' }}</td>
-                <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '&mdash;' }}</td>
+                <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '—' }}</td>
             </tr>
             {% set ns.fy_annual = ns.fy_annual + m.annual %}
             {% set ns.fy_sick = ns.fy_sick + m.sick %}
@@ -130,7 +130,7 @@
                     {% elif leave.day_portion == 'second_half' %}Second Half
                     {% else %}Full Day{% endif %}
                 </td>
-                <td style="color: var(--gray-600); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '&mdash;' }}</td>
+                <td style="color: var(--gray-600); max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '—' }}</td>
                 <td>
                     {% if leave.status == 'pending' %}
                     <span class="badge badge-pending">Pending</span>
