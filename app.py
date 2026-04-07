@@ -223,12 +223,8 @@ def get_all_holidays():
     return {row['holiday_date']: row for row in holidays}
 
 @app.route('/')
+@login_required
 def index():
-    if 'user_id' not in session:
-        return redirect(url_for('login'))
-    user = get_user()
-    if user and user['is_admin']:
-        return redirect(url_for('admin_dashboard'))
     return redirect(url_for('dashboard'))
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -303,109 +299,74 @@ def change_password():
 @app.route('/dashboard')
 @login_required
 def dashboard():
+    """Main CRM dashboard for all users (admin and employees)"""
     user = get_user()
-    if user['is_admin']:
-        return redirect(url_for('admin_dashboard'))
-
     conn = get_db()
+    now = datetime.now()
+    today = now.strftime('%Y-%m-%d')
+    fy_year = now.year if now.month >= 4 else now.year - 1
 
-    # Current FY (April to March)
-    today = datetime.now()
-    current_year = today.year
-    current_month = today.month
-    fy_year = current_year if current_month >= 4 else current_year - 1
+    # Total employees
+    total_employees = conn.execute("SELECT COUNT(*) as count FROM employees WHERE is_active = 1 AND emp_code != 'admin'").fetchone()
+    total_employees_count = total_employees['count'] if total_employees else 0
 
-    # Total balance calculation
-    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-    total_allocation = 25 + carry_forward
+    # Leaves today
+    leaves_today = conn.execute("SELECT COUNT(DISTINCT employee_id) as count FROM leave_records WHERE leave_date = ? AND status = 'approved'", (today,)).fetchone()
+    leaves_today_count = leaves_today['count'] if leaves_today else 0
 
-    # Days taken this FY - with type breakdown
-    leaves = conn.execute('''
-        SELECT SUM(days) as total_days,
-               SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual_taken,
-               SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick_taken,
-               SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual_taken
-        FROM leave_records
-        WHERE employee_id = ? AND status = 'approved'
-        AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
-             OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
-    ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
+    # Pending leave approvals
+    pending_leaves = conn.execute("SELECT COUNT(*) as count FROM leave_records WHERE status = 'pending'").fetchone()
+    pending_leaves_count = pending_leaves['count'] if pending_leaves else 0
 
-    days_taken = leaves['total_days'] if leaves['total_days'] else 0
-    annual_taken = leaves['annual_taken'] if leaves['annual_taken'] else 0
-    sick_taken = leaves['sick_taken'] if leaves['sick_taken'] else 0
-    casual_taken = leaves['casual_taken'] if leaves['casual_taken'] else 0
-    available_balance = total_allocation - days_taken
+    # Departments
+    departments = conn.execute("SELECT department, COUNT(*) as count FROM employees WHERE is_active = 1 AND emp_code != 'admin' GROUP BY department ORDER BY department").fetchall()
+    total_departments = len(departments) if departments else 0
 
-    # Pending requests
-    pending = conn.execute('''
-        SELECT COUNT(*) as count FROM leave_records
-        WHERE employee_id = ? AND status = 'pending'
-    ''', (user['id'],)).fetchone()
+    # Active projects (try/except in case projects table doesn't exist)
+    active_projects = 0
+    try:
+        ap_result = conn.execute("SELECT COUNT(*) as count FROM projects WHERE status = 'active'").fetchone()
+        active_projects = ap_result['count'] if ap_result else 0
+    except:
+        active_projects = 0
 
-    # Recent leave history
-    recent = conn.execute('''
-        SELECT * FROM leave_records
-        WHERE employee_id = ?
-        ORDER BY created_at DESC LIMIT 10
-    ''', (user['id'],)).fetchall()
+    # Meetings this month
+    month_start = now.strftime('%Y-%m-01')
+    month_end = now.strftime('%Y-%m-') + str(calendar.monthrange(now.year, now.month)[1])
+    total_meetings = 0
+    try:
+        tm_result = conn.execute("SELECT COUNT(*) as count FROM b2b_trips WHERE from_date >= ? AND from_date <= ?", (month_start, month_end)).fetchone()
+        total_meetings = tm_result['count'] if tm_result else 0
+    except:
+        total_meetings = 0
 
-    # Mini calendar data - current month
-    holidays = get_all_holidays()
-    month_leaves = get_leaves_for_month(user['id'], current_year, current_month)
-    leave_dates = {lr['leave_date']: lr for lr in month_leaves}
+    # Meetings this week
+    week_start = (now - timedelta(days=now.weekday())).strftime('%Y-%m-%d')
+    week_end = (now + timedelta(days=6-now.weekday())).strftime('%Y-%m-%d')
+    meetings_this_week = 0
+    try:
+        mtw_result = conn.execute("SELECT COUNT(*) as count FROM b2b_trips WHERE from_date >= ? AND from_date <= ?", (week_start, week_end)).fetchone()
+        meetings_this_week = mtw_result['count'] if mtw_result else 0
+    except:
+        meetings_this_week = 0
 
-    # Get direct reports if manager
-    direct_reports = conn.execute('''
-        SELECT e.id, e.name, e.photo_url, e.department, e.designation,
-               (SELECT SUM(lr2.days) FROM leave_records lr2 WHERE lr2.employee_id = e.id AND lr2.status = 'approved') as total_taken,
-               (SELECT COUNT(*) FROM leave_records lr3 WHERE lr3.employee_id = e.id AND lr3.status = 'pending') as pending_leaves
-        FROM employees e WHERE e.reporting_to = ? AND e.is_active = 1 ORDER BY e.name
-    ''', (user['id'],)).fetchall()
+    # Sales news count
+    total_news = 0
+    try:
+        tn_result = conn.execute("SELECT COUNT(*) as count FROM sales_news").fetchone()
+        total_news = tn_result['count'] if tn_result else 0
+    except:
+        total_news = 0
 
-    # Get today's team status
-    today_str = today.strftime('%Y-%m-%d')
-    team_on_leave = conn.execute('''
-        SELECT e.name, e.photo_url, lr.day_portion, lr.leave_type
+    # On leave today list
+    on_leave_today = conn.execute('''
+        SELECT e.name, e.photo_url, e.department, lr.day_portion, lr.leave_type
         FROM leave_records lr JOIN employees e ON lr.employee_id = e.id
-        WHERE e.reporting_to = ? AND lr.leave_date = ? AND lr.status = 'approved'
-    ''', (user['id'], today_str)).fetchall()
+        WHERE lr.leave_date = ? AND lr.status = 'approved'
+        ORDER BY e.name
+    ''', (today,)).fetchall()
 
-    # Upcoming holidays - current month + next month
-    next_month = today.month + 1
-    next_month_year = today.year
-    if next_month > 12:
-        next_month = 1
-        next_month_year += 1
-    next_month_end = '{}-{}-{}'.format(next_month_year, str(next_month).zfill(2), calendar.monthrange(next_month_year, next_month)[1])
-    next_month_name = calendar.month_name[next_month]
-
-    upcoming_holidays = conn.execute('''
-        SELECT * FROM holidays
-        WHERE holiday_date >= ? AND holiday_date <= ?
-        ORDER BY holiday_date
-    ''', (today.strftime('%Y-%m-%d'), next_month_end)).fetchall()
-
-    # Birthdays this month (employees who have DOB set, matching current month)
-    current_mm = str(current_month).zfill(2)
-    birthdays_this_month = conn.execute('''
-        SELECT name, dob, photo_url, department FROM employees
-        WHERE is_active = 1 AND emp_code != 'admin' AND dob IS NOT NULL AND dob != ''
-        AND strftime('%m', dob) = ?
-        ORDER BY strftime('%d', dob)
-    ''', (current_mm,)).fetchall()
-
-    # Work anniversaries this month (employees with joining_date matching current month, excluding current year joins)
-    anniversaries_this_month = conn.execute('''
-        SELECT name, joining_date, photo_url, department FROM employees
-        WHERE is_active = 1 AND emp_code != 'admin' AND joining_date IS NOT NULL AND joining_date != ''
-        AND strftime('%m', joining_date) = ?
-        AND strftime('%Y', joining_date) != ?
-        ORDER BY strftime('%d', joining_date)
-    ''', (current_mm, str(current_year))).fetchall()
-
-    # Recent announcements (last 5 active)
+    # Recent announcements
     announcements = conn.execute('''
         SELECT a.*, e.name as posted_by_name FROM announcements a
         JOIN employees e ON a.posted_by = e.id
@@ -413,34 +374,102 @@ def dashboard():
         ORDER BY a.created_at DESC LIMIT 5
     ''', ()).fetchall()
 
+    # Upcoming holidays
+    upcoming_holidays = conn.execute('''
+        SELECT * FROM holidays
+        WHERE holiday_date >= ?
+        ORDER BY holiday_date LIMIT 5
+    ''', (today,)).fetchall()
+
+    # Recent activities (combine from different tables)
+    recent_activities = []
+
+    # Recent leaves
+    try:
+        recent_leaves_act = conn.execute('''
+            SELECT lr.leave_date as date, e.name, lr.leave_type, lr.status, lr.created_at
+            FROM leave_records lr JOIN employees e ON lr.employee_id = e.id
+            ORDER BY lr.created_at DESC LIMIT 5
+        ''').fetchall()
+        for l in recent_leaves_act:
+            recent_activities.append({
+                'type': 'leave',
+                'title': f"{l['name']} - {l['leave_type'].capitalize()} Leave",
+                'subtitle': f"Status: {l['status'].capitalize()}",
+                'time_ago': l['created_at'][:10] if l['created_at'] else '',
+                'icon_color': 'var(--orange)'
+            })
+    except:
+        pass
+
+    # Recent meetings
+    try:
+        recent_meetings = conn.execute('''
+            SELECT t.from_date, e.name, t.trip_type, t.created_at
+            FROM b2b_trips t JOIN employees e ON t.employee_id = e.id
+            ORDER BY t.created_at DESC LIMIT 5
+        ''').fetchall()
+        for m in recent_meetings:
+            recent_activities.append({
+                'type': 'meeting',
+                'title': f"{m['name']} - {(m['trip_type'] or 'Meeting').capitalize()} Meeting",
+                'subtitle': f"From: {m['from_date']}",
+                'time_ago': m['created_at'][:10] if m['created_at'] else '',
+                'icon_color': 'var(--blue)'
+            })
+    except:
+        pass
+
+    # Sort by time_ago desc and limit to 8
+    recent_activities.sort(key=lambda x: x.get('time_ago', ''), reverse=True)
+    recent_activities = recent_activities[:8]
+
+    # Management data (for users with management access)
+    is_management = user['emp_code'] in MANAGEMENT_CODES
+    mgmt_leave_data = {}
+    if is_management or user['is_admin']:
+        carry_forward = user['carry_forward'] or 0
+        total_allocation = 25 + carry_forward
+        leaves_taken = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+        ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
+        days_taken = leaves_taken['total_days'] if leaves_taken['total_days'] else 0
+        my_pending = conn.execute(
+            "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
+            (user['id'],)
+        ).fetchone()['cnt']
+        mgmt_leave_data = {
+            'total_allocation': total_allocation,
+            'available_balance': round(total_allocation - days_taken, 2),
+            'days_taken': days_taken,
+            'pending_count': my_pending
+        }
+
     conn.close()
 
-    return render_template('employee_dashboard.html',
+    return render_template('main_dashboard.html',
                          user=user,
-                         total_allocation=total_allocation,
-                         available_balance=round(available_balance, 2),
-                         days_taken=days_taken,
-                         annual_taken=annual_taken,
-                         sick_taken=sick_taken,
-                         casual_taken=casual_taken,
-                         pending_count=pending['count'],
-                         monthly_allocation=round(total_allocation / 12, 2),
-                         recent_leaves=recent,
-                         current_year=current_year,
-                         current_month=current_month,
-                         holidays=holidays,
-                         leave_dates=leave_dates,
-                         direct_reports=direct_reports,
-                         team_on_leave=team_on_leave,
-                         upcoming_holidays=upcoming_holidays,
-                         current_month_name=calendar.month_name[current_month],
-                         next_month_name=next_month_name,
-                         carry_forward=carry_forward,
-                         current_month_available=round(calculate_monthly_balance(user['id'], fy_year, current_month), 2),
-                         birthdays_this_month=birthdays_this_month,
-                         anniversaries_this_month=anniversaries_this_month,
+                         total_employees=total_employees_count,
+                         leaves_today=leaves_today_count,
+                         pending_count=pending_leaves_count,
+                         departments=departments,
+                         total_departments=total_departments,
+                         active_projects=active_projects,
+                         total_meetings=total_meetings,
+                         meetings_this_week=meetings_this_week,
+                         total_news=total_news,
+                         on_leave_today=on_leave_today,
                          announcements=announcements,
-                         can_announce=can_post_announcements(user))
+                         upcoming_holidays=upcoming_holidays,
+                         recent_activities=recent_activities,
+                         current_month_name=calendar.month_name[now.month],
+                         current_year=now.year,
+                         can_announce=can_post_announcements(user),
+                         is_management=is_management,
+                         mgmt_leave_data=mgmt_leave_data)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -1351,10 +1380,16 @@ def my_leave_report():
                          carry_forward=carry_forward,
                          monthly_alloc=monthly_alloc)
 
-@app.route('/admin/dashboard')
-@admin_required
-def admin_dashboard():
+@app.route('/hr-dashboard')
+@login_required
+def hr_dashboard():
+    """HR-specific dashboard - admins see full view, employees see limited view"""
     user = get_user()
+
+    # Redirect non-admin employees to main dashboard
+    if not user['is_admin']:
+        return redirect(url_for('dashboard'))
+
     conn = get_db()
 
     # Summary stats
@@ -1474,6 +1509,12 @@ def admin_dashboard():
                          can_announce=can_post_announcements(user),
                          is_management=is_management,
                          mgmt_leave_data=mgmt_leave_data)
+
+@app.route('/admin/dashboard')
+@admin_required
+def admin_dashboard():
+    """Redirect to the new HR dashboard"""
+    return redirect(url_for('hr_dashboard'))
 
 @app.route('/admin/org-chart')
 @admin_required

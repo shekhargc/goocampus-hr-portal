@@ -1,0 +1,1307 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  /* Dashboard-specific styling */
+  .dashboard-container {
+    max-width: 1600px;
+    margin: 0 auto;
+    padding: 2rem 1rem;
+  }
+
+  /* Welcome Banner */
+  .welcome-banner {
+    background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
+    border-radius: 12px;
+    padding: 2.5rem;
+    margin-bottom: 2.5rem;
+    color: white;
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    gap: 2rem;
+    align-items: center;
+  }
+
+  .welcome-banner__user-profile {
+    display: flex;
+    gap: 1rem;
+    align-items: center;
+  }
+
+  .welcome-banner__avatar {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    border: 3px solid white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 2rem;
+    font-weight: 600;
+    overflow: hidden;
+  }
+
+  .welcome-banner__avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .welcome-banner__greeting {
+    flex: 1;
+  }
+
+  .welcome-banner__title {
+    font-size: 1.75rem;
+    font-weight: 700;
+    margin: 0 0 0.25rem 0;
+    line-height: 1.2;
+  }
+
+  .welcome-banner__subtitle {
+    font-size: 0.95rem;
+    opacity: 0.9;
+    margin: 0;
+  }
+
+  .welcome-banner__info {
+    font-size: 0.85rem;
+    opacity: 0.75;
+    margin-top: 0.5rem;
+  }
+
+  .welcome-banner__actions {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+  }
+
+  .banner-btn {
+    padding: 0.65rem 1.25rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .banner-btn--primary {
+    background: white;
+    color: var(--navy);
+  }
+
+  .banner-btn--primary:hover {
+    background: var(--orange);
+    color: white;
+    transform: translateY(-2px);
+  }
+
+  .banner-btn--secondary {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+  }
+
+  .banner-btn--secondary:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: translateY(-2px);
+  }
+
+  /* Management Leave Pills */
+  .leave-pills {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    margin-top: 1rem;
+  }
+
+  .leave-pill {
+    background: rgba(255, 255, 255, 0.15);
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .leave-pill__label {
+    opacity: 0.8;
+    display: block;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.25rem;
+  }
+
+  .leave-pill__value {
+    font-size: 1.5rem;
+    font-weight: 700;
+    display: block;
+  }
+
+  /* Stats Grid */
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 10px;
+    padding: 1.75rem;
+    border: 1px solid var(--gray-200);
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .stat-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.08);
+    transform: translateY(-4px);
+  }
+
+  .stat-card__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+  }
+
+  .stat-card__icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+  }
+
+  .stat-card__icon.blue {
+    background: var(--blue-light);
+    color: var(--blue);
+  }
+
+  .stat-card__icon.orange {
+    background: var(--orange-light);
+    color: var(--orange);
+  }
+
+  .stat-card__icon.red {
+    background: var(--danger-light);
+    color: var(--danger);
+  }
+
+  .stat-card__icon.green {
+    background: var(--success-light);
+    color: var(--success);
+  }
+
+  .stat-card__icon.purple {
+    background: rgba(156, 39, 176, 0.1);
+    color: #9c27b0;
+  }
+
+  .stat-card__icon.teal {
+    background: rgba(0, 150, 136, 0.1);
+    color: #009688;
+  }
+
+  .stat-card__label {
+    font-size: 0.85rem;
+    color: var(--gray-600);
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+  }
+
+  .stat-card__value {
+    font-size: 2.5rem;
+    font-weight: 700;
+    color: var(--navy-dark);
+    margin: 0.5rem 0 0 0;
+    line-height: 1;
+  }
+
+  /* Department Cards */
+  .department-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2.5rem;
+  }
+
+  .dept-card {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    border: 1px solid var(--gray-200);
+    transition: all 0.3s ease;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+  }
+
+  .dept-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.12);
+    transform: translateY(-6px);
+  }
+
+  .dept-card__accent {
+    height: 4px;
+  }
+
+  .dept-card__accent.blue {
+    background: var(--blue);
+  }
+
+  .dept-card__accent.orange {
+    background: var(--orange);
+  }
+
+  .dept-card__accent.green {
+    background: var(--success);
+  }
+
+  .dept-card__content {
+    padding: 2rem;
+  }
+
+  .dept-card__header {
+    display: flex;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+    align-items: flex-start;
+  }
+
+  .dept-card__icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.5rem;
+  }
+
+  .dept-card__icon.blue {
+    background: var(--blue-light);
+    color: var(--blue);
+  }
+
+  .dept-card__icon.orange {
+    background: var(--orange-light);
+    color: var(--orange);
+  }
+
+  .dept-card__icon.green {
+    background: var(--success-light);
+    color: var(--success);
+  }
+
+  .dept-card__title {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: var(--navy-dark);
+    margin: 0;
+  }
+
+  .dept-card__stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-item {
+    text-align: center;
+  }
+
+  .stat-item__value {
+    font-size: 1.75rem;
+    font-weight: 700;
+    color: var(--navy-dark);
+    line-height: 1;
+    margin-bottom: 0.25rem;
+  }
+
+  .stat-item__label {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+  }
+
+  .dept-card__link {
+    display: inline-block;
+    padding: 0.75rem 1.5rem;
+    background: var(--navy);
+    color: white;
+    border-radius: 6px;
+    text-decoration: none;
+    font-size: 0.9rem;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    border: none;
+    cursor: pointer;
+  }
+
+  .dept-card__link:hover {
+    background: var(--navy-dark);
+    transform: translateX(4px);
+  }
+
+  /* Two Column Section */
+  .dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 2rem;
+    margin-bottom: 2.5rem;
+  }
+
+  @media (max-width: 1024px) {
+    .dashboard-grid {
+      grid-template-columns: 1fr;
+    }
+  }
+
+  /* Activity Feed */
+  .activity-feed {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+  }
+
+  .activity-feed__header {
+    padding: 1.5rem;
+    border-bottom: 1px solid var(--gray-100);
+    background: var(--gray-50);
+  }
+
+  .activity-feed__title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--navy-dark);
+    margin: 0;
+  }
+
+  .activity-items {
+    max-height: 500px;
+    overflow-y: auto;
+  }
+
+  .activity-item {
+    padding: 1.25rem 1.5rem;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    gap: 1rem;
+    align-items: flex-start;
+    transition: background 0.2s ease;
+  }
+
+  .activity-item:hover {
+    background: var(--gray-50);
+  }
+
+  .activity-item:last-child {
+    border-bottom: none;
+  }
+
+  .activity-icon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 1.1rem;
+  }
+
+  .activity-icon.leave {
+    background: var(--orange-light);
+    color: var(--orange);
+  }
+
+  .activity-icon.meeting {
+    background: rgba(156, 39, 176, 0.1);
+    color: #9c27b0;
+  }
+
+  .activity-icon.news {
+    background: var(--blue-light);
+    color: var(--blue);
+  }
+
+  .activity-icon.wfh {
+    background: var(--success-light);
+    color: var(--success);
+  }
+
+  .activity-content {
+    flex: 1;
+    min-width: 0;
+  }
+
+  .activity-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--navy-dark);
+    margin: 0 0 0.25rem 0;
+    word-break: break-word;
+  }
+
+  .activity-subtitle {
+    font-size: 0.8rem;
+    color: var(--gray-600);
+    margin: 0 0 0.25rem 0;
+  }
+
+  .activity-time {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+  }
+
+  /* Right Sidebar Panels */
+  .sidebar-panels {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+  }
+
+  .panel {
+    background: white;
+    border-radius: 12px;
+    border: 1px solid var(--gray-200);
+    padding: 1.5rem;
+  }
+
+  .panel__header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--gray-100);
+  }
+
+  .panel__title {
+    font-size: 1rem;
+    font-weight: 600;
+    color: var(--navy-dark);
+    margin: 0;
+  }
+
+  .panel__link {
+    font-size: 0.8rem;
+    color: var(--blue);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .panel__link:hover {
+    text-decoration: underline;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 1rem;
+    color: var(--gray-600);
+    font-size: 0.9rem;
+  }
+
+  .employee-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .employee-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 0;
+    font-size: 0.9rem;
+  }
+
+  .employee-avatar {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--gray-300);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: white;
+    overflow: hidden;
+  }
+
+  .employee-avatar img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .employee-info {
+    flex: 1;
+  }
+
+  .employee-name {
+    font-weight: 500;
+    color: var(--navy-dark);
+  }
+
+  .employee-dept {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  /* Holiday List */
+  .holiday-item {
+    padding: 0.75rem 0;
+    border-bottom: 1px solid var(--gray-100);
+    font-size: 0.9rem;
+  }
+
+  .holiday-item:last-child {
+    border-bottom: none;
+  }
+
+  .holiday-date {
+    font-weight: 600;
+    color: var(--navy-dark);
+  }
+
+  .holiday-name {
+    color: var(--gray-700);
+    margin-top: 0.25rem;
+  }
+
+  /* Announcements */
+  .announcements-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .announcement-item {
+    padding: 1rem;
+    background: var(--gray-50);
+    border-radius: 8px;
+    border-left: 3px solid var(--blue);
+  }
+
+  .announcement-title {
+    font-weight: 600;
+    color: var(--navy-dark);
+    margin: 0 0 0.25rem 0;
+    font-size: 0.95rem;
+  }
+
+  .announcement-message {
+    color: var(--gray-700);
+    font-size: 0.85rem;
+    margin: 0.5rem 0 0.5rem 0;
+    line-height: 1.4;
+  }
+
+  .announcement-meta {
+    font-size: 0.75rem;
+    color: var(--gray-600);
+  }
+
+  .announcement-category {
+    display: inline-block;
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    color: var(--blue);
+    margin-right: 0.5rem;
+  }
+
+  .post-announcement-btn {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--blue);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    margin-top: 1rem;
+  }
+
+  .post-announcement-btn:hover {
+    background: var(--blue-dark);
+  }
+
+  /* Quick Links */
+  .quick-links {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .quick-link-card {
+    background: white;
+    border-radius: 10px;
+    padding: 1.5rem;
+    border: 1px solid var(--gray-200);
+    text-decoration: none;
+    color: inherit;
+    transition: all 0.3s ease;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    cursor: pointer;
+  }
+
+  .quick-link-card:hover {
+    border-color: var(--gray-300);
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    transform: translateY(-6px);
+  }
+
+  .quick-link-icon {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .quick-link-icon.blue {
+    background: var(--blue-light);
+    color: var(--blue);
+  }
+
+  .quick-link-icon.orange {
+    background: var(--orange-light);
+    color: var(--orange);
+  }
+
+  .quick-link-icon.green {
+    background: var(--success-light);
+    color: var(--success);
+  }
+
+  .quick-link-icon.purple {
+    background: rgba(156, 39, 176, 0.1);
+    color: #9c27b0;
+  }
+
+  .quick-link-icon.teal {
+    background: rgba(0, 150, 136, 0.1);
+    color: #009688;
+  }
+
+  .quick-link-title {
+    font-weight: 600;
+    color: var(--navy-dark);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .quick-link-badge {
+    display: inline-block;
+    background: var(--danger);
+    color: white;
+    font-size: 0.75rem;
+    padding: 0.25rem 0.6rem;
+    border-radius: 12px;
+    font-weight: 600;
+    margin-top: 0.5rem;
+  }
+
+  /* Responsive */
+  @media (max-width: 768px) {
+    .welcome-banner {
+      grid-template-columns: 1fr;
+      gap: 1.5rem;
+      text-align: center;
+    }
+
+    .welcome-banner__actions {
+      justify-content: center;
+    }
+
+    .dashboard-container {
+      padding: 1rem;
+    }
+
+    .banner-btn {
+      padding: 0.55rem 1rem;
+      font-size: 0.85rem;
+    }
+
+    .stat-card__value {
+      font-size: 2rem;
+    }
+
+    .dept-card__stats {
+      grid-template-columns: 1fr 1fr 1fr;
+    }
+  }
+
+  @media (max-width: 480px) {
+    .welcome-banner__title {
+      font-size: 1.3rem;
+    }
+
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .department-cards {
+      grid-template-columns: 1fr;
+    }
+
+    .quick-links {
+      grid-template-columns: repeat(2, 1fr);
+      gap: 1rem;
+    }
+
+    .quick-link-card {
+      padding: 1rem;
+    }
+  }
+
+  /* Scrollbar styling for activity feed */
+  .activity-items::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .activity-items::-webkit-scrollbar-track {
+    background: var(--gray-100);
+    border-radius: 3px;
+  }
+
+  .activity-items::-webkit-scrollbar-thumb {
+    background: var(--gray-400);
+    border-radius: 3px;
+  }
+
+  .activity-items::-webkit-scrollbar-thumb:hover {
+    background: var(--gray-500);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="dashboard-container">
+  <!-- Welcome Banner -->
+  <div class="welcome-banner">
+    <div class="welcome-banner__user-profile">
+      <div class="welcome-banner__avatar">
+        {% if user.photo_url %}
+          <img src="{{ user.photo_url }}" alt="{{ user.name }}">
+        {% else %}
+          {{ user.name[0].upper() }}
+        {% endif %}
+      </div>
+      <div class="welcome-banner__greeting">
+        <h1 class="welcome-banner__title">Welcome back, {{ user.name }}</h1>
+        <p class="welcome-banner__subtitle">GooCampus CRM Portal — Your central hub for Sales, HR & Operations</p>
+        <div class="welcome-banner__info">{{ user.designation }} • {{ user.department }}</div>
+
+        {% if is_management and mgmt_leave_data %}
+        <div class="leave-pills">
+          <div class="leave-pill">
+            <span class="leave-pill__label">Total Allocation</span>
+            <span class="leave-pill__value">{{ mgmt_leave_data.total_allocation }}</span>
+          </div>
+          <div class="leave-pill">
+            <span class="leave-pill__label">Available Balance</span>
+            <span class="leave-pill__value">{{ mgmt_leave_data.available_balance }}</span>
+          </div>
+          <div class="leave-pill">
+            <span class="leave-pill__label">Days Taken</span>
+            <span class="leave-pill__value">{{ mgmt_leave_data.days_taken }}</span>
+          </div>
+          <div class="leave-pill">
+            <span class="leave-pill__label">Pending Approvals</span>
+            <span class="leave-pill__value">{{ mgmt_leave_data.pending_count }}</span>
+          </div>
+        </div>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="welcome-banner__actions">
+      <a href="/hr-dashboard" class="banner-btn banner-btn--primary">HR Dashboard</a>
+      <a href="/sales" class="banner-btn banner-btn--secondary">Sales Dashboard</a>
+    </div>
+  </div>
+
+  <!-- Stats Grid -->
+  <div class="stats-grid">
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Total Employees</p>
+          <h2 class="stat-card__value">{{ total_employees }}</h2>
+        </div>
+        <div class="stat-card__icon blue">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+            <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+            <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">On Leave Today</p>
+          <h2 class="stat-card__value">{{ leaves_today }}</h2>
+        </div>
+        <div class="stat-card__icon orange">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Pending Approvals</p>
+          <h2 class="stat-card__value">{{ pending_leaves }}</h2>
+        </div>
+        <div class="stat-card__icon red">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3.05h16.94a2 2 0 0 0 1.71-3.05L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+            <line x1="12" y1="9" x2="12" y2="13"></line>
+            <line x1="12" y1="17" x2="12.01" y2="17"></line>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Active Projects</p>
+          <h2 class="stat-card__value">{{ active_projects }}</h2>
+        </div>
+        <div class="stat-card__icon green">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="12 3 20 7.5 20 16.5 12 21 4 16.5 4 7.5 12 3"></polyline>
+            <line x1="12" y1="12" x2="20" y2="7.5"></line>
+            <line x1="12" y1="12" x2="12" y2="21"></line>
+            <line x1="12" y1="12" x2="4" y2="7.5"></line>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Meetings This Month</p>
+          <h2 class="stat-card__value">{{ total_meetings }}</h2>
+        </div>
+        <div class="stat-card__icon purple">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 7l-7 5 7 5V7z"></path>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Departments</p>
+          <h2 class="stat-card__value">{{ total_departments }}</h2>
+        </div>
+        <div class="stat-card__icon teal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"></rect>
+            <rect x="14" y="3" width="7" height="7"></rect>
+            <rect x="14" y="14" width="7" height="7"></rect>
+            <rect x="3" y="14" width="7" height="7"></rect>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Department Cards -->
+  <div class="department-cards">
+    <!-- HR Department Card -->
+    <div class="dept-card">
+      <div class="dept-card__accent blue"></div>
+      <div class="dept-card__content">
+        <div class="dept-card__header">
+          <div class="dept-card__icon blue">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+              <circle cx="9" cy="7" r="4"></circle>
+              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+            </svg>
+          </div>
+          <h3 class="dept-card__title">Human Resources</h3>
+        </div>
+
+        <div class="dept-card__stats">
+          {% set hr_dept = departments|selectattr('department', 'equalto', 'HR')|first %}
+          <div class="stat-item">
+            <div class="stat-item__value">{{ hr_dept.count if hr_dept else 0 }}</div>
+            <div class="stat-item__label">Employees</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ leaves_today }}</div>
+            <div class="stat-item__label">On Leave</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ pending_leaves }}</div>
+            <div class="stat-item__label">Pending</div>
+          </div>
+        </div>
+
+        <a href="/hr-dashboard" class="dept-card__link">Go to HR Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Sales Department Card -->
+    <div class="dept-card">
+      <div class="dept-card__accent orange"></div>
+      <div class="dept-card__content">
+        <div class="dept-card__header">
+          <div class="dept-card__icon orange">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <circle cx="12" cy="12" r="1"></circle>
+              <path d="M12 1v6m8-8l-4.24 4.24m6.24 4.76h-6m0 8l4.24-4.24m-4.24 4.24l-4.24-4.24m-4.24 4.24h6m0-8l-4.24 4.24M3 12c0 4.97 4.03 9 9 9s9-4.03 9-9-4.03-9-9-9"></path>
+            </svg>
+          </div>
+          <h3 class="dept-card__title">Sales & CRM</h3>
+        </div>
+
+        <div class="dept-card__stats">
+          <div class="stat-item">
+            <div class="stat-item__value">{{ active_projects }}</div>
+            <div class="stat-item__label">Projects</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ total_meetings }}</div>
+            <div class="stat-item__label">Meetings</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ total_news }}</div>
+            <div class="stat-item__label">News</div>
+          </div>
+        </div>
+
+        <a href="/sales" class="dept-card__link">Go to Sales Dashboard</a>
+      </div>
+    </div>
+
+    <!-- Operations Department Card -->
+    <div class="dept-card">
+      <div class="dept-card__accent green"></div>
+      <div class="dept-card__content">
+        <div class="dept-card__header">
+          <div class="dept-card__icon green">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"></path>
+            </svg>
+          </div>
+          <h3 class="dept-card__title">Operations</h3>
+        </div>
+
+        <div class="dept-card__stats">
+          {% set ops_dept = departments|selectattr('department', 'equalto', 'Operations')|first %}
+          <div class="stat-item">
+            <div class="stat-item__value">{{ total_departments }}</div>
+            <div class="stat-item__label">Departments</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ meetings_this_week }}</div>
+            <div class="stat-item__label">This Week</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-item__value">{{ total_employees }}</div>
+            <div class="stat-item__label">All Employees</div>
+          </div>
+        </div>
+
+        <a href="#" class="dept-card__link">Go to Operations</a>
+      </div>
+    </div>
+  </div>
+
+  <!-- Two Column Section: Activity Feed + Sidebar -->
+  <div class="dashboard-grid">
+    <!-- Left: Activity Feed -->
+    <div class="activity-feed">
+      <div class="activity-feed__header">
+        <h2 class="activity-feed__title">Recent Activity</h2>
+      </div>
+      <div class="activity-items">
+        {% if recent_activities %}
+          {% for activity in recent_activities %}
+          <div class="activity-item">
+            <div class="activity-icon {{ activity.type }}">
+              {% if activity.type == 'leave' %}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              {% elif activity.type == 'meeting' %}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M23 7l-7 5 7 5V7z"></path>
+                  <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+                </svg>
+              {% elif activity.type == 'news' %}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                  <line x1="4" y1="8" x2="20" y2="8"></line>
+                  <line x1="4" y1="13" x2="20" y2="13"></line>
+                </svg>
+              {% else %}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                </svg>
+              {% endif %}
+            </div>
+            <div class="activity-content">
+              <h3 class="activity-title">{{ activity.title }}</h3>
+              <p class="activity-subtitle">{{ activity.subtitle }}</p>
+              <span class="activity-time">{{ activity.time_ago }}</span>
+            </div>
+          </div>
+          {% endfor %}
+        {% else %}
+          <div class="empty-state">No recent activity</div>
+        {% endif %}
+      </div>
+    </div>
+
+    <!-- Right: Sidebar Panels -->
+    <div class="sidebar-panels">
+      <!-- Who's On Leave Today -->
+      <div class="panel">
+        <div class="panel__header">
+          <h3 class="panel__title">Who's On Leave Today</h3>
+        </div>
+        {% if on_leave_today %}
+          <div class="employee-list">
+            {% for employee in on_leave_today[:3] %}
+            <div class="employee-item">
+              <div class="employee-avatar">
+                {% if employee.photo_url %}
+                  <img src="{{ employee.photo_url }}" alt="{{ employee.name }}">
+                {% else %}
+                  {{ employee.name[0].upper() }}
+                {% endif %}
+              </div>
+              <div class="employee-info">
+                <div class="employee-name">{{ employee.name }}</div>
+                <div class="employee-dept">{{ employee.department }}</div>
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+          {% if on_leave_today|length > 3 %}
+          <div style="text-align: center; margin-top: 1rem; font-size: 0.85rem; color: var(--blue);">
+            +{{ on_leave_today|length - 3 }} more
+          </div>
+          {% endif %}
+        {% else %}
+          <div class="empty-state">Everyone's in today</div>
+        {% endif %}
+      </div>
+
+      <!-- Upcoming Holidays -->
+      <div class="panel">
+        <div class="panel__header">
+          <h3 class="panel__title">Upcoming Holidays</h3>
+        </div>
+        {% if upcoming_holidays %}
+          <div class="holiday-item" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            {% for holiday in upcoming_holidays[:4] %}
+            <div class="holiday-item">
+              <div class="holiday-date">{{ holiday.holiday_date }}</div>
+              <div class="holiday-name">{{ holiday.name }}</div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">No upcoming holidays</div>
+        {% endif %}
+      </div>
+
+      <!-- Announcements -->
+      <div class="panel">
+        <div class="panel__header">
+          <h3 class="panel__title">Announcements</h3>
+          {% if can_announce %}
+          <a href="/admin/post-announcement" class="panel__link">Post</a>
+          {% endif %}
+        </div>
+        {% if announcements %}
+          <div class="announcements-list">
+            {% for announcement in announcements[:3] %}
+            <div class="announcement-item">
+              {% if announcement.category %}
+              <span class="announcement-category">{{ announcement.category }}</span>
+              {% endif %}
+              <h4 class="announcement-title">{{ announcement.title }}</h4>
+              <p class="announcement-message">{{ announcement.message }}</p>
+              <div class="announcement-meta">
+                {{ announcement.posted_by_name }} • {{ announcement.created_at }}
+              </div>
+            </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <div class="empty-state">No announcements</div>
+        {% endif %}
+        {% if can_announce %}
+        <button class="post-announcement-btn" onclick="window.location.href='/admin/post-announcement'">
+          Post Announcement
+        </button>
+        {% endif %}
+      </div>
+    </div>
+  </div>
+
+  <!-- Quick Links -->
+  <h2 style="margin: 2rem 0 1.5rem 0; font-size: 1.2rem; font-weight: 600; color: var(--navy-dark);">Quick Links</h2>
+  <div class="quick-links">
+    <a href="/apply-leave" class="quick-link-card">
+      <div class="quick-link-icon blue">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+          <polyline points="9 22 9 12 15 12 15 22"></polyline>
+        </svg>
+      </div>
+      <div class="quick-link-title">Apply Leave</div>
+    </a>
+
+    <a href="/admin/pending-approvals" class="quick-link-card">
+      <div class="quick-link-icon orange">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <polyline points="20 6 9 17 4 12"></polyline>
+        </svg>
+      </div>
+      <div class="quick-link-title">Approvals</div>
+      {% if pending_leaves > 0 %}
+      <span class="quick-link-badge">{{ pending_leaves }}</span>
+      {% endif %}
+    </a>
+
+    <a href="/b2b/add" class="quick-link-card">
+      <div class="quick-link-icon purple">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 7l-7 5 7 5V7z"></path>
+          <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+        </svg>
+      </div>
+      <div class="quick-link-title">New Meeting</div>
+    </a>
+
+    <a href="/sales" class="quick-link-card">
+      <div class="quick-link-icon orange">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"></line>
+          <line x1="5" y1="12" x2="19" y2="12"></line>
+        </svg>
+      </div>
+      <div class="quick-link-title">Sales Dashboard</div>
+    </a>
+
+    <a href="/admin/org-chart" class="quick-link-card">
+      <div class="quick-link-icon teal">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+          <circle cx="9" cy="7" r="4"></circle>
+          <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+          <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+        </svg>
+      </div>
+      <div class="quick-link-title">Org Chart</div>
+    </a>
+
+    <a href="/admin/calendar" class="quick-link-card">
+      <div class="quick-link-icon green">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
+          <line x1="16" y1="2" x2="16" y2="6"></line>
+          <line x1="8" y1="2" x2="8" y2="6"></line>
+          <line x1="3" y1="10" x2="21" y2="10"></line>
+        </svg>
+      </div>
+      <div class="quick-link-title">Calendar</div>
+    </a>
+  </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+  // Smooth scroll behavior
+  document.querySelectorAll('a[href^="/"]').forEach(link => {
+    if (link.target !== '_blank') {
+      link.addEventListener('click', function(e) {
+        // Allow normal navigation for now
+        // This can be enhanced with AJAX navigation if needed
+      });
+    }
+  });
+
+  // Optional: Add animation on scroll for stats cards
+  const observerOptions = {
+    threshold: 0.1,
+    rootMargin: '0px 0px -50px 0px'
+  };
+
+  const observer = new IntersectionObserver(function(entries) {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.style.opacity = '1';
+        entry.target.style.transform = 'translateY(0)';
+        observer.unobserve(entry.target);
+      }
+    });
+  }, observerOptions);
+
+  document.querySelectorAll('.stat-card, .dept-card, .quick-link-card').forEach(card => {
+    card.style.opacity = '0';
+    card.style.transform = 'translateY(10px)';
+    card.style.transition = 'opacity 0.4s ease, transform 0.4s ease';
+    observer.observe(card);
+  });
+</script>
+{% endblock %}
