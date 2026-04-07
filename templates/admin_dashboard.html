@@ -192,6 +192,10 @@
                 <span class="badge badge-pending">Pending</span>
                 {% elif leave.status == 'approved' %}
                 <span class="badge badge-approved">Approved</span>
+                {% elif leave.status == 'retrieved' %}
+                <span class="badge" style="background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB;">Retrieved</span>
+                {% elif leave.status == 'modified' %}
+                <span class="badge" style="background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;">Modified</span>
                 {% else %}
                 <span class="badge badge-rejected">Rejected</span>
                 {% endif %}
