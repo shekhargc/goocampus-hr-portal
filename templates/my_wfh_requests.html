@@ -1,0 +1,156 @@
+{% extends "base.html" %}
+
+{% block title %}My WFH Requests - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+
+    .data-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        background: white;
+    }
+    .data-table th {
+        background: var(--gray-100);
+        color: var(--navy);
+        padding: 1rem 1.25rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        border-bottom: 2px solid var(--gray-200);
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+    .data-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .data-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .data-table td {
+        padding: 0.9rem 1.25rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem;
+        vertical-align: middle;
+    }
+    .data-table tbody tr:hover { background: var(--gray-50); }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+    .status-badge.pending {
+        background: var(--warning-light);
+        color: #92400E;
+    }
+    .status-badge.approved {
+        background: var(--success-light);
+        color: #166534;
+    }
+    .status-badge.rejected {
+        background: var(--danger-light);
+        color: #991B1B;
+    }
+
+    .reason-cell { max-width: 280px; }
+    .reason-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        color: var(--gray-600);
+        font-size: 0.85rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 4rem 2rem;
+        color: var(--gray-400);
+    }
+    .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
+    .empty-state p { font-size: 0.95rem; }
+
+    .action-link {
+        color: var(--orange);
+        text-decoration: none;
+        font-weight: 600;
+        transition: color 0.2s;
+    }
+    .action-link:hover { color: var(--orange-dark); }
+
+    @media (max-width: 768px) {
+        .data-table { font-size: 0.8rem; }
+        .data-table th { padding: 0.75rem; }
+        .data-table td { padding: 0.6rem; }
+        .reason-cell { max-width: 150px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<h1 class="page-title">My WFH Requests</h1>
+
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if requests %}
+    <div style="overflow-x: auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>From Date</th>
+                <th>To Date</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Approver</th>
+                <th>Created</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                    {{ req.from_date }}
+                </td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                    {{ req.to_date }}
+                </td>
+                <td class="reason-cell">
+                    <div class="reason-text" title="{{ req.reason }}">{{ req.reason }}</div>
+                </td>
+                <td>
+                    {% if req.status == 'pending' %}
+                    <span class="status-badge pending">Pending</span>
+                    {% elif req.status == 'approved' %}
+                    <span class="status-badge approved">Approved</span>
+                    {% elif req.status == 'rejected' %}
+                    <span class="status-badge rejected">Rejected</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.82rem; color: var(--gray-600);">
+                    {{ req.approver_name or '—' }}
+                </td>
+                <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
+                    {{ req.created_at.split(' ')[0] if req.created_at is string else (req.created_at.strftime('%Y-%m-%d') if req.created_at else '—') }}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p>You haven't submitted any WFH requests yet</p>
+        <p style="margin-top: 1rem;"><a href="/apply-wfh" class="action-link">Create your first request</a></p>
+    </div>
+    {% endif %}
+</div>
+
+{% if requests %}
+<div style="margin-top: 2rem;">
+    <a href="/apply-wfh" class="button">New WFH Request</a>
+</div>
+{% endif %}
+{% endblock %}

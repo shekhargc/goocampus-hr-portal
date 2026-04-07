@@ -1,0 +1,170 @@
+{% extends "base.html" %}
+
+{% block title %}Add Project - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .add-proj-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .add-proj-card {
+        background: var(--white);
+        border-radius: 0.85rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        padding: 2rem;
+    }
+
+    .add-proj-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.5rem;
+    }
+
+    .add-proj-subtitle {
+        font-size: 0.9rem;
+        color: var(--gray-500);
+        margin-bottom: 2rem;
+    }
+
+    .add-proj-form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .add-proj-label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--gray-600);
+        margin-bottom: 0.5rem;
+    }
+
+    .add-proj-input,
+    .add-proj-textarea {
+        width: 100%;
+        padding: 0.65rem 0.85rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-family: 'Inter', sans-serif;
+        box-sizing: border-box;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .add-proj-input:focus,
+    .add-proj-textarea:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+    }
+
+    .add-proj-textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .add-proj-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .add-proj-submit {
+        flex: 1;
+        background: var(--orange);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: background 0.15s;
+    }
+
+    .add-proj-submit:hover {
+        background: var(--orange-dark);
+    }
+
+    .add-proj-cancel {
+        flex: 1;
+        background: var(--white);
+        color: var(--gray-600);
+        border: 1px solid var(--gray-300);
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+    }
+
+    .add-proj-cancel:hover {
+        background: var(--gray-50);
+        border-color: var(--gray-400);
+        color: var(--gray-700);
+    }
+
+    @media (max-width: 768px) {
+        .add-proj-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .add-proj-card {
+            padding: 1.5rem;
+        }
+
+        .add-proj-actions {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="add-proj-container">
+    <div class="add-proj-card">
+        <h1 class="add-proj-title">Add New Project</h1>
+        <p class="add-proj-subtitle">Create a new project to organize your products and services.</p>
+
+        <form method="POST" action="/projects/add">
+            <div class="add-proj-form-group">
+                <label class="add-proj-label">Project Name *</label>
+                <input
+                    type="text"
+                    name="name"
+                    class="add-proj-input"
+                    placeholder="Enter project name"
+                    required
+                    maxlength="100"
+                />
+            </div>
+
+            <div class="add-proj-form-group">
+                <label class="add-proj-label">Description</label>
+                <textarea
+                    name="description"
+                    class="add-proj-textarea"
+                    placeholder="Enter project description (optional)"
+                    maxlength="500"
+                ></textarea>
+            </div>
+
+            <div class="add-proj-actions">
+                <button type="submit" class="add-proj-submit">Create Project</button>
+                <a href="/projects" class="add-proj-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

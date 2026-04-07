@@ -1,0 +1,219 @@
+{% extends "base.html" %}
+
+{% block title %}Manage Meeting Types - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 2rem;
+    }
+
+    .add-type-card {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        border: 1px solid var(--gray-200);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .add-form {
+        display: flex;
+        gap: 1rem;
+        align-items: flex-end;
+    }
+
+    .add-form .form-group {
+        flex: 1;
+        margin-bottom: 0;
+    }
+
+    .add-form .button {
+        height: fit-content;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        border: 1px solid var(--gray-200);
+    }
+
+    .data-table thead {
+        background: var(--navy);
+        color: white;
+    }
+
+    .data-table th {
+        padding: 1rem 1.25rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .data-table td {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.95rem;
+    }
+
+    .data-table tbody tr:hover {
+        background: var(--orange-light);
+    }
+
+    .type-name {
+        font-weight: 600;
+        color: var(--navy);
+    }
+
+    .badge-active {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        background: var(--success-light);
+        color: #166534;
+    }
+
+    .badge-inactive {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+        background: var(--gray-100);
+        color: var(--gray-600);
+    }
+
+    .action-form {
+        display: inline;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.6rem 1.2rem;
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        font-size: 0.88rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .btn:hover {
+        background: var(--orange-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(245,130,32,0.25);
+    }
+
+    .btn-toggle {
+        background: var(--gray-500);
+    }
+
+    .btn-toggle:hover {
+        background: var(--gray-600);
+        box-shadow: 0 6px 12px rgba(100,116,139,0.25);
+    }
+
+    .btn-small {
+        padding: 0.4rem 0.9rem;
+        font-size: 0.85rem;
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--gray-500);
+    }
+
+    .empty-state p {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem;">
+    <h1 class="page-title">Manage Meeting Types</h1>
+
+    <!-- Add Meeting Type Form -->
+    <div class="add-type-card">
+        <form method="POST" action="/admin/meeting-types" class="add-form">
+            <div class="form-group" style="flex: 1;">
+                <label for="type_name">Meeting Type Name</label>
+                <input
+                    type="text"
+                    id="type_name"
+                    name="name"
+                    placeholder="e.g., One-on-One, Team Sync, Project Planning"
+                    required
+                >
+            </div>
+            <input type="hidden" name="action" value="add">
+            <button type="submit" class="btn">Add Type</button>
+        </form>
+    </div>
+
+    <!-- Meeting Types Table -->
+    <div style="background: white; border-radius: 1rem; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);">
+        {% if meeting_types %}
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Meeting Type</th>
+                    <th>Status</th>
+                    <th style="text-align: center; width: 120px;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for type in meeting_types %}
+                <tr>
+                    <td class="type-name">{{ type.name }}</td>
+                    <td>
+                        {% if type.is_active %}
+                        <span class="badge-active">Active</span>
+                        {% else %}
+                        <span class="badge-inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align: center;">
+                        <form method="POST" action="/admin/meeting-types" class="action-form">
+                            <input type="hidden" name="action" value="toggle">
+                            <input type="hidden" name="id" value="{{ type.id }}">
+                            {% if type.is_active %}
+                            <button type="submit" class="btn btn-toggle btn-small">Deactivate</button>
+                            {% else %}
+                            <button type="submit" class="btn btn-toggle btn-small">Activate</button>
+                            {% endif %}
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No meeting types found. Add one to get started!</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

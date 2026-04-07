@@ -1,0 +1,419 @@
+{% extends "base.html" %}
+
+{% block title %}Module Access Management - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-title {
+        font-size: 2rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 2rem;
+    }
+
+    .grant-access-card {
+        background: white;
+        border-radius: 1rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        border: 1px solid var(--gray-200);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .card-title {
+        font-size: 1.15rem;
+        font-weight: 600;
+        margin-bottom: 1.25rem;
+        color: var(--navy);
+    }
+
+    .grant-form {
+        display: grid;
+        grid-template-columns: 1fr 1fr 180px;
+        gap: 1rem;
+        align-items: flex-end;
+    }
+
+    @media (max-width: 768px) {
+        .grant-form {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .grant-form .form-group {
+        margin-bottom: 0;
+    }
+
+    .btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        font-size: 0.92rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+        justify-content: center;
+    }
+
+    .btn:hover {
+        background: var(--orange-dark);
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(245,130,32,0.25);
+    }
+
+    .btn-danger {
+        background: var(--danger);
+        padding: 0.4rem 0.9rem;
+        font-size: 0.85rem;
+    }
+
+    .btn-danger:hover {
+        background: #DC2626;
+        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
+    }
+
+    .btn-small {
+        padding: 0.4rem 0.9rem;
+        font-size: 0.85rem;
+    }
+
+    .data-table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+        border-radius: 1rem;
+        overflow: hidden;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        border: 1px solid var(--gray-200);
+    }
+
+    .data-table thead {
+        background: var(--navy);
+        color: white;
+    }
+
+    .data-table th {
+        padding: 1rem 1.25rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .data-table td {
+        padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.95rem;
+    }
+
+    .data-table tbody tr:hover {
+        background: var(--orange-light);
+    }
+
+    .emp-name {
+        font-weight: 600;
+        color: var(--navy);
+    }
+
+    .emp-code {
+        color: var(--gray-500);
+        font-size: 0.9rem;
+    }
+
+    .module-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.4rem 0.9rem;
+        border-radius: 0.4rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: white;
+    }
+
+    .module-sales {
+        background: #0EA5E9;
+    }
+
+    .module-projects {
+        background: #8B5CF6;
+    }
+
+    .module-b2b {
+        background: #06B6D4;
+    }
+
+    .action-form {
+        display: inline;
+    }
+
+    .module-section {
+        margin-bottom: 2.5rem;
+    }
+
+    .section-header {
+        display: flex;
+        align-items: center;
+        gap: 0.85rem;
+        margin-bottom: 1.25rem;
+        padding-bottom: 0.75rem;
+        border-bottom: 2px solid var(--gray-200);
+    }
+
+    .section-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 32px;
+        height: 32px;
+        border-radius: 50%;
+        font-size: 0.88rem;
+        font-weight: 700;
+        color: white;
+    }
+
+    .section-badge-sales {
+        background: #0EA5E9;
+    }
+
+    .section-badge-projects {
+        background: #8B5CF6;
+    }
+
+    .section-badge-b2b {
+        background: #06B6D4;
+    }
+
+    .section-header h2 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: var(--navy);
+    }
+
+    .empty-state {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--gray-500);
+    }
+
+    .empty-state p {
+        font-size: 1rem;
+        margin-bottom: 1rem;
+    }
+
+    .confirm-dialog {
+        display: none;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0,0,0,0.45);
+        z-index: 999;
+        align-items: center;
+        justify-content: center;
+        backdrop-filter: blur(4px);
+    }
+
+    .confirm-dialog.active {
+        display: flex;
+    }
+
+    .confirm-dialog-content {
+        background: white;
+        border-radius: 1rem;
+        padding: 2rem;
+        width: 420px;
+        max-width: 92vw;
+        box-shadow: 0 24px 60px rgba(0,0,0,0.2);
+    }
+
+    .confirm-dialog-title {
+        font-size: 1.25rem;
+        font-weight: 600;
+        color: var(--navy);
+        margin-bottom: 1rem;
+    }
+
+    .confirm-dialog-message {
+        color: var(--gray-600);
+        margin-bottom: 1.75rem;
+        font-size: 0.95rem;
+    }
+
+    .confirm-dialog-actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: flex-end;
+    }
+
+    .btn-cancel {
+        background: var(--gray-300);
+        color: var(--gray-800);
+    }
+
+    .btn-cancel:hover {
+        background: var(--gray-400);
+        box-shadow: 0 6px 12px rgba(203,213,225,0.25);
+    }
+
+    .btn-confirm {
+        background: var(--danger);
+    }
+
+    .btn-confirm:hover {
+        background: #DC2626;
+        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem;">
+    <h1 class="page-title">Module Access Management</h1>
+
+    <!-- Grant Access Form -->
+    <div class="grant-access-card">
+        <h3 class="card-title">Grant New Access</h3>
+        <form method="POST" action="/admin/module-access" class="grant-form">
+            <div class="form-group">
+                <label for="employee_id">Employee</label>
+                <select id="employee_id" name="employee_id" required>
+                    <option value="">Select an employee...</option>
+                    {% for emp in employees %}
+                    <option value="{{ emp.id }}">{{ emp.name }} ({{ emp.emp_code }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label for="module">Module</label>
+                <select id="module" name="module" required>
+                    <option value="">Select a module...</option>
+                    <option value="sales">Sales</option>
+                    <option value="projects">Projects</option>
+                    <option value="b2b_meetings">B2B Meetings</option>
+                </select>
+            </div>
+
+            <input type="hidden" name="action" value="grant">
+            <button type="submit" class="btn">Grant Access</button>
+        </form>
+    </div>
+
+    <!-- Module Access Groups -->
+    {% if access_by_module %}
+        {% for module_name, accesses in access_by_module.items() %}
+        <div class="module-section">
+            <div class="section-header">
+                {% if module_name == 'sales' %}
+                <span class="section-badge section-badge-sales">S</span>
+                <h2>Sales Module</h2>
+                {% elif module_name == 'projects' %}
+                <span class="section-badge section-badge-projects">P</span>
+                <h2>Projects Module</h2>
+                {% elif module_name == 'b2b_meetings' %}
+                <span class="section-badge section-badge-b2b">B</span>
+                <h2>B2B Meetings Module</h2>
+                {% endif %}
+            </div>
+
+            {% if accesses %}
+            <div style="background: white; border-radius: 1rem; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);">
+                <table class="data-table">
+                    <thead>
+                        <tr>
+                            <th>Employee Name</th>
+                            <th>Employee Code</th>
+                            <th>Department</th>
+                            <th>Module</th>
+                            <th style="text-align: center; width: 100px;">Action</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for access in accesses %}
+                        <tr>
+                            <td class="emp-name">{{ access.employee.name }}</td>
+                            <td class="emp-code">{{ access.employee.emp_code }}</td>
+                            <td>{{ access.employee.department or 'N/A' }}</td>
+                            <td>
+                                {% if access.module == 'sales' %}
+                                <span class="module-badge module-sales">Sales</span>
+                                {% elif access.module == 'projects' %}
+                                <span class="module-badge module-projects">Projects</span>
+                                {% elif access.module == 'b2b_meetings' %}
+                                <span class="module-badge module-b2b">B2B Meetings</span>
+                                {% endif %}
+                            </td>
+                            <td style="text-align: center;">
+                                <button
+                                    type="button"
+                                    class="btn btn-danger btn-small"
+                                    onclick="openConfirmDialog('{{ access.employee.id }}', '{{ access.module }}', '{{ access.employee.name }}', '{% if access.module == 'sales' %}Sales{% elif access.module == 'projects' %}Projects{% elif access.module == 'b2b_meetings' %}B2B Meetings{% endif %}')"
+                                >
+                                    Revoke
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="empty-state">
+                <p>No access granted for this module yet.</p>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <p>No module access records found. Grant access to employees to get started!</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Confirmation Dialog -->
+<div id="confirmDialog" class="confirm-dialog">
+    <div class="confirm-dialog-content">
+        <div class="confirm-dialog-title">Revoke Access?</div>
+        <div class="confirm-dialog-message" id="confirmMessage"></div>
+        <div class="confirm-dialog-actions">
+            <button type="button" class="btn btn-cancel btn-small" onclick="closeConfirmDialog()">Cancel</button>
+            <form id="revokeForm" method="POST" action="/admin/module-access" style="display: inline;">
+                <input type="hidden" name="action" value="revoke">
+                <input type="hidden" id="formEmployeeId" name="employee_id">
+                <input type="hidden" id="formModule" name="module">
+                <button type="submit" class="btn btn-confirm btn-small">Revoke Access</button>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script>
+    function openConfirmDialog(employeeId, module, employeeName, moduleName) {
+        document.getElementById('confirmDialog').classList.add('active');
+        document.getElementById('confirmMessage').textContent = `Are you sure you want to revoke ${employeeName}'s access to the ${moduleName} module? This action cannot be undone.`;
+        document.getElementById('formEmployeeId').value = employeeId;
+        document.getElementById('formModule').value = module;
+    }
+
+    function closeConfirmDialog() {
+        document.getElementById('confirmDialog').classList.remove('active');
+    }
+
+    // Close dialog when clicking outside
+    document.getElementById('confirmDialog').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeConfirmDialog();
+        }
+    });
+</script>
+{% endblock %}

@@ -1,0 +1,445 @@
+{% extends "base.html" %}
+
+{% block title %}B2B Trip Details - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .trip-info-container {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .trip-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 2px solid var(--gray-light);
+  }
+
+  .trip-title {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .trip-status {
+    background-color: var(--success);
+    color: white;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 0.9rem;
+  }
+
+  .trip-details-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 2rem;
+    margin-bottom: 2rem;
+  }
+
+  .detail-item {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .detail-label {
+    font-weight: 600;
+    color: var(--gray-dark);
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  .detail-value {
+    font-size: 1.1rem;
+    color: var(--navy);
+    font-weight: 500;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    width: fit-content;
+  }
+
+  .badge-outstation {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+  }
+
+  .badge-city {
+    background-color: #DCFCE7;
+    color: #15803D;
+  }
+
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-top: 2rem;
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--orange);
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    overflow: hidden;
+    margin-bottom: 2rem;
+  }
+
+  .data-table thead {
+    background-color: var(--gray-lightest);
+    border-bottom: 2px solid var(--gray-light);
+  }
+
+  .data-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--navy);
+    font-size: 0.95rem;
+  }
+
+  .data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--gray-lightest);
+    color: var(--gray-dark);
+    font-size: 0.95rem;
+  }
+
+  .data-table tbody tr:hover {
+    background-color: #fafafa;
+  }
+
+  .meeting-outcome-section {
+    background: var(--gray-lightest);
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-top: 1rem;
+  }
+
+  .outcome-header {
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .outcome-toggle {
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 1.1rem;
+    color: var(--orange);
+  }
+
+  .outcome-form {
+    background: white;
+    padding: 1rem;
+    border-radius: 4px;
+    display: none;
+  }
+
+  .outcome-form.open {
+    display: block;
+  }
+
+  .form-group {
+    margin-bottom: 1rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .form-group textarea {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    resize: vertical;
+    min-height: 80px;
+    box-sizing: border-box;
+  }
+
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+  }
+
+  .btn-submit-outcome {
+    background-color: var(--orange);
+    color: white;
+    border: none;
+    padding: 0.6rem 1.2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+  }
+
+  .btn-submit-outcome:hover {
+    background-color: #E26E00;
+  }
+
+  .add-meeting-section {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 2rem;
+    margin-top: 2rem;
+  }
+
+  .add-meeting-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .add-meeting-form input,
+  .add-meeting-form select {
+    padding: 0.75rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
+  }
+
+  .add-meeting-form input:focus,
+  .add-meeting-form select:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+  }
+
+  .form-group-full {
+    grid-column: 1 / -1;
+  }
+
+  .btn-add {
+    background-color: var(--success);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    font-size: 0.95rem;
+    transition: background-color 0.2s;
+    grid-column: 1 / -1;
+    justify-self: flex-start;
+  }
+
+  .btn-add:hover {
+    background-color: #059669;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 2rem;
+    color: var(--gray-dark);
+    background: var(--gray-lightest);
+    border-radius: 6px;
+  }
+
+  .required {
+    color: var(--danger);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">B2B Trip Details</div>
+
+<div class="trip-info-container">
+  <div class="trip-header">
+    <div>
+      <div class="trip-title">{{ trip.employee_name }}</div>
+    </div>
+    <div class="trip-status">{{ trip.status }}</div>
+  </div>
+
+  <div class="trip-details-grid">
+    <div class="detail-item">
+      <div class="detail-label">Trip Type</div>
+      <div class="detail-value">
+        {% if trip.trip_type == 'outstation' %}
+          <span class="badge badge-outstation">Outstation</span>
+        {% else %}
+          <span class="badge badge-city">City</span>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="detail-item">
+      <div class="detail-label">From Date</div>
+      <div class="detail-value">{{ trip.from_date.strftime('%B %d, %Y') }}</div>
+    </div>
+
+    <div class="detail-item">
+      <div class="detail-label">To Date</div>
+      <div class="detail-value">{{ trip.to_date.strftime('%B %d, %Y') }}</div>
+    </div>
+
+    <div class="detail-item">
+      <div class="detail-label">Travel Date</div>
+      <div class="detail-value">{{ trip.travel_date.strftime('%B %d, %Y') }}</div>
+    </div>
+
+    <div class="detail-item">
+      <div class="detail-label">Project</div>
+      <div class="detail-value">{{ trip.project_name }}</div>
+    </div>
+  </div>
+
+  {% if trip.notes %}
+    <div class="detail-item">
+      <div class="detail-label">Notes</div>
+      <div class="detail-value">{{ trip.notes }}</div>
+    </div>
+  {% endif %}
+</div>
+
+<h2 class="section-title">Meetings</h2>
+
+{% if trip.meetings %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Date</th>
+        <th>Type</th>
+        <th>Meeting With</th>
+        <th>Location</th>
+        <th>Contact Person</th>
+        <th>Contact Phone</th>
+        <th>Outcome</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for meeting in trip.meetings %}
+        <tr>
+          <td>{{ meeting.meeting_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ meeting.meeting_type_name }}</td>
+          <td>{{ meeting.meeting_with }}</td>
+          <td>{{ meeting.meeting_location }}</td>
+          <td>{{ meeting.contact_person }}</td>
+          <td>{{ meeting.contact_phone }}</td>
+          <td>{{ meeting.outcome or 'Pending' }}</td>
+        </tr>
+
+        <tr>
+          <td colspan="7">
+            <div class="meeting-outcome-section">
+              <div class="outcome-header">
+                <button class="outcome-toggle" onclick="toggleOutcomeForm({{ meeting.id }})">▼</button>
+                <span>Add/Update Meeting Outcome</span>
+              </div>
+              <form method="POST" action="/b2b/meeting/{{ meeting.id }}/outcome" class="outcome-form" id="outcome-form-{{ meeting.id }}">
+                <div class="form-group">
+                  <label for="outcome_{{ meeting.id }}">Outcome</label>
+                  <textarea id="outcome_{{ meeting.id }}" name="outcome" placeholder="Describe the meeting outcome...">{{ meeting.outcome or '' }}</textarea>
+                </div>
+                <div class="form-group">
+                  <label for="meeting_notes_{{ meeting.id }}">Notes</label>
+                  <textarea id="meeting_notes_{{ meeting.id }}" name="notes" placeholder="Add any additional notes...">{{ meeting.notes or '' }}</textarea>
+                </div>
+                <button type="submit" class="btn-submit-outcome">Save Outcome</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="empty-state">
+    <p>No meetings scheduled for this trip yet</p>
+  </div>
+{% endif %}
+
+<div class="add-meeting-section">
+  <h3 class="section-title">Add New Meeting</h3>
+
+  <form method="POST" action="/b2b/{{ trip.id }}/add-meeting" class="add-meeting-form">
+    <div class="form-group">
+      <label for="new_meeting_date">Meeting Date <span class="required">*</span></label>
+      <input type="date" id="new_meeting_date" name="meeting_date" required>
+    </div>
+
+    <div class="form-group">
+      <label for="new_meeting_with">Meeting With <span class="required">*</span></label>
+      <input type="text" id="new_meeting_with" name="meeting_with" placeholder="Client/Partner name" required>
+    </div>
+
+    <div class="form-group">
+      <label for="new_meeting_type_id">Meeting Type <span class="required">*</span></label>
+      <select id="new_meeting_type_id" name="meeting_type_id" required>
+        <option value="">-- Select type --</option>
+        {% for type in meeting_types %}
+          <option value="{{ type.id }}">{{ type.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-group">
+      <label for="new_meeting_location">Location <span class="required">*</span></label>
+      <input type="text" id="new_meeting_location" name="meeting_location" placeholder="Meeting location" required>
+    </div>
+
+    <div class="form-group">
+      <label for="new_contact_person">Contact Person <span class="required">*</span></label>
+      <input type="text" id="new_contact_person" name="contact_person" placeholder="Contact name" required>
+    </div>
+
+    <div class="form-group">
+      <label for="new_contact_phone">Contact Phone <span class="required">*</span></label>
+      <input type="tel" id="new_contact_phone" name="contact_phone" placeholder="Phone number" required>
+    </div>
+
+    <div class="form-group">
+      <label for="new_meeting_project_id">Project <span class="required">*</span></label>
+      <select id="new_meeting_project_id" name="meeting_project_id" required>
+        <option value="">-- Select project --</option>
+        {% for project in projects %}
+          <option value="{{ project.id }}">{{ project.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <button type="submit" class="btn-add">Add Meeting</button>
+  </form>
+</div>
+
+<script>
+  function toggleOutcomeForm(meetingId) {
+    const form = document.getElementById('outcome-form-' + meetingId);
+    form.classList.toggle('open');
+  }
+</script>
+{% endblock %}

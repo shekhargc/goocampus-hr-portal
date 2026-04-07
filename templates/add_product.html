@@ -1,0 +1,181 @@
+{% extends "base.html" %}
+
+{% block title %}Add Product/Service - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .add-prod-container {
+        max-width: 600px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .add-prod-card {
+        background: var(--white);
+        border-radius: 0.85rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        padding: 2rem;
+    }
+
+    .add-prod-title {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.5rem;
+    }
+
+    .add-prod-subtitle {
+        font-size: 0.9rem;
+        color: var(--gray-500);
+        margin-bottom: 2rem;
+    }
+
+    .add-prod-form-group {
+        margin-bottom: 1.5rem;
+    }
+
+    .add-prod-label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.85rem;
+        color: var(--gray-600);
+        margin-bottom: 0.5rem;
+    }
+
+    .add-prod-input,
+    .add-prod-textarea,
+    .add-prod-select {
+        width: 100%;
+        padding: 0.65rem 0.85rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-family: 'Inter', sans-serif;
+        box-sizing: border-box;
+        transition: border-color 0.15s, box-shadow 0.15s;
+    }
+
+    .add-prod-input:focus,
+    .add-prod-textarea:focus,
+    .add-prod-select:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+    }
+
+    .add-prod-textarea {
+        min-height: 120px;
+        resize: vertical;
+    }
+
+    .add-prod-actions {
+        display: flex;
+        gap: 1rem;
+        margin-top: 2rem;
+    }
+
+    .add-prod-submit {
+        flex: 1;
+        background: var(--orange);
+        color: white;
+        border: none;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: background 0.15s;
+    }
+
+    .add-prod-submit:hover {
+        background: var(--orange-dark);
+    }
+
+    .add-prod-cancel {
+        flex: 1;
+        background: var(--white);
+        color: var(--gray-600);
+        border: 1px solid var(--gray-300);
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.15s;
+    }
+
+    .add-prod-cancel:hover {
+        background: var(--gray-50);
+        border-color: var(--gray-400);
+        color: var(--gray-700);
+    }
+
+    @media (max-width: 768px) {
+        .add-prod-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .add-prod-card {
+            padding: 1.5rem;
+        }
+
+        .add-prod-actions {
+            flex-direction: column;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="add-prod-container">
+    <div class="add-prod-card">
+        <h1 class="add-prod-title">Add Product/Service</h1>
+        <p class="add-prod-subtitle">Add a new product or service to <strong>{{ project.name }}</strong>.</p>
+
+        <form method="POST" action="/products/add/{{ project.id }}">
+            <div class="add-prod-form-group">
+                <label class="add-prod-label">Name *</label>
+                <input
+                    type="text"
+                    name="name"
+                    class="add-prod-input"
+                    placeholder="Enter product/service name"
+                    required
+                    maxlength="100"
+                />
+            </div>
+
+            <div class="add-prod-form-group">
+                <label class="add-prod-label">Description</label>
+                <textarea
+                    name="description"
+                    class="add-prod-textarea"
+                    placeholder="Enter product/service description (optional)"
+                    maxlength="500"
+                ></textarea>
+            </div>
+
+            <div class="add-prod-form-group">
+                <label class="add-prod-label">Type *</label>
+                <select name="type" class="add-prod-select" required>
+                    <option value="">-- Select Type --</option>
+                    <option value="product">Product</option>
+                    <option value="service">Service</option>
+                </select>
+            </div>
+
+            <div class="add-prod-actions">
+                <button type="submit" class="add-prod-submit">Add Product/Service</button>
+                <a href="/projects/{{ project.id }}" class="add-prod-cancel">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

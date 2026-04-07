@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+
+{% block title %}Sales News & Updates - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .news-cards-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .news-card {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    transition: box-shadow 0.2s, border-color 0.2s;
+  }
+
+  .news-card:hover {
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: var(--orange);
+  }
+
+  .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1rem;
+  }
+
+  .card-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin: 0;
+    flex: 1;
+  }
+
+  .category-badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    white-space: nowrap;
+    text-transform: capitalize;
+  }
+
+  .badge-general {
+    background-color: #E5E7EB;
+    color: #374151;
+  }
+
+  .badge-achievement {
+    background-color: #DCFCE7;
+    color: #15803D;
+  }
+
+  .badge-update {
+    background-color: #FEF3C7;
+    color: #B45309;
+  }
+
+  .badge-alert {
+    background-color: #FEE2E2;
+    color: #991B1B;
+  }
+
+  .card-content {
+    color: var(--gray-dark);
+    font-size: 0.95rem;
+    line-height: 1.6;
+    margin-bottom: 1rem;
+    flex: 1;
+    display: -webkit-box;
+    -webkit-line-clamp: 3;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+
+  .card-meta {
+    font-size: 0.85rem;
+    color: var(--gray-medium);
+    margin-bottom: 1rem;
+    border-bottom: 1px solid var(--gray-lightest);
+    padding-bottom: 1rem;
+  }
+
+  .card-footer {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .delete-form {
+    margin: 0;
+  }
+
+  .btn-delete {
+    background-color: var(--danger);
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+  }
+
+  .btn-delete:hover {
+    background-color: #DC2626;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--gray-dark);
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 1.1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .no-news-message {
+    color: var(--gray-medium);
+    font-style: italic;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">Sales News & Updates</div>
+  {% if can_post %}
+    <a href="/sales/news/add" class="btn btn-primary">Post News</a>
+  {% endif %}
+</div>
+
+{% if news_items %}
+  <div class="news-cards-container">
+    {% for item in news_items %}
+      <div class="news-card">
+        <div class="card-header">
+          <h3 class="card-title">{{ item.title }}</h3>
+          <span class="category-badge badge-{{ item.category }}">{{ item.category }}</span>
+        </div>
+        <div class="card-content">{{ item.content }}</div>
+        <div class="card-meta">
+          Posted by <strong>{{ item.posted_by_name }}</strong> on {{ item.created_at.strftime('%B %d, %Y') }}
+        </div>
+        {% if can_post %}
+          <div class="card-footer">
+            <form method="POST" action="/sales/news/delete/{{ item.id }}" class="delete-form" onsubmit="return confirm('Are you sure you want to delete this news item?');">
+              <button type="submit" class="btn-delete">Delete</button>
+            </form>
+          </div>
+        {% endif %}
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📰</div>
+    <p>No news updates yet</p>
+    {% if can_post %}
+      <p><a href="/sales/news/add" class="btn btn-primary">Be the first to post news</a></p>
+    {% else %}
+      <p class="no-news-message">Check back soon for updates</p>
+    {% endif %}
+  </div>
+{% endif %}
+{% endblock %}

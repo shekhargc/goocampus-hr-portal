@@ -1,0 +1,465 @@
+{% extends "base.html" %}
+
+{% block title %}{{ project.name }} - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .proj-detail-container {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .proj-detail-header {
+        margin-bottom: 2rem;
+    }
+
+    .proj-detail-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.5rem;
+    }
+
+    .proj-detail-meta {
+        display: flex;
+        align-items: center;
+        gap: 1rem;
+        flex-wrap: wrap;
+        margin-top: 0.75rem;
+        font-size: 0.9rem;
+        color: var(--gray-600);
+    }
+
+    .proj-detail-badge {
+        display: inline-block;
+        padding: 0.2rem 0.65rem;
+        border-radius: 0.3rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+    }
+
+    .proj-detail-badge-active {
+        background: rgba(16, 185, 129, 0.1);
+        color: #059669;
+    }
+
+    .proj-detail-badge-inactive {
+        background: rgba(148, 163, 184, 0.15);
+        color: var(--gray-500);
+    }
+
+    .proj-detail-content {
+        background: var(--white);
+        border-radius: 0.85rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        padding: 2rem;
+        margin-bottom: 2rem;
+    }
+
+    .proj-detail-section {
+        margin-bottom: 2rem;
+    }
+
+    .proj-detail-section:last-child {
+        margin-bottom: 0;
+    }
+
+    .proj-detail-section-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.75rem;
+    }
+
+    .proj-detail-description {
+        font-size: 0.9rem;
+        color: var(--gray-600);
+        line-height: 1.6;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .proj-detail-info {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 1.5rem;
+    }
+
+    .proj-detail-info-item {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .proj-detail-info-label {
+        font-size: 0.75rem;
+        color: var(--gray-500);
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.35rem;
+    }
+
+    .proj-detail-info-value {
+        font-size: 0.95rem;
+        color: var(--navy);
+        font-weight: 600;
+    }
+
+    .proj-detail-edit-form {
+        background: var(--gray-50);
+        padding: 1.5rem;
+        border-radius: 0.5rem;
+        margin-top: 1.5rem;
+    }
+
+    .proj-detail-form-title {
+        font-size: 0.9rem;
+        font-weight: 600;
+        color: var(--navy);
+        margin-bottom: 1rem;
+    }
+
+    .proj-detail-form-group {
+        margin-bottom: 1rem;
+    }
+
+    .proj-detail-form-group:last-child {
+        margin-bottom: 0;
+    }
+
+    .proj-detail-label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--gray-600);
+        margin-bottom: 0.4rem;
+    }
+
+    .proj-detail-input,
+    .proj-detail-textarea,
+    .proj-detail-select {
+        width: 100%;
+        padding: 0.6rem 0.8rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.4rem;
+        font-size: 0.85rem;
+        font-family: 'Inter', sans-serif;
+        box-sizing: border-box;
+        transition: border-color 0.15s;
+    }
+
+    .proj-detail-input:focus,
+    .proj-detail-textarea:focus,
+    .proj-detail-select:focus {
+        outline: none;
+        border-color: var(--orange);
+    }
+
+    .proj-detail-textarea {
+        min-height: 100px;
+        resize: vertical;
+    }
+
+    .proj-detail-form-actions {
+        display: flex;
+        gap: 0.75rem;
+        margin-top: 1.25rem;
+    }
+
+    .proj-detail-form-submit {
+        background: var(--orange);
+        color: white;
+        border: none;
+        padding: 0.55rem 1.25rem;
+        border-radius: 0.4rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: background 0.15s;
+    }
+
+    .proj-detail-form-submit:hover {
+        background: var(--orange-dark);
+    }
+
+    .proj-detail-form-reset {
+        background: var(--white);
+        color: var(--gray-600);
+        border: 1px solid var(--gray-300);
+        padding: 0.55rem 1.25rem;
+        border-radius: 0.4rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+        transition: all 0.15s;
+    }
+
+    .proj-detail-form-reset:hover {
+        background: var(--gray-100);
+        border-color: var(--gray-400);
+    }
+
+    .proj-products-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .proj-products-table thead {
+        background: var(--gray-50);
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .proj-products-table th {
+        padding: 0.9rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.8rem;
+        color: var(--gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+    }
+
+    .proj-products-table td {
+        padding: 1rem 0.9rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.9rem;
+        color: var(--gray-700);
+    }
+
+    .proj-products-table tbody tr:hover {
+        background: var(--gray-50);
+    }
+
+    .proj-products-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .proj-product-name {
+        font-weight: 600;
+        color: var(--navy);
+    }
+
+    .proj-product-type-badge {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 0.3rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: rgba(245, 130, 32, 0.1);
+        color: #D96E0E;
+    }
+
+    .proj-product-status-active {
+        color: #059669;
+        font-weight: 600;
+    }
+
+    .proj-product-status-inactive {
+        color: var(--gray-500);
+        font-weight: 600;
+    }
+
+    .proj-empty-products {
+        text-align: center;
+        padding: 2rem;
+        color: var(--gray-400);
+        font-size: 0.9rem;
+    }
+
+    .proj-products-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .proj-add-product-btn {
+        background: var(--orange);
+        color: white;
+        border: none;
+        padding: 0.6rem 1.25rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        display: inline-block;
+        transition: background 0.15s;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .proj-add-product-btn:hover {
+        background: var(--orange-dark);
+    }
+
+    @media (max-width: 768px) {
+        .proj-detail-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .proj-detail-content {
+            padding: 1.5rem;
+        }
+
+        .proj-detail-info {
+            grid-template-columns: 1fr;
+        }
+
+        .proj-products-table {
+            font-size: 0.85rem;
+        }
+
+        .proj-products-table th,
+        .proj-products-table td {
+            padding: 0.75rem 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="proj-detail-container">
+    <!-- Project Header -->
+    <div class="proj-detail-header">
+        <h1 class="proj-detail-title">{{ project.name }}</h1>
+        <div class="proj-detail-meta">
+            {% if project.is_active == 1 %}
+            <span class="proj-detail-badge proj-detail-badge-active">Active</span>
+            {% else %}
+            <span class="proj-detail-badge proj-detail-badge-inactive">Inactive</span>
+            {% endif %}
+            <span>Created by {{ project.created_by_name or 'Unknown' }}</span>
+        </div>
+    </div>
+
+    <!-- Project Details Card -->
+    <div class="proj-detail-content">
+        <!-- Description Section -->
+        <div class="proj-detail-section">
+            <div class="proj-detail-section-title">Description</div>
+            <div class="proj-detail-description">
+                {{ project.description or 'No description provided.' }}
+            </div>
+        </div>
+
+        <!-- Project Info -->
+        <div class="proj-detail-section">
+            <div class="proj-detail-info">
+                <div class="proj-detail-info-item">
+                    <div class="proj-detail-info-label">Status</div>
+                    <div class="proj-detail-info-value">
+                        {% if project.is_active == 1 %}
+                        Active
+                        {% else %}
+                        Inactive
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="proj-detail-info-item">
+                    <div class="proj-detail-info-label">Created By</div>
+                    <div class="proj-detail-info-value">{{ project.created_by_name or 'Unknown' }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Edit Form (if can_manage) -->
+        {% if can_manage %}
+        <div class="proj-detail-section" style="border-top: 1px solid var(--gray-200); padding-top: 2rem; margin-top: 2rem;">
+            <div class="proj-detail-edit-form">
+                <div class="proj-detail-form-title">Edit Project</div>
+                <form method="POST" action="/projects/{{ project.id }}/edit">
+                    <div class="proj-detail-form-group">
+                        <label class="proj-detail-label">Project Name</label>
+                        <input
+                            type="text"
+                            name="name"
+                            class="proj-detail-input"
+                            value="{{ project.name }}"
+                            required
+                            maxlength="100"
+                        />
+                    </div>
+
+                    <div class="proj-detail-form-group">
+                        <label class="proj-detail-label">Description</label>
+                        <textarea
+                            name="description"
+                            class="proj-detail-textarea"
+                            maxlength="500"
+                        >{{ project.description or '' }}</textarea>
+                    </div>
+
+                    <div class="proj-detail-form-group">
+                        <label class="proj-detail-label">Status</label>
+                        <select name="is_active" class="proj-detail-select">
+                            <option value="1" {% if project.is_active == 1 %}selected{% endif %}>Active</option>
+                            <option value="0" {% if project.is_active == 0 %}selected{% endif %}>Inactive</option>
+                        </select>
+                    </div>
+
+                    <div class="proj-detail-form-actions">
+                        <button type="submit" class="proj-detail-form-submit">Save Changes</button>
+                        <button type="reset" class="proj-detail-form-reset">Reset</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Products & Services Section -->
+    <div class="proj-detail-content">
+        <div class="proj-detail-section">
+            <div class="proj-products-header">
+                <div class="proj-detail-section-title">Products & Services</div>
+                {% if can_manage %}
+                <a href="/products/add/{{ project.id }}" class="proj-add-product-btn">+ Add Product/Service</a>
+                {% endif %}
+            </div>
+
+            {% if products %}
+            <table class="proj-products-table">
+                <thead>
+                    <tr>
+                        <th>Name</th>
+                        <th>Type</th>
+                        <th>Description</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for product in products %}
+                    <tr>
+                        <td class="proj-product-name">{{ product.name }}</td>
+                        <td>
+                            <span class="proj-product-type-badge">
+                                {{ 'Service' if product.type == 'service' else 'Product' }}
+                            </span>
+                        </td>
+                        <td>{{ product.description or '-' }}</td>
+                        <td>
+                            {% if product.is_active == 1 %}
+                            <span class="proj-product-status-active">Active</span>
+                            {% else %}
+                            <span class="proj-product-status-inactive">Inactive</span>
+                            {% endif %}
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="proj-empty-products">
+                No products or services yet.
+                {% if can_manage %}
+                <a href="/products/add/{{ project.id }}" style="color: var(--orange); text-decoration: none; font-weight: 600;">Add one now</a>
+                {% endif %}
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

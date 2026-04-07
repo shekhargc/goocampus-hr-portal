@@ -1,0 +1,336 @@
+{% extends "base.html" %}
+
+{% block title %}WFH Approvals - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+
+    .filter-bar {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+        background: white; padding: 1.25rem; border-radius: 0.75rem;
+        border: 1px solid var(--gray-200); margin-bottom: 1.5rem;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filter-group label {
+        font-size: 0.72rem; font-weight: 700; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .filter-group input, .filter-group select {
+        padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.85rem; min-width: 140px;
+        background: white; color: var(--navy);
+    }
+    .filter-group input:focus, .filter-group select:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px rgba(245,130,32,0.15);
+    }
+    .filter-actions { display: flex; gap: 0.5rem; align-items: flex-end; }
+    .btn-filter {
+        padding: 0.5rem 1rem; border: none; border-radius: 0.4rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-filter-apply { background: var(--orange); color: white; }
+    .btn-filter-apply:hover { background: #e0741a; }
+    .btn-filter-clear { background: var(--gray-200); color: var(--gray-600); }
+    .btn-filter-clear:hover { background: var(--gray-300); }
+
+    .stat-pills { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat-pill {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.6rem 1rem; border-radius: 0.5rem;
+        border: 1px solid var(--gray-200); background: white;
+        font-size: 0.85rem; color: var(--gray-600);
+    }
+    .stat-pill .count {
+        font-size: 1.1rem; font-weight: 700;
+    }
+    .stat-pill.total .count { color: var(--navy); }
+    .stat-pill.pending .count { color: #D97706; }
+    .stat-pill.approved .count { color: var(--success); }
+    .stat-pill.rejected .count { color: var(--danger); }
+
+    .data-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+    }
+    .data-table th {
+        background: var(--navy);
+        color: white;
+        padding: 0.75rem 1rem;
+        font-size: 0.78rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.4px;
+        position: sticky;
+        top: 0;
+        z-index: 5;
+    }
+    .data-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .data-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .data-table td {
+        padding: 0.7rem 1rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem;
+        vertical-align: middle;
+    }
+    .data-table tbody tr:hover { background: #FFF7ED; }
+
+    .emp-cell { display: flex; align-items: center; gap: 0.6rem; }
+    .emp-avatar {
+        width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
+        border: 2px solid var(--gray-200); flex-shrink: 0;
+    }
+    .emp-avatar-placeholder {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: var(--navy); color: white; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+    }
+    .emp-name { font-weight: 600; color: var(--navy); font-size: 0.85rem; }
+    .emp-code { font-size: 0.72rem; color: var(--gray-400); }
+
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        padding: 0.3rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.82rem;
+        font-weight: 600;
+    }
+    .status-badge.pending {
+        background: var(--warning-light);
+        color: #92400E;
+    }
+    .status-badge.approved {
+        background: var(--success-light);
+        color: #166534;
+    }
+    .status-badge.rejected {
+        background: var(--danger-light);
+        color: #991B1B;
+    }
+
+    .reason-cell { max-width: 220px; }
+    .reason-text {
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: var(--gray-600); font-size: 0.85rem;
+    }
+
+    .action-cell {
+        white-space: nowrap;
+    }
+    .action-cell form {
+        display: inline-block;
+    }
+
+    .action-row {
+        display: flex; gap: 0.5rem; align-items: center;
+    }
+
+    .btn-action {
+        padding: 0.4rem 0.9rem;
+        font-size: 0.75rem;
+        font-weight: 600;
+        border: none;
+        border-radius: 0.35rem;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .btn-approve {
+        background: var(--success-light);
+        color: #166534;
+        border: 1px solid #BBF7D0;
+    }
+    .btn-approve:hover {
+        background: #DCF8EB;
+    }
+
+    .btn-reject {
+        background: var(--danger-light);
+        color: #991B1B;
+        border: 1px solid #FECACA;
+    }
+    .btn-reject:hover {
+        background: #FED2D2;
+    }
+
+    .rejection-reason-input {
+        display: none;
+        margin-top: 0.5rem;
+    }
+    .rejection-reason-input.visible {
+        display: block;
+    }
+
+    .rejection-reason-input input {
+        width: 100%;
+        padding: 0.5rem;
+        font-size: 0.82rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.4rem;
+        margin-bottom: 0.5rem;
+    }
+
+    .rejection-reason-input button {
+        padding: 0.3rem 0.6rem;
+        font-size: 0.75rem;
+        margin-right: 0.3rem;
+    }
+
+    .empty-state {
+        text-align: center; padding: 4rem 2rem; color: var(--gray-400);
+    }
+    .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
+    .empty-state p { font-size: 0.95rem; }
+
+    .results-info {
+        font-size: 0.82rem; color: var(--gray-500); margin-bottom: 0.75rem;
+    }
+
+    @media (max-width: 768px) {
+        .filter-bar { flex-direction: column; }
+        .filter-group input, .filter-group select { min-width: 100%; }
+        .stat-pills { gap: 0.5rem; }
+        .stat-pill { padding: 0.4rem 0.75rem; font-size: 0.78rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>WFH Approvals</h1>
+    <p>Review and approve work from home requests from your team</p>
+</div>
+
+<!-- Filter Bar -->
+<form method="GET" class="filter-bar">
+    <div class="filter-group">
+        <label>Employee</label>
+        <input type="text" name="employee" value="{{ f_employee }}" placeholder="Name or code...">
+    </div>
+    <div class="filter-group">
+        <label>Department</label>
+        <input type="text" name="department" value="{{ f_department }}" placeholder="Department...">
+    </div>
+    <div class="filter-group">
+        <label>Status</label>
+        <select name="status">
+            <option value="">All Status</option>
+            <option value="pending" {% if f_status == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="approved" {% if f_status == 'approved' %}selected{% endif %}>Approved</option>
+            <option value="rejected" {% if f_status == 'rejected' %}selected{% endif %}>Rejected</option>
+        </select>
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn-filter btn-filter-apply">Filter</button>
+        <a href="/wfh/approvals" class="btn-filter btn-filter-clear" style="text-decoration: none;">Clear</a>
+    </div>
+</form>
+
+<!-- Summary Pills -->
+<div class="stat-pills">
+    <div class="stat-pill total">
+        <span class="count">{{ total_count or 0 }}</span> Total
+    </div>
+    <div class="stat-pill pending">
+        <span class="count">{{ pending_count or 0 }}</span> Pending
+    </div>
+    <div class="stat-pill approved">
+        <span class="count">{{ approved_count or 0 }}</span> Approved
+    </div>
+    <div class="stat-pill rejected">
+        <span class="count">{{ rejected_count or 0 }}</span> Rejected
+    </div>
+</div>
+
+<!-- WFH Requests Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if requests %}
+    <div style="overflow-x: auto;">
+    <table class="data-table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Emp Code</th>
+                <th>Department</th>
+                <th>From Date</th>
+                <th>To Date</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for req in requests %}
+            <tr>
+                <td>
+                    <div class="emp-cell">
+                        {% if req.photo_url %}
+                        <img src="/static/photos/{{ req.photo_url }}" class="emp-avatar" alt="">
+                        {% else %}
+                        <div class="emp-avatar-placeholder">{{ req.employee_name[0] if req.employee_name else '?' }}</div>
+                        {% endif %}
+                        <div>
+                            <div class="emp-name">{{ req.employee_name }}</div>
+                        </div>
+                    </div>
+                </td>
+                <td style="font-size: 0.82rem; color: var(--gray-500);">{{ req.emp_code }}</td>
+                <td style="font-size: 0.82rem; color: var(--gray-500);">{{ req.department or '—' }}</td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.from_date }}</td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.to_date }}</td>
+                <td class="reason-cell">
+                    <div class="reason-text" title="{{ req.reason }}">{{ req.reason }}</div>
+                </td>
+                <td>
+                    {% if req.status == 'pending' %}
+                    <span class="status-badge pending">Pending</span>
+                    {% elif req.status == 'approved' %}
+                    <span class="status-badge approved">Approved</span>
+                    {% elif req.status == 'rejected' %}
+                    <span class="status-badge rejected">Rejected</span>
+                    {% endif %}
+                </td>
+                <td class="action-cell">
+                    {% if req.status == 'pending' %}
+                    <div class="action-row">
+                        <form method="POST" action="/wfh/approve/{{ req.id }}" style="display: inline;">
+                            <input type="hidden" name="action" value="approve">
+                            <button type="submit" class="btn-action btn-approve">Approve</button>
+                        </form>
+                        <button type="button" class="btn-action btn-reject" onclick="toggleRejectForm({{ req.id }})">Reject</button>
+                    </div>
+                    <div class="rejection-reason-input" id="reject-form-{{ req.id }}">
+                        <form method="POST" action="/wfh/approve/{{ req.id }}">
+                            <input type="hidden" name="action" value="reject">
+                            <input type="text" name="rejection_reason" placeholder="Reason for rejection..." required>
+                            <button type="submit" class="btn-action btn-reject">Confirm Reject</button>
+                            <button type="button" class="btn-action" style="background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-300);" onclick="toggleRejectForm({{ req.id }})">Cancel</button>
+                        </form>
+                    </div>
+                    {% else %}
+                    <span style="font-size: 0.82rem; color: var(--gray-400);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p>No WFH requests found matching your filters</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function toggleRejectForm(reqId) {
+    const form = document.getElementById('reject-form-' + reqId);
+    form.classList.toggle('visible');
+}
+</script>
+{% endblock %}

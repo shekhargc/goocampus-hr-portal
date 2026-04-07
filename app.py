@@ -84,6 +84,32 @@ def can_approve_leave(approver, leave_employee, conn):
 
     return False, 'Not authorized to approve this leave'
 
+def has_module_access(user, module):
+    """Check if user has access to a CRM module (sales, projects, b2b_meetings).
+    Admin and management always have access. Others need explicit grant."""
+    if user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES:
+        return True
+    conn = get_db()
+    access = conn.execute(
+        'SELECT id FROM module_access WHERE employee_id = ? AND module = ?',
+        (user['id'], module)
+    ).fetchone()
+    conn.close()
+    return access is not None
+
+def sales_access_required(f):
+    """Decorator requiring sales module access."""
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        user = get_user()
+        if not has_module_access(user, 'sales'):
+            flash('Sales module access required', 'error')
+            return redirect(url_for('dashboard'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 def get_user():
     if 'user_id' not in session:
         return None
@@ -112,13 +138,15 @@ def get_pending_team_count(user_id):
 
 @app.context_processor
 def inject_manager_status():
-    """Make is_manager and pending_team_count available in all templates"""
+    """Make is_manager, pending_team_count, and has_sales_access available in all templates"""
     if 'user_id' in session:
         user_id = session['user_id']
+        user = get_user()
         mgr = is_manager(user_id)
         pending_team = get_pending_team_count(user_id) if mgr else 0
-        return {'is_manager': mgr, 'pending_team_count': pending_team}
-    return {'is_manager': False, 'pending_team_count': 0}
+        sales_access = has_module_access(user, 'sales') if user else False
+        return {'is_manager': mgr, 'pending_team_count': pending_team, 'has_sales_access': sales_access}
+    return {'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False}
 
 def calculate_monthly_balance(employee_id, year, month):
     """Calculate running balance for a given month"""
@@ -363,7 +391,7 @@ def dashboard():
     current_mm = str(current_month).zfill(2)
     birthdays_this_month = conn.execute('''
         SELECT name, dob, photo_url, department FROM employees
-        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND dob IS NOT NULL AND dob != ''
         AND strftime('%m', dob) = ?
         ORDER BY strftime('%d', dob)
     ''', (current_mm,)).fetchall()
@@ -371,7 +399,7 @@ def dashboard():
     # Work anniversaries this month (employees with joining_date matching current month, excluding current year joins)
     anniversaries_this_month = conn.execute('''
         SELECT name, joining_date, photo_url, department FROM employees
-        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND joining_date IS NOT NULL AND joining_date != ''
         AND strftime('%m', joining_date) = ?
         AND strftime('%Y', joining_date) != ?
         ORDER BY strftime('%d', joining_date)
@@ -1297,7 +1325,7 @@ def admin_dashboard():
     conn = get_db()
 
     # Summary stats
-    total_employees = conn.execute('SELECT COUNT(*) as count FROM employees WHERE is_active = 1').fetchone()
+    total_employees = conn.execute("SELECT COUNT(*) as count FROM employees WHERE is_active = 1 AND emp_code != 'admin'").fetchone()
 
     today = datetime.now().strftime('%Y-%m-%d')
     leaves_today = conn.execute('''
@@ -1307,10 +1335,10 @@ def admin_dashboard():
 
     pending = conn.execute("SELECT COUNT(*) as count FROM leave_records WHERE status = 'pending'").fetchone()
 
-    # Department-wise count (include management as employees)
+    # Department-wise count (include management as employees, exclude admin login)
     departments = conn.execute('''
         SELECT department, COUNT(*) as count FROM employees
-        WHERE is_active = 1
+        WHERE is_active = 1 AND emp_code != 'admin'
         GROUP BY department ORDER BY department
     ''').fetchall()
 
@@ -1346,7 +1374,7 @@ def admin_dashboard():
     current_mm = str(now.month).zfill(2)
     birthdays_this_month = conn.execute('''
         SELECT name, dob, photo_url, department FROM employees
-        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND dob IS NOT NULL AND dob != ''
         AND strftime('%m', dob) = ?
         ORDER BY strftime('%d', dob)
     ''', (current_mm,)).fetchall()
@@ -1354,7 +1382,7 @@ def admin_dashboard():
     # Work anniversaries this month
     anniversaries_this_month = conn.execute('''
         SELECT name, joining_date, photo_url, department FROM employees
-        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND joining_date IS NOT NULL AND joining_date != ''
         AND strftime('%m', joining_date) = ?
         AND strftime('%Y', joining_date) != ?
         ORDER BY strftime('%d', joining_date)
@@ -1398,12 +1426,12 @@ def org_chart():
         SELECT e.*, m.name as manager_name, m.photo_url as manager_photo
         FROM employees e
         LEFT JOIN employees m ON e.reporting_to = m.id
-        WHERE e.is_active = 1
+        WHERE e.is_active = 1 AND e.emp_code != 'admin'
         ORDER BY e.department, e.name
     ''').fetchall()
     departments = conn.execute('''
         SELECT department, COUNT(*) as count FROM employees
-        WHERE is_active = 1
+        WHERE is_active = 1 AND emp_code != 'admin'
         GROUP BY department ORDER BY department
     ''').fetchall()
     conn.close()
@@ -1422,7 +1450,7 @@ def admin_calendar():
 
     # Get all employees
     conn = get_db()
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     # Get all leaves for the month
     all_leaves = conn.execute('''
@@ -1630,7 +1658,7 @@ def admin_add_leave():
     user = get_user()
     conn = get_db()
 
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     if request.method == 'POST':
         employee_id = request.form.get('employee_id', '').strip()
@@ -1679,7 +1707,7 @@ def admin_bulk_leave():
     user = get_user()
     conn = get_db()
 
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     if request.method == 'POST':
         department = request.form.get('department', '').strip()
@@ -1755,7 +1783,7 @@ def manage_employees():
         flash('Employee added successfully', 'success')
         return redirect(url_for('manage_employees'))
 
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY department, name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY department, name").fetchall()
 
     # Group employees by department
     dept_employees = {}
@@ -1823,7 +1851,7 @@ def admin_monthly_report():
     month = int(request.args.get('month', datetime.now().month))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     report_data = []
     for emp in employees:
@@ -1877,7 +1905,7 @@ def admin_monthly_report_download():
     file_format = request.args.get('format', 'xlsx')
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     if file_format == 'xlsx':
         wb = Workbook()
@@ -2016,7 +2044,7 @@ def pending_approvals():
         # Get late leave summary for all employees with late_leave_count > 0
         late_summary = conn.execute('''
             SELECT name, emp_code, late_leave_count FROM employees
-            WHERE late_leave_count > 0 AND is_active = 1
+            WHERE late_leave_count > 0 AND is_active = 1 AND emp_code != 'admin'
             ORDER BY late_leave_count DESC
         ''').fetchall()
     else:
@@ -2449,7 +2477,7 @@ def daily_notifications():
     # Birthday reminders for tomorrow
     birthday_people = conn.execute('''
         SELECT name, dob, email FROM employees
-        WHERE is_active = 1 AND dob IS NOT NULL AND dob != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND dob IS NOT NULL AND dob != ''
         AND strftime('%m', dob) = ? AND strftime('%d', dob) = ?
     ''', (tomorrow_mm, tomorrow_dd)).fetchall()
 
@@ -2482,7 +2510,7 @@ def daily_notifications():
     # Anniversary reminders for tomorrow
     anniversary_people = conn.execute('''
         SELECT name, joining_date, email FROM employees
-        WHERE is_active = 1 AND joining_date IS NOT NULL AND joining_date != ''
+        WHERE is_active = 1 AND emp_code != 'admin' AND joining_date IS NOT NULL AND joining_date != ''
         AND strftime('%m', joining_date) = ? AND strftime('%d', joining_date) = ?
         AND strftime('%Y', joining_date) != ?
     ''', (tomorrow_mm, tomorrow_dd, str(current_year))).fetchall()
@@ -2549,7 +2577,7 @@ def admin_quarterly_report():
     months = quarter_months.get(quarter, [4, 5, 6])
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     report_data = []
     for emp in employees:
@@ -2605,7 +2633,7 @@ def admin_quarterly_report_download():
     months = quarter_months.get(quarter, [4, 5, 6])
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     wb = Workbook()
     ws = wb.active
@@ -2676,7 +2704,7 @@ def admin_annual_report():
     year = int(request.args.get('year', datetime.now().year))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     report_data = []
     for emp in employees:
@@ -2732,7 +2760,7 @@ def admin_annual_report_download():
     year = int(request.args.get('year', datetime.now().year))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     wb = Workbook()
     ws = wb.active
@@ -2960,6 +2988,803 @@ def reports_annual_redirect():
     return redirect(url_for('my_leave_report', year=year))
 
 
+def ensure_crm_tables():
+    """Create CRM tables if they don't exist (safe to run repeatedly)."""
+    try:
+        conn = get_db()
+        tables_sql = [
+            '''CREATE TABLE IF NOT EXISTS wfh_requests (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                from_date TEXT NOT NULL,
+                to_date TEXT NOT NULL,
+                reason TEXT NOT NULL,
+                status TEXT DEFAULT 'pending',
+                approved_by INTEGER REFERENCES employees(id),
+                approved_at TEXT,
+                rejection_reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS projects (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                status TEXT DEFAULT 'active',
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS products_services (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT,
+                type TEXT NOT NULL DEFAULT 'product',
+                project_id INTEGER REFERENCES projects(id),
+                status TEXT DEFAULT 'active',
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS sales_news (
+                id SERIAL PRIMARY KEY,
+                title TEXT NOT NULL,
+                content TEXT NOT NULL,
+                category TEXT DEFAULT 'general',
+                posted_by INTEGER NOT NULL REFERENCES employees(id),
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS meeting_types (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS b2b_trips (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                trip_type TEXT NOT NULL,
+                from_date TEXT NOT NULL,
+                to_date TEXT NOT NULL,
+                travel_date TEXT,
+                project_id INTEGER REFERENCES projects(id),
+                notes TEXT,
+                status TEXT DEFAULT 'planned',
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS b2b_meetings (
+                id SERIAL PRIMARY KEY,
+                trip_id INTEGER NOT NULL REFERENCES b2b_trips(id) ON DELETE CASCADE,
+                meeting_type_id INTEGER REFERENCES meeting_types(id),
+                meeting_with TEXT NOT NULL,
+                meeting_date TEXT NOT NULL,
+                project_id INTEGER REFERENCES projects(id),
+                location TEXT,
+                contact_person TEXT,
+                contact_phone TEXT,
+                outcome TEXT,
+                notes TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS module_access (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                module TEXT NOT NULL,
+                granted_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(employee_id, module)
+            )''',
+        ]
+        for sql in tables_sql:
+            conn.execute(sql)
+        conn.commit()
+        conn.close()
+        logging.info("CRM tables ensured.")
+    except Exception as e:
+        logging.error(f"ensure_crm_tables: {e}")
+
+
+def seed_default_meeting_types():
+    """Seed default meeting types if table is empty."""
+    try:
+        conn = get_db()
+        count = conn.execute('SELECT COUNT(*) as cnt FROM meeting_types').fetchone()
+        if count['cnt'] == 0:
+            for mt in ['School', 'College', 'Partner', 'Branch Partner', 'Agent']:
+                conn.execute('INSERT INTO meeting_types (name) VALUES (?)', (mt,))
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"seed_default_meeting_types: {e}")
+
+
+# ─── WFH (Work from Home) Routes ───
+
+@app.route('/wfh/apply', methods=['GET', 'POST'])
+@login_required
+def apply_wfh():
+    user = get_user()
+    if request.method == 'POST':
+        from_date = request.form.get('from_date')
+        to_date = request.form.get('to_date')
+        reason = request.form.get('reason', '').strip()
+
+        if not from_date or not to_date or not reason:
+            flash('All fields are required', 'error')
+            return redirect(url_for('apply_wfh'))
+
+        if to_date < from_date:
+            flash('To date cannot be before from date', 'error')
+            return redirect(url_for('apply_wfh'))
+
+        conn = get_db()
+        conn.execute('''
+            INSERT INTO wfh_requests (employee_id, from_date, to_date, reason)
+            VALUES (?, ?, ?, ?)
+        ''', (user['id'], from_date, to_date, reason))
+        conn.commit()
+
+        # Notify reporting manager and admins
+        admins = conn.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1').fetchall()
+        for admin in admins:
+            if admin['id'] != user['id']:
+                conn.execute('''
+                    INSERT INTO notifications (type, title, message, target_user_id, reference_id)
+                    VALUES ('wfh_request', ?, ?, ?, NULL)
+                ''', (
+                    f"WFH Request from {user['name']}",
+                    f"{user['name']} has requested WFH from {from_date} to {to_date}. Reason: {reason}",
+                    admin['id']
+                ))
+        conn.commit()
+        conn.close()
+
+        flash('WFH request submitted successfully', 'success')
+        return redirect(url_for('my_wfh_requests'))
+
+    return render_template('apply_wfh.html', user=user)
+
+
+@app.route('/wfh/my-requests')
+@login_required
+def my_wfh_requests():
+    user = get_user()
+    conn = get_db()
+    requests_list = conn.execute('''
+        SELECT w.*, a.name as approver_name
+        FROM wfh_requests w
+        LEFT JOIN employees a ON w.approved_by = a.id
+        WHERE w.employee_id = ?
+        ORDER BY w.created_at DESC
+    ''', (user['id'],)).fetchall()
+    conn.close()
+    return render_template('my_wfh_requests.html', user=user, requests=requests_list)
+
+
+@app.route('/wfh/approvals')
+@login_required
+def wfh_approvals():
+    user = get_user()
+    conn = get_db()
+
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+    is_admin_user = user['is_admin'] == 1
+
+    if not is_admin_user and not is_mgmt:
+        # Only show direct reports' WFH requests
+        direct_report_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM employees WHERE reporting_to = ? AND is_active = 1', (user['id'],)
+        ).fetchall()]
+        if not direct_report_ids:
+            flash('No team members to manage', 'error')
+            conn.close()
+            return redirect(url_for('dashboard'))
+        placeholders = ','.join('?' * len(direct_report_ids))
+        requests_list = conn.execute(f'''
+            SELECT w.*, e.name, e.emp_code, e.department, a.name as approver_name
+            FROM wfh_requests w
+            JOIN employees e ON w.employee_id = e.id
+            LEFT JOIN employees a ON w.approved_by = a.id
+            WHERE w.employee_id IN ({placeholders})
+            ORDER BY w.created_at DESC
+        ''', direct_report_ids).fetchall()
+    else:
+        # Admin/management see all
+        requests_list = conn.execute('''
+            SELECT w.*, e.name, e.emp_code, e.department, a.name as approver_name
+            FROM wfh_requests w
+            JOIN employees e ON w.employee_id = e.id
+            LEFT JOIN employees a ON w.approved_by = a.id
+            ORDER BY w.created_at DESC
+        ''').fetchall()
+
+    conn.close()
+    return render_template('wfh_approvals.html', user=user, requests=requests_list)
+
+
+@app.route('/wfh/approve/<int:wfh_id>', methods=['POST'])
+@login_required
+def approve_wfh(wfh_id):
+    user = get_user()
+    action = request.form.get('action')  # 'approve' or 'reject'
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+
+    conn = get_db()
+    wfh = conn.execute('SELECT * FROM wfh_requests WHERE id = ?', (wfh_id,)).fetchone()
+    if not wfh:
+        flash('WFH request not found', 'error')
+        conn.close()
+        return redirect(url_for('wfh_approvals'))
+
+    if wfh['status'] != 'pending':
+        flash('This request has already been processed', 'error')
+        conn.close()
+        return redirect(url_for('wfh_approvals'))
+
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn.execute('''
+        UPDATE wfh_requests SET status = ?, approved_by = ?, approved_at = ?, rejection_reason = ?
+        WHERE id = ?
+    ''', (new_status, user['id'], now, rejection_reason if action == 'reject' else None, wfh_id))
+
+    # Notify the employee
+    emp = conn.execute('SELECT name FROM employees WHERE id = ?', (wfh['employee_id'],)).fetchone()
+    status_text = 'approved' if action == 'approve' else 'rejected'
+    msg = f"Your WFH request ({wfh['from_date']} to {wfh['to_date']}) has been {status_text} by {user['name']}."
+    if action == 'reject' and rejection_reason:
+        msg += f" Reason: {rejection_reason}"
+    conn.execute('''
+        INSERT INTO notifications (type, title, message, target_user_id)
+        VALUES ('wfh_update', ?, ?, ?)
+    ''', (f"WFH Request {status_text.title()}", msg, wfh['employee_id']))
+
+    conn.commit()
+    conn.close()
+
+    flash(f'WFH request {status_text}', 'success')
+    return redirect(url_for('wfh_approvals'))
+
+
+# ─── Projects Routes ───
+
+@app.route('/projects')
+@login_required
+def projects_list():
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        # All employees can view projects, but only certain can manage
+        pass
+    conn = get_db()
+    projects = conn.execute('''
+        SELECT p.*, e.name as created_by_name,
+               (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count
+        FROM projects p
+        LEFT JOIN employees e ON p.created_by = e.id
+        ORDER BY p.status, p.name
+    ''').fetchall()
+    conn.close()
+    return render_template('projects.html', user=user, projects=projects,
+                         can_manage=has_module_access(user, 'projects') or user['is_admin'])
+
+
+@app.route('/projects/add', methods=['GET', 'POST'])
+@login_required
+def add_project():
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        if not name:
+            flash('Project name is required', 'error')
+            return redirect(url_for('add_project'))
+
+        conn = get_db()
+        conn.execute('INSERT INTO projects (name, description, created_by) VALUES (?, ?, ?)',
+                    (name, description, user['id']))
+        conn.commit()
+        conn.close()
+        flash('Project added successfully', 'success')
+        return redirect(url_for('projects_list'))
+
+    return render_template('add_project.html', user=user)
+
+
+@app.route('/projects/<int:project_id>')
+@login_required
+def project_detail(project_id):
+    user = get_user()
+    conn = get_db()
+    project = conn.execute('SELECT p.*, e.name as created_by_name FROM projects p LEFT JOIN employees e ON p.created_by = e.id WHERE p.id = ?', (project_id,)).fetchone()
+    if not project:
+        flash('Project not found', 'error')
+        conn.close()
+        return redirect(url_for('projects_list'))
+
+    products = conn.execute('''
+        SELECT ps.*, e.name as created_by_name
+        FROM products_services ps
+        LEFT JOIN employees e ON ps.created_by = e.id
+        WHERE ps.project_id = ?
+        ORDER BY ps.type, ps.name
+    ''', (project_id,)).fetchall()
+
+    conn.close()
+    return render_template('project_detail.html', user=user, project=project, products=products,
+                         can_manage=has_module_access(user, 'projects') or user['is_admin'])
+
+
+@app.route('/projects/<int:project_id>/edit', methods=['POST'])
+@login_required
+def edit_project(project_id):
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
+    status = request.form.get('status', 'active')
+
+    conn = get_db()
+    conn.execute('UPDATE projects SET name = ?, description = ?, status = ? WHERE id = ?',
+                (name, description, status, project_id))
+    conn.commit()
+    conn.close()
+    flash('Project updated', 'success')
+    return redirect(url_for('project_detail', project_id=project_id))
+
+
+# ─── Products & Services Routes ───
+
+@app.route('/products/add/<int:project_id>', methods=['GET', 'POST'])
+@login_required
+def add_product(project_id):
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    project = conn.execute('SELECT * FROM projects WHERE id = ?', (project_id,)).fetchone()
+    if not project:
+        flash('Project not found', 'error')
+        conn.close()
+        return redirect(url_for('projects_list'))
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        description = request.form.get('description', '').strip()
+        ps_type = request.form.get('type', 'product')
+
+        if not name:
+            flash('Name is required', 'error')
+            conn.close()
+            return redirect(url_for('add_product', project_id=project_id))
+
+        conn.execute('''
+            INSERT INTO products_services (name, description, type, project_id, created_by)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (name, description, ps_type, project_id, user['id']))
+        conn.commit()
+        conn.close()
+        flash('Product/Service added', 'success')
+        return redirect(url_for('project_detail', project_id=project_id))
+
+    conn.close()
+    return render_template('add_product.html', user=user, project=project)
+
+
+@app.route('/products/<int:ps_id>/edit', methods=['POST'])
+@login_required
+def edit_product(ps_id):
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    ps = conn.execute('SELECT * FROM products_services WHERE id = ?', (ps_id,)).fetchone()
+    if not ps:
+        flash('Not found', 'error')
+        conn.close()
+        return redirect(url_for('projects_list'))
+
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
+    ps_type = request.form.get('type', ps['type'])
+    status = request.form.get('status', ps['status'])
+
+    conn.execute('UPDATE products_services SET name = ?, description = ?, type = ?, status = ? WHERE id = ?',
+                (name, description, ps_type, status, ps_id))
+    conn.commit()
+    conn.close()
+    flash('Updated successfully', 'success')
+    return redirect(url_for('project_detail', project_id=ps['project_id']))
+
+
+# ─── Sales News Routes ───
+
+@app.route('/sales/news')
+@login_required
+@sales_access_required
+def sales_news():
+    user = get_user()
+    conn = get_db()
+    news = conn.execute('''
+        SELECT n.*, e.name as posted_by_name, e.photo_url
+        FROM sales_news n
+        JOIN employees e ON n.posted_by = e.id
+        WHERE n.is_active = 1
+        ORDER BY n.created_at DESC
+    ''').fetchall()
+    conn.close()
+    return render_template('sales_news.html', user=user, news=news,
+                         can_post=user['is_admin'] or user['emp_code'] in MANAGEMENT_CODES)
+
+
+@app.route('/sales/news/add', methods=['GET', 'POST'])
+@login_required
+@sales_access_required
+def add_sales_news():
+    user = get_user()
+    if not user['is_admin'] and user['emp_code'] not in MANAGEMENT_CODES:
+        flash('Only admin/management can post news', 'error')
+        return redirect(url_for('sales_news'))
+
+    if request.method == 'POST':
+        title = request.form.get('title', '').strip()
+        content = request.form.get('content', '').strip()
+        category = request.form.get('category', 'general')
+
+        if not title or not content:
+            flash('Title and content are required', 'error')
+            return redirect(url_for('add_sales_news'))
+
+        conn = get_db()
+        conn.execute('INSERT INTO sales_news (title, content, category, posted_by) VALUES (?, ?, ?, ?)',
+                    (title, content, category, user['id']))
+        conn.commit()
+        conn.close()
+        flash('News posted', 'success')
+        return redirect(url_for('sales_news'))
+
+    return render_template('add_sales_news.html', user=user)
+
+
+@app.route('/sales/news/delete/<int:news_id>', methods=['POST'])
+@login_required
+@sales_access_required
+def delete_sales_news(news_id):
+    user = get_user()
+    if not user['is_admin'] and user['emp_code'] not in MANAGEMENT_CODES:
+        flash('Access denied', 'error')
+        return redirect(url_for('sales_news'))
+
+    conn = get_db()
+    conn.execute('UPDATE sales_news SET is_active = 0 WHERE id = ?', (news_id,))
+    conn.commit()
+    conn.close()
+    flash('News removed', 'success')
+    return redirect(url_for('sales_news'))
+
+
+# ─── Sales Dashboard ───
+
+@app.route('/sales')
+@login_required
+@sales_access_required
+def sales_dashboard():
+    user = get_user()
+    conn = get_db()
+
+    # Recent news
+    recent_news = conn.execute('''
+        SELECT n.*, e.name as posted_by_name
+        FROM sales_news n JOIN employees e ON n.posted_by = e.id
+        WHERE n.is_active = 1
+        ORDER BY n.created_at DESC LIMIT 5
+    ''').fetchall()
+
+    # Recent B2B trips
+    recent_trips = conn.execute('''
+        SELECT t.*, e.name as employee_name, p.name as project_name
+        FROM b2b_trips t
+        JOIN employees e ON t.employee_id = e.id
+        LEFT JOIN projects p ON t.project_id = p.id
+        ORDER BY t.created_at DESC LIMIT 10
+    ''').fetchall()
+
+    # Active projects count
+    project_count = conn.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'").fetchone()
+
+    # Meeting stats this month
+    now = datetime.now()
+    month_start = now.strftime('%Y-%m-01')
+    month_end = now.strftime('%Y-%m-') + str(calendar.monthrange(now.year, now.month)[1])
+    meeting_count = conn.execute('''
+        SELECT COUNT(*) as cnt FROM b2b_meetings
+        WHERE meeting_date >= ? AND meeting_date <= ?
+    ''', (month_start, month_end)).fetchone()
+
+    conn.close()
+    return render_template('sales_dashboard.html', user=user, recent_news=recent_news,
+                         recent_trips=recent_trips, project_count=project_count['cnt'],
+                         meeting_count=meeting_count['cnt'])
+
+
+# ─── B2B Meetings Routes ───
+
+@app.route('/b2b')
+@login_required
+@sales_access_required
+def b2b_trips_list():
+    user = get_user()
+    conn = get_db()
+
+    trip_type = request.args.get('type', '')
+    f_from = request.args.get('from_date', '')
+    f_to = request.args.get('to_date', '')
+
+    query = '''
+        SELECT t.*, e.name as employee_name, e.emp_code, p.name as project_name,
+               (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
+        FROM b2b_trips t
+        JOIN employees e ON t.employee_id = e.id
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if trip_type:
+        query += ' AND t.trip_type = ?'
+        params.append(trip_type)
+    if f_from:
+        query += ' AND t.from_date >= ?'
+        params.append(f_from)
+    if f_to:
+        query += ' AND t.to_date <= ?'
+        params.append(f_to)
+
+    query += ' ORDER BY t.from_date DESC'
+    trips = conn.execute(query, params).fetchall()
+    conn.close()
+
+    return render_template('b2b_trips.html', user=user, trips=trips,
+                         trip_type=trip_type, f_from=f_from, f_to=f_to)
+
+
+@app.route('/b2b/add', methods=['GET', 'POST'])
+@login_required
+@sales_access_required
+def add_b2b_trip():
+    user = get_user()
+    conn = get_db()
+
+    if request.method == 'POST':
+        trip_type = request.form.get('trip_type')
+        from_date = request.form.get('from_date')
+        to_date = request.form.get('to_date')
+        travel_date = request.form.get('travel_date', '')
+        project_id = request.form.get('project_id') or None
+        notes = request.form.get('notes', '').strip()
+
+        if not trip_type or not from_date or not to_date:
+            flash('Trip type, from date, and to date are required', 'error')
+            projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+            meeting_types = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+            conn.close()
+            return render_template('add_b2b_trip.html', user=user, projects=projects, meeting_types=meeting_types)
+
+        conn.execute('''
+            INSERT INTO b2b_trips (employee_id, trip_type, from_date, to_date, travel_date, project_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (user['id'], trip_type, from_date, to_date, travel_date or None, project_id, notes))
+        conn.commit()
+
+        # Get the new trip ID
+        trip = conn.execute('SELECT id FROM b2b_trips WHERE employee_id = ? ORDER BY id DESC LIMIT 1', (user['id'],)).fetchone()
+        trip_id = trip['id']
+
+        # Process multiple meetings
+        meeting_dates = request.form.getlist('meeting_date[]')
+        meeting_withs = request.form.getlist('meeting_with[]')
+        meeting_type_ids = request.form.getlist('meeting_type_id[]')
+        meeting_locations = request.form.getlist('meeting_location[]')
+        meeting_contacts = request.form.getlist('contact_person[]')
+        meeting_phones = request.form.getlist('contact_phone[]')
+        meeting_project_ids = request.form.getlist('meeting_project_id[]')
+
+        for i in range(len(meeting_dates)):
+            if meeting_dates[i] and meeting_withs[i]:
+                m_project_id = meeting_project_ids[i] if i < len(meeting_project_ids) and meeting_project_ids[i] else project_id
+                m_type_id = meeting_type_ids[i] if i < len(meeting_type_ids) and meeting_type_ids[i] else None
+                conn.execute('''
+                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, project_id, location, contact_person, contact_phone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i],
+                      m_project_id, meeting_locations[i] if i < len(meeting_locations) else '',
+                      meeting_contacts[i] if i < len(meeting_contacts) else '',
+                      meeting_phones[i] if i < len(meeting_phones) else ''))
+
+        conn.commit()
+        conn.close()
+        flash('B2B trip and meetings added', 'success')
+        return redirect(url_for('b2b_trip_detail', trip_id=trip_id))
+
+    projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    meeting_types = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+    conn.close()
+    return render_template('add_b2b_trip.html', user=user, projects=projects, meeting_types=meeting_types)
+
+
+@app.route('/b2b/<int:trip_id>')
+@login_required
+@sales_access_required
+def b2b_trip_detail(trip_id):
+    user = get_user()
+    conn = get_db()
+    trip = conn.execute('''
+        SELECT t.*, e.name as employee_name, e.emp_code, p.name as project_name
+        FROM b2b_trips t
+        JOIN employees e ON t.employee_id = e.id
+        LEFT JOIN projects p ON t.project_id = p.id
+        WHERE t.id = ?
+    ''', (trip_id,)).fetchone()
+
+    if not trip:
+        flash('Trip not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+
+    meetings = conn.execute('''
+        SELECT m.*, mt.name as meeting_type_name, p.name as project_name
+        FROM b2b_meetings m
+        LEFT JOIN meeting_types mt ON m.meeting_type_id = mt.id
+        LEFT JOIN projects p ON m.project_id = p.id
+        WHERE m.trip_id = ?
+        ORDER BY m.meeting_date, m.id
+    ''', (trip_id,)).fetchall()
+
+    conn.close()
+    return render_template('b2b_trip_detail.html', user=user, trip=trip, meetings=meetings)
+
+
+@app.route('/b2b/<int:trip_id>/add-meeting', methods=['POST'])
+@login_required
+@sales_access_required
+def add_meeting_to_trip(trip_id):
+    user = get_user()
+    conn = get_db()
+
+    trip = conn.execute('SELECT * FROM b2b_trips WHERE id = ?', (trip_id,)).fetchone()
+    if not trip:
+        flash('Trip not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+
+    meeting_date = request.form.get('meeting_date')
+    meeting_with = request.form.get('meeting_with', '').strip()
+    meeting_type_id = request.form.get('meeting_type_id') or None
+    project_id = request.form.get('project_id') or trip['project_id']
+    location = request.form.get('location', '').strip()
+    contact_person = request.form.get('contact_person', '').strip()
+    contact_phone = request.form.get('contact_phone', '').strip()
+
+    if not meeting_date or not meeting_with:
+        flash('Meeting date and name are required', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trip_detail', trip_id=trip_id))
+
+    conn.execute('''
+        INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, project_id, location, contact_person, contact_phone)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    ''', (trip_id, meeting_type_id, meeting_with, meeting_date, project_id, location, contact_person, contact_phone))
+    conn.commit()
+    conn.close()
+    flash('Meeting added', 'success')
+    return redirect(url_for('b2b_trip_detail', trip_id=trip_id))
+
+
+@app.route('/b2b/meeting/<int:meeting_id>/outcome', methods=['POST'])
+@login_required
+@sales_access_required
+def update_meeting_outcome(meeting_id):
+    user = get_user()
+    conn = get_db()
+
+    meeting = conn.execute('SELECT * FROM b2b_meetings WHERE id = ?', (meeting_id,)).fetchone()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+
+    outcome = request.form.get('outcome', '').strip()
+    notes = request.form.get('notes', '').strip()
+
+    conn.execute('UPDATE b2b_meetings SET outcome = ?, notes = ? WHERE id = ?',
+                (outcome, notes, meeting_id))
+    conn.commit()
+    conn.close()
+    flash('Meeting outcome updated', 'success')
+    return redirect(url_for('b2b_trip_detail', trip_id=meeting['trip_id']))
+
+
+# ─── Meeting Types Management (Admin) ───
+
+@app.route('/admin/meeting-types', methods=['GET', 'POST'])
+@admin_required
+def manage_meeting_types():
+    user = get_user()
+    conn = get_db()
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            name = request.form.get('name', '').strip()
+            if name:
+                conn.execute('INSERT INTO meeting_types (name) VALUES (?)', (name,))
+                conn.commit()
+                flash('Meeting type added', 'success')
+        elif action == 'toggle':
+            mt_id = request.form.get('id')
+            conn.execute('UPDATE meeting_types SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?', (mt_id,))
+            conn.commit()
+            flash('Meeting type updated', 'success')
+        conn.close()
+        return redirect(url_for('manage_meeting_types'))
+
+    types = conn.execute('SELECT * FROM meeting_types ORDER BY name').fetchall()
+    conn.close()
+    return render_template('manage_meeting_types.html', user=user, types=types)
+
+
+# ─── Module Access Management (Admin) ───
+
+@app.route('/admin/module-access', methods=['GET', 'POST'])
+@admin_required
+def manage_module_access():
+    user = get_user()
+    conn = get_db()
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+        emp_id = request.form.get('employee_id')
+        module = request.form.get('module')
+
+        if action == 'grant' and emp_id and module:
+            conn.execute('''
+                INSERT INTO module_access (employee_id, module, granted_by)
+                VALUES (?, ?, ?)
+                ON CONFLICT (employee_id, module) DO NOTHING
+            ''', (emp_id, module, user['id']))
+            conn.commit()
+            flash('Access granted', 'success')
+        elif action == 'revoke' and emp_id and module:
+            conn.execute('DELETE FROM module_access WHERE employee_id = ? AND module = ?', (emp_id, module))
+            conn.commit()
+            flash('Access revoked', 'success')
+
+        conn.close()
+        return redirect(url_for('manage_module_access'))
+
+    employees = conn.execute("SELECT id, name, emp_code, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
+    access_list = conn.execute('''
+        SELECT ma.*, e.name, e.emp_code, e.department
+        FROM module_access ma
+        JOIN employees e ON ma.employee_id = e.id
+        ORDER BY ma.module, e.name
+    ''').fetchall()
+
+    modules = ['sales', 'projects', 'b2b_meetings']
+    conn.close()
+    return render_template('manage_module_access.html', user=user, employees=employees,
+                         access_list=access_list, modules=modules)
+
+
 def ensure_management_admins():
     """Ensure MANAGEMENT_CODES employees always have is_admin = 1."""
     try:
@@ -3017,7 +3842,7 @@ def admin_leave_applications():
 
     # Get employee list for filter dropdown
     employees = conn.execute(
-        "SELECT id, name, emp_code FROM employees WHERE is_active = 1 ORDER BY name"
+        "SELECT id, name, emp_code FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
     ).fetchall()
 
     # Summary counts
@@ -3178,6 +4003,8 @@ def team_leave_applications():
 
 
 # Run on startup
+ensure_crm_tables()
+seed_default_meeting_types()
 ensure_management_admins()
 
 if __name__ == '__main__':

@@ -1,0 +1,153 @@
+{% extends "base.html" %}
+
+{% block title %}Post Sales News - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .form-container {
+    max-width: 700px;
+    margin: 0 auto;
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 2rem;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: var(--gray-dark);
+    transition: border-color 0.2s, box-shadow 0.2s;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 250px;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--gray-light);
+  }
+
+  .btn-submit {
+    background-color: var(--orange);
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+  }
+
+  .btn-submit:hover {
+    background-color: #E26E00;
+  }
+
+  .btn-cancel {
+    background-color: var(--gray-light);
+    color: var(--gray-dark);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-cancel:hover {
+    background-color: var(--gray-medium);
+    color: white;
+  }
+
+  .form-hint {
+    font-size: 0.85rem;
+    color: var(--gray-medium);
+    margin-top: 0.3rem;
+  }
+
+  .required {
+    color: var(--danger);
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Post Sales News</div>
+
+<div class="form-container">
+  <form method="POST" action="/sales/news/add">
+    <div class="form-group">
+      <label for="title">
+        Title
+        <span class="required">*</span>
+      </label>
+      <input type="text" id="title" name="title" required placeholder="Enter news title">
+      <div class="form-hint">Be clear and concise</div>
+    </div>
+
+    <div class="form-group">
+      <label for="content">
+        Content
+        <span class="required">*</span>
+      </label>
+      <textarea id="content" name="content" required placeholder="Write your news content here..."></textarea>
+      <div class="form-hint">Provide details and context</div>
+    </div>
+
+    <div class="form-group">
+      <label for="category">
+        Category
+        <span class="required">*</span>
+      </label>
+      <select id="category" name="category" required>
+        <option value="">-- Select a category --</option>
+        <option value="general">General</option>
+        <option value="achievement">Achievement</option>
+        <option value="update">Update</option>
+        <option value="alert">Alert</option>
+      </select>
+      <div class="form-hint">Choose the most relevant category</div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-submit">Post News</button>
+      <a href="/sales/news" class="btn-cancel">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

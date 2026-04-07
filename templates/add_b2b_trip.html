@@ -1,0 +1,406 @@
+{% extends "base.html" %}
+
+{% block title %}Add B2B Trip - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .form-container {
+    max-width: 900px;
+    margin: 0 auto;
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 2rem;
+  }
+
+  .form-section {
+    margin-bottom: 2rem;
+  }
+
+  .section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--orange);
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+  }
+
+  .form-group label {
+    display: block;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .form-group input,
+  .form-group textarea,
+  .form-group select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 4px;
+    font-family: inherit;
+    font-size: 0.95rem;
+    color: var(--gray-dark);
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+  }
+
+  .form-group input:focus,
+  .form-group textarea:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .required {
+    color: var(--danger);
+  }
+
+  .meetings-container {
+    background: var(--gray-lightest);
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    padding: 1.5rem;
+  }
+
+  .meeting-row {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    padding: 1.5rem;
+    margin-bottom: 1rem;
+  }
+
+  .meeting-row-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+  }
+
+  .meeting-number {
+    font-weight: 600;
+    color: var(--navy);
+    font-size: 1rem;
+  }
+
+  .btn-remove-meeting {
+    background-color: var(--danger);
+    color: white;
+    border: none;
+    padding: 0.4rem 0.8rem;
+    border-radius: 4px;
+    font-size: 0.85rem;
+    cursor: pointer;
+    font-weight: 500;
+    transition: background-color 0.2s;
+  }
+
+  .btn-remove-meeting:hover {
+    background-color: #DC2626;
+  }
+
+  .btn-add-meeting {
+    background-color: var(--success);
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+    margin-top: 1rem;
+  }
+
+  .btn-add-meeting:hover {
+    background-color: #059669;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--gray-light);
+  }
+
+  .btn-submit {
+    background-color: var(--orange);
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+  }
+
+  .btn-submit:hover {
+    background-color: #E26E00;
+  }
+
+  .btn-cancel {
+    background-color: var(--gray-light);
+    color: var(--gray-dark);
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-cancel:hover {
+    background-color: var(--gray-medium);
+    color: white;
+  }
+
+  .form-hint {
+    font-size: 0.85rem;
+    color: var(--gray-medium);
+    margin-top: 0.3rem;
+  }
+
+  .template-meeting {
+    display: none;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Add B2B Trip</div>
+
+<div class="form-container">
+  <form method="POST" action="/b2b/add" id="tripForm">
+    <!-- Trip Details Section -->
+    <div class="form-section">
+      <h2 class="section-title">Trip Details</h2>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="trip_type">
+            Trip Type
+            <span class="required">*</span>
+          </label>
+          <select id="trip_type" name="trip_type" required>
+            <option value="">-- Select trip type --</option>
+            <option value="outstation">Outstation</option>
+            <option value="city">City</option>
+          </select>
+        </div>
+
+        <div class="form-group">
+          <label for="from_date">
+            From Date
+            <span class="required">*</span>
+          </label>
+          <input type="date" id="from_date" name="from_date" required>
+        </div>
+
+        <div class="form-group">
+          <label for="to_date">
+            To Date
+            <span class="required">*</span>
+          </label>
+          <input type="date" id="to_date" name="to_date" required>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="travel_date">
+            Travel Date
+            <span class="required">*</span>
+          </label>
+          <input type="date" id="travel_date" name="travel_date" required>
+        </div>
+
+        <div class="form-group">
+          <label for="project_id">
+            Project
+            <span class="required">*</span>
+          </label>
+          <select id="project_id" name="project_id" required>
+            <option value="">-- Select project --</option>
+            {% for project in projects %}
+              <option value="{{ project.id }}">{{ project.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label for="notes">Notes</label>
+        <textarea id="notes" name="notes" placeholder="Any additional notes about this trip..."></textarea>
+        <div class="form-hint">Optional: Add context or special information</div>
+      </div>
+    </div>
+
+    <!-- Meetings Section -->
+    <div class="form-section">
+      <h2 class="section-title">Meetings</h2>
+
+      <div class="meetings-container">
+        <div id="meetings-list">
+          <!-- Meeting rows will be added here -->
+          <div class="meeting-row" data-meeting-index="0">
+            <div class="meeting-row-header">
+              <div class="meeting-number">Meeting 1</div>
+              <button type="button" class="btn-remove-meeting" onclick="removeMeeting(0)" style="display: none;">Remove</button>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="meeting_date_0">
+                  Meeting Date
+                  <span class="required">*</span>
+                </label>
+                <input type="date" id="meeting_date_0" name="meeting_date[]" required>
+              </div>
+
+              <div class="form-group">
+                <label for="meeting_with_0">
+                  Meeting With
+                  <span class="required">*</span>
+                </label>
+                <input type="text" id="meeting_with_0" name="meeting_with[]" placeholder="Client/Partner name" required>
+              </div>
+
+              <div class="form-group">
+                <label for="meeting_type_id_0">
+                  Meeting Type
+                  <span class="required">*</span>
+                </label>
+                <select id="meeting_type_id_0" name="meeting_type_id[]" required>
+                  <option value="">-- Select type --</option>
+                  {% for type in meeting_types %}
+                    <option value="{{ type.id }}">{{ type.name }}</option>
+                  {% endfor %}
+                </select>
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label for="meeting_location_0">
+                  Location
+                  <span class="required">*</span>
+                </label>
+                <input type="text" id="meeting_location_0" name="meeting_location[]" placeholder="Meeting location" required>
+              </div>
+
+              <div class="form-group">
+                <label for="contact_person_0">
+                  Contact Person
+                  <span class="required">*</span>
+                </label>
+                <input type="text" id="contact_person_0" name="contact_person[]" placeholder="Contact name" required>
+              </div>
+
+              <div class="form-group">
+                <label for="contact_phone_0">
+                  Contact Phone
+                  <span class="required">*</span>
+                </label>
+                <input type="tel" id="contact_phone_0" name="contact_phone[]" placeholder="Phone number" required>
+              </div>
+            </div>
+
+            <div class="form-group">
+              <label for="meeting_project_id_0">
+                Project for this Meeting
+                <span class="required">*</span>
+              </label>
+              <select id="meeting_project_id_0" name="meeting_project_id[]" required>
+                <option value="">-- Select project --</option>
+                {% for project in projects %}
+                  <option value="{{ project.id }}">{{ project.name }}</option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <button type="button" class="btn-add-meeting" onclick="addMeeting()">+ Add Another Meeting</button>
+      </div>
+    </div>
+
+    <div class="form-actions">
+      <button type="submit" class="btn-submit">Create Trip</button>
+      <a href="/b2b" class="btn-cancel">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<script>
+  let meetingCount = 1;
+
+  function addMeeting() {
+    const meetingsList = document.getElementById('meetings-list');
+    const newMeeting = document.querySelector('.meeting-row').cloneNode(true);
+
+    newMeeting.setAttribute('data-meeting-index', meetingCount);
+
+    // Update all input IDs and names
+    newMeeting.querySelectorAll('input, select, textarea').forEach(input => {
+      const baseName = input.name.replace(/\[\]$/, '').replace(/_\d+$/, '');
+      input.id = baseName + '_' + meetingCount;
+      input.value = '';
+    });
+
+    newMeeting.querySelector('.meeting-number').textContent = 'Meeting ' + (meetingCount + 1);
+
+    const removeBtn = newMeeting.querySelector('.btn-remove-meeting');
+    removeBtn.style.display = 'block';
+    removeBtn.onclick = function() { removeMeeting(meetingCount); };
+
+    meetingsList.appendChild(newMeeting);
+    meetingCount++;
+  }
+
+  function removeMeeting(index) {
+    const meeting = document.querySelector(`[data-meeting-index="${index}"]`);
+    if (meeting) {
+      meeting.remove();
+      updateMeetingNumbers();
+    }
+  }
+
+  function updateMeetingNumbers() {
+    const meetings = document.querySelectorAll('.meeting-row');
+    meetings.forEach((meeting, index) => {
+      meeting.querySelector('.meeting-number').textContent = 'Meeting ' + (index + 1);
+      const removeBtn = meeting.querySelector('.btn-remove-meeting');
+      if (meetings.length === 1) {
+        removeBtn.style.display = 'none';
+      } else {
+        removeBtn.style.display = 'block';
+      }
+    });
+  }
+</script>
+{% endblock %}

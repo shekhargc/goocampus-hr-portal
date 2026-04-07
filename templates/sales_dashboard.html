@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block title %}Sales Dashboard - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+  }
+
+  .stat-value {
+    font-size: 2.5rem;
+    font-weight: bold;
+    color: var(--orange);
+    margin: 0.5rem 0;
+  }
+
+  .stat-label {
+    color: var(--gray-dark);
+    font-size: 0.95rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-top: 2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .section-title {
+    font-size: 1.3rem;
+    font-weight: 600;
+    color: var(--navy);
+  }
+
+  .news-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .news-item {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    padding: 1rem;
+    transition: box-shadow 0.2s;
+  }
+
+  .news-item:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  .news-title {
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+  }
+
+  .news-meta {
+    font-size: 0.85rem;
+    color: var(--gray-dark);
+  }
+
+  .news-link {
+    color: var(--orange);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .news-link:hover {
+    text-decoration: underline;
+  }
+
+  .trips-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .trips-table thead {
+    background-color: var(--gray-lightest);
+    border-bottom: 2px solid var(--gray-light);
+  }
+
+  .trips-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--navy);
+    font-size: 0.95rem;
+  }
+
+  .trips-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--gray-lightest);
+    color: var(--gray-dark);
+  }
+
+  .trips-table tbody tr:hover {
+    background-color: #fafafa;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .badge-outstation {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+  }
+
+  .badge-city {
+    background-color: #DCFCE7;
+    color: #15803D;
+  }
+
+  .quick-actions {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--gray-light);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--gray-dark);
+  }
+
+  .empty-state p {
+    margin-bottom: 1.5rem;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-title">Sales Dashboard</div>
+
+<div class="stats-row">
+  <div class="stat-card">
+    <div class="stat-label">Active Projects</div>
+    <div class="stat-value">{{ project_count }}</div>
+  </div>
+  <div class="stat-card">
+    <div class="stat-label">Meetings This Month</div>
+    <div class="stat-value">{{ meeting_count }}</div>
+  </div>
+</div>
+
+<div class="section-header">
+  <div class="section-title">Recent News</div>
+  <a href="/sales/news" class="news-link">View All</a>
+</div>
+
+{% if recent_news %}
+  <div class="news-list">
+    {% for item in recent_news %}
+      <div class="news-item">
+        <div class="news-title">{{ item.title }}</div>
+        <div class="news-meta">
+          Posted by <strong>{{ item.posted_by_name }}</strong> on {{ item.created_at.strftime('%B %d, %Y') }}
+        </div>
+      </div>
+    {% endfor %}
+  </div>
+{% else %}
+  <div class="empty-state">
+    <p>No news updates yet</p>
+  </div>
+{% endif %}
+
+<div class="section-header">
+  <div class="section-title">Recent B2B Trips</div>
+</div>
+
+{% if recent_trips %}
+  <table class="trips-table">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Type</th>
+        <th>From Date</th>
+        <th>To Date</th>
+        <th>Project</th>
+        <th>Meetings</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for trip in recent_trips %}
+        <tr>
+          <td>{{ trip.employee_name }}</td>
+          <td>
+            {% if trip.trip_type == 'outstation' %}
+              <span class="badge badge-outstation">Outstation</span>
+            {% else %}
+              <span class="badge badge-city">City</span>
+            {% endif %}
+          </td>
+          <td>{{ trip.from_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ trip.to_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ trip.project_name }}</td>
+          <td>{{ trip.meeting_count }}</td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="empty-state">
+    <p>No recent trips</p>
+  </div>
+{% endif %}
+
+<div class="quick-actions">
+  <a href="/b2b" class="btn btn-primary">View All Trips</a>
+  <a href="/b2b/add" class="btn btn-primary">Add New Trip</a>
+  <a href="/sales/news" class="btn btn-primary">Sales News</a>
+  <a href="/projects" class="btn btn-primary">Projects</a>
+</div>
+{% endblock %}

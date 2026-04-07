@@ -1,0 +1,273 @@
+{% extends "base.html" %}
+
+{% block title %}B2B Meetings - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+  }
+
+  .filter-section {
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .filter-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+    align-items: flex-end;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .filter-group label {
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+    font-size: 0.95rem;
+  }
+
+  .filter-group input,
+  .filter-group select {
+    padding: 0.6rem;
+    border: 1px solid var(--gray-light);
+    border-radius: 4px;
+    font-size: 0.95rem;
+    font-family: inherit;
+  }
+
+  .filter-group input:focus,
+  .filter-group select:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+  }
+
+  .tab-buttons {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .tab-btn {
+    padding: 0.75rem 1.5rem;
+    border: 2px solid var(--gray-light);
+    background: white;
+    color: var(--gray-dark);
+    border-radius: 6px;
+    cursor: pointer;
+    font-weight: 600;
+    font-size: 0.95rem;
+    transition: all 0.2s;
+  }
+
+  .tab-btn:hover {
+    border-color: var(--orange);
+    color: var(--orange);
+  }
+
+  .tab-btn.active {
+    background-color: var(--orange);
+    color: white;
+    border-color: var(--orange);
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+    border: 1px solid var(--gray-light);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+
+  .data-table thead {
+    background-color: var(--gray-lightest);
+    border-bottom: 2px solid var(--gray-light);
+  }
+
+  .data-table th {
+    padding: 1rem;
+    text-align: left;
+    font-weight: 600;
+    color: var(--navy);
+    font-size: 0.95rem;
+  }
+
+  .data-table td {
+    padding: 1rem;
+    border-bottom: 1px solid var(--gray-lightest);
+    color: var(--gray-dark);
+    font-size: 0.95rem;
+  }
+
+  .data-table tbody tr {
+    cursor: pointer;
+    transition: background-color 0.2s;
+  }
+
+  .data-table tbody tr:hover {
+    background-color: #fafafa;
+  }
+
+  .row-link {
+    color: var(--orange);
+    text-decoration: none;
+    font-weight: 500;
+  }
+
+  .row-link:hover {
+    text-decoration: underline;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.35rem 0.75rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+  }
+
+  .badge-outstation {
+    background-color: #DBEAFE;
+    color: #1E40AF;
+  }
+
+  .badge-city {
+    background-color: #DCFCE7;
+    color: #15803D;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: var(--gray-dark);
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .btn-primary {
+    background-color: var(--orange);
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 4px;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    display: inline-block;
+    transition: background-color 0.2s;
+    font-size: 0.95rem;
+  }
+
+  .btn-primary:hover {
+    background-color: #E26E00;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div class="page-title">B2B Meetings</div>
+  <a href="/b2b/add" class="btn-primary">Add New Trip</a>
+</div>
+
+<div class="tab-buttons">
+  <button class="tab-btn active" data-filter="all">All Trips</button>
+  <button class="tab-btn" data-filter="outstation">Outstation</button>
+  <button class="tab-btn" data-filter="city">City</button>
+</div>
+
+<div class="filter-section">
+  <div class="filter-row">
+    <div class="filter-group">
+      <label for="filter-type">Type</label>
+      <select id="filter-type">
+        <option value="">All Types</option>
+        <option value="outstation">Outstation</option>
+        <option value="city">City</option>
+      </select>
+    </div>
+    <div class="filter-group">
+      <label for="filter-from">From Date</label>
+      <input type="date" id="filter-from">
+    </div>
+    <div class="filter-group">
+      <label for="filter-to">To Date</label>
+      <input type="date" id="filter-to">
+    </div>
+  </div>
+</div>
+
+{% if trips %}
+  <table class="data-table">
+    <thead>
+      <tr>
+        <th>Employee</th>
+        <th>Type</th>
+        <th>From Date</th>
+        <th>To Date</th>
+        <th>Project</th>
+        <th>Meetings</th>
+        <th>Status</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for trip in trips %}
+        <tr>
+          <td>
+            <a href="/b2b/{{ trip.id }}" class="row-link">{{ trip.employee_name }}</a>
+          </td>
+          <td>
+            {% if trip.trip_type == 'outstation' %}
+              <span class="badge badge-outstation">Outstation</span>
+            {% else %}
+              <span class="badge badge-city">City</span>
+            {% endif %}
+          </td>
+          <td>{{ trip.from_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ trip.to_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ trip.project_name }}</td>
+          <td>{{ trip.meeting_count }}</td>
+          <td>
+            <span style="color: var(--success); font-weight: 500;">{{ trip.status }}</span>
+          </td>
+        </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+{% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">✈️</div>
+    <p>No B2B trips found</p>
+    <a href="/b2b/add" class="btn-primary">Create First Trip</a>
+  </div>
+{% endif %}
+
+<script>
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', function() {
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+      this.classList.add('active');
+      const filter = this.dataset.filter;
+      // Filter logic would be implemented here
+      console.log('Filtering by:', filter);
+    });
+  });
+</script>
+{% endblock %}
