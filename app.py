@@ -822,6 +822,12 @@ def employee_approve_leave(leave_id):
         conn.close()
         return redirect(url_for('employee_approvals'))
 
+    # Block self-approval
+    if leave['employee_id'] == user['id']:
+        flash('You cannot approve your own leave request', 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
     # Verify this user is the reporting manager
     emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
     if emp['reporting_to'] != user['id']:
@@ -848,6 +854,12 @@ def employee_reject_leave(leave_id):
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
     if not leave:
         flash('Leave not found', 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
+    # Block self-rejection
+    if leave['employee_id'] == user['id']:
+        flash('You cannot reject your own leave request', 'error')
         conn.close()
         return redirect(url_for('employee_approvals'))
 
@@ -1775,6 +1787,12 @@ def approve_leave(leave_id):
         conn.close()
         return redirect(url_for('pending_approvals'))
 
+    # Block self-approval
+    if leave['employee_id'] == user['id']:
+        flash('You cannot approve your own leave request', 'error')
+        conn.close()
+        return redirect(url_for('pending_approvals'))
+
     # Check authorization
     if not user['is_admin']:
         emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
@@ -1803,6 +1821,12 @@ def reject_leave(leave_id):
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
     if not leave:
         flash('Leave not found', 'error')
+        conn.close()
+        return redirect(url_for('pending_approvals'))
+
+    # Block self-rejection
+    if leave['employee_id'] == user['id']:
+        flash('You cannot reject your own leave request', 'error')
         conn.close()
         return redirect(url_for('pending_approvals'))
 

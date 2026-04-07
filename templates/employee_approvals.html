@@ -116,6 +116,9 @@
                 </td>
                 <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '-' }}</td>
                 <td>
+                    {% if leave.employee_id == user.id %}
+                    <span style="color: var(--gray-400); font-size: 0.82rem; font-style: italic;">Own request</span>
+                    {% else %}
                     <div style="display: flex; gap: 0.5rem;">
                         <form method="POST" action="/approve/{{ leave.id }}" style="display: inline;">
                             <button type="submit" class="button button-success button-small">Approve</button>
@@ -124,6 +127,7 @@
                             <button type="submit" class="button button-danger button-small">Reject</button>
                         </form>
                     </div>
+                    {% endif %}
                 </td>
             </tr>
             {% endfor %}
