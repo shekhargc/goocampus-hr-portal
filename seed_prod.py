@@ -70,6 +70,9 @@ def seed_production_db():
                 approved_by INTEGER REFERENCES employees(id),
                 approved_at TEXT,
                 is_late INTEGER DEFAULT 0,
+                original_id INTEGER,
+                original_reason TEXT,
+                modification_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')

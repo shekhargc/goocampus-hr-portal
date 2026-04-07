@@ -20,6 +20,17 @@
         padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
         border-left: 3px solid #D97706;
     }
+    .modified-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        background: #DBEAFE; color: #1E40AF; font-size: 0.72rem; font-weight: 700;
+        padding: 0.2rem 0.55rem; border-radius: 9999px; border: 1px solid #93C5FD;
+        text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .mod-reason {
+        font-size: 0.82rem; color: #1E40AF; background: #EFF6FF;
+        padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
+        border-left: 3px solid #3B82F6;
+    }
 </style>
 {% endblock %}
 
@@ -67,6 +78,12 @@
             <tr{% if leave.is_late %} style="background: #FFFBEB;"{% endif %}>
                 <td>
                     <strong>{{ leave.name }}</strong>
+                    {% if leave.original_id %}
+                    <br><span class="modified-badge">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        Re-approval
+                    </span>
+                    {% endif %}
                     {% if leave.is_late %}
                     <br><span class="late-badge">
                         <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
@@ -88,6 +105,16 @@
                     {% if leave.is_late and leave.reason and '[Late Application Reason]:' in (leave.reason or '') %}
                     <div class="late-reason">
                         <strong>Late Reason:</strong> {{ leave.reason.split('[Late Application Reason]: ')[1] if '[Late Application Reason]: ' in (leave.reason or '') else '' }}
+                    </div>
+                    {% endif %}
+                    {% if leave.original_id and leave.modification_reason %}
+                    <div class="mod-reason">
+                        <strong>Modification Reason:</strong> {{ leave.modification_reason }}
+                    </div>
+                    {% endif %}
+                    {% if leave.original_id and leave.original_reason %}
+                    <div style="font-size: 0.78rem; color: var(--gray-500); margin-top: 0.35rem;">
+                        <em>Original: {{ leave.original_reason[:80] }}{% if leave.original_reason|length > 80 %}...{% endif %}</em>
                     </div>
                     {% endif %}
                 </td>

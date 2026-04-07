@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Modify Leave - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Modify Leave Request</h1>
+    <p>Change the details of your existing leave. The modified leave will need re-approval.</p>
+</div>
+
+<div class="card" style="border-left: 4px solid #3B82F6; margin-bottom: 1.5rem;">
+    <h2 class="card-title" style="font-size: 1rem; color: var(--navy);">Original Leave Details</h2>
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(180px, 1fr)); gap: 1rem; margin-top: 0.75rem;">
+        <div>
+            <div style="font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px;">Date</div>
+            <div style="font-weight: 600; color: var(--navy); margin-top: 0.25rem;">{{ leave.leave_date }}</div>
+        </div>
+        <div>
+            <div style="font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px;">Type</div>
+            <div style="font-weight: 600; color: var(--navy); margin-top: 0.25rem;">{{ leave.leave_type | capitalize }}</div>
+        </div>
+        <div>
+            <div style="font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px;">Duration</div>
+            <div style="font-weight: 600; color: var(--navy); margin-top: 0.25rem;">
+                {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}
+            </div>
+        </div>
+        <div>
+            <div style="font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px;">Status</div>
+            <div style="font-weight: 600; margin-top: 0.25rem;">
+                {% if leave.status == 'pending' %}<span style="color: #D97706;">Pending</span>
+                {% elif leave.status == 'approved' %}<span style="color: #059669;">Approved</span>
+                {% else %}<span style="color: #DC2626;">Rejected</span>{% endif %}
+            </div>
+        </div>
+    </div>
+    {% if leave.reason %}
+    <div style="margin-top: 1rem; font-size: 0.88rem; color: var(--gray-600);">
+        <strong>Reason:</strong> {{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else leave.reason }}
+    </div>
+    {% endif %}
+</div>
+
+<div class="card">
+    <h2 class="card-title" style="color: var(--navy);">New Leave Details</h2>
+    <form method="POST" style="margin-top: 1rem;">
+        <div class="form-group">
+            <label class="form-label">Leave Type <span style="color: var(--danger);">*</span></label>
+            <select name="leave_type" id="leave_type" class="form-control" required style="max-width: 400px;">
+                <option value="casual" {% if leave.leave_type == 'casual' %}selected{% endif %}>Casual Leave</option>
+                <option value="sick" {% if leave.leave_type == 'sick' %}selected{% endif %}>Sick Leave</option>
+                <option value="annual" {% if leave.leave_type == 'annual' %}selected{% endif %}>Annual Leave</option>
+            </select>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 500px;">
+            <div class="form-group">
+                <label class="form-label">From Date <span style="color: var(--danger);">*</span></label>
+                <input type="date" name="from_date" id="from_date" class="form-control" required value="{{ leave.leave_date }}">
+            </div>
+            <div class="form-group">
+                <label class="form-label">To Date <span style="color: var(--gray-400);">(optional)</span></label>
+                <input type="date" name="to_date" id="to_date" class="form-control">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; max-width: 500px;">
+            <div class="form-group">
+                <label class="form-label">Duration (First/Single Day)</label>
+                <select name="day_portion" class="form-control">
+                    <option value="full" {% if leave.day_portion == 'full' %}selected{% endif %}>Full Day</option>
+                    <option value="first_half" {% if leave.day_portion == 'first_half' %}selected{% endif %}>First Half</option>
+                    <option value="second_half" {% if leave.day_portion == 'second_half' %}selected{% endif %}>Second Half</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Duration (Last Day)</label>
+                <select name="last_day_portion" class="form-control">
+                    <option value="full">Full Day</option>
+                    <option value="first_half">First Half</option>
+                    <option value="second_half">Second Half</option>
+                </select>
+            </div>
+        </div>
+
+        <div class="form-group">
+            <label class="form-label">Reason for Leave <span style="color: var(--danger);">*</span></label>
+            <textarea name="reason" class="form-control" rows="3" required style="max-width: 600px;">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '') }}</textarea>
+        </div>
+
+        <div class="form-group" style="border-top: 1px solid var(--gray-200); padding-top: 1rem; margin-top: 1rem;">
+            <label class="form-label" style="color: #D97706;">Reason for Modification <span style="color: var(--danger);">*</span></label>
+            <textarea name="modification_reason" class="form-control" rows="2" required placeholder="Why are you modifying this leave?" style="max-width: 600px; border-color: #FCD34D;"></textarea>
+            <small style="color: var(--gray-500);">This will be visible to your reporting manager and admin.</small>
+        </div>
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 1rem;">
+            <button type="submit" class="button button-primary">Submit Modified Leave</button>
+            <a href="/my-leave-report" class="button" style="background: var(--gray-200); color: var(--navy);">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

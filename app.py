@@ -54,6 +54,36 @@ def can_post_announcements(user):
     """Check if user is admin or management team."""
     return user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
 
+def can_approve_leave(approver, leave_employee, conn):
+    """Determine if approver can approve/reject a leave for leave_employee.
+    Returns (allowed: bool, reason: str).
+    Rules:
+      1. Never self-approve
+      2. Management (GC001-GC003) leaves → other management members can approve
+      3. Employee with reporting_to → reporting manager OR any admin can approve
+      4. Employee without reporting_to → only admin can approve
+    """
+    if approver['id'] == leave_employee['id']:
+        return False, 'You cannot approve your own leave request'
+
+    emp_code = leave_employee.get('emp_code', '')
+    approver_code = approver.get('emp_code', '')
+
+    # Management cross-approval: any management member can approve another's leave
+    if emp_code in MANAGEMENT_CODES and approver_code in MANAGEMENT_CODES:
+        return True, 'management_peer'
+
+    # Admin can approve anyone else's leave
+    if approver['is_admin'] == 1:
+        return True, 'admin'
+
+    # Reporting manager can approve their direct report's leave
+    reporting_to = leave_employee.get('reporting_to')
+    if reporting_to and reporting_to == approver['id']:
+        return True, 'manager'
+
+    return False, 'Not authorized to approve this leave'
+
 def get_user():
     if 'user_id' not in session:
         return None
@@ -772,10 +802,167 @@ def cancel_leave(leave_id):
     flash('Leave request cancelled', 'success')
     return redirect(url_for('dashboard'))
 
+
+@app.route('/retrieve-leave/<int:leave_id>', methods=['POST'])
+@login_required
+def retrieve_leave(leave_id):
+    """Retrieve (recall) a leave — works for any status, before leave date."""
+    user = get_user()
+    conn = get_db()
+
+    leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
+    if not leave or leave['employee_id'] != user['id']:
+        flash('Leave not found or unauthorized', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_report'))
+
+    if leave['status'] == 'retrieved':
+        flash('This leave has already been retrieved', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_report'))
+
+    # Check leave date is today or in the future
+    try:
+        leave_dt = datetime.strptime(leave['leave_date'], '%Y-%m-%d')
+    except (ValueError, TypeError):
+        leave_dt = leave['leave_date'] if hasattr(leave['leave_date'], 'strftime') else datetime.now()
+    today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+
+    retrieve_reason = request.form.get('retrieve_reason', '').strip()
+    if not retrieve_reason:
+        flash('Please provide a reason for retrieving this leave', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_report'))
+
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute('''
+        UPDATE leave_records
+        SET status = 'retrieved', modification_reason = ?, approved_at = ?
+        WHERE id = ?
+    ''', (retrieve_reason, now_str, leave_id))
+    conn.commit()
+    conn.close()
+
+    flash('Leave retrieved successfully', 'success')
+    return redirect(url_for('my_leave_report'))
+
+
+@app.route('/modify-leave/<int:leave_id>', methods=['GET', 'POST'])
+@login_required
+def modify_leave(leave_id):
+    """Modify an existing leave — creates new record, marks old as modified, goes to pending."""
+    user = get_user()
+    conn = get_db()
+
+    leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
+    if not leave or leave['employee_id'] != user['id']:
+        flash('Leave not found or unauthorized', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_report'))
+
+    if leave['status'] in ('retrieved', 'modified'):
+        flash('This leave has already been retrieved or modified', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_report'))
+
+    if request.method == 'POST':
+        new_leave_type = request.form.get('leave_type', '').strip()
+        new_from_date = request.form.get('from_date', '').strip()
+        new_to_date = request.form.get('to_date', '').strip() or new_from_date
+        new_day_portion = request.form.get('day_portion', 'full').strip()
+        new_last_day_portion = request.form.get('last_day_portion', 'full').strip()
+        new_reason = request.form.get('reason', '').strip()
+        mod_reason = request.form.get('modification_reason', '').strip()
+
+        if not all([new_leave_type, new_from_date, new_reason, mod_reason]):
+            flash('All fields including modification reason are required', 'error')
+            conn.close()
+            return redirect(url_for('modify_leave', leave_id=leave_id))
+
+        try:
+            from_dt = datetime.strptime(new_from_date, '%Y-%m-%d')
+            to_dt = datetime.strptime(new_to_date, '%Y-%m-%d')
+        except ValueError:
+            flash('Invalid date format', 'error')
+            conn.close()
+            return redirect(url_for('modify_leave', leave_id=leave_id))
+
+        if to_dt < from_dt:
+            flash('To date cannot be before from date', 'error')
+            conn.close()
+            return redirect(url_for('modify_leave', leave_id=leave_id))
+
+        # Check holidays
+        holidays_db = {row['holiday_date'] for row in conn.execute('SELECT holiday_date FROM holidays').fetchall()}
+
+        # Determine if this is a late leave modification
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        is_late = 1 if leave.get('is_late') else 0
+
+        # Build working days
+        leave_days = []
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            if current.weekday() < 5 and date_str not in holidays_db:
+                leave_days.append(current)
+            current += timedelta(days=1)
+
+        if not leave_days:
+            flash('No working days in the selected date range', 'error')
+            conn.close()
+            return redirect(url_for('modify_leave', leave_id=leave_id))
+
+        # Mark original leave as 'modified'
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        original_reason = leave['reason'] or ''
+        conn.execute('''
+            UPDATE leave_records SET status = 'modified', modification_reason = ? WHERE id = ?
+        ''', (mod_reason, leave_id))
+
+        # Insert new leave records (one per working day)
+        total_days = 0
+        for i, day in enumerate(leave_days):
+            date_str = day.strftime('%Y-%m-%d')
+            is_single = (len(leave_days) == 1)
+            is_first = (i == 0)
+            is_last = (i == len(leave_days) - 1)
+
+            if is_single:
+                portion = new_day_portion
+            elif is_first:
+                portion = new_day_portion
+            elif is_last:
+                portion = new_last_day_portion
+            else:
+                portion = 'full'
+
+            day_val = 0.5 if portion in ('first_half', 'second_half') else 1.0
+            total_days += day_val
+
+            conn.execute('''
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion,
+                    reason, status, is_late, original_id, original_reason, modification_reason, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+            ''', (user['id'], new_leave_type, date_str, day_val, portion,
+                  new_reason, is_late, leave_id, original_reason, mod_reason, now_str))
+
+        conn.commit()
+        conn.close()
+
+        flash(f'Leave modified ({total_days:.1f} day(s)). Re-approval is required.', 'success')
+        return redirect(url_for('my_leave_report'))
+
+    # GET: show modification form
+    conn.close()
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    return render_template('modify_leave.html', user=user, leave=leave, today=today_str)
+
+
 @app.route('/approvals')
 @login_required
 def employee_approvals():
-    """Approvals page for managers (non-admin employees who have direct reports)"""
+    """Approvals page for managers and management peers"""
     user = get_user()
     conn = get_db()
 
@@ -786,6 +973,22 @@ def employee_approvals():
         WHERE lr.status = 'pending' AND e.reporting_to = ?
         ORDER BY lr.is_late DESC, lr.created_at DESC
     ''', (user['id'],)).fetchall()
+    pending = list(pending)
+
+    # If current user is management, also show pending from other management members
+    if user['emp_code'] in MANAGEMENT_CODES:
+        mgmt_pending = conn.execute('''
+            SELECT lr.*, e.name, e.emp_code, e.department FROM leave_records lr
+            JOIN employees e ON lr.employee_id = e.id
+            WHERE lr.status = 'pending' AND e.emp_code IN (?, ?, ?)
+            AND e.id != ?
+            ORDER BY lr.is_late DESC, lr.created_at DESC
+        ''', (*MANAGEMENT_CODES, user['id'])).fetchall()
+        # Merge, avoiding duplicates
+        existing_ids = {l['id'] for l in pending}
+        for leave in mgmt_pending:
+            if leave['id'] not in existing_ids:
+                pending.append(leave)
 
     # Get recently approved/rejected by this manager
     recent = conn.execute('''
@@ -822,16 +1025,10 @@ def employee_approve_leave(leave_id):
         conn.close()
         return redirect(url_for('employee_approvals'))
 
-    # Block self-approval
-    if leave['employee_id'] == user['id']:
-        flash('You cannot approve your own leave request', 'error')
-        conn.close()
-        return redirect(url_for('employee_approvals'))
-
-    # Verify this user is the reporting manager
-    emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
-    if emp['reporting_to'] != user['id']:
-        flash('Not authorized to approve this leave', 'error')
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
         conn.close()
         return redirect(url_for('employee_approvals'))
 
@@ -847,7 +1044,7 @@ def employee_approve_leave(leave_id):
 @app.route('/reject/<int:leave_id>', methods=['POST'])
 @login_required
 def employee_reject_leave(leave_id):
-    """Reject leave - for non-admin managers"""
+    """Reject leave - for managers and management peers"""
     user = get_user()
     conn = get_db()
 
@@ -857,15 +1054,10 @@ def employee_reject_leave(leave_id):
         conn.close()
         return redirect(url_for('employee_approvals'))
 
-    # Block self-rejection
-    if leave['employee_id'] == user['id']:
-        flash('You cannot reject your own leave request', 'error')
-        conn.close()
-        return redirect(url_for('employee_approvals'))
-
-    emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
-    if emp['reporting_to'] != user['id']:
-        flash('Not authorized to reject this leave', 'error')
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
         conn.close()
         return redirect(url_for('employee_approvals'))
 
@@ -1787,19 +1979,12 @@ def approve_leave(leave_id):
         conn.close()
         return redirect(url_for('pending_approvals'))
 
-    # Block self-approval
-    if leave['employee_id'] == user['id']:
-        flash('You cannot approve your own leave request', 'error')
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
         conn.close()
         return redirect(url_for('pending_approvals'))
-
-    # Check authorization
-    if not user['is_admin']:
-        emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
-        if emp['reporting_to'] != user['id']:
-            flash('Not authorized to approve this leave', 'error')
-            conn.close()
-            return redirect(url_for('pending_approvals'))
 
     conn.execute('''
         UPDATE leave_records
@@ -1824,19 +2009,12 @@ def reject_leave(leave_id):
         conn.close()
         return redirect(url_for('pending_approvals'))
 
-    # Block self-rejection
-    if leave['employee_id'] == user['id']:
-        flash('You cannot reject your own leave request', 'error')
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
         conn.close()
         return redirect(url_for('pending_approvals'))
-
-    # Check authorization
-    if not user['is_admin']:
-        emp = conn.execute('SELECT reporting_to FROM employees WHERE id = ?', (leave['employee_id'],)).fetchone()
-        if emp['reporting_to'] != user['id']:
-            flash('Not authorized to reject this leave', 'error')
-            conn.close()
-            return redirect(url_for('pending_approvals'))
 
     conn.execute('''
         UPDATE leave_records
