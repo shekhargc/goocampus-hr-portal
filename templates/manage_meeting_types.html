@@ -174,7 +174,7 @@
 
     <!-- Meeting Types Table -->
     <div style="background: white; border-radius: 1rem; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);">
-        {% if meeting_types %}
+        {% if types %}
         <table class="data-table">
             <thead>
                 <tr>
@@ -184,7 +184,7 @@
                 </tr>
             </thead>
             <tbody>
-                {% for type in meeting_types %}
+                {% for type in types %}
                 <tr>
                     <td class="type-name">{{ type.name }}</td>
                     <td>
