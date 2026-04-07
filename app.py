@@ -2969,7 +2969,7 @@ def cleanup_data():
             results.append('All leave records deleted')
 
         if action == 'clear_notifications_keep_welcome':
-            conn.execute("DELETE FROM notifications WHERE type != 'announcement' AND title NOT LIKE '%Welcome%' AND title NOT LIKE '%welcome%'")
+            conn.execute("DELETE FROM notifications WHERE id != 1")
             results.append('Non-welcome notifications cleared')
 
         if action == 'clear_late_count':
