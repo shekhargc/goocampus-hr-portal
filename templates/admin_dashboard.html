@@ -106,11 +106,46 @@
     .ann-meta { font-size: 0.75rem; color: var(--gray-400); margin-top: 0.2rem; }
     .ann-msg { font-size: 0.85rem; color: var(--gray-600); margin-top: 0.4rem; line-height: 1.5; }
 
+    /* Management welcome banner (same as employee dashboard) */
+    .dash-welcome {
+        display: flex; align-items: center; gap: 2rem; margin-bottom: 2rem;
+        background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+        padding: 1.75rem 2.25rem; border-radius: 0.85rem; color: white;
+    }
+    .dash-photo { width: 56px; height: 56px; border-radius: 50%; object-fit: cover; border: 3px solid rgba(255,255,255,0.3); flex-shrink: 0; }
+    .dash-photo-init {
+        width: 56px; height: 56px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-size: 1.4rem; font-weight: 700; background: rgba(255,255,255,0.15);
+        color: white; flex-shrink: 0;
+    }
+    .dash-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.15rem; }
+    .dash-role { opacity: 0.7; font-size: 0.85rem; }
+    .dash-actions { margin-left: auto; display: flex; gap: 0.75rem; }
+    .dash-action-btn {
+        padding: 0.55rem 1.2rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.3);
+        color: white; text-decoration: none; font-size: 0.85rem; font-weight: 600;
+        transition: all 0.15s; background: rgba(255,255,255,0.1);
+    }
+    .dash-action-btn:hover { background: rgba(255,255,255,0.2); }
+    .dash-action-btn.primary { background: var(--orange); border-color: var(--orange); }
+    .dash-action-btn.primary:hover { background: var(--orange-dark); }
+    .mgmt-leave-pills {
+        display: flex; gap: 1.5rem; margin-top: 0.5rem;
+    }
+    .mgmt-leave-pill {
+        display: flex; flex-direction: column; align-items: center;
+    }
+    .mgmt-leave-pill-val { font-size: 1.15rem; font-weight: 700; line-height: 1; }
+    .mgmt-leave-pill-lbl { font-size: 0.7rem; opacity: 0.7; margin-top: 0.15rem; }
+
     @media (max-width: 768px) {
         .stat-cards { grid-template-columns: 1fr; }
         .quick-links { grid-template-columns: repeat(2, 1fr); }
         .grid-3col { grid-template-columns: 1fr; }
         .dash-header h1 { font-size: 1.6rem; }
+        .dash-welcome { flex-wrap: wrap; padding: 1.25rem 1.5rem; }
+        .dash-actions { margin-left: 0; width: 100%; }
+        .mgmt-leave-pills { gap: 1rem; }
     }
     @media (min-width: 769px) and (max-width: 1024px) {
         .grid-3col { grid-template-columns: 1fr 1fr; }
@@ -121,10 +156,54 @@
 {% block content %}
 {% set dept_colors = {'Admin':'var(--navy)','Operations':'var(--blue)','Marketing':'var(--orange)','Sales':'var(--orange-dark)','Senior Management':'var(--gray-500)','HR':'var(--success)','Management':'var(--blue-dark)'} %}
 
+{% if is_management %}
+<!-- Management Welcome Banner (with photo, like employee dashboard) -->
+<div class="dash-welcome">
+    {% if user.photo_url %}
+    <img src="/static/photos/{{ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
+    {% else %}
+    <div class="dash-photo-init">{{ user.name[0] }}</div>
+    {% endif %}
+    <div>
+        <div class="dash-name">{{ user.name }}</div>
+        <div class="dash-role">{{ user.department or 'Management' }} · {{ user.designation or 'Management' }}</div>
+        {% if mgmt_leave_data %}
+        <div class="mgmt-leave-pills">
+            <div class="mgmt-leave-pill">
+                <div class="mgmt-leave-pill-val">{{ mgmt_leave_data.total_allocation }}</div>
+                <div class="mgmt-leave-pill-lbl">Total Leaves</div>
+            </div>
+            <div class="mgmt-leave-pill">
+                <div class="mgmt-leave-pill-val" style="color: #6EE7B7;">{{ mgmt_leave_data.available_balance }}</div>
+                <div class="mgmt-leave-pill-lbl">Available</div>
+            </div>
+            <div class="mgmt-leave-pill">
+                <div class="mgmt-leave-pill-val" style="color: #FCD34D;">{{ mgmt_leave_data.days_taken }}</div>
+                <div class="mgmt-leave-pill-lbl">Taken</div>
+            </div>
+            {% if mgmt_leave_data.pending_count > 0 %}
+            <div class="mgmt-leave-pill">
+                <div class="mgmt-leave-pill-val" style="color: #FCA5A5;">{{ mgmt_leave_data.pending_count }}</div>
+                <div class="mgmt-leave-pill-lbl">Pending</div>
+            </div>
+            {% endif %}
+        </div>
+        {% endif %}
+    </div>
+    <div class="dash-actions">
+        <a href="/apply-leave" class="dash-action-btn primary">+ Apply Leave</a>
+        <a href="/admin/pending-approvals" class="dash-action-btn">
+            Approvals {% if pending_count > 0 %}({{ pending_count }}){% endif %}
+        </a>
+    </div>
+</div>
+{% else %}
+<!-- Plain admin header (for admin control account) -->
 <div class="dash-header">
     <h1>Dashboard</h1>
     <p>Welcome back! Here's what's happening at GooCampus today.</p>
 </div>
+{% endif %}
 
 <!-- Stat Cards -->
 <div class="stat-cards">

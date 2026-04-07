@@ -1409,6 +1409,31 @@ def admin_dashboard():
         ORDER BY a.created_at DESC LIMIT 5
     ''', ()).fetchall()
 
+    # Management user leave balance (for welcome banner)
+    is_management = user['emp_code'] in MANAGEMENT_CODES
+    mgmt_leave_data = {}
+    if is_management:
+        fy_year = now.year if now.month >= 4 else now.year - 1
+        carry_forward = user['carry_forward'] or 0
+        total_allocation = 25 + carry_forward
+        leaves_taken = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+        ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
+        days_taken = leaves_taken['total_days'] if leaves_taken['total_days'] else 0
+        my_pending = conn.execute(
+            "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
+            (user['id'],)
+        ).fetchone()['cnt']
+        mgmt_leave_data = {
+            'total_allocation': total_allocation,
+            'available_balance': round(total_allocation - days_taken, 2),
+            'days_taken': days_taken,
+            'pending_count': my_pending
+        }
+
     conn.close()
 
     return render_template('admin_dashboard.html',
@@ -1426,7 +1451,9 @@ def admin_dashboard():
                          birthdays_this_month=birthdays_this_month,
                          anniversaries_this_month=anniversaries_this_month,
                          announcements=announcements,
-                         can_announce=can_post_announcements(user))
+                         can_announce=can_post_announcements(user),
+                         is_management=is_management,
+                         mgmt_leave_data=mgmt_leave_data)
 
 @app.route('/admin/org-chart')
 @admin_required
