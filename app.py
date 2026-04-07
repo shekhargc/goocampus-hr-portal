@@ -91,7 +91,7 @@ def has_module_access(user, module):
         return True
     conn = get_db()
     access = conn.execute(
-        'SELECT id FROM module_access WHERE employee_id = ? AND module = ?',
+        'SELECT id FROM module_access WHERE employee_id = ? AND module = ? AND is_active = 1',
         (user['id'], module)
     ).fetchone()
     conn.close()
@@ -3235,6 +3235,7 @@ def ensure_crm_tables():
                 employee_id INTEGER NOT NULL REFERENCES employees(id),
                 module TEXT NOT NULL,
                 granted_by INTEGER REFERENCES employees(id),
+                is_active INTEGER DEFAULT 1,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 UNIQUE(employee_id, module)
             )''',
@@ -3242,6 +3243,12 @@ def ensure_crm_tables():
         for sql in tables_sql:
             conn.execute(sql)
         conn.commit()
+        # Add is_active column if not exists (migration for existing deployments)
+        try:
+            conn.execute('ALTER TABLE module_access ADD COLUMN is_active INTEGER DEFAULT 1')
+            conn.commit()
+        except Exception:
+            pass  # Column already exists
         conn.close()
         logging.info("CRM tables ensured.")
     except Exception as e:
@@ -3662,7 +3669,12 @@ def sales_dashboard():
     month_end = now.strftime('%Y-%m-') + str(calendar.monthrange(now.year, now.month)[1])
     month_name = calendar.month_name[now.month]
 
-    # Recent news
+    # Determine if user sees company-wide or personal view
+    is_company_view = user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
+    emp_filter = '' if is_company_view else ' AND t.employee_id = ?'
+    emp_params = [] if is_company_view else [user['id']]
+
+    # Recent news (always company-wide)
     recent_news = conn.execute('''
         SELECT n.*, e.name as posted_by_name, e.photo_url
         FROM sales_news n JOIN employees e ON n.posted_by = e.id
@@ -3670,45 +3682,66 @@ def sales_dashboard():
         ORDER BY n.created_at DESC LIMIT 5
     ''').fetchall()
 
-    # Recent B2B trips (with meeting count)
+    # Recent B2B trips (filtered for employees)
     recent_trips = conn.execute('''
         SELECT t.*, e.name as employee_name, e.photo_url as emp_photo, e.emp_code, p.name as project_name,
                (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
         FROM b2b_trips t
         JOIN employees e ON t.employee_id = e.id
         LEFT JOIN projects p ON t.project_id = p.id
+        WHERE 1=1''' + emp_filter + '''
         ORDER BY t.created_at DESC LIMIT 5
-    ''').fetchall()
+    ''', emp_params).fetchall()
 
-    # Active projects count
+    # Active projects count (company-wide, all can see)
     project_count = conn.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'").fetchone()['cnt']
 
     # Total products/services count
     product_count = conn.execute("SELECT COUNT(*) as cnt FROM products_services").fetchone()['cnt']
 
-    # Total trips count
-    total_trips = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips").fetchone()['cnt']
+    # Total trips count (filtered)
+    if is_company_view:
+        total_trips = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips").fetchone()['cnt']
+        outstation_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'outstation'").fetchone()['cnt']
+        city_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'city'").fetchone()['cnt']
+    else:
+        total_trips = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE employee_id = ?", (user['id'],)).fetchone()['cnt']
+        outstation_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'outstation' AND employee_id = ?", (user['id'],)).fetchone()['cnt']
+        city_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'city' AND employee_id = ?", (user['id'],)).fetchone()['cnt']
 
-    # Meeting stats this month
-    meeting_count = conn.execute('''
-        SELECT COUNT(*) as cnt FROM b2b_meetings
-        WHERE meeting_date >= ? AND meeting_date <= ?
-    ''', (month_start, month_end)).fetchone()['cnt']
+    # Meeting stats this month (filtered)
+    if is_company_view:
+        meeting_count = conn.execute('''
+            SELECT COUNT(*) as cnt FROM b2b_meetings
+            WHERE meeting_date >= ? AND meeting_date <= ?
+        ''', (month_start, month_end)).fetchone()['cnt']
+    else:
+        meeting_count = conn.execute('''
+            SELECT COUNT(*) as cnt FROM b2b_meetings m
+            JOIN b2b_trips t ON m.trip_id = t.id
+            WHERE m.meeting_date >= ? AND m.meeting_date <= ? AND t.employee_id = ?
+        ''', (month_start, month_end, user['id'])).fetchone()['cnt']
 
-    # Trip type breakdown
-    outstation_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'outstation'").fetchone()['cnt']
-    city_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'city'").fetchone()['cnt']
+    # Meeting type breakdown this month (filtered)
+    if is_company_view:
+        meeting_types = conn.execute('''
+            SELECT mt.name, COUNT(m.id) as cnt
+            FROM b2b_meetings m
+            JOIN meeting_types mt ON m.meeting_type_id = mt.id
+            WHERE m.meeting_date >= ? AND m.meeting_date <= ?
+            GROUP BY mt.name ORDER BY cnt DESC
+        ''', (month_start, month_end)).fetchall()
+    else:
+        meeting_types = conn.execute('''
+            SELECT mt.name, COUNT(m.id) as cnt
+            FROM b2b_meetings m
+            JOIN meeting_types mt ON m.meeting_type_id = mt.id
+            JOIN b2b_trips t ON m.trip_id = t.id
+            WHERE m.meeting_date >= ? AND m.meeting_date <= ? AND t.employee_id = ?
+            GROUP BY mt.name ORDER BY cnt DESC
+        ''', (month_start, month_end, user['id'])).fetchall()
 
-    # Meeting type breakdown this month
-    meeting_types = conn.execute('''
-        SELECT mt.name, COUNT(m.id) as cnt
-        FROM b2b_meetings m
-        JOIN meeting_types mt ON m.meeting_type_id = mt.id
-        WHERE m.meeting_date >= ? AND m.meeting_date <= ?
-        GROUP BY mt.name ORDER BY cnt DESC
-    ''', (month_start, month_end)).fetchall()
-
-    # Top performers (employees with most meetings this month)
+    # Top performers (always company-wide — everyone can see the leaderboard)
     top_performers = conn.execute('''
         SELECT e.name, e.photo_url, e.emp_code, COUNT(m.id) as meeting_count
         FROM b2b_meetings m
@@ -3718,24 +3751,35 @@ def sales_dashboard():
         GROUP BY e.id ORDER BY meeting_count DESC LIMIT 5
     ''', (month_start, month_end)).fetchall()
 
-    # Active projects list
+    # Active projects list (company-wide)
     active_projects = conn.execute('''
         SELECT p.*, (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count
         FROM projects p WHERE p.status = 'active' ORDER BY p.name LIMIT 6
     ''').fetchall()
 
-    # Upcoming meetings (next 7 days)
+    # Upcoming meetings (next 7 days, filtered)
     today_str = now.strftime('%Y-%m-%d')
     week_end = (now + timedelta(days=7)).strftime('%Y-%m-%d')
-    upcoming_meetings = conn.execute('''
-        SELECT m.*, mt.name as type_name, e.name as emp_name, e.photo_url as emp_photo, t.trip_type
-        FROM b2b_meetings m
-        JOIN meeting_types mt ON m.meeting_type_id = mt.id
-        JOIN b2b_trips t ON m.trip_id = t.id
-        JOIN employees e ON t.employee_id = e.id
-        WHERE m.meeting_date >= ? AND m.meeting_date <= ?
-        ORDER BY m.meeting_date ASC LIMIT 8
-    ''', (today_str, week_end)).fetchall()
+    if is_company_view:
+        upcoming_meetings = conn.execute('''
+            SELECT m.*, mt.name as type_name, e.name as emp_name, e.photo_url as emp_photo, t.trip_type
+            FROM b2b_meetings m
+            JOIN meeting_types mt ON m.meeting_type_id = mt.id
+            JOIN b2b_trips t ON m.trip_id = t.id
+            JOIN employees e ON t.employee_id = e.id
+            WHERE m.meeting_date >= ? AND m.meeting_date <= ?
+            ORDER BY m.meeting_date ASC LIMIT 8
+        ''', (today_str, week_end)).fetchall()
+    else:
+        upcoming_meetings = conn.execute('''
+            SELECT m.*, mt.name as type_name, e.name as emp_name, e.photo_url as emp_photo, t.trip_type
+            FROM b2b_meetings m
+            JOIN meeting_types mt ON m.meeting_type_id = mt.id
+            JOIN b2b_trips t ON m.trip_id = t.id
+            JOIN employees e ON t.employee_id = e.id
+            WHERE m.meeting_date >= ? AND m.meeting_date <= ? AND t.employee_id = ?
+            ORDER BY m.meeting_date ASC LIMIT 8
+        ''', (today_str, week_end, user['id'])).fetchall()
 
     conn.close()
     return render_template('sales_dashboard.html', user=user,
@@ -3745,7 +3789,8 @@ def sales_dashboard():
                          outstation_count=outstation_count, city_count=city_count,
                          meeting_types=meeting_types, top_performers=top_performers,
                          active_projects=active_projects, upcoming_meetings=upcoming_meetings,
-                         month_name=month_name, current_year=now.year)
+                         month_name=month_name, current_year=now.year,
+                         is_company_view=is_company_view)
 
 
 # ─── B2B Meetings Routes ───
@@ -3761,8 +3806,10 @@ def b2b_trips_list():
     f_from = request.args.get('from_date', '')
     f_to = request.args.get('to_date', '')
 
+    is_company_view = user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
+
     query = '''
-        SELECT t.*, e.name as employee_name, e.emp_code, p.name as project_name,
+        SELECT t.*, e.name as employee_name, e.emp_code, e.photo_url as emp_photo, p.name as project_name,
                (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
         FROM b2b_trips t
         JOIN employees e ON t.employee_id = e.id
@@ -3770,6 +3817,11 @@ def b2b_trips_list():
         WHERE 1=1
     '''
     params = []
+
+    # Non-admin/non-management employees only see their own trips
+    if not is_company_view:
+        query += ' AND t.employee_id = ?'
+        params.append(user['id'])
 
     if trip_type:
         query += ' AND t.trip_type = ?'
@@ -3786,7 +3838,8 @@ def b2b_trips_list():
     conn.close()
 
     return render_template('b2b_trips.html', user=user, trips=trips,
-                         trip_type=trip_type, f_from=f_from, f_to=f_to)
+                         trip_type=trip_type, f_from=f_from, f_to=f_to,
+                         is_company_view=is_company_view)
 
 
 @app.route('/b2b/add', methods=['GET', 'POST'])
@@ -3984,31 +4037,50 @@ def manage_module_access():
 
     if request.method == 'POST':
         action = request.form.get('action')
-        emp_id = request.form.get('employee_id')
-        module = request.form.get('module')
 
-        if action == 'grant' and emp_id and module:
-            conn.execute('''
-                INSERT INTO module_access (employee_id, module, granted_by)
-                VALUES (?, ?, ?)
-                ON CONFLICT (employee_id, module) DO NOTHING
-            ''', (emp_id, module, user['id']))
-            conn.commit()
-            flash('Access granted', 'success')
-        elif action == 'revoke' and emp_id and module:
-            conn.execute('DELETE FROM module_access WHERE employee_id = ? AND module = ?', (emp_id, module))
-            conn.commit()
-            flash('Access revoked', 'success')
+        if action == 'grant':
+            employee_ids = request.form.getlist('employee_ids')
+            modules = request.form.getlist('modules')
+            if employee_ids and modules:
+                for emp_id in employee_ids:
+                    for module in modules:
+                        conn.execute('''
+                            INSERT INTO module_access (employee_id, module, granted_by, is_active)
+                            VALUES (?, ?, ?, 1)
+                            ON CONFLICT (employee_id, module) DO UPDATE SET is_active = 1, granted_by = ?
+                        ''', (emp_id, module, user['id'], user['id']))
+                conn.commit()
+                flash(f'Access granted to {len(employee_ids)} employee(s) for {len(modules)} module(s)', 'success')
+            else:
+                flash('Please select at least one employee and one module', 'error')
+
+        elif action == 'toggle':
+            access_id = request.form.get('access_id')
+            new_status = request.form.get('new_status', '1')
+            if access_id:
+                conn.execute('UPDATE module_access SET is_active = ? WHERE id = ?', (int(new_status), access_id))
+                conn.commit()
+                flash('Access status updated', 'success')
+
+        elif action == 'revoke':
+            access_id = request.form.get('access_id')
+            if access_id:
+                conn.execute('DELETE FROM module_access WHERE id = ?', (access_id,))
+                conn.commit()
+                flash('Access revoked', 'success')
 
         conn.close()
         return redirect(url_for('manage_module_access'))
 
-    employees = conn.execute("SELECT id, name, emp_code, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
+    employees = conn.execute("SELECT id, name, emp_code, department, photo_url FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
     access_list = conn.execute('''
-        SELECT ma.*, e.name, e.emp_code, e.department
+        SELECT ma.id as access_id, ma.employee_id, ma.module, ma.is_active, ma.created_at,
+               e.name, e.emp_code, e.department, e.photo_url,
+               g.name as granted_by_name
         FROM module_access ma
         JOIN employees e ON ma.employee_id = e.id
-        ORDER BY ma.module, e.name
+        LEFT JOIN employees g ON ma.granted_by = g.id
+        ORDER BY e.name, ma.module
     ''').fetchall()
 
     modules = ['sales', 'projects', 'b2b_meetings']

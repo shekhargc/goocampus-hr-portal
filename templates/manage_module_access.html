@@ -4,416 +4,411 @@
 
 {% block extra_css %}
 <style>
-    .page-title {
-        font-size: 2rem;
-        font-weight: 700;
-        color: var(--navy);
-        margin-bottom: 2rem;
-    }
+    .page-header { margin-bottom: 2.5rem; }
+    .page-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 0.4rem; }
+    .page-header p { color: var(--gray-500); font-size: 1.05rem; }
 
-    .grant-access-card {
-        background: white;
-        border-radius: 1rem;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-        border: 1px solid var(--gray-200);
-        padding: 2rem;
-        margin-bottom: 2rem;
+    .panel {
+        background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 2rem;
     }
+    .panel-header {
+        padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--gray-100);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .panel-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
+    .panel-body { padding: 1.5rem 1.75rem; }
 
-    .card-title {
-        font-size: 1.15rem;
-        font-weight: 600;
-        margin-bottom: 1.25rem;
-        color: var(--navy);
+    /* Multi-select container */
+    .grant-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 1.5rem; }
+    .select-box { border: 2px solid var(--gray-200); border-radius: 0.75rem; overflow: hidden; }
+    .select-box-header {
+        padding: 0.75rem 1rem; background: var(--gray-50); border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
     }
+    .select-box-header label { font-weight: 600; font-size: 0.9rem; color: var(--navy); margin-bottom: 0; }
+    .select-all-btn { font-size: 0.8rem; color: var(--orange); cursor: pointer; font-weight: 600; border: none; background: none; }
+    .select-all-btn:hover { text-decoration: underline; }
+    .select-box-search {
+        width: 100%; padding: 0.65rem 1rem; border: none; border-bottom: 1px solid var(--gray-100);
+        font-size: 0.9rem; font-family: inherit; outline: none;
+    }
+    .select-box-search:focus { background: var(--blue-light); }
+    .select-box-list { max-height: 280px; overflow-y: auto; }
+    .select-box-item {
+        display: flex; align-items: center; gap: 0.75rem; padding: 0.7rem 1rem;
+        border-bottom: 1px solid var(--gray-50); cursor: pointer; transition: background 0.1s;
+    }
+    .select-box-item:hover { background: var(--orange-light); }
+    .select-box-item:last-child { border-bottom: none; }
+    .select-box-item input[type="checkbox"] {
+        width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer; flex-shrink: 0;
+    }
+    .select-box-item .emp-avatar {
+        width: 32px; height: 32px; border-radius: 50%; object-fit: cover; flex-shrink: 0;
+    }
+    .select-box-item .emp-avatar-init {
+        width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.75rem; color: white; flex-shrink: 0;
+    }
+    .select-box-item .emp-label { flex: 1; min-width: 0; }
+    .select-box-item .emp-name { font-weight: 600; font-size: 0.88rem; color: var(--navy); }
+    .select-box-item .emp-meta { font-size: 0.78rem; color: var(--gray-500); }
 
-    .grant-form {
-        display: grid;
-        grid-template-columns: 1fr 1fr 180px;
-        gap: 1rem;
-        align-items: flex-end;
+    /* Module checkboxes */
+    .module-option {
+        display: flex; align-items: center; gap: 0.75rem; padding: 1rem 1.25rem;
+        border-bottom: 1px solid var(--gray-50); cursor: pointer; transition: background 0.1s;
     }
+    .module-option:hover { background: var(--orange-light); }
+    .module-option:last-child { border-bottom: none; }
+    .module-option input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--orange); cursor: pointer; }
+    .module-icon {
+        width: 36px; height: 36px; border-radius: 0.6rem; display: flex; align-items: center;
+        justify-content: center; flex-shrink: 0;
+    }
+    .module-label { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .module-desc { font-size: 0.78rem; color: var(--gray-500); }
+
+    .grant-btn {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.75rem 2rem; background: var(--orange); color: white;
+        border: none; border-radius: 0.6rem; cursor: pointer;
+        font-size: 0.95rem; font-weight: 600; font-family: inherit; transition: all 0.2s;
+    }
+    .grant-btn:hover { background: var(--orange-dark); transform: translateY(-1px); box-shadow: 0 6px 12px rgba(245,130,32,0.25); }
+    .grant-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; box-shadow: none; }
+    .selected-count { font-size: 0.85rem; color: var(--gray-500); margin-left: 1rem; }
+
+    /* Access list */
+    .access-row {
+        display: flex; align-items: center; gap: 1rem; padding: 0.85rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .access-row:last-child { border-bottom: none; }
+    .access-avatar { width: 40px; height: 40px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--gray-100); }
+    .access-avatar-init {
+        width: 40px; height: 40px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.9rem; color: white; flex-shrink: 0;
+    }
+    .access-info { flex: 1; min-width: 0; }
+    .access-name { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .access-meta { font-size: 0.8rem; color: var(--gray-500); margin-top: 0.1rem; }
+    .access-modules { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .module-badge {
+        display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.3rem 0.75rem;
+        border-radius: 1rem; font-size: 0.78rem; font-weight: 600;
+    }
+    .module-badge-sales { background: #DBEAFE; color: #1E40AF; }
+    .module-badge-projects { background: #EDE9FE; color: #6D28D9; }
+    .module-badge-b2b { background: #CFFAFE; color: #0E7490; }
+    .module-badge-inactive { opacity: 0.4; text-decoration: line-through; }
+
+    /* Toggle switch */
+    .toggle-switch { position: relative; width: 44px; height: 24px; flex-shrink: 0; }
+    .toggle-switch input { opacity: 0; width: 0; height: 0; }
+    .toggle-slider {
+        position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0;
+        background-color: var(--gray-300); transition: 0.3s; border-radius: 24px;
+    }
+    .toggle-slider:before {
+        position: absolute; content: ""; height: 18px; width: 18px; left: 3px; bottom: 3px;
+        background-color: white; transition: 0.3s; border-radius: 50%;
+    }
+    .toggle-switch input:checked + .toggle-slider { background-color: var(--success); }
+    .toggle-switch input:checked + .toggle-slider:before { transform: translateX(20px); }
+
+    .actions-cell { display: flex; align-items: center; gap: 0.75rem; }
+
+    .btn-revoke {
+        padding: 0.35rem 0.75rem; background: var(--danger-light); color: var(--danger);
+        border: 1px solid #FCA5A5; border-radius: 0.4rem; cursor: pointer;
+        font-size: 0.78rem; font-weight: 600; font-family: inherit; transition: all 0.15s;
+    }
+    .btn-revoke:hover { background: var(--danger); color: white; }
+
+    /* Stats pills */
+    .access-stats { display: flex; gap: 1rem; margin-bottom: 2rem; }
+    .access-stat {
+        display: flex; align-items: center; gap: 0.75rem; padding: 0.85rem 1.35rem;
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .access-stat-icon { width: 40px; height: 40px; border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; }
+    .access-stat-val { font-size: 1.3rem; font-weight: 700; color: var(--navy); line-height: 1; }
+    .access-stat-lbl { font-size: 0.8rem; color: var(--gray-500); }
+
+    .empty-state { text-align: center; padding: 2.5rem 1rem; color: var(--gray-400); font-size: 0.9rem; }
 
     @media (max-width: 768px) {
-        .grant-form {
-            grid-template-columns: 1fr;
-        }
+        .grant-grid { grid-template-columns: 1fr; }
+        .access-stats { flex-wrap: wrap; }
     }
 
-    .grant-form .form-group {
-        margin-bottom: 0;
+    /* Filter tabs */
+    .filter-tabs { display: flex; gap: 0.5rem; }
+    .filter-tab {
+        padding: 0.4rem 1rem; border-radius: 2rem; border: 1px solid var(--gray-200);
+        background: var(--white); cursor: pointer; font-size: 0.82rem; font-weight: 600;
+        color: var(--gray-600); transition: all 0.15s; font-family: inherit;
     }
-
-    .btn {
-        display: inline-flex;
-        align-items: center;
-        gap: 0.5rem;
-        padding: 0.7rem 1.4rem;
-        background: var(--orange);
-        color: white;
-        border: none;
-        border-radius: 0.6rem;
-        cursor: pointer;
-        font-size: 0.92rem;
-        font-weight: 600;
-        text-decoration: none;
-        transition: all 0.2s;
-        font-family: inherit;
-        justify-content: center;
-    }
-
-    .btn:hover {
-        background: var(--orange-dark);
-        transform: translateY(-1px);
-        box-shadow: 0 6px 12px rgba(245,130,32,0.25);
-    }
-
-    .btn-danger {
-        background: var(--danger);
-        padding: 0.4rem 0.9rem;
-        font-size: 0.85rem;
-    }
-
-    .btn-danger:hover {
-        background: #DC2626;
-        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
-    }
-
-    .btn-small {
-        padding: 0.4rem 0.9rem;
-        font-size: 0.85rem;
-    }
-
-    .data-table {
-        width: 100%;
-        border-collapse: collapse;
-        background: white;
-        border-radius: 1rem;
-        overflow: hidden;
-        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-        border: 1px solid var(--gray-200);
-    }
-
-    .data-table thead {
-        background: var(--navy);
-        color: white;
-    }
-
-    .data-table th {
-        padding: 1rem 1.25rem;
-        text-align: left;
-        font-weight: 600;
-        font-size: 0.85rem;
-        text-transform: uppercase;
-        letter-spacing: 0.5px;
-    }
-
-    .data-table td {
-        padding: 1rem 1.25rem;
-        border-bottom: 1px solid var(--gray-100);
-        font-size: 0.95rem;
-    }
-
-    .data-table tbody tr:hover {
-        background: var(--orange-light);
-    }
-
-    .emp-name {
-        font-weight: 600;
-        color: var(--navy);
-    }
-
-    .emp-code {
-        color: var(--gray-500);
-        font-size: 0.9rem;
-    }
-
-    .module-badge {
-        display: inline-flex;
-        align-items: center;
-        padding: 0.4rem 0.9rem;
-        border-radius: 0.4rem;
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: white;
-    }
-
-    .module-sales {
-        background: #0EA5E9;
-    }
-
-    .module-projects {
-        background: #8B5CF6;
-    }
-
-    .module-b2b {
-        background: #06B6D4;
-    }
-
-    .action-form {
-        display: inline;
-    }
-
-    .module-section {
-        margin-bottom: 2.5rem;
-    }
-
-    .section-header {
-        display: flex;
-        align-items: center;
-        gap: 0.85rem;
-        margin-bottom: 1.25rem;
-        padding-bottom: 0.75rem;
-        border-bottom: 2px solid var(--gray-200);
-    }
-
-    .section-badge {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        width: 32px;
-        height: 32px;
-        border-radius: 50%;
-        font-size: 0.88rem;
-        font-weight: 700;
-        color: white;
-    }
-
-    .section-badge-sales {
-        background: #0EA5E9;
-    }
-
-    .section-badge-projects {
-        background: #8B5CF6;
-    }
-
-    .section-badge-b2b {
-        background: #06B6D4;
-    }
-
-    .section-header h2 {
-        font-size: 1.15rem;
-        font-weight: 600;
-        color: var(--navy);
-    }
-
-    .empty-state {
-        text-align: center;
-        padding: 3rem 2rem;
-        color: var(--gray-500);
-    }
-
-    .empty-state p {
-        font-size: 1rem;
-        margin-bottom: 1rem;
-    }
-
-    .confirm-dialog {
-        display: none;
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
-        background: rgba(0,0,0,0.45);
-        z-index: 999;
-        align-items: center;
-        justify-content: center;
-        backdrop-filter: blur(4px);
-    }
-
-    .confirm-dialog.active {
-        display: flex;
-    }
-
-    .confirm-dialog-content {
-        background: white;
-        border-radius: 1rem;
-        padding: 2rem;
-        width: 420px;
-        max-width: 92vw;
-        box-shadow: 0 24px 60px rgba(0,0,0,0.2);
-    }
-
-    .confirm-dialog-title {
-        font-size: 1.25rem;
-        font-weight: 600;
-        color: var(--navy);
-        margin-bottom: 1rem;
-    }
-
-    .confirm-dialog-message {
-        color: var(--gray-600);
-        margin-bottom: 1.75rem;
-        font-size: 0.95rem;
-    }
-
-    .confirm-dialog-actions {
-        display: flex;
-        gap: 1rem;
-        justify-content: flex-end;
-    }
-
-    .btn-cancel {
-        background: var(--gray-300);
-        color: var(--gray-800);
-    }
-
-    .btn-cancel:hover {
-        background: var(--gray-400);
-        box-shadow: 0 6px 12px rgba(203,213,225,0.25);
-    }
-
-    .btn-confirm {
-        background: var(--danger);
-    }
-
-    .btn-confirm:hover {
-        background: #DC2626;
-        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
-    }
+    .filter-tab:hover { border-color: var(--orange); color: var(--orange); }
+    .filter-tab.active { background: var(--orange); color: white; border-color: var(--orange); }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem;">
-    <h1 class="page-title">Module Access Management</h1>
+{% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
 
-    <!-- Grant Access Form -->
-    <div class="grant-access-card">
-        <h3 class="card-title">Grant New Access</h3>
-        <form method="POST" action="/admin/module-access" class="grant-form">
-            <div class="form-group">
-                <label for="employee_id">Employee</label>
-                <select id="employee_id" name="employee_id" required>
-                    <option value="">Select an employee...</option>
-                    {% for emp in employees %}
-                    <option value="{{ emp.id }}">{{ emp.name }} ({{ emp.emp_code }})</option>
-                    {% endfor %}
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="module">Module</label>
-                <select id="module" name="module" required>
-                    <option value="">Select a module...</option>
-                    <option value="sales">Sales</option>
-                    <option value="projects">Projects</option>
-                    <option value="b2b_meetings">B2B Meetings</option>
-                </select>
-            </div>
-
-            <input type="hidden" name="action" value="grant">
-            <button type="submit" class="btn">Grant Access</button>
-        </form>
-    </div>
-
-    <!-- Module Access Groups -->
-    {% if access_by_module %}
-        {% for module_name, accesses in access_by_module.items() %}
-        <div class="module-section">
-            <div class="section-header">
-                {% if module_name == 'sales' %}
-                <span class="section-badge section-badge-sales">S</span>
-                <h2>Sales Module</h2>
-                {% elif module_name == 'projects' %}
-                <span class="section-badge section-badge-projects">P</span>
-                <h2>Projects Module</h2>
-                {% elif module_name == 'b2b_meetings' %}
-                <span class="section-badge section-badge-b2b">B</span>
-                <h2>B2B Meetings Module</h2>
-                {% endif %}
-            </div>
-
-            {% if accesses %}
-            <div style="background: white; border-radius: 1rem; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);">
-                <table class="data-table">
-                    <thead>
-                        <tr>
-                            <th>Employee Name</th>
-                            <th>Employee Code</th>
-                            <th>Department</th>
-                            <th>Module</th>
-                            <th style="text-align: center; width: 100px;">Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for access in accesses %}
-                        <tr>
-                            <td class="emp-name">{{ access.employee.name }}</td>
-                            <td class="emp-code">{{ access.employee.emp_code }}</td>
-                            <td>{{ access.employee.department or 'N/A' }}</td>
-                            <td>
-                                {% if access.module == 'sales' %}
-                                <span class="module-badge module-sales">Sales</span>
-                                {% elif access.module == 'projects' %}
-                                <span class="module-badge module-projects">Projects</span>
-                                {% elif access.module == 'b2b_meetings' %}
-                                <span class="module-badge module-b2b">B2B Meetings</span>
-                                {% endif %}
-                            </td>
-                            <td style="text-align: center;">
-                                <button
-                                    type="button"
-                                    class="btn btn-danger btn-small"
-                                    onclick="openConfirmDialog('{{ access.employee.id }}', '{{ access.module }}', '{{ access.employee.name }}', '{% if access.module == 'sales' %}Sales{% elif access.module == 'projects' %}Projects{% elif access.module == 'b2b_meetings' %}B2B Meetings{% endif %}')"
-                                >
-                                    Revoke
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="empty-state">
-                <p>No access granted for this module yet.</p>
-            </div>
-            {% endif %}
-        </div>
-        {% endfor %}
-    {% else %}
-    <div class="empty-state">
-        <p>No module access records found. Grant access to employees to get started!</p>
-    </div>
-    {% endif %}
+<div class="page-header">
+    <h1>Module Access Management</h1>
+    <p>Grant, manage, and control employee access to CRM modules.</p>
 </div>
 
-<!-- Confirmation Dialog -->
-<div id="confirmDialog" class="confirm-dialog">
-    <div class="confirm-dialog-content">
-        <div class="confirm-dialog-title">Revoke Access?</div>
-        <div class="confirm-dialog-message" id="confirmMessage"></div>
-        <div class="confirm-dialog-actions">
-            <button type="button" class="btn btn-cancel btn-small" onclick="closeConfirmDialog()">Cancel</button>
-            <form id="revokeForm" method="POST" action="/admin/module-access" style="display: inline;">
-                <input type="hidden" name="action" value="revoke">
-                <input type="hidden" id="formEmployeeId" name="employee_id">
-                <input type="hidden" id="formModule" name="module">
-                <button type="submit" class="btn btn-confirm btn-small">Revoke Access</button>
-            </form>
+<!-- Stats -->
+{% set active_count = access_list | selectattr('is_active', 'equalto', 1) | list | length %}
+{% set inactive_count = access_list | selectattr('is_active', 'equalto', 0) | list | length %}
+{% set unique_emps = access_list | map(attribute='employee_id') | unique | list | length %}
+<div class="access-stats">
+    <div class="access-stat">
+        <div class="access-stat-icon" style="background: var(--success-light); color: var(--success);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         </div>
+        <div>
+            <div class="access-stat-val">{{ active_count }}</div>
+            <div class="access-stat-lbl">Active Grants</div>
+        </div>
+    </div>
+    <div class="access-stat">
+        <div class="access-stat-icon" style="background: var(--warning-light); color: #D97706;">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>
+        </div>
+        <div>
+            <div class="access-stat-val">{{ inactive_count }}</div>
+            <div class="access-stat-lbl">Deactivated</div>
+        </div>
+    </div>
+    <div class="access-stat">
+        <div class="access-stat-icon" style="background: var(--blue-light); color: var(--blue);">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div>
+            <div class="access-stat-val">{{ unique_emps }}</div>
+            <div class="access-stat-lbl">Employees with Access</div>
+        </div>
+    </div>
+</div>
+
+<!-- Grant Access -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            Grant Access
+        </div>
+        <div class="selected-count" id="selectedSummary"></div>
+    </div>
+    <div class="panel-body">
+        <form method="POST" action="/admin/module-access" id="grantForm">
+            <input type="hidden" name="action" value="grant">
+            <div class="grant-grid">
+                <!-- Employee Multi-Select -->
+                <div class="select-box">
+                    <div class="select-box-header">
+                        <label>Select Employees</label>
+                        <button type="button" class="select-all-btn" onclick="toggleAllEmployees()">Select All</button>
+                    </div>
+                    <input type="text" class="select-box-search" placeholder="Search employees..." oninput="filterEmployees(this.value)">
+                    <div class="select-box-list" id="employeeList">
+                        {% for emp in employees %}
+                        <label class="select-box-item" data-name="{{ emp.name | lower }}" data-dept="{{ (emp.department or '') | lower }}">
+                            <input type="checkbox" name="employee_ids" value="{{ emp.id }}" onchange="updateSummary()">
+                            {% if emp.photo_url %}
+                            <img src="/static/photos/{{ emp.photo_url }}" class="emp-avatar" alt="">
+                            {% else %}
+                            <div class="emp-avatar-init" style="background: {{ dept_colors.get(emp.department, '#94a3b8') }};">{{ emp.name[0] }}</div>
+                            {% endif %}
+                            <div class="emp-label">
+                                <div class="emp-name">{{ emp.name }}</div>
+                                <div class="emp-meta">{{ emp.emp_code }} &middot; {{ emp.department or 'N/A' }}</div>
+                            </div>
+                        </label>
+                        {% endfor %}
+                    </div>
+                </div>
+
+                <!-- Module Multi-Select -->
+                <div class="select-box">
+                    <div class="select-box-header">
+                        <label>Select Modules</label>
+                        <button type="button" class="select-all-btn" onclick="toggleAllModules()">Select All</button>
+                    </div>
+                    <div style="padding: 0.5rem 0;">
+                        <label class="module-option">
+                            <input type="checkbox" name="modules" value="sales" onchange="updateSummary()">
+                            <div class="module-icon" style="background: #DBEAFE; color: #1E40AF;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                            </div>
+                            <div>
+                                <div class="module-label">Sales</div>
+                                <div class="module-desc">Sales dashboard, news feed, and analytics</div>
+                            </div>
+                        </label>
+                        <label class="module-option">
+                            <input type="checkbox" name="modules" value="projects" onchange="updateSummary()">
+                            <div class="module-icon" style="background: #EDE9FE; color: #6D28D9;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                            </div>
+                            <div>
+                                <div class="module-label">Projects</div>
+                                <div class="module-desc">Projects and products/services management</div>
+                            </div>
+                        </label>
+                        <label class="module-option">
+                            <input type="checkbox" name="modules" value="b2b_meetings" onchange="updateSummary()">
+                            <div class="module-icon" style="background: #CFFAFE; color: #0E7490;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                            </div>
+                            <div>
+                                <div class="module-label">B2B Meetings</div>
+                                <div class="module-desc">Outstation and city meeting management</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+            <button type="submit" class="grant-btn" id="grantBtn" disabled>
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+                Grant Access
+            </button>
+        </form>
+    </div>
+</div>
+
+<!-- Current Access List -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            Current Access
+        </div>
+        <div class="filter-tabs">
+            <button class="filter-tab active" onclick="filterAccess('all', this)">All</button>
+            <button class="filter-tab" onclick="filterAccess('active', this)">Active</button>
+            <button class="filter-tab" onclick="filterAccess('inactive', this)">Inactive</button>
+            <button class="filter-tab" onclick="filterAccess('sales', this)">Sales</button>
+            <button class="filter-tab" onclick="filterAccess('projects', this)">Projects</button>
+            <button class="filter-tab" onclick="filterAccess('b2b_meetings', this)">B2B</button>
+        </div>
+    </div>
+    <div class="panel-body">
+        {% if access_list %}
+        {% for access in access_list %}
+        <div class="access-row" data-module="{{ access.module }}" data-active="{{ access.is_active }}">
+            {% if access.photo_url %}
+            <img src="/static/photos/{{ access.photo_url }}" class="access-avatar" alt="">
+            {% else %}
+            <div class="access-avatar-init" style="background: {{ dept_colors.get(access.department, '#94a3b8') }};">{{ access.name[0] }}</div>
+            {% endif %}
+            <div class="access-info">
+                <div class="access-name">{{ access.name }} <span style="font-weight: 400; color: var(--gray-400); font-size: 0.82rem;">({{ access.emp_code }})</span></div>
+                <div class="access-meta">
+                    {{ access.department or 'N/A' }}
+                    {% if access.granted_by_name %} &middot; Granted by {{ access.granted_by_name }}{% endif %}
+                </div>
+            </div>
+            <div class="access-modules">
+                {% if access.module == 'sales' %}
+                <span class="module-badge module-badge-sales {% if not access.is_active %}module-badge-inactive{% endif %}">Sales</span>
+                {% elif access.module == 'projects' %}
+                <span class="module-badge module-badge-projects {% if not access.is_active %}module-badge-inactive{% endif %}">Projects</span>
+                {% elif access.module == 'b2b_meetings' %}
+                <span class="module-badge module-badge-b2b {% if not access.is_active %}module-badge-inactive{% endif %}">B2B Meetings</span>
+                {% endif %}
+            </div>
+            <div class="actions-cell">
+                <!-- Toggle Active/Inactive -->
+                <form method="POST" action="/admin/module-access" style="display: inline;">
+                    <input type="hidden" name="action" value="toggle">
+                    <input type="hidden" name="access_id" value="{{ access.access_id }}">
+                    <input type="hidden" name="new_status" value="{{ 0 if access.is_active else 1 }}">
+                    <label class="toggle-switch" title="{{ 'Deactivate' if access.is_active else 'Activate' }}">
+                        <input type="checkbox" {{ 'checked' if access.is_active }} onchange="this.form.submit()">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </form>
+                <!-- Revoke -->
+                <form method="POST" action="/admin/module-access" style="display: inline;" onsubmit="return confirm('Remove {{ access.name }}\'s {{ access.module }} access permanently?')">
+                    <input type="hidden" name="action" value="revoke">
+                    <input type="hidden" name="access_id" value="{{ access.access_id }}">
+                    <button type="submit" class="btn-revoke" title="Remove permanently">Remove</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <div class="empty-state">No module access records found. Grant access to employees above to get started.</div>
+        {% endif %}
     </div>
 </div>
 
 <script>
-    function openConfirmDialog(employeeId, module, employeeName, moduleName) {
-        document.getElementById('confirmDialog').classList.add('active');
-        document.getElementById('confirmMessage').textContent = `Are you sure you want to revoke ${employeeName}'s access to the ${moduleName} module? This action cannot be undone.`;
-        document.getElementById('formEmployeeId').value = employeeId;
-        document.getElementById('formModule').value = module;
-    }
-
-    function closeConfirmDialog() {
-        document.getElementById('confirmDialog').classList.remove('active');
-    }
-
-    // Close dialog when clicking outside
-    document.getElementById('confirmDialog').addEventListener('click', function(e) {
-        if (e.target === this) {
-            closeConfirmDialog();
-        }
+function filterEmployees(query) {
+    const items = document.querySelectorAll('#employeeList .select-box-item');
+    const q = query.toLowerCase();
+    items.forEach(item => {
+        const name = item.dataset.name || '';
+        const dept = item.dataset.dept || '';
+        item.style.display = (name.includes(q) || dept.includes(q)) ? '' : 'none';
     });
+}
+
+function toggleAllEmployees() {
+    const checkboxes = document.querySelectorAll('#employeeList input[type="checkbox"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => { if (cb.closest('.select-box-item').style.display !== 'none') cb.checked = !allChecked; });
+    updateSummary();
+}
+
+function toggleAllModules() {
+    const checkboxes = document.querySelectorAll('input[name="modules"]');
+    const allChecked = Array.from(checkboxes).every(cb => cb.checked);
+    checkboxes.forEach(cb => cb.checked = !allChecked);
+    updateSummary();
+}
+
+function updateSummary() {
+    const empCount = document.querySelectorAll('#employeeList input[type="checkbox"]:checked').length;
+    const modCount = document.querySelectorAll('input[name="modules"]:checked').length;
+    const summary = document.getElementById('selectedSummary');
+    const btn = document.getElementById('grantBtn');
+
+    if (empCount > 0 && modCount > 0) {
+        summary.textContent = empCount + ' employee' + (empCount > 1 ? 's' : '') + ' x ' + modCount + ' module' + (modCount > 1 ? 's' : '') + ' = ' + (empCount * modCount) + ' grant' + (empCount * modCount > 1 ? 's' : '');
+        summary.style.color = 'var(--orange)';
+        btn.disabled = false;
+    } else {
+        const parts = [];
+        if (empCount === 0) parts.push('Select employees');
+        if (modCount === 0) parts.push('Select modules');
+        summary.textContent = parts.join(' & ');
+        summary.style.color = 'var(--gray-400)';
+        btn.disabled = true;
+    }
+}
+
+function filterAccess(type, btn) {
+    document.querySelectorAll('.filter-tab').forEach(t => t.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('.access-row').forEach(row => {
+        if (type === 'all') { row.style.display = ''; }
+        else if (type === 'active') { row.style.display = row.dataset.active === '1' ? '' : 'none'; }
+        else if (type === 'inactive') { row.style.display = row.dataset.active === '0' ? '' : 'none'; }
+        else { row.style.display = row.dataset.module === type ? '' : 'none'; }
+    });
+}
+
+updateSummary();
 </script>
 {% endblock %}

@@ -169,7 +169,11 @@
 <!-- Header -->
 <div class="dash-header">
     <h1>Sales Dashboard</h1>
-    <p>{{ month_name }} {{ current_year }} — Track projects, meetings, and team performance.</p>
+    {% if is_company_view %}
+    <p>{{ month_name }} {{ current_year }} — Company-wide sales activity and team performance.</p>
+    {% else %}
+    <p>{{ month_name }} {{ current_year }} — Your personal sales activity and performance, {{ user.name.split(' ')[0] }}.</p>
+    {% endif %}
 </div>
 
 <!-- Stat Cards -->
@@ -190,7 +194,7 @@
         </div>
         <div>
             <div class="stat-value">{{ meeting_count }}</div>
-            <div class="stat-label">Meetings This Month</div>
+            <div class="stat-label">{% if is_company_view %}Meetings This Month{% else %}My Meetings This Month{% endif %}</div>
         </div>
     </div>
     <div class="stat-card">
@@ -199,7 +203,7 @@
         </div>
         <div>
             <div class="stat-value">{{ total_trips }}</div>
-            <div class="stat-label">Total B2B Trips</div>
+            <div class="stat-label">{% if is_company_view %}Total B2B Trips{% else %}My B2B Trips{% endif %}</div>
             <div class="stat-sub">{{ outstation_count }} outstation, {{ city_count }} city</div>
         </div>
     </div>
@@ -239,7 +243,7 @@
     <!-- Upcoming Meetings -->
     <div class="panel">
         <div class="panel-header">
-            <div class="panel-title">Upcoming Meetings (Next 7 Days)</div>
+            <div class="panel-title">{% if is_company_view %}Upcoming Meetings (Next 7 Days){% else %}My Upcoming Meetings{% endif %}</div>
             <a href="/b2b" class="view-all-link">All Trips &rarr;</a>
         </div>
         <div class="panel-body">
@@ -305,7 +309,7 @@
         <!-- Meeting Types Breakdown -->
         <div class="panel">
             <div class="panel-header">
-                <div class="panel-title">Meeting Types — {{ month_name }}</div>
+                <div class="panel-title">{% if is_company_view %}Meeting Types — {{ month_name }}{% else %}My Meeting Types — {{ month_name }}{% endif %}</div>
             </div>
             <div class="panel-body">
                 {% if meeting_types %}
@@ -357,7 +361,7 @@
     <!-- Recent B2B Trips -->
     <div class="panel">
         <div class="panel-header">
-            <div class="panel-title">Recent B2B Trips</div>
+            <div class="panel-title">{% if is_company_view %}Recent B2B Trips{% else %}My Recent Trips{% endif %}</div>
             <a href="/b2b" class="view-all-link">View All &rarr;</a>
         </div>
         <div class="panel-body">
