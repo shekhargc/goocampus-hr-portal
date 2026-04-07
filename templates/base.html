@@ -776,12 +776,14 @@
                     <li><a href="/admin/manage-employees">Employees</a></li>
                     <li><a href="/admin/org-chart">Org Chart</a></li>
                     <li><a href="/admin/monthly-report">Reports</a></li>
+                    <li><a href="/admin/leave-applications">Leave Applications</a></li>
                     <li><a href="/admin/holidays">Holidays</a></li>
                 {% else %}
                     <li><a href="/dashboard">Dashboard</a></li>
                     <li><a href="/calendar">Calendar</a></li>
                     <li><a href="/holidays">Holidays</a></li>
                     <li><a href="/my-leave-report">Leave Report</a></li>
+                    <li><a href="/my-applications">My Applications</a></li>
                     <li><a href="/apply-leave">Apply Leave</a></li>
                     <li><a href="/apply-late-leave" style="color: rgba(255,255,200,0.9);">Late Leave</a></li>
                     {% if is_manager %}
@@ -791,6 +793,7 @@
                         <span class="nav-badge">{{ pending_team_count }}</span>
                         {% endif %}
                     </a></li>
+                    <li><a href="/team-applications">Team Leaves</a></li>
                     {% endif %}
                 {% endif %}
 

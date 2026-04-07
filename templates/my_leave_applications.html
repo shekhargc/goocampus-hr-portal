@@ -1,0 +1,267 @@
+{% extends "base.html" %}
+
+{% block title %}My Leave Applications - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .filter-bar {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+        background: white; padding: 1.25rem; border-radius: 0.75rem;
+        border: 1px solid var(--gray-200); margin-bottom: 1.5rem;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filter-group label {
+        font-size: 0.72rem; font-weight: 700; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .filter-group input, .filter-group select {
+        padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.85rem; min-width: 140px;
+        background: white; color: var(--navy);
+    }
+    .filter-group input:focus, .filter-group select:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px rgba(245,130,32,0.15);
+    }
+    .filter-actions { display: flex; gap: 0.5rem; align-items: flex-end; }
+    .btn-filter {
+        padding: 0.5rem 1rem; border: none; border-radius: 0.4rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-filter-apply { background: var(--orange); color: white; }
+    .btn-filter-apply:hover { background: #e0741a; }
+    .btn-filter-clear { background: var(--gray-200); color: var(--gray-600); }
+    .btn-filter-clear:hover { background: var(--gray-300); }
+
+    .stat-pills { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat-pill {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.6rem 1rem; border-radius: 0.5rem;
+        border: 1px solid var(--gray-200); background: white;
+        font-size: 0.85rem; color: var(--gray-600);
+    }
+    .stat-pill .count { font-size: 1.1rem; font-weight: 700; }
+    .stat-pill.total .count { color: var(--navy); }
+    .stat-pill.pending .count { color: #D97706; }
+    .stat-pill.approved .count { color: var(--success); }
+    .stat-pill.rejected .count { color: var(--danger); }
+
+    .leave-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .leave-table th {
+        background: var(--navy); color: white; padding: 0.75rem 1rem;
+        font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.4px; position: sticky; top: 0; z-index: 5;
+    }
+    .leave-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .leave-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .leave-table td {
+        padding: 0.7rem 1rem; border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem; vertical-align: middle;
+    }
+    .leave-table tbody tr:hover { background: #FFF7ED; }
+    .leave-table tbody tr.late-row { background: #FFFBEB; }
+    .leave-table tbody tr.late-row:hover { background: #FEF3C7; }
+
+    .type-annual { color: var(--blue); font-weight: 600; }
+    .type-sick { color: var(--success); font-weight: 600; }
+    .type-casual { color: var(--orange); font-weight: 600; }
+
+    .late-badge {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        background: #FEF3C7; color: #92400E; font-size: 0.68rem; font-weight: 700;
+        padding: 0.15rem 0.45rem; border-radius: 9999px; border: 1px solid #FCD34D;
+        text-transform: uppercase;
+    }
+    .modified-badge {
+        display: inline-flex; align-items: center; gap: 0.25rem;
+        background: #DBEAFE; color: #1E40AF; font-size: 0.68rem; font-weight: 700;
+        padding: 0.15rem 0.45rem; border-radius: 9999px; border: 1px solid #93C5FD;
+        text-transform: uppercase;
+    }
+
+    .reason-cell { max-width: 280px; }
+    .reason-text {
+        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+        color: var(--gray-600); font-size: 0.85rem;
+    }
+    .sub-reason { font-size: 0.75rem; margin-top: 0.25rem; font-style: italic; }
+
+    .empty-state {
+        text-align: center; padding: 4rem 2rem; color: var(--gray-400);
+    }
+    .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
+    .empty-state p { font-size: 0.95rem; }
+
+    .action-btns { display: flex; gap: 0.35rem; flex-wrap: wrap; }
+    .btn-sm {
+        font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem;
+        border: none; cursor: pointer; text-decoration: none; display: inline-block;
+    }
+    .btn-retrieve { background: #E5E7EB; color: #374151; }
+    .btn-retrieve:hover { background: #D1D5DB; }
+    .btn-modify { background: #DBEAFE; color: #1D4ED8; }
+    .btn-modify:hover { background: #BFDBFE; }
+
+    @media (max-width: 768px) {
+        .filter-bar { flex-direction: column; }
+        .filter-group input, .filter-group select { min-width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>My Leave Applications</h1>
+    <p>View all your leave applications and their current status</p>
+</div>
+
+<!-- Filter Bar -->
+<form method="GET" class="filter-bar">
+    <div class="filter-group">
+        <label>Leave Type</label>
+        <select name="leave_type">
+            <option value="">All Types</option>
+            <option value="annual" {% if f_type == 'annual' %}selected{% endif %}>Annual</option>
+            <option value="sick" {% if f_type == 'sick' %}selected{% endif %}>Sick</option>
+            <option value="casual" {% if f_type == 'casual' %}selected{% endif %}>Casual</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>Status</label>
+        <select name="status">
+            <option value="">All Status</option>
+            <option value="pending" {% if f_status == 'pending' %}selected{% endif %}>Pending</option>
+            <option value="approved" {% if f_status == 'approved' %}selected{% endif %}>Approved</option>
+            <option value="rejected" {% if f_status == 'rejected' %}selected{% endif %}>Rejected</option>
+            <option value="retrieved" {% if f_status == 'retrieved' %}selected{% endif %}>Retrieved</option>
+            <option value="modified" {% if f_status == 'modified' %}selected{% endif %}>Modified</option>
+        </select>
+    </div>
+    <div class="filter-group">
+        <label>From Date</label>
+        <input type="date" name="from_date" value="{{ f_from }}">
+    </div>
+    <div class="filter-group">
+        <label>To Date</label>
+        <input type="date" name="to_date" value="{{ f_to }}">
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn-filter btn-filter-apply">Filter</button>
+        <a href="/my-applications" class="btn-filter btn-filter-clear" style="text-decoration: none;">Clear</a>
+    </div>
+</form>
+
+<!-- Summary Pills -->
+<div class="stat-pills">
+    <div class="stat-pill total">
+        <span class="count">{{ total }}</span> Total
+    </div>
+    <div class="stat-pill pending">
+        <span class="count">{{ pending_count }}</span> Pending
+    </div>
+    <div class="stat-pill approved">
+        <span class="count">{{ approved_count }}</span> Approved
+    </div>
+    <div class="stat-pill rejected">
+        <span class="count">{{ rejected_count }}</span> Rejected
+    </div>
+</div>
+
+<!-- Leave Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
+    {% if leaves %}
+    <div style="overflow-x: auto;">
+    <table class="leave-table">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Applied On</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in leaves %}
+            <tr{% if leave.is_late %} class="late-row"{% endif %}{% if leave.status == 'retrieved' %} style="opacity: 0.55;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.45;"{% endif %}>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                    {{ leave.leave_date }}
+                    {% if leave.is_late %}
+                    <br><span class="late-badge">Late</span>
+                    {% endif %}
+                    {% if leave.original_id %}
+                    <br><span class="modified-badge">Re-applied</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.leave_type == 'annual' %}
+                    <span class="type-annual">Annual</span>
+                    {% elif leave.leave_type == 'sick' %}
+                    <span class="type-sick">Sick</span>
+                    {% else %}
+                    <span class="type-casual">Casual</span>
+                    {% endif %}
+                </td>
+                <td style="white-space: nowrap;">
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day{% endif %}
+                </td>
+                <td class="reason-cell">
+                    <div class="reason-text">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '—') }}</div>
+                    {% if leave.modification_reason %}
+                    <div class="sub-reason" style="color: #D97706;">Mod: {{ leave.modification_reason[:80] }}{% if leave.modification_reason|length > 80 %}...{% endif %}</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.status == 'pending' %}
+                    <span class="badge badge-pending">Pending</span>
+                    {% elif leave.status == 'approved' %}
+                    <span class="badge badge-approved">Approved</span>
+                    {% elif leave.status == 'rejected' %}
+                    <span class="badge badge-rejected">Rejected</span>
+                    {% elif leave.status == 'retrieved' %}
+                    <span class="badge" style="background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB;">Retrieved</span>
+                    {% elif leave.status == 'modified' %}
+                    <span class="badge" style="background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;">Modified</span>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
+                    {{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '—' }}
+                </td>
+                <td style="white-space: nowrap;">
+                    {% if leave.status not in ('retrieved', 'modified') %}
+                    <div class="action-btns">
+                        <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm btn-retrieve">Retrieve</button>
+                        <a href="/modify-leave/{{ leave.id }}" class="btn-sm btn-modify">Modify</a>
+                    </div>
+                    {% else %}
+                    <span style="color: var(--gray-400); font-size: 0.78rem;">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% if leave.status not in ('retrieved', 'modified') %}
+            <tr id="ret-{{ leave.id }}" style="display: none; background: #F9FAFB;">
+                <td colspan="7">
+                    <form method="POST" action="/retrieve-leave/{{ leave.id }}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.3rem 0;">
+                        <input type="text" name="retrieve_reason" placeholder="Reason for retrieving this leave..." required
+                               style="flex: 1; padding: 0.4rem 0.7rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
+                        <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm</button>
+                        <button type="button" onclick="document.getElementById('ret-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Cancel</button>
+                    </form>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        <p>No leave applications found matching your filters</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

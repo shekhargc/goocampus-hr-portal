@@ -2462,6 +2462,210 @@ def ensure_management_admins():
     except Exception as e:
         logging.error(f"ensure_management_admins: {e}")
 
+# ─── Leave Applications (All) ─── Admin / Management view ───
+@app.route('/admin/leave-applications')
+@login_required
+@admin_required
+def admin_leave_applications():
+    user = get_user()
+    conn = get_db()
+
+    # Read filter params
+    f_employee = request.args.get('employee', '').strip()
+    f_type = request.args.get('leave_type', '').strip()
+    f_status = request.args.get('status', '').strip()
+    f_from = request.args.get('from_date', '').strip()
+    f_to = request.args.get('to_date', '').strip()
+
+    # Build query
+    query = '''
+        SELECT lr.*, e.name, e.emp_code, e.department, e.photo_url
+        FROM leave_records lr
+        JOIN employees e ON lr.employee_id = e.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if f_employee:
+        query += " AND (LOWER(e.name) LIKE LOWER(?) OR LOWER(e.emp_code) LIKE LOWER(?))"
+        params.extend([f'%{f_employee}%', f'%{f_employee}%'])
+    if f_type:
+        query += " AND lr.leave_type = ?"
+        params.append(f_type)
+    if f_status:
+        query += " AND lr.status = ?"
+        params.append(f_status)
+    if f_from:
+        query += " AND lr.leave_date >= ?"
+        params.append(f_from)
+    if f_to:
+        query += " AND lr.leave_date <= ?"
+        params.append(f_to)
+
+    query += " ORDER BY lr.leave_date DESC, lr.created_at DESC"
+
+    leaves = conn.execute(query, params).fetchall()
+
+    # Get employee list for filter dropdown
+    employees = conn.execute(
+        "SELECT id, name, emp_code FROM employees WHERE is_active = 1 ORDER BY name"
+    ).fetchall()
+
+    # Summary counts
+    total = len(leaves)
+    pending_count = sum(1 for l in leaves if l['status'] == 'pending')
+    approved_count = sum(1 for l in leaves if l['status'] == 'approved')
+    rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
+
+    conn.close()
+    return render_template('admin_leave_applications.html',
+        user=user, leaves=leaves, employees=employees,
+        total=total, pending_count=pending_count,
+        approved_count=approved_count, rejected_count=rejected_count,
+        f_employee=f_employee, f_type=f_type, f_status=f_status,
+        f_from=f_from, f_to=f_to)
+
+
+# ─── My Leave Applications ─── Employee's own leaves ───
+@app.route('/my-applications')
+@login_required
+def my_leave_applications():
+    user = get_user()
+    conn = get_db()
+
+    f_type = request.args.get('leave_type', '').strip()
+    f_status = request.args.get('status', '').strip()
+    f_from = request.args.get('from_date', '').strip()
+    f_to = request.args.get('to_date', '').strip()
+
+    query = '''
+        SELECT lr.*, e.name, e.emp_code, e.department
+        FROM leave_records lr
+        JOIN employees e ON lr.employee_id = e.id
+        WHERE lr.employee_id = ?
+    '''
+    params = [user['id']]
+
+    if f_type:
+        query += " AND lr.leave_type = ?"
+        params.append(f_type)
+    if f_status:
+        query += " AND lr.status = ?"
+        params.append(f_status)
+    if f_from:
+        query += " AND lr.leave_date >= ?"
+        params.append(f_from)
+    if f_to:
+        query += " AND lr.leave_date <= ?"
+        params.append(f_to)
+
+    query += " ORDER BY lr.leave_date DESC, lr.created_at DESC"
+
+    leaves = conn.execute(query, params).fetchall()
+
+    total = len(leaves)
+    pending_count = sum(1 for l in leaves if l['status'] == 'pending')
+    approved_count = sum(1 for l in leaves if l['status'] == 'approved')
+    rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
+
+    conn.close()
+    return render_template('my_leave_applications.html',
+        user=user, leaves=leaves,
+        total=total, pending_count=pending_count,
+        approved_count=approved_count, rejected_count=rejected_count,
+        f_type=f_type, f_status=f_status,
+        f_from=f_from, f_to=f_to)
+
+
+# ─── Team Leave Applications ─── Manager view of team leaves ───
+@app.route('/team-applications')
+@login_required
+def team_leave_applications():
+    user = get_user()
+    conn = get_db()
+
+    # Check if user is a manager or management
+    direct_reports = conn.execute(
+        "SELECT id FROM employees WHERE reporting_to = ? AND is_active = 1",
+        (user['id'],)
+    ).fetchall()
+
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+
+    if not direct_reports and not is_mgmt:
+        flash('You do not have team members to view', 'error')
+        conn.close()
+        return redirect(url_for('dashboard'))
+
+    # Build list of viewable employee IDs
+    viewable_ids = [r['id'] for r in direct_reports]
+
+    # Management can also see other management members' leaves
+    if is_mgmt:
+        mgmt_employees = conn.execute(
+            "SELECT id FROM employees WHERE emp_code IN ({})".format(
+                ','.join('?' * len(MANAGEMENT_CODES))
+            ), MANAGEMENT_CODES
+        ).fetchall()
+        for m in mgmt_employees:
+            if m['id'] not in viewable_ids and m['id'] != user['id']:
+                viewable_ids.append(m['id'])
+
+    f_employee = request.args.get('employee', '').strip()
+    f_type = request.args.get('leave_type', '').strip()
+    f_status = request.args.get('status', '').strip()
+    f_from = request.args.get('from_date', '').strip()
+    f_to = request.args.get('to_date', '').strip()
+
+    placeholders = ','.join('?' * len(viewable_ids))
+    query = f'''
+        SELECT lr.*, e.name, e.emp_code, e.department, e.photo_url
+        FROM leave_records lr
+        JOIN employees e ON lr.employee_id = e.id
+        WHERE lr.employee_id IN ({placeholders})
+    '''
+    params = list(viewable_ids)
+
+    if f_employee:
+        query += " AND (LOWER(e.name) LIKE LOWER(?) OR LOWER(e.emp_code) LIKE LOWER(?))"
+        params.extend([f'%{f_employee}%', f'%{f_employee}%'])
+    if f_type:
+        query += " AND lr.leave_type = ?"
+        params.append(f_type)
+    if f_status:
+        query += " AND lr.status = ?"
+        params.append(f_status)
+    if f_from:
+        query += " AND lr.leave_date >= ?"
+        params.append(f_from)
+    if f_to:
+        query += " AND lr.leave_date <= ?"
+        params.append(f_to)
+
+    query += " ORDER BY lr.leave_date DESC, lr.created_at DESC"
+
+    leaves = conn.execute(query, params).fetchall()
+
+    # Get team member names for filter
+    team_members = conn.execute(
+        f"SELECT id, name, emp_code FROM employees WHERE id IN ({placeholders}) ORDER BY name",
+        viewable_ids
+    ).fetchall()
+
+    total = len(leaves)
+    pending_count = sum(1 for l in leaves if l['status'] == 'pending')
+    approved_count = sum(1 for l in leaves if l['status'] == 'approved')
+    rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
+
+    conn.close()
+    return render_template('team_leave_applications.html',
+        user=user, leaves=leaves, team_members=team_members,
+        total=total, pending_count=pending_count,
+        approved_count=approved_count, rejected_count=rejected_count,
+        f_employee=f_employee, f_type=f_type, f_status=f_status,
+        f_from=f_from, f_to=f_to)
+
+
 # Run on startup
 ensure_management_admins()
 
