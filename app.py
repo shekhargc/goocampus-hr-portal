@@ -3657,39 +3657,95 @@ def sales_dashboard():
     user = get_user()
     conn = get_db()
 
+    now = datetime.now()
+    month_start = now.strftime('%Y-%m-01')
+    month_end = now.strftime('%Y-%m-') + str(calendar.monthrange(now.year, now.month)[1])
+    month_name = calendar.month_name[now.month]
+
     # Recent news
     recent_news = conn.execute('''
-        SELECT n.*, e.name as posted_by_name
+        SELECT n.*, e.name as posted_by_name, e.photo_url
         FROM sales_news n JOIN employees e ON n.posted_by = e.id
         WHERE n.is_active = 1
         ORDER BY n.created_at DESC LIMIT 5
     ''').fetchall()
 
-    # Recent B2B trips
+    # Recent B2B trips (with meeting count)
     recent_trips = conn.execute('''
-        SELECT t.*, e.name as employee_name, p.name as project_name
+        SELECT t.*, e.name as employee_name, e.photo_url as emp_photo, e.emp_code, p.name as project_name,
+               (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
         FROM b2b_trips t
         JOIN employees e ON t.employee_id = e.id
         LEFT JOIN projects p ON t.project_id = p.id
-        ORDER BY t.created_at DESC LIMIT 10
+        ORDER BY t.created_at DESC LIMIT 5
     ''').fetchall()
 
     # Active projects count
-    project_count = conn.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'").fetchone()
+    project_count = conn.execute("SELECT COUNT(*) as cnt FROM projects WHERE status = 'active'").fetchone()['cnt']
+
+    # Total products/services count
+    product_count = conn.execute("SELECT COUNT(*) as cnt FROM products_services").fetchone()['cnt']
+
+    # Total trips count
+    total_trips = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips").fetchone()['cnt']
 
     # Meeting stats this month
-    now = datetime.now()
-    month_start = now.strftime('%Y-%m-01')
-    month_end = now.strftime('%Y-%m-') + str(calendar.monthrange(now.year, now.month)[1])
     meeting_count = conn.execute('''
         SELECT COUNT(*) as cnt FROM b2b_meetings
         WHERE meeting_date >= ? AND meeting_date <= ?
-    ''', (month_start, month_end)).fetchone()
+    ''', (month_start, month_end)).fetchone()['cnt']
+
+    # Trip type breakdown
+    outstation_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'outstation'").fetchone()['cnt']
+    city_count = conn.execute("SELECT COUNT(*) as cnt FROM b2b_trips WHERE trip_type = 'city'").fetchone()['cnt']
+
+    # Meeting type breakdown this month
+    meeting_types = conn.execute('''
+        SELECT mt.name, COUNT(m.id) as cnt
+        FROM b2b_meetings m
+        JOIN meeting_types mt ON m.meeting_type_id = mt.id
+        WHERE m.meeting_date >= ? AND m.meeting_date <= ?
+        GROUP BY mt.name ORDER BY cnt DESC
+    ''', (month_start, month_end)).fetchall()
+
+    # Top performers (employees with most meetings this month)
+    top_performers = conn.execute('''
+        SELECT e.name, e.photo_url, e.emp_code, COUNT(m.id) as meeting_count
+        FROM b2b_meetings m
+        JOIN b2b_trips t ON m.trip_id = t.id
+        JOIN employees e ON t.employee_id = e.id
+        WHERE m.meeting_date >= ? AND m.meeting_date <= ?
+        GROUP BY e.id ORDER BY meeting_count DESC LIMIT 5
+    ''', (month_start, month_end)).fetchall()
+
+    # Active projects list
+    active_projects = conn.execute('''
+        SELECT p.*, (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count
+        FROM projects p WHERE p.status = 'active' ORDER BY p.name LIMIT 6
+    ''').fetchall()
+
+    # Upcoming meetings (next 7 days)
+    today_str = now.strftime('%Y-%m-%d')
+    week_end = (now + timedelta(days=7)).strftime('%Y-%m-%d')
+    upcoming_meetings = conn.execute('''
+        SELECT m.*, mt.name as type_name, e.name as emp_name, e.photo_url as emp_photo, t.trip_type
+        FROM b2b_meetings m
+        JOIN meeting_types mt ON m.meeting_type_id = mt.id
+        JOIN b2b_trips t ON m.trip_id = t.id
+        JOIN employees e ON t.employee_id = e.id
+        WHERE m.meeting_date >= ? AND m.meeting_date <= ?
+        ORDER BY m.meeting_date ASC LIMIT 8
+    ''', (today_str, week_end)).fetchall()
 
     conn.close()
-    return render_template('sales_dashboard.html', user=user, recent_news=recent_news,
-                         recent_trips=recent_trips, project_count=project_count['cnt'],
-                         meeting_count=meeting_count['cnt'])
+    return render_template('sales_dashboard.html', user=user,
+                         recent_news=recent_news, recent_trips=recent_trips,
+                         project_count=project_count, product_count=product_count,
+                         total_trips=total_trips, meeting_count=meeting_count,
+                         outstation_count=outstation_count, city_count=city_count,
+                         meeting_types=meeting_types, top_performers=top_performers,
+                         active_projects=active_projects, upcoming_meetings=upcoming_meetings,
+                         month_name=month_name, current_year=now.year)
 
 
 # ─── B2B Meetings Routes ───

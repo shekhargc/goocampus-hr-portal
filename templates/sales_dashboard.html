@@ -4,240 +4,455 @@
 
 {% block extra_css %}
 <style>
-  .stats-row {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
-  }
+    .dash-header { margin-bottom: 2.5rem; }
+    .dash-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 0.4rem; }
+    .dash-header p { color: var(--gray-500); font-size: 1.05rem; }
 
-  .stat-card {
-    background: white;
-    border: 1px solid var(--gray-light);
-    border-radius: 8px;
-    padding: 1.5rem;
-    text-align: center;
-  }
+    .stat-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2.5rem; }
+    .stat-card {
+        background: var(--white); border-radius: 1rem; padding: 1.75rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200);
+        display: flex; align-items: center; gap: 1.25rem;
+        transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .stat-card:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(0,0,0,0.08);
+    }
+    .stat-icon {
+        width: 56px; height: 56px; border-radius: 1rem; display: flex;
+        align-items: center; justify-content: center; font-size: 1.4rem; flex-shrink: 0;
+    }
+    .stat-value { font-size: 2rem; font-weight: 700; color: var(--navy); line-height: 1; }
+    .stat-label { font-size: 0.9rem; color: var(--gray-500); margin-top: 0.3rem; }
+    .stat-sub { font-size: 0.78rem; color: var(--gray-400); margin-top: 0.2rem; }
 
-  .stat-value {
-    font-size: 2.5rem;
-    font-weight: bold;
-    color: var(--orange);
-    margin: 0.5rem 0;
-  }
+    .grid-row { display: grid; grid-template-columns: 5fr 3fr; gap: 2rem; margin-bottom: 2rem; }
+    .grid-row-equal { display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem; }
 
-  .stat-label {
-    color: var(--gray-dark);
-    font-size: 0.95rem;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-  }
+    .panel {
+        background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden;
+    }
+    .panel-header {
+        padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--gray-100);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .panel-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); }
+    .panel-body { padding: 1.25rem 1.75rem; }
 
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-top: 2rem;
-    margin-bottom: 1.5rem;
-  }
+    .view-all-link {
+        font-size: 0.85rem; color: var(--orange); text-decoration: none; font-weight: 600;
+    }
+    .view-all-link:hover { text-decoration: underline; }
 
-  .section-title {
-    font-size: 1.3rem;
-    font-weight: 600;
-    color: var(--navy);
-  }
+    /* Trip rows */
+    .trip-row {
+        display: flex; align-items: center; gap: 1rem; padding: 0.85rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .trip-row:last-child { border-bottom: none; }
+    .trip-avatar { width: 42px; height: 42px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid var(--gray-100); }
+    .trip-avatar-init {
+        width: 42px; height: 42px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.95rem; color: white; flex-shrink: 0;
+    }
+    .trip-info { flex: 1; min-width: 0; }
+    .trip-name { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .trip-detail { font-size: 0.82rem; color: var(--gray-500); margin-top: 0.15rem; }
 
-  .news-list {
-    display: flex;
-    flex-direction: column;
-    gap: 1rem;
-  }
+    /* Meeting item */
+    .meeting-item {
+        display: flex; align-items: center; gap: 1rem; padding: 0.75rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .meeting-item:last-child { border-bottom: none; }
+    .meeting-date-box {
+        text-align: center; min-width: 48px; padding: 0.5rem; border-radius: 0.6rem;
+        background: var(--blue-light);
+    }
+    .meeting-date-day { font-size: 1.15rem; font-weight: 700; color: var(--blue-dark); line-height: 1; }
+    .meeting-date-month { font-size: 0.65rem; text-transform: uppercase; font-weight: 600; color: var(--blue); margin-top: 0.1rem; }
+    .meeting-info { flex: 1; min-width: 0; }
+    .meeting-with { font-weight: 600; font-size: 0.92rem; color: var(--navy); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .meeting-meta { font-size: 0.8rem; color: var(--gray-500); margin-top: 0.15rem; }
+    .meeting-type-tag {
+        display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 1rem;
+        font-weight: 600; background: var(--orange-light); color: var(--orange-dark);
+    }
 
-  .news-item {
-    background: white;
-    border: 1px solid var(--gray-light);
-    border-radius: 6px;
-    padding: 1rem;
-    transition: box-shadow 0.2s;
-  }
+    /* Project cards */
+    .project-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; }
+    .project-card {
+        padding: 1.25rem; border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        background: var(--white); transition: all 0.2s; text-decoration: none; display: block;
+    }
+    .project-card:hover {
+        border-color: var(--orange); transform: translateY(-2px);
+        box-shadow: 0 6px 16px rgba(245,130,32,0.12);
+    }
+    .project-card-name { font-weight: 600; font-size: 0.95rem; color: var(--navy); margin-bottom: 0.35rem; }
+    .project-card-desc { font-size: 0.82rem; color: var(--gray-500); line-height: 1.4; margin-bottom: 0.6rem;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+    .project-card-meta { display: flex; align-items: center; gap: 0.75rem; font-size: 0.78rem; color: var(--gray-400); }
+    .project-card-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.15rem 0.5rem;
+        border-radius: 1rem; font-size: 0.72rem; font-weight: 600;
+    }
 
-  .news-item:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
+    /* Performer rows */
+    .performer-row {
+        display: flex; align-items: center; gap: 1rem; padding: 0.65rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .performer-row:last-child { border-bottom: none; }
+    .performer-rank {
+        width: 28px; height: 28px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.82rem; flex-shrink: 0;
+    }
+    .performer-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; }
+    .performer-avatar-init {
+        width: 36px; height: 36px; border-radius: 50%; display: flex; align-items: center;
+        justify-content: center; font-weight: 700; font-size: 0.85rem; color: white; flex-shrink: 0;
+    }
+    .performer-name { font-weight: 600; font-size: 0.9rem; color: var(--navy); }
+    .performer-count { margin-left: auto; font-weight: 700; font-size: 0.95rem; color: var(--orange); }
 
-  .news-title {
-    font-weight: 600;
-    color: var(--navy);
-    margin-bottom: 0.5rem;
-  }
+    /* Meeting type bars */
+    .type-bar { display: flex; align-items: center; gap: 0.85rem; padding: 0.55rem 0; }
+    .type-bar-name { font-size: 0.88rem; width: 130px; flex-shrink: 0; color: var(--gray-700); font-weight: 500; }
+    .type-bar-track { flex: 1; height: 10px; background: var(--gray-100); border-radius: 5px; overflow: hidden; }
+    .type-bar-fill { height: 100%; border-radius: 5px; transition: width 0.5s; }
+    .type-bar-count { font-size: 0.88rem; font-weight: 700; width: 28px; text-align: right; color: var(--navy); }
 
-  .news-meta {
-    font-size: 0.85rem;
-    color: var(--gray-dark);
-  }
+    /* Quick Actions */
+    .quick-links { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; }
+    .quick-link {
+        display: flex; flex-direction: column; align-items: center; gap: 0.65rem;
+        padding: 1.5rem; border-radius: 1rem; text-decoration: none;
+        border: 1px solid var(--gray-200); background: var(--white); transition: all 0.2s;
+        color: var(--gray-700); font-size: 0.92rem; font-weight: 500;
+    }
+    .quick-link:hover {
+        border-color: var(--orange); background: var(--orange-light);
+        color: var(--orange-dark); transform: translateY(-3px);
+        box-shadow: 0 6px 16px rgba(245,130,32,0.12);
+    }
 
-  .news-link {
-    color: var(--orange);
-    text-decoration: none;
-    font-weight: 500;
-  }
+    /* Trip type pills */
+    .trip-type-pills { display: flex; gap: 1rem; margin-top: 0.75rem; }
+    .trip-type-pill {
+        display: flex; align-items: center; gap: 0.6rem; padding: 0.65rem 1.1rem;
+        border-radius: 0.75rem; font-size: 0.88rem; font-weight: 600;
+    }
+    .trip-type-pill-val { font-size: 1.3rem; font-weight: 700; line-height: 1; }
 
-  .news-link:hover {
-    text-decoration: underline;
-  }
+    .empty-state { text-align: center; padding: 2rem 1rem; color: var(--gray-400); font-size: 0.9rem; }
 
-  .trips-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-    border: 1px solid var(--gray-light);
-    border-radius: 6px;
-    overflow: hidden;
-  }
-
-  .trips-table thead {
-    background-color: var(--gray-lightest);
-    border-bottom: 2px solid var(--gray-light);
-  }
-
-  .trips-table th {
-    padding: 1rem;
-    text-align: left;
-    font-weight: 600;
-    color: var(--navy);
-    font-size: 0.95rem;
-  }
-
-  .trips-table td {
-    padding: 1rem;
-    border-bottom: 1px solid var(--gray-lightest);
-    color: var(--gray-dark);
-  }
-
-  .trips-table tbody tr:hover {
-    background-color: #fafafa;
-  }
-
-  .badge {
-    display: inline-block;
-    padding: 0.35rem 0.75rem;
-    border-radius: 12px;
-    font-size: 0.8rem;
-    font-weight: 600;
-  }
-
-  .badge-outstation {
-    background-color: #DBEAFE;
-    color: #1E40AF;
-  }
-
-  .badge-city {
-    background-color: #DCFCE7;
-    color: #15803D;
-  }
-
-  .quick-actions {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-    gap: 1rem;
-    margin-top: 2rem;
-    padding-top: 2rem;
-    border-top: 1px solid var(--gray-light);
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem 1rem;
-    color: var(--gray-dark);
-  }
-
-  .empty-state p {
-    margin-bottom: 1.5rem;
-  }
+    @media (max-width: 1024px) {
+        .stat-cards { grid-template-columns: repeat(2, 1fr); }
+        .grid-row, .grid-row-equal { grid-template-columns: 1fr; }
+        .project-grid { grid-template-columns: repeat(2, 1fr); }
+        .quick-links { grid-template-columns: repeat(2, 1fr); }
+    }
+    @media (max-width: 768px) {
+        .stat-cards { grid-template-columns: 1fr; }
+        .project-grid { grid-template-columns: 1fr; }
+        .quick-links { grid-template-columns: 1fr; }
+        .dash-header h1 { font-size: 1.6rem; }
+    }
 </style>
 {% endblock %}
 
 {% block content %}
-<div class="page-title">Sales Dashboard</div>
-
-<div class="stats-row">
-  <div class="stat-card">
-    <div class="stat-label">Active Projects</div>
-    <div class="stat-value">{{ project_count }}</div>
-  </div>
-  <div class="stat-card">
-    <div class="stat-label">Meetings This Month</div>
-    <div class="stat-value">{{ meeting_count }}</div>
-  </div>
+<!-- Header -->
+<div class="dash-header">
+    <h1>Sales Dashboard</h1>
+    <p>{{ month_name }} {{ current_year }} — Track projects, meetings, and team performance.</p>
 </div>
 
-<div class="section-header">
-  <div class="section-title">Recent News</div>
-  <a href="/sales/news" class="news-link">View All</a>
-</div>
-
-{% if recent_news %}
-  <div class="news-list">
-    {% for item in recent_news %}
-      <div class="news-item">
-        <div class="news-title">{{ item.title }}</div>
-        <div class="news-meta">
-          Posted by <strong>{{ item.posted_by_name }}</strong> on {{ item.created_at.strftime('%B %d, %Y') }}
+<!-- Stat Cards -->
+<div class="stat-cards">
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--blue-light); color: var(--blue);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
         </div>
-      </div>
-    {% endfor %}
-  </div>
-{% else %}
-  <div class="empty-state">
-    <p>No news updates yet</p>
-  </div>
-{% endif %}
-
-<div class="section-header">
-  <div class="section-title">Recent B2B Trips</div>
+        <div>
+            <div class="stat-value">{{ project_count }}</div>
+            <div class="stat-label">Active Projects</div>
+            <div class="stat-sub">{{ product_count }} products/services</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--orange-light); color: var(--orange);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ meeting_count }}</div>
+            <div class="stat-label">Meetings This Month</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: #DBEAFE; color: #2563EB;">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ total_trips }}</div>
+            <div class="stat-label">Total B2B Trips</div>
+            <div class="stat-sub">{{ outstation_count }} outstation, {{ city_count }} city</div>
+        </div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon" style="background: var(--success-light); color: var(--success);">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div>
+            <div class="stat-value">{{ recent_news | length }}</div>
+            <div class="stat-label">News Updates</div>
+        </div>
+    </div>
 </div>
 
-{% if recent_trips %}
-  <table class="trips-table">
-    <thead>
-      <tr>
-        <th>Employee</th>
-        <th>Type</th>
-        <th>From Date</th>
-        <th>To Date</th>
-        <th>Project</th>
-        <th>Meetings</th>
-      </tr>
-    </thead>
-    <tbody>
-      {% for trip in recent_trips %}
-        <tr>
-          <td>{{ trip.employee_name }}</td>
-          <td>
-            {% if trip.trip_type == 'outstation' %}
-              <span class="badge badge-outstation">Outstation</span>
-            {% else %}
-              <span class="badge badge-city">City</span>
-            {% endif %}
-          </td>
-          <td>{{ trip.from_date.strftime('%b %d, %Y') }}</td>
-          <td>{{ trip.to_date.strftime('%b %d, %Y') }}</td>
-          <td>{{ trip.project_name }}</td>
-          <td>{{ trip.meeting_count }}</td>
-        </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-{% else %}
-  <div class="empty-state">
-    <p>No recent trips</p>
-  </div>
+<!-- Trip Type Breakdown -->
+{% if total_trips > 0 %}
+<div class="trip-type-pills" style="margin-bottom: 2rem;">
+    <div class="trip-type-pill" style="background: #DBEAFE; color: #1E40AF;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.4-.1.9.3 1.1l5.5 3.1-3.8 3.8-2.1-.4c-.4-.1-.8.1-1 .4l-.3.5c-.2.3-.1.7.2.9l3.3 2.2 2.2 3.3c.2.3.6.4.9.2l.5-.3c.3-.2.5-.6.4-1l-.4-2.1 3.8-3.8 3.1 5.5c.2.4.7.5 1.1.3l.5-.3c.4-.2.6-.6.5-1.1z"/></svg>
+        <div>
+            <div class="trip-type-pill-val">{{ outstation_count }}</div>
+            <div style="font-size: 0.75rem; opacity: 0.8;">Outstation</div>
+        </div>
+    </div>
+    <div class="trip-type-pill" style="background: #DCFCE7; color: #15803D;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+        <div>
+            <div class="trip-type-pill-val">{{ city_count }}</div>
+            <div style="font-size: 0.75rem; opacity: 0.8;">City</div>
+        </div>
+    </div>
+</div>
 {% endif %}
 
-<div class="quick-actions">
-  <a href="/b2b" class="btn btn-primary">View All Trips</a>
-  <a href="/b2b/add" class="btn btn-primary">Add New Trip</a>
-  <a href="/sales/news" class="btn btn-primary">Sales News</a>
-  <a href="/projects" class="btn btn-primary">Projects</a>
+<!-- Main Content: Upcoming Meetings + Top Performers / Meeting Types -->
+<div class="grid-row">
+    <!-- Upcoming Meetings -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Upcoming Meetings (Next 7 Days)</div>
+            <a href="/b2b" class="view-all-link">All Trips &rarr;</a>
+        </div>
+        <div class="panel-body">
+            {% if upcoming_meetings %}
+            {% for m in upcoming_meetings %}
+            <div class="meeting-item">
+                <div class="meeting-date-box">
+                    <div class="meeting-date-day">{{ m.meeting_date[8:] | int }}</div>
+                    <div class="meeting-date-month">
+                        {% set mm = m.meeting_date[5:7] | int %}
+                        {% if mm == 1 %}Jan{% elif mm == 2 %}Feb{% elif mm == 3 %}Mar{% elif mm == 4 %}Apr{% elif mm == 5 %}May{% elif mm == 6 %}Jun{% elif mm == 7 %}Jul{% elif mm == 8 %}Aug{% elif mm == 9 %}Sep{% elif mm == 10 %}Oct{% elif mm == 11 %}Nov{% elif mm == 12 %}Dec{% endif %}
+                    </div>
+                </div>
+                <div class="meeting-info">
+                    <div class="meeting-with">{{ m.meeting_with }}</div>
+                    <div class="meeting-meta">
+                        {{ m.emp_name }} &middot;
+                        <span class="meeting-type-tag">{{ m.type_name }}</span>
+                        {% if m.trip_type == 'outstation' %}
+                        <span style="display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 1rem; font-weight: 600; background: #DBEAFE; color: #1E40AF; margin-left: 0.25rem;">Outstation</span>
+                        {% else %}
+                        <span style="display: inline-block; font-size: 0.72rem; padding: 0.15rem 0.55rem; border-radius: 1rem; font-weight: 600; background: #DCFCE7; color: #15803D; margin-left: 0.25rem;">City</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">No meetings scheduled in the next 7 days</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Right Column -->
+    <div>
+        <!-- Top Performers -->
+        <div class="panel" style="margin-bottom: 2rem;">
+            <div class="panel-header">
+                <div class="panel-title">Top Performers — {{ month_name }}</div>
+            </div>
+            <div class="panel-body">
+                {% if top_performers %}
+                {% for p in top_performers %}
+                <div class="performer-row">
+                    <div class="performer-rank" style="background: {% if loop.index == 1 %}#FEF3C7; color: #D97706{% elif loop.index == 2 %}var(--gray-100); color: var(--gray-600){% elif loop.index == 3 %}#FDE68A; color: #92400E{% else %}var(--gray-50); color: var(--gray-400){% endif %};">
+                        {{ loop.index }}
+                    </div>
+                    {% if p.photo_url %}
+                    <img src="/static/photos/{{ p.photo_url }}" class="performer-avatar" alt="{{ p.name }}">
+                    {% else %}
+                    <div class="performer-avatar-init" style="background: var(--navy);">{{ p.name[0] }}</div>
+                    {% endif %}
+                    <div class="performer-name">{{ p.name }}</div>
+                    <div class="performer-count">{{ p.meeting_count }} meetings</div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="empty-state">No meetings recorded this month</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <!-- Meeting Types Breakdown -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">Meeting Types — {{ month_name }}</div>
+            </div>
+            <div class="panel-body">
+                {% if meeting_types %}
+                {% set max_mt = meeting_types | map(attribute='cnt') | max %}
+                {% set mt_colors = ['var(--orange)', 'var(--blue)', 'var(--success)', '#8b5cf6', '#d946ef'] %}
+                {% for mt in meeting_types %}
+                <div class="type-bar">
+                    <div class="type-bar-name">{{ mt.name }}</div>
+                    <div class="type-bar-track">
+                        <div class="type-bar-fill" style="width: {{ (mt.cnt / max_mt * 100) | int }}%; background: {{ mt_colors[loop.index0 % 5] }};"></div>
+                    </div>
+                    <div class="type-bar-count">{{ mt.cnt }}</div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div class="empty-state">No meeting data this month</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Active Projects -->
+{% if active_projects %}
+<div class="panel" style="margin-bottom: 2rem;">
+    <div class="panel-header">
+        <div class="panel-title">Active Projects</div>
+        <a href="/projects" class="view-all-link">View All &rarr;</a>
+    </div>
+    <div class="panel-body">
+        <div class="project-grid">
+            {% for proj in active_projects %}
+            <a href="/projects/{{ proj.id }}" class="project-card">
+                <div class="project-card-name">{{ proj.name }}</div>
+                <div class="project-card-desc">{{ proj.description or 'No description' }}</div>
+                <div class="project-card-meta">
+                    <span class="project-card-badge" style="background: var(--success-light); color: #166534;">Active</span>
+                    <span>{{ proj.product_count }} product{{ 's' if proj.product_count != 1 }}</span>
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+
+<!-- Recent Trips + Recent News -->
+<div class="grid-row-equal">
+    <!-- Recent B2B Trips -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Recent B2B Trips</div>
+            <a href="/b2b" class="view-all-link">View All &rarr;</a>
+        </div>
+        <div class="panel-body">
+            {% if recent_trips %}
+            {% for trip in recent_trips %}
+            <div class="trip-row">
+                {% if trip.emp_photo %}
+                <img src="/static/photos/{{ trip.emp_photo }}" class="trip-avatar" alt="{{ trip.employee_name }}">
+                {% else %}
+                <div class="trip-avatar-init" style="background: var(--navy);">{{ trip.employee_name[0] }}</div>
+                {% endif %}
+                <div class="trip-info">
+                    <div class="trip-name">{{ trip.employee_name }}</div>
+                    <div class="trip-detail">
+                        {{ trip.from_date }} to {{ trip.to_date }} &middot;
+                        {{ trip.project_name or 'No project' }} &middot;
+                        {{ trip.meeting_count }} meeting{{ 's' if trip.meeting_count != 1 }}
+                    </div>
+                </div>
+                {% if trip.trip_type == 'outstation' %}
+                <span class="badge" style="background: #DBEAFE; color: #1E40AF; padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600;">Outstation</span>
+                {% else %}
+                <span class="badge" style="background: #DCFCE7; color: #15803D; padding: 0.3rem 0.75rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600;">City</span>
+                {% endif %}
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">No trips recorded yet</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Recent News -->
+    <div class="panel">
+        <div class="panel-header">
+            <div class="panel-title">Sales News</div>
+            <a href="/sales/news" class="view-all-link">View All &rarr;</a>
+        </div>
+        <div class="panel-body">
+            {% if recent_news %}
+            {% for item in recent_news %}
+            <div class="trip-row">
+                {% if item.photo_url %}
+                <img src="/static/photos/{{ item.photo_url }}" class="trip-avatar" alt="{{ item.posted_by_name }}">
+                {% else %}
+                <div class="trip-avatar-init" style="background: var(--orange);">{{ item.posted_by_name[0] }}</div>
+                {% endif %}
+                <div class="trip-info">
+                    <div class="trip-name">{{ item.title }}</div>
+                    <div class="trip-detail">
+                        Posted by {{ item.posted_by_name }}
+                        {% if item.content %} &middot; {{ item.content[:80] }}{% if item.content | length > 80 %}...{% endif %}{% endif %}
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+            {% else %}
+            <div class="empty-state">No news updates yet</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Quick Actions -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">Quick Actions</div>
+    </div>
+    <div class="panel-body">
+        <div class="quick-links">
+            <a href="/b2b/add" class="quick-link">
+                <span>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                </span>
+                New B2B Trip
+            </a>
+            <a href="/projects" class="quick-link">
+                <span>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                </span>
+                Projects
+            </a>
+            <a href="/sales/news" class="quick-link">
+                <span>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/></svg>
+                </span>
+                Sales News
+            </a>
+            <a href="/b2b" class="quick-link">
+                <span>
+                    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                </span>
+                All B2B Trips
+            </a>
+        </div>
+    </div>
 </div>
 {% endblock %}
