@@ -454,6 +454,7 @@ def dashboard():
                          user=user,
                          total_employees=total_employees_count,
                          leaves_today=leaves_today_count,
+                         pending_leaves=pending_leaves_count,
                          pending_count=pending_leaves_count,
                          departments=departments,
                          total_departments=total_departments,
