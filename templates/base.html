@@ -977,6 +977,39 @@
         </div>
     </nav>
 
+    {% if session.get('show_welcome') %}
+    <div id="welcome-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">
+        <div style="background:white;border-radius:1rem;max-width:440px;width:90%;padding:2.5rem;text-align:center;box-shadow:0 20px 60px rgba(0,0,0,0.3);animation:popIn 0.3s ease-out;">
+            <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--orange),#F59E0B);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+            </div>
+            <h2 style="color:var(--navy);font-size:1.4rem;margin-bottom:0.5rem;">Welcome to GooCampus HR Portal!</h2>
+            <p style="color:var(--gray-500);font-size:0.92rem;line-height:1.6;margin-bottom:1.5rem;">
+                We're glad to have you on board. For your account security, please change your default password as soon as possible.
+            </p>
+            <a href="/change-password" onclick="dismissWelcome()" style="display:inline-block;padding:0.7rem 2rem;background:var(--orange);color:white;border-radius:0.5rem;font-weight:700;font-size:0.95rem;text-decoration:none;margin-bottom:0.75rem;">
+                Change Password Now
+            </a>
+            <br>
+            <button onclick="dismissWelcome()" style="background:none;border:none;color:var(--gray-400);font-size:0.85rem;cursor:pointer;margin-top:0.5rem;padding:0.3rem 1rem;">
+                I'll do it later
+            </button>
+        </div>
+    </div>
+    <style>
+        @keyframes popIn {
+            from { opacity: 0; transform: scale(0.85); }
+            to { opacity: 1; transform: scale(1); }
+        }
+    </style>
+    <script>
+    function dismissWelcome() {
+        document.getElementById('welcome-overlay').style.display = 'none';
+        fetch('/api/dismiss-welcome', {method: 'POST'});
+    }
+    </script>
+    {% endif %}
+
     <div class="container">
         {% with messages = get_flashed_messages(with_categories=true) %}
             {% if messages %}
