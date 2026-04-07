@@ -52,6 +52,7 @@ def seed_production_db():
                 emergency_contact_phone TEXT,
                 emergency_contact_relation TEXT,
                 address TEXT,
+                late_leave_count INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
@@ -68,6 +69,7 @@ def seed_production_db():
                 status TEXT DEFAULT 'pending',
                 approved_by INTEGER REFERENCES employees(id),
                 approved_at TEXT,
+                is_late INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')

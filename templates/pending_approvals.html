@@ -2,11 +2,49 @@
 
 {% block title %}Pending Approvals - GooCampus HR Portal{% endblock %}
 
+{% block extra_css %}
+<style>
+    .late-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        background: #FEF3C7; color: #92400E; font-size: 0.72rem; font-weight: 700;
+        padding: 0.2rem 0.55rem; border-radius: 9999px; border: 1px solid #FCD34D;
+        text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .late-count-chip {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        background: #FEF3C7; color: #92400E; font-size: 0.78rem; font-weight: 600;
+        padding: 0.15rem 0.6rem; border-radius: 9999px;
+    }
+    .late-reason {
+        font-size: 0.82rem; color: #92400E; background: #FEF3C7;
+        padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
+        border-left: 3px solid #D97706;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 <div class="page-header">
     <h1>Pending Leave Approvals</h1>
     <p>Review and approve pending leave requests from employees</p>
 </div>
+
+{% if late_leave_summary %}
+<div class="card" style="border-left: 4px solid #D97706; margin-bottom: 1.5rem;">
+    <h2 class="card-title" style="display: flex; align-items: center; gap: 0.75rem; color: #92400E;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        Late Leave Tracker
+    </h2>
+    <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem;">
+        {% for emp in late_leave_summary %}
+        <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 0.6rem; padding: 0.65rem 1rem; display: flex; align-items: center; gap: 0.75rem;">
+            <strong style="color: var(--navy);">{{ emp.name }}</strong>
+            <span class="late-count-chip">{{ emp.late_leave_count }}x late</span>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endif %}
 
 <div class="card">
     {% if pending_leaves %}
@@ -26,8 +64,16 @@
         </thead>
         <tbody>
             {% for leave in pending_leaves %}
-            <tr>
-                <td><strong>{{ leave.name }}</strong></td>
+            <tr{% if leave.is_late %} style="background: #FFFBEB;"{% endif %}>
+                <td>
+                    <strong>{{ leave.name }}</strong>
+                    {% if leave.is_late %}
+                    <br><span class="late-badge">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Late Leave
+                    </span>
+                    {% endif %}
+                </td>
                 <td>{{ leave.emp_code }}</td>
                 <td>{{ leave.leave_date }}</td>
                 <td>{{ leave.leave_type.capitalize() }}</td>
@@ -37,8 +83,15 @@
                     {% else %}Full Day
                     {% endif %}
                 </td>
-                <td>{{ leave.reason or '-' }}</td>
-                <td>{{ leave.created_at.split(' ')[0] }}</td>
+                <td>
+                    {{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '-') }}
+                    {% if leave.is_late and leave.reason and '[Late Application Reason]:' in (leave.reason or '') %}
+                    <div class="late-reason">
+                        <strong>Late Reason:</strong> {{ leave.reason.split('[Late Application Reason]: ')[1] if '[Late Application Reason]: ' in (leave.reason or '') else '' }}
+                    </div>
+                    {% endif %}
+                </td>
+                <td>{{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '-' }}</td>
                 <td>
                     <div style="display: flex; gap: 0.75rem;">
                         <form method="POST" action="/admin/approve-leave/{{ leave.id }}" style="display: inline;">

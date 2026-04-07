@@ -13,6 +13,22 @@
     }
     .team-card-name { font-weight: 700; font-size: 1rem; color: var(--navy); margin-bottom: 0.5rem; }
     .team-card-detail { color: var(--gray-500); font-size: 0.9rem; }
+    .late-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        background: #FEF3C7; color: #92400E; font-size: 0.72rem; font-weight: 700;
+        padding: 0.2rem 0.55rem; border-radius: 9999px; border: 1px solid #FCD34D;
+        text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .late-count-chip {
+        display: inline-flex; align-items: center; gap: 0.35rem;
+        background: #FEF3C7; color: #92400E; font-size: 0.78rem; font-weight: 600;
+        padding: 0.15rem 0.6rem; border-radius: 9999px;
+    }
+    .late-reason {
+        font-size: 0.82rem; color: #92400E; background: #FEF3C7;
+        padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
+        border-left: 3px solid #D97706;
+    }
 </style>
 {% endblock %}
 
@@ -29,6 +45,14 @@
             <div class="team-card-name">{{ emp.name }}</div>
             <div class="team-card-detail" style="margin-bottom: 0.75rem;">{{ emp.emp_code }} &middot; {{ emp.department }}</div>
             <div class="team-card-detail">{{ emp.designation or 'Employee' }}</div>
+            {% if emp.late_leave_count and emp.late_leave_count > 0 %}
+            <div style="margin-top: 0.75rem;">
+                <span class="late-count-chip">
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    {{ emp.late_leave_count }}x late leave
+                </span>
+            </div>
+            {% endif %}
         </div>
         {% endfor %}
     </div>
@@ -62,8 +86,17 @@
         </thead>
         <tbody>
             {% for leave in pending_leaves %}
-            <tr>
-                <td><strong style="color: var(--navy);">{{ leave.name }}</strong><br><span style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.emp_code }}</span></td>
+            <tr{% if leave.is_late %} style="background: #FFFBEB;"{% endif %}>
+                <td>
+                    <strong style="color: var(--navy);">{{ leave.name }}</strong><br>
+                    <span style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.emp_code }}</span>
+                    {% if leave.is_late %}
+                    <br><span class="late-badge">
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                        Late Leave
+                    </span>
+                    {% endif %}
+                </td>
                 <td style="color: var(--navy);">{{ leave.department }}</td>
                 <td style="color: var(--navy);">{{ leave.leave_date }}</td>
                 <td style="color: var(--navy);">{{ leave.leave_type.capitalize() }}</td>
@@ -73,8 +106,15 @@
                     {% else %}Full Day
                     {% endif %}
                 </td>
-                <td style="color: var(--navy);">{{ leave.reason or '-' }}</td>
-                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.created_at.split(' ')[0] }}</td>
+                <td style="color: var(--navy);">
+                    {{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '-') }}
+                    {% if leave.is_late and leave.reason and '[Late Application Reason]:' in (leave.reason or '') %}
+                    <div class="late-reason">
+                        <strong>Late Reason:</strong> {{ leave.reason.split('[Late Application Reason]: ')[1] if '[Late Application Reason]: ' in (leave.reason or '') else '' }}
+                    </div>
+                    {% endif %}
+                </td>
+                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '-' }}</td>
                 <td>
                     <div style="display: flex; gap: 0.5rem;">
                         <form method="POST" action="/approve/{{ leave.id }}" style="display: inline;">
@@ -112,7 +152,12 @@
         <tbody>
             {% for leave in recent_actions %}
             <tr>
-                <td><strong style="color: var(--navy);">{{ leave.name }}</strong></td>
+                <td>
+                    <strong style="color: var(--navy);">{{ leave.name }}</strong>
+                    {% if leave.is_late %}
+                    <span class="late-badge" style="margin-left: 0.5rem;">Late</span>
+                    {% endif %}
+                </td>
                 <td style="color: var(--navy);">{{ leave.leave_date }}</td>
                 <td style="color: var(--navy);">{{ leave.leave_type.capitalize() }}</td>
                 <td style="color: var(--navy);">
@@ -128,7 +173,7 @@
                     <span class="badge badge-rejected">Rejected</span>
                     {% endif %}
                 </td>
-                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.approved_at.split(' ')[0] if leave.approved_at else '-' }}</td>
+                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.approved_at.split(' ')[0] if leave.approved_at is string else leave.approved_at.strftime('%Y-%m-%d') if leave.approved_at else '-' }}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -595,6 +595,158 @@ def apply_leave():
 
     return render_template('apply_leave.html', user=user)
 
+
+@app.route('/apply-late-leave', methods=['GET', 'POST'])
+@login_required
+def apply_late_leave():
+    """Late leave application — for past dates up to 15 days ago"""
+    user = get_user()
+
+    if request.method == 'POST':
+        leave_type = request.form.get('leave_type', '').strip()
+        from_date = request.form.get('from_date', '').strip()
+        to_date = request.form.get('to_date', '').strip()
+        day_portion = request.form.get('day_portion', 'full').strip()
+        last_day_portion = request.form.get('last_day_portion', 'full').strip()
+        reason = request.form.get('reason', '').strip()
+        late_reason = request.form.get('late_reason', '').strip()
+
+        if not leave_type or not from_date or not reason or not late_reason:
+            flash('All fields are required, including reason for late application', 'error')
+            conn = get_db()
+            late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
+            conn.close()
+            return render_template('apply_late_leave.html', user=user,
+                                 late_leave_count=late_count['late_leave_count'] if late_count else 0)
+
+        if leave_type not in ['annual', 'sick', 'casual']:
+            flash('Invalid leave type', 'error')
+            conn = get_db()
+            late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
+            conn.close()
+            return render_template('apply_late_leave.html', user=user,
+                                 late_leave_count=late_count['late_leave_count'] if late_count else 0)
+
+        if not to_date:
+            to_date = from_date
+
+        from_dt = datetime.strptime(from_date, '%Y-%m-%d')
+        to_dt = datetime.strptime(to_date, '%Y-%m-%d')
+        today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        min_date = today - timedelta(days=15)
+
+        # Validate: dates must be in the past
+        if from_dt >= today:
+            flash('Late leave is for past dates only. Use regular leave application for today or future dates.', 'error')
+            return redirect(url_for('apply_late_leave'))
+
+        # Validate: not older than 15 days
+        if from_dt < min_date:
+            flash('Cannot apply late leave for dates older than 15 days', 'error')
+            return redirect(url_for('apply_late_leave'))
+
+        if to_dt < from_dt:
+            flash('To date cannot be before from date', 'error')
+            return redirect(url_for('apply_late_leave'))
+
+        if to_dt >= today:
+            flash('To date must also be a past date for late leave', 'error')
+            return redirect(url_for('apply_late_leave'))
+
+        conn = get_db()
+        holidays_db = {row['holiday_date'] for row in conn.execute('SELECT holiday_date FROM holidays').fetchall()}
+
+        # Build list of working days
+        leave_days = []
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            if current.weekday() < 5 and date_str not in holidays_db:
+                leave_days.append(current)
+            current += timedelta(days=1)
+
+        if not leave_days:
+            flash('No working days in the selected date range (weekends and holidays are excluded)', 'error')
+            conn.close()
+            return redirect(url_for('apply_late_leave'))
+
+        # Insert leave records with is_late = 1
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        total_days = 0
+        combined_reason = f"{reason}\n\n[Late Application Reason]: {late_reason}"
+
+        for i, day in enumerate(leave_days):
+            date_str = day.strftime('%Y-%m-%d')
+            is_single = (len(leave_days) == 1)
+            is_last = (i == len(leave_days) - 1 and len(leave_days) > 1)
+
+            if is_single:
+                portion = day_portion if day_portion in ['full', 'first_half', 'second_half'] else 'full'
+            elif is_last:
+                portion = last_day_portion if last_day_portion in ['full', 'first_half', 'second_half'] else 'full'
+            else:
+                portion = 'full'
+
+            day_val = 0.5 if portion in ['first_half', 'second_half'] else 1.0
+            total_days += day_val
+
+            # Check for duplicate
+            existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
+                                   (user['id'], date_str, 'rejected')).fetchone()
+            if existing:
+                flash(f'You already have a leave record for {date_str}', 'error')
+                conn.close()
+                return redirect(url_for('apply_late_leave'))
+
+            conn.execute('''
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, is_late, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, ?)
+            ''', (user['id'], leave_type, date_str, day_val, portion, combined_reason, now_str))
+
+        # Increment late leave count
+        conn.execute('UPDATE employees SET late_leave_count = late_leave_count + 1 WHERE id = ?', (user['id'],))
+        conn.commit()
+        conn.close()
+
+        # Notify reporting manager with LATE flag
+        conn2 = get_db()
+        reporting_mgr = conn2.execute('SELECT reporting_to FROM employees WHERE id = ?', (user['id'],)).fetchone()
+        if reporting_mgr and reporting_mgr['reporting_to']:
+            try:
+                create_notification(conn2, 'leave_request',
+                    f"⚠️ Late Leave Request from {user['name']}",
+                    f"{user['name']} has applied LATE for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date}). Late reason: {late_reason}",
+                    target_user_id=reporting_mgr['reporting_to'], target_role='manager')
+                conn2.commit()
+            except Exception as e:
+                logging.error(f"Failed to create late leave notification for manager: {e}")
+
+        # Notify admin
+        admins = conn2.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1', ()).fetchall()
+        for adm in admins:
+            if not reporting_mgr or adm['id'] != reporting_mgr.get('reporting_to'):
+                try:
+                    create_notification(conn2, 'leave_request',
+                        f"⚠️ Late Leave Request from {user['name']}",
+                        f"{user['name']} has applied LATE for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date}). Late reason: {late_reason}",
+                        target_user_id=adm['id'], target_role='admin')
+                    conn2.commit()
+                except Exception as e:
+                    logging.error(f"Failed to create late leave notification for admin: {e}")
+        conn2.close()
+
+        day_label = 'day' if total_days == 1 else 'days'
+        flash(f'Late leave request submitted for {total_days:.1f} {day_label}. Your late leave count has been updated.', 'success')
+        return redirect(url_for('dashboard'))
+
+    # GET request
+    conn = get_db()
+    late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    conn.close()
+    return render_template('apply_late_leave.html', user=user,
+                         late_leave_count=late_count['late_leave_count'] if late_count else 0)
+
+
 @app.route('/cancel-leave/<int:leave_id>', methods=['POST'])
 @login_required
 def cancel_leave(leave_id):
@@ -627,12 +779,12 @@ def employee_approvals():
     user = get_user()
     conn = get_db()
 
-    # Get pending leave requests from direct reports
+    # Get pending leave requests from direct reports (late leaves first)
     pending = conn.execute('''
         SELECT lr.*, e.name, e.emp_code, e.department FROM leave_records lr
         JOIN employees e ON lr.employee_id = e.id
         WHERE lr.status = 'pending' AND e.reporting_to = ?
-        ORDER BY lr.created_at DESC
+        ORDER BY lr.is_late DESC, lr.created_at DESC
     ''', (user['id'],)).fetchall()
 
     # Get recently approved/rejected by this manager
@@ -643,9 +795,9 @@ def employee_approvals():
         ORDER BY lr.approved_at DESC LIMIT 10
     ''', (user['id'],)).fetchall()
 
-    # Get direct reports list
+    # Get direct reports list (include late leave count)
     direct_reports = conn.execute('''
-        SELECT id, name, emp_code, department, designation FROM employees
+        SELECT id, name, emp_code, department, designation, late_leave_count FROM employees
         WHERE reporting_to = ? AND is_active = 1 ORDER BY name
     ''', (user['id'],)).fetchall()
 
@@ -1583,7 +1735,13 @@ def pending_approvals():
             SELECT lr.*, e.name, e.emp_code FROM leave_records lr
             JOIN employees e ON lr.employee_id = e.id
             WHERE lr.status = 'pending'
-            ORDER BY lr.created_at DESC
+            ORDER BY lr.is_late DESC, lr.created_at DESC
+        ''').fetchall()
+        # Get late leave summary for all employees with late_leave_count > 0
+        late_summary = conn.execute('''
+            SELECT name, emp_code, late_leave_count FROM employees
+            WHERE late_leave_count > 0 AND is_active = 1
+            ORDER BY late_leave_count DESC
         ''').fetchall()
     else:
         # If manager, show pending from direct reports
@@ -1591,12 +1749,19 @@ def pending_approvals():
             SELECT lr.*, e.name, e.emp_code FROM leave_records lr
             JOIN employees e ON lr.employee_id = e.id
             WHERE lr.status = 'pending' AND e.reporting_to = ?
-            ORDER BY lr.created_at DESC
+            ORDER BY lr.is_late DESC, lr.created_at DESC
+        ''', (user['id'],)).fetchall()
+        # Late leave summary for direct reports only
+        late_summary = conn.execute('''
+            SELECT name, emp_code, late_leave_count FROM employees
+            WHERE late_leave_count > 0 AND reporting_to = ? AND is_active = 1
+            ORDER BY late_leave_count DESC
         ''', (user['id'],)).fetchall()
 
     conn.close()
 
-    return render_template('pending_approvals.html', user=user, pending_leaves=pending)
+    return render_template('pending_approvals.html', user=user, pending_leaves=pending,
+                         late_leave_summary=late_summary)
 
 @app.route('/admin/approve-leave/<int:leave_id>', methods=['POST'])
 @login_required
