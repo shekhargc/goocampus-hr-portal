@@ -1293,7 +1293,7 @@ def admin_dashboard():
     conn = get_db()
 
     # Summary stats
-    total_employees = conn.execute('SELECT COUNT(*) as count FROM employees WHERE is_admin = 0 AND is_active = 1').fetchone()
+    total_employees = conn.execute('SELECT COUNT(*) as count FROM employees WHERE is_active = 1').fetchone()
 
     today = datetime.now().strftime('%Y-%m-%d')
     leaves_today = conn.execute('''
@@ -1303,10 +1303,10 @@ def admin_dashboard():
 
     pending = conn.execute("SELECT COUNT(*) as count FROM leave_records WHERE status = 'pending'").fetchone()
 
-    # Department-wise count
+    # Department-wise count (include management as employees)
     departments = conn.execute('''
         SELECT department, COUNT(*) as count FROM employees
-        WHERE is_admin = 0 AND is_active = 1
+        WHERE is_active = 1
         GROUP BY department ORDER BY department
     ''').fetchall()
 
@@ -1394,12 +1394,12 @@ def org_chart():
         SELECT e.*, m.name as manager_name, m.photo_url as manager_photo
         FROM employees e
         LEFT JOIN employees m ON e.reporting_to = m.id
-        WHERE e.is_admin = 0 AND e.is_active = 1
+        WHERE e.is_active = 1
         ORDER BY e.department, e.name
     ''').fetchall()
     departments = conn.execute('''
         SELECT department, COUNT(*) as count FROM employees
-        WHERE is_admin = 0 AND is_active = 1
+        WHERE is_active = 1
         GROUP BY department ORDER BY department
     ''').fetchall()
     conn.close()
@@ -1418,7 +1418,7 @@ def admin_calendar():
 
     # Get all employees
     conn = get_db()
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     # Get all leaves for the month
     all_leaves = conn.execute('''
@@ -1626,7 +1626,7 @@ def admin_add_leave():
     user = get_user()
     conn = get_db()
 
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     if request.method == 'POST':
         employee_id = request.form.get('employee_id', '').strip()
@@ -1675,7 +1675,7 @@ def admin_bulk_leave():
     user = get_user()
     conn = get_db()
 
-    employees = conn.execute('SELECT id, name FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     if request.method == 'POST':
         department = request.form.get('department', '').strip()
@@ -1698,7 +1698,7 @@ def admin_bulk_leave():
             return render_template('admin_bulk_leave.html', user=user, employees=employees)
 
         # Get all employees in department
-        dept_employees = conn.execute('SELECT id FROM employees WHERE department = ? AND is_admin = 0 AND is_active = 1', (department,)).fetchall()
+        dept_employees = conn.execute('SELECT id FROM employees WHERE department = ? AND is_active = 1', (department,)).fetchall()
 
         count = 0
         for emp in dept_employees:
@@ -1751,7 +1751,7 @@ def manage_employees():
         flash('Employee added successfully', 'success')
         return redirect(url_for('manage_employees'))
 
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 ORDER BY department, name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY department, name').fetchall()
 
     # Group employees by department
     dept_employees = {}
@@ -1819,7 +1819,7 @@ def admin_monthly_report():
     month = int(request.args.get('month', datetime.now().month))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     report_data = []
     for emp in employees:
@@ -1873,7 +1873,7 @@ def admin_monthly_report_download():
     file_format = request.args.get('format', 'xlsx')
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     if file_format == 'xlsx':
         wb = Workbook()
@@ -2537,7 +2537,7 @@ def admin_quarterly_report():
     months = quarter_months.get(quarter, [4, 5, 6])
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     report_data = []
     for emp in employees:
@@ -2593,7 +2593,7 @@ def admin_quarterly_report_download():
     months = quarter_months.get(quarter, [4, 5, 6])
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     wb = Workbook()
     ws = wb.active
@@ -2664,7 +2664,7 @@ def admin_annual_report():
     year = int(request.args.get('year', datetime.now().year))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     report_data = []
     for emp in employees:
@@ -2720,7 +2720,7 @@ def admin_annual_report_download():
     year = int(request.args.get('year', datetime.now().year))
 
     conn = get_db()
-    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+    employees = conn.execute('SELECT * FROM employees WHERE is_active = 1 ORDER BY name').fetchall()
 
     wb = Workbook()
     ws = wb.active
