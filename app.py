@@ -4030,6 +4030,11 @@ def manage_meeting_types():
             conn.execute('UPDATE meeting_types SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?', (mt_id,))
             conn.commit()
             flash('Meeting type updated', 'success')
+        elif action == 'delete':
+            mt_id = request.form.get('id')
+            conn.execute('DELETE FROM meeting_types WHERE id = ?', (mt_id,))
+            conn.commit()
+            flash('Meeting client type deleted', 'success')
         conn.close()
         return redirect(url_for('manage_meeting_types'))
 

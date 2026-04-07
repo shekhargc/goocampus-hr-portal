@@ -137,6 +137,25 @@
         font-size: 0.85rem;
     }
 
+    .btn-delete {
+        background: transparent;
+        color: var(--gray-400);
+        border: 1.5px solid var(--gray-200);
+    }
+
+    .btn-delete:hover {
+        background: var(--danger-light);
+        color: var(--danger);
+        border-color: var(--danger);
+        box-shadow: 0 4px 10px rgba(239,68,68,0.2);
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 0.5rem;
+        justify-content: center;
+    }
+
     .empty-state {
         text-align: center;
         padding: 3rem 2rem;
@@ -180,7 +199,7 @@
                 <tr>
                     <th>Meeting Type</th>
                     <th>Status</th>
-                    <th style="text-align: center; width: 120px;">Action</th>
+                    <th style="text-align: center; width: 220px;">Action</th>
                 </tr>
             </thead>
             <tbody>
@@ -195,15 +214,25 @@
                         {% endif %}
                     </td>
                     <td style="text-align: center;">
-                        <form method="POST" action="/admin/meeting-types" class="action-form">
-                            <input type="hidden" name="action" value="toggle">
-                            <input type="hidden" name="id" value="{{ type.id }}">
-                            {% if type.is_active %}
-                            <button type="submit" class="btn btn-toggle btn-small">Deactivate</button>
-                            {% else %}
-                            <button type="submit" class="btn btn-toggle btn-small">Activate</button>
-                            {% endif %}
-                        </form>
+                        <div class="action-buttons">
+                            <form method="POST" action="/admin/meeting-types" class="action-form">
+                                <input type="hidden" name="action" value="toggle">
+                                <input type="hidden" name="id" value="{{ type.id }}">
+                                {% if type.is_active %}
+                                <button type="submit" class="btn btn-toggle btn-small">Deactivate</button>
+                                {% else %}
+                                <button type="submit" class="btn btn-toggle btn-small">Activate</button>
+                                {% endif %}
+                            </form>
+                            <form method="POST" action="/admin/meeting-types" class="action-form" onsubmit="return confirm('Delete &quot;{{ type.name }}&quot;? This cannot be undone.');">
+                                <input type="hidden" name="action" value="delete">
+                                <input type="hidden" name="id" value="{{ type.id }}">
+                                <button type="submit" class="btn btn-delete btn-small">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                                    Delete
+                                </button>
+                            </form>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
