@@ -1238,6 +1238,26 @@ def employee_holidays():
     today_date = datetime.now().strftime('%Y-%m-%d')
     return render_template('employee_holidays.html', user=user, holidays=holidays, today_date=today_date)
 
+@app.route('/org-chart')
+@login_required
+def employee_org_chart():
+    user = get_user()
+    conn = get_db()
+    employees = conn.execute('''
+        SELECT e.*, m.name as manager_name, m.photo_url as manager_photo
+        FROM employees e
+        LEFT JOIN employees m ON e.reporting_to = m.id
+        WHERE e.is_active = 1 AND e.emp_code != 'admin'
+        ORDER BY e.department, e.name
+    ''').fetchall()
+    departments = conn.execute('''
+        SELECT department, COUNT(*) as count FROM employees
+        WHERE is_active = 1 AND emp_code != 'admin'
+        GROUP BY department ORDER BY department
+    ''').fetchall()
+    conn.close()
+    return render_template('employee_org_chart.html', user=user, employees=employees, departments=departments)
+
 @app.route('/my-leave-report')
 @login_required
 def my_leave_report():

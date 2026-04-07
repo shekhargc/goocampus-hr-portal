@@ -884,9 +884,29 @@
                         </div>
                     </li>
 
-                    <li><a href="/admin/calendar">Calendar</a></li>
-                    <li><a href="/admin/org-chart">Org Chart</a></li>
-                    <li><a href="/admin/holidays">Holidays</a></li>
+                    <!-- Company Dropdown -->
+                    <li class="nav-dropdown" id="company-dropdown-admin">
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-admin', event)">
+                            Company
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                            <div class="nav-dropdown-menu-inner">
+                                <a href="/admin/org-chart">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                                    Org Chart
+                                </a>
+                                <a href="/admin/holidays" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>
+                                    Holidays
+                                </a>
+                                <a href="/admin/calendar" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                    Calendar
+                                </a>
+                            </div>
+                        </div>
+                    </li>
                 {% else %}
                     <li><a href="/dashboard">Dashboard</a></li>
 
@@ -1021,8 +1041,29 @@
                     </li>
                     {% endif %}
 
-                    <li><a href="/calendar">Calendar</a></li>
-                    <li><a href="/holidays">Holidays</a></li>
+                    <!-- Company Dropdown -->
+                    <li class="nav-dropdown" id="company-dropdown-emp">
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-emp', event)">
+                            Company
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                            <div class="nav-dropdown-menu-inner">
+                                <a href="/org-chart">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                                    Org Chart
+                                </a>
+                                <a href="/holidays" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>
+                                    Holidays
+                                </a>
+                                <a href="/calendar" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                    Calendar
+                                </a>
+                            </div>
+                        </div>
+                    </li>
                 {% endif %}
 
                 {% if session.get('user_id') %}
@@ -1136,12 +1177,14 @@
                     {% if session.get('is_admin') %}
                     <li><a href="/admin/dashboard">Dashboard</a></li>
                     <li><a href="/admin/manage-employees">Employees</a></li>
-                    <li><a href="/admin/calendar">Calendar</a></li>
+                    <li><a href="/admin/org-chart">Org Chart</a></li>
                     <li><a href="/admin/holidays">Holidays</a></li>
+                    <li><a href="/admin/calendar">Calendar</a></li>
                     {% else %}
                     <li><a href="/dashboard">Dashboard</a></li>
-                    <li><a href="/calendar">Calendar</a></li>
+                    <li><a href="/org-chart">Org Chart</a></li>
                     <li><a href="/holidays">Holidays</a></li>
+                    <li><a href="/calendar">Calendar</a></li>
                     <li><a href="/apply-leave">Apply Leave</a></li>
                     <li><a href="/apply-late-leave">Late Leave</a></li>
                     {% endif %}
