@@ -1,0 +1,299 @@
+{% extends "base.html" %}
+
+{% block title %}Employee Leave Report - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+    .s-card {
+        background: var(--white); border-radius: 0.7rem; padding: 1.1rem 1.25rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); border: 1px solid var(--gray-200);
+        display: flex; align-items: center; gap: 1rem;
+        border-left: 3px solid var(--gray-300);
+    }
+    .s-card-icon {
+        width: 38px; height: 38px; border-radius: 0.5rem;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .s-card-val { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+    .s-card-lbl { font-size: 0.75rem; color: var(--gray-500); font-weight: 500; margin-top: 0.15rem; }
+    .report-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1.75rem;
+    }
+    .report-panel-header {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .report-panel-title { font-weight: 600; font-size: 1rem; color: var(--navy); }
+    .emp-selector {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        padding: 1.5rem; margin-bottom: 1.75rem; box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .emp-selector form {
+        display: flex; gap: 1rem; align-items: end;
+    }
+    .emp-selector select {
+        flex: 1; padding: 0.65rem 1rem; border: 1px solid var(--gray-300);
+        border-radius: 0.5rem; font-size: 0.95rem; background: var(--white);
+    }
+    .emp-selector button {
+        padding: 0.65rem 1.5rem; background: var(--orange); color: white;
+        border: none; border-radius: 0.5rem; font-weight: 600; cursor: pointer;
+        font-size: 0.95rem;
+    }
+    .emp-selector button:hover { background: var(--orange-dark); }
+    .emp-info {
+        background: var(--blue-light); border: 1px solid var(--blue); border-radius: 0.7rem;
+        padding: 1rem 1.5rem; margin-bottom: 1.5rem;
+        display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;
+    }
+    .emp-info-name { font-size: 1.2rem; font-weight: 700; color: var(--navy); }
+    .emp-info-detail { font-size: 0.85rem; color: var(--gray-600); }
+    @media (max-width: 768px) {
+        .stats-grid { grid-template-columns: repeat(2, 1fr); }
+        .emp-selector form { flex-direction: column; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Employee Leave Report</h1>
+    <p>Select an employee to view their detailed leave report</p>
+</div>
+
+<!-- Employee Selector -->
+<div class="emp-selector">
+    <form method="GET" action="/admin/employee-leave-report">
+        <div class="form-group" style="margin-bottom: 0; flex: 1;">
+            <label for="employee_id" style="font-weight: 600; color: var(--navy); margin-bottom: 0.4rem; display: block;">Select Employee</label>
+            <select name="employee_id" id="employee_id" required>
+                <option value="">-- Choose an Employee --</option>
+                {% for emp in employees %}
+                <option value="{{ emp.id }}" {% if selected_emp_id == emp.id %}selected{% endif %}>
+                    {{ emp.name }} ({{ emp.emp_code }}) — {{ emp.department or 'N/A' }}
+                </option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit">View Report</button>
+    </form>
+</div>
+
+{% if selected_emp %}
+<!-- Employee Info Bar -->
+<div class="emp-info">
+    <div>
+        <div class="emp-info-name">{{ selected_emp.name }}</div>
+        <div class="emp-info-detail">{{ selected_emp.emp_code }} &middot; {{ selected_emp.department or 'N/A' }} &middot; {{ selected_emp.designation or '' }}</div>
+    </div>
+    <div style="text-align: right;">
+        <div style="font-size: 0.85rem; color: var(--gray-500);">Financial Year</div>
+        <div style="font-weight: 700; color: var(--navy);">{{ fy_year }}&ndash;{{ fy_year + 1 }}</div>
+    </div>
+</div>
+
+<!-- Summary Stats -->
+<div class="stats-grid">
+    <div class="s-card" style="border-left-color: var(--navy);">
+        <div class="s-card-icon" style="background: rgba(27,42,74,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="2"><rect x="3" y="4" width="14" height="14" rx="2"/><path d="M16 2v4M4 2v4M2 8h16"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--navy);">{{ total_allocation }}</div><div class="s-card-lbl">Total Leaves (FY)</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--success);">
+        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M20 12v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h10"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ available_balance }}</div><div class="s-card-lbl">Available Balance</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--orange);">
+        <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--orange);">{{ total_taken }}</div><div class="s-card-lbl">Days Taken (FY)</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--warning, #f59e0b);">
+        <div class="s-card-icon" style="background: rgba(245,158,11,0.08);">
+            <svg width="20" height="20" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 7v3M10 13h.01"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: #f59e0b;">{{ pending_count }}</div><div class="s-card-lbl">Pending Requests</div></div>
+    </div>
+</div>
+
+<!-- Leave Type Breakdown -->
+<div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="s-card" style="border-left-color: var(--blue);">
+        <div class="s-card-icon" style="background: rgba(74,122,181,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="14" height="14" rx="2"/><path d="M16 2v4M4 2v4M2 8h16"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--blue);">{{ annual_total }}</div><div class="s-card-lbl">Annual Leave</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--success);">
+        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M12 2a8 8 0 00-8 8c0 5.3 8 12 8 12s8-6.7 8-12a8 8 0 00-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ sick_total }}</div><div class="s-card-lbl">Sick Leave</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--orange);">
+        <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--orange);">{{ casual_total }}</div><div class="s-card-lbl">Casual Leave</div></div>
+    </div>
+</div>
+
+<!-- Allocation Details -->
+<div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
+    <div class="s-card" style="border-left-color: var(--navy);">
+        <div class="s-card-icon" style="background: rgba(27,42,74,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--navy)" stroke-width="2"><path d="M4 4h16v16H4z"/><path d="M4 10h16M10 4v16"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--navy);">25</div><div class="s-card-lbl">Base Allocation</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--blue);">
+        <div class="s-card-icon" style="background: rgba(74,122,181,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--blue)" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--blue);">{{ carry_forward }}</div><div class="s-card-lbl">Carry Forward</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--success);">
+        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M2 10l6 6L18 4"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ monthly_alloc }}</div><div class="s-card-lbl">Monthly Allocation</div></div>
+    </div>
+</div>
+
+<!-- Month-wise Breakdown -->
+<div class="report-panel">
+    <div class="report-panel-header">
+        <div class="report-panel-title">Month-wise Breakdown — {{ selected_emp.name }}</div>
+    </div>
+    <div style="overflow-x: auto;">
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th style="text-align: center;">Monthly Alloc.</th>
+                <th style="text-align: center;">Annual</th>
+                <th style="text-align: center;">Sick</th>
+                <th style="text-align: center;">Casual</th>
+                <th style="text-align: center;">Total Taken</th>
+                <th style="text-align: center;">Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set ns = namespace(fy_annual=0, fy_sick=0, fy_casual=0) %}
+            {% for m in monthly_leave_data %}
+            <tr style="{% if m.total > 0 %}background: var(--orange-light);{% endif %}">
+                <td style="font-weight: 600; color: var(--navy);">{{ m.month }} {{ m.year }}</td>
+                <td style="text-align: center; color: var(--navy); font-weight: 600;">{{ m.monthly_alloc }}</td>
+                <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.balance >= 0 %}var(--success){% else %}var(--danger, #dc3545){% endif %};">{{ m.balance }}</td>
+            </tr>
+            {% set ns.fy_annual = ns.fy_annual + m.annual %}
+            {% set ns.fy_sick = ns.fy_sick + m.sick %}
+            {% set ns.fy_casual = ns.fy_casual + m.casual %}
+            {% endfor %}
+            <tr style="background: var(--navy); color: white;">
+                <td style="font-weight: 700; color: white; border: none;">FY Total</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ monthly_alloc }} /mo</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_annual }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_sick }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ available_balance }}</td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- All Leave Records -->
+<div class="report-panel">
+    <div class="report-panel-header">
+        <div class="report-panel-title">All Leave Records — {{ selected_emp.name }}</div>
+        <span style="font-size: 0.88rem; color: var(--gray-500);">{{ all_leaves | length }} records</span>
+    </div>
+    {% if all_leaves %}
+    <div style="overflow-x: auto;">
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in all_leaves %}
+            <tr{% if leave.status == 'retrieved' %} style="opacity: 0.6;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.5;"{% endif %}>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                    {{ leave.leave_date }}
+                    {% if leave.original_id %}
+                    <div style="font-size: 0.72rem; color: #3B82F6; margin-top: 0.2rem;">Modified leave</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.leave_type == 'annual' %}
+                    <span style="color: var(--blue); font-weight: 600;">Annual</span>
+                    {% elif leave.leave_type == 'sick' %}
+                    <span style="color: var(--success); font-weight: 600;">Sick</span>
+                    {% else %}
+                    <span style="color: var(--orange); font-weight: 600;">Casual</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.day_portion == 'first_half' %}First Half
+                    {% elif leave.day_portion == 'second_half' %}Second Half
+                    {% else %}Full Day{% endif %}
+                </td>
+                <td style="color: var(--gray-600); max-width: 300px;">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '—' }}</div>
+                </td>
+                <td>
+                    {% if leave.status == 'pending' %}
+                    <span class="badge badge-pending">Pending</span>
+                    {% elif leave.status == 'approved' %}
+                    <span class="badge badge-approved">Approved</span>
+                    {% elif leave.status == 'rejected' %}
+                    <span class="badge badge-rejected">Rejected</span>
+                    {% elif leave.status == 'retrieved' %}
+                    <span style="display:inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; background: #E5E7EB; color: #6B7280;">Retrieved</span>
+                    {% elif leave.status == 'modified' %}
+                    <span style="display:inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; background: #DBEAFE; color: #1D4ED8;">Modified</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    </div>
+    {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--gray-400);">
+        No leave records found for this financial year
+    </div>
+    {% endif %}
+</div>
+
+{% else %}
+<!-- No employee selected state -->
+<div style="text-align: center; padding: 4rem 2rem; background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);">
+    <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="1.5" style="margin-bottom: 1rem;">
+        <path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/>
+        <circle cx="8.5" cy="7" r="4"/>
+        <line x1="20" y1="8" x2="20" y2="14"/>
+        <line x1="23" y1="11" x2="17" y2="11"/>
+    </svg>
+    <h3 style="color: var(--gray-500); font-weight: 600; margin-bottom: 0.5rem;">Select an Employee</h3>
+    <p style="color: var(--gray-400); font-size: 0.95rem;">Choose an employee from the dropdown above to view their complete leave report for the current financial year.</p>
+</div>
+{% endif %}
+{% endblock %}

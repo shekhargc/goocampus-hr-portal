@@ -545,6 +545,11 @@ def profile_upload_photo():
 def apply_leave():
     user = get_user()
 
+    # Admin control account cannot apply for personal leave
+    if user['emp_code'] == 'admin':
+        flash('Admin account cannot apply for leave. Use "Add Leave (Employee)" to apply on behalf of an employee.', 'error')
+        return redirect(url_for('admin_dashboard'))
+
     if request.method == 'POST':
         leave_type = request.form.get('leave_type', '').strip()
         from_date = request.form.get('from_date', '').strip()
@@ -663,6 +668,10 @@ def apply_leave():
 def apply_late_leave():
     """Late leave application — for past dates up to 15 days ago"""
     user = get_user()
+
+    if user['emp_code'] == 'admin':
+        flash('Admin account cannot apply for leave.', 'error')
+        return redirect(url_for('admin_dashboard'))
 
     if request.method == 'POST':
         leave_type = request.form.get('leave_type', '').strip()
@@ -1233,6 +1242,10 @@ def employee_holidays():
 @login_required
 def my_leave_report():
     user = get_user()
+
+    # Admin control account has no personal leave report
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('admin_employee_leave_report'))
     conn = get_db()
 
     today = datetime.now()
@@ -2831,6 +2844,112 @@ def admin_annual_report_download():
 
 
 
+# ─── Admin Employee Leave Report (select any employee) ───
+@app.route('/admin/employee-leave-report')
+@admin_required
+def admin_employee_leave_report():
+    user = get_user()
+    conn = get_db()
+
+    employees = conn.execute("SELECT id, name, emp_code, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
+
+    selected_emp_id = request.args.get('employee_id', type=int)
+    selected_emp = None
+    monthly_leave_data = []
+    all_leaves = []
+    total_allocation = 0
+    total_taken = 0
+    annual_total = 0
+    sick_total = 0
+    casual_total = 0
+    available_balance = 0
+    pending_count = 0
+    carry_forward = 0
+    monthly_alloc = 0
+
+    today = datetime.now()
+    current_month = today.month
+    fy_year = today.year if current_month >= 4 else today.year - 1
+
+    if selected_emp_id:
+        selected_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (selected_emp_id,)).fetchone()
+        if selected_emp:
+            carry_forward = selected_emp['carry_forward'] or 0
+            total_allocation = 25 + carry_forward
+            monthly_alloc = round(total_allocation / 12, 2)
+
+            pending_count = conn.execute(
+                "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
+                (selected_emp_id,)
+            ).fetchone()['cnt']
+
+            running_balance = 0
+            for m in range(12):
+                report_month = ((m + 3) % 12) + 1
+                report_year = fy_year if report_month >= 4 else fy_year + 1
+
+                month_data = conn.execute('''
+                    SELECT SUM(days) as total_days,
+                           SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
+                           SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
+                           SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual,
+                           COUNT(*) as count
+                    FROM leave_records
+                    WHERE employee_id = ? AND status = 'approved'
+                    AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+                ''', (selected_emp_id, str(report_year), str(report_month).zfill(2))).fetchone()
+
+                month_total = month_data['total_days'] or 0
+                running_balance = round(running_balance + monthly_alloc - month_total, 2)
+
+                monthly_leave_data.append({
+                    'month': calendar.month_name[report_month],
+                    'month_short': calendar.month_abbr[report_month],
+                    'year': report_year,
+                    'total': month_total,
+                    'annual': month_data['annual'] or 0,
+                    'sick': month_data['sick'] or 0,
+                    'casual': month_data['casual'] or 0,
+                    'count': month_data['count'] or 0,
+                    'monthly_alloc': monthly_alloc,
+                    'balance': running_balance
+                })
+
+            all_leaves = conn.execute('''
+                SELECT * FROM leave_records
+                WHERE employee_id = ?
+                AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+                     OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+                ORDER BY leave_date DESC
+            ''', (selected_emp_id, str(fy_year), str(fy_year + 1))).fetchall()
+
+            total_taken = sum(m['total'] for m in monthly_leave_data)
+            annual_total = sum(m['annual'] for m in monthly_leave_data)
+            sick_total = sum(m['sick'] for m in monthly_leave_data)
+            casual_total = sum(m['casual'] for m in monthly_leave_data)
+            available_balance = round(total_allocation - total_taken, 2)
+
+    conn.close()
+
+    return render_template('admin_employee_leave_report.html',
+                         user=user,
+                         employees=employees,
+                         selected_emp=selected_emp,
+                         selected_emp_id=selected_emp_id,
+                         monthly_leave_data=monthly_leave_data,
+                         all_leaves=all_leaves,
+                         fy_year=fy_year,
+                         total_allocation=total_allocation,
+                         total_taken=total_taken,
+                         annual_total=annual_total,
+                         sick_total=sick_total,
+                         casual_total=casual_total,
+                         available_balance=available_balance,
+                         pending_count=pending_count,
+                         carry_forward=carry_forward,
+                         monthly_alloc=monthly_alloc)
+
+
 # ─── Team Leave Report Routes ───
 @app.route('/reports/team')
 @login_required
@@ -3102,6 +3221,12 @@ def seed_default_meeting_types():
 @login_required
 def apply_wfh():
     user = get_user()
+
+    # Admin control account cannot apply for WFH
+    if user['emp_code'] == 'admin':
+        flash('Admin account cannot apply for WFH.', 'error')
+        return redirect(url_for('wfh_approvals'))
+
     if request.method == 'POST':
         from_date = request.form.get('from_date')
         to_date = request.form.get('to_date')
@@ -3147,6 +3272,10 @@ def apply_wfh():
 @login_required
 def my_wfh_requests():
     user = get_user()
+
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('wfh_approvals'))
+
     conn = get_db()
     requests_list = conn.execute('''
         SELECT w.*, a.name as approver_name
@@ -3866,6 +3995,11 @@ def admin_leave_applications():
 @login_required
 def my_leave_applications():
     user = get_user()
+
+    # Admin control account has no personal applications
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('admin_leave_applications'))
+
     conn = get_db()
 
     f_type = request.args.get('leave_type', '').strip()
