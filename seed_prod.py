@@ -148,15 +148,17 @@ def seed_production_db():
         ]
 
         created_at = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        management_codes = ['GC001', 'GC002', 'GC003']
 
         for name, emp_code, first_name_pwd, carry_forward, email, department, designation, joining_date in employees_data:
+            is_admin_flag = 1 if emp_code in management_codes else 0
             c.execute('''
                 INSERT INTO employees (name, emp_code, password, email, department, designation,
-                                      carry_forward, joining_date, reporting_to, is_active, created_at)
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
+                                      carry_forward, joining_date, reporting_to, is_admin, is_active, created_at)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, 1, %s)
                 ON CONFLICT (emp_code) DO NOTHING
             ''', (name, emp_code, hash_password(first_name_pwd), email or None, department,
-                  designation or None, carry_forward, joining_date or None, admin_id, created_at))
+                  designation or None, carry_forward, joining_date or None, admin_id, is_admin_flag, created_at))
 
         # Insert holidays for 2026
         holidays_data = [

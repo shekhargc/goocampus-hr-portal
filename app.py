@@ -2249,6 +2249,20 @@ def daily_notifications():
     return jsonify({'status': 'ok', **results})
 
 
+def ensure_management_admins():
+    """Ensure MANAGEMENT_CODES employees always have is_admin = 1."""
+    try:
+        conn = get_db()
+        for code in MANAGEMENT_CODES:
+            conn.execute('UPDATE employees SET is_admin = 1 WHERE emp_code = ? AND is_admin = 0', (code,))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_management_admins: {e}")
+
+# Run on startup
+ensure_management_admins()
+
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)
