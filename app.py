@@ -959,6 +959,74 @@ def modify_leave(leave_id):
     return render_template('modify_leave.html', user=user, leave=leave, today=today_str)
 
 
+# ─── Edit Leave (in-place update for future leaves) ───
+@app.route('/edit-leave/<int:leave_id>', methods=['GET', 'POST'])
+@login_required
+def edit_leave(leave_id):
+    """Edit a leave record in-place. Allowed for future-dated leaves only.
+       Authorised users: the applicant, their reporting manager, or admin."""
+    user = get_user()
+    conn = get_db()
+
+    leave = conn.execute('''
+        SELECT lr.*, e.name, e.emp_code, e.reporting_to
+        FROM leave_records lr JOIN employees e ON lr.employee_id = e.id
+        WHERE lr.id = ?
+    ''', (leave_id,)).fetchone()
+
+    if not leave:
+        flash('Leave not found', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('dashboard'))
+
+    # Authorization: applicant, reporting manager, or admin
+    is_owner = (leave['employee_id'] == user['id'])
+    is_reporting = (leave['reporting_to'] == user['id'])
+    is_admin_user = bool(user.get('is_admin'))
+    if not (is_owner or is_reporting or is_admin_user):
+        flash('You are not authorised to edit this leave', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('dashboard'))
+
+    # Only future leaves can be edited
+    today = datetime.now().strftime('%Y-%m-%d')
+    if leave['leave_date'] < today:
+        flash('Past leaves cannot be edited', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('dashboard'))
+
+    if leave['status'] in ('retrieved', 'modified'):
+        flash('This leave has already been retrieved or modified', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('dashboard'))
+
+    if request.method == 'POST':
+        new_leave_type = request.form.get('leave_type', '').strip()
+        new_day_portion = request.form.get('day_portion', 'full').strip()
+        new_reason = request.form.get('reason', '').strip()
+
+        if not all([new_leave_type, new_reason]):
+            flash('Leave type and reason are required', 'error')
+            conn.close()
+            return redirect(url_for('edit_leave', leave_id=leave_id))
+
+        day_val = 0.5 if new_day_portion in ('first_half', 'second_half') else 1.0
+
+        conn.execute('''
+            UPDATE leave_records SET leave_type = ?, day_portion = ?, days = ?, reason = ?
+            WHERE id = ?
+        ''', (new_leave_type, new_day_portion, day_val, new_reason, leave_id))
+        conn.commit()
+        conn.close()
+
+        flash('Leave updated successfully', 'success')
+        return redirect(request.referrer or url_for('my_leave_applications'))
+
+    # GET: show edit form
+    conn.close()
+    return render_template('edit_leave.html', user=user, leave=leave)
+
+
 @app.route('/approvals')
 @login_required
 def employee_approvals():
@@ -2451,6 +2519,435 @@ def daily_notifications():
     return jsonify({'status': 'ok', **results})
 
 
+# ─── Quarterly Report Routes ───
+@app.route('/admin/quarterly-report')
+@admin_required
+def admin_quarterly_report():
+    user = get_user()
+    year = int(request.args.get('year', datetime.now().year))
+    quarter = int(request.args.get('quarter', 1))
+
+    # Q1=Apr-Jun, Q2=Jul-Sep, Q3=Oct-Dec, Q4=Jan-Mar
+    quarter_months = {
+        1: [4, 5, 6],
+        2: [7, 8, 9],
+        3: [10, 11, 12],
+        4: [1, 2, 3]
+    }
+    months = quarter_months.get(quarter, [4, 5, 6])
+
+    conn = get_db()
+    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+
+    report_data = []
+    for emp in employees:
+        # Get leaves for each month in quarter
+        quarterly_days = 0
+        leave_breakdown = {'annual': 0, 'sick': 0, 'casual': 0}
+
+        for m in months:
+            # Adjust year for Q4 (Jan-Mar of next year)
+            check_year = year + 1 if m < 4 else year
+            leaves = conn.execute('''
+                SELECT SUM(days) as total_days, leave_type FROM leave_records
+                WHERE employee_id = ? AND status = 'approved'
+                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+                GROUP BY leave_type
+            ''', (emp['id'], str(check_year), str(m).zfill(2))).fetchall()
+
+            for row in leaves:
+                if row['total_days']:
+                    quarterly_days += row['total_days']
+                    leave_type = (row['leave_type'] or 'casual').lower()
+                    if leave_type in leave_breakdown:
+                        leave_breakdown[leave_type] += row['total_days']
+
+        report_data.append({
+            'name': emp['name'],
+            'emp_code': emp['emp_code'],
+            'department': emp['department'],
+            'total_days': quarterly_days,
+            'annual': leave_breakdown['annual'],
+            'sick': leave_breakdown['sick'],
+            'casual': leave_breakdown['casual']
+        })
+
+    conn.close()
+    quarter_name = f"Q{quarter} (FY {year}-{year+1})"
+
+    return render_template('admin_quarterly_report.html',
+                         user=user,
+                         year=year,
+                         quarter=quarter,
+                         quarter_name=quarter_name,
+                         report_data=report_data)
+
+
+@app.route('/admin/quarterly-report/download')
+@admin_required
+def admin_quarterly_report_download():
+    year = int(request.args.get('year', datetime.now().year))
+    quarter = int(request.args.get('quarter', 1))
+
+    quarter_months = {1: [4, 5, 6], 2: [7, 8, 9], 3: [10, 11, 12], 4: [1, 2, 3]}
+    months = quarter_months.get(quarter, [4, 5, 6])
+
+    conn = get_db()
+    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Q{quarter} Report {year}"
+
+    headers = ['Name', 'Employee Code', 'Department', 'Total Days', 'Annual', 'Sick', 'Casual']
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color='1a56db', end_color='1a56db', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for emp in employees:
+        quarterly_days = 0
+        leave_breakdown = {'annual': 0, 'sick': 0, 'casual': 0}
+
+        for m in months:
+            check_year = year + 1 if m < 4 else year
+            leaves = conn.execute('''
+                SELECT SUM(days) as total_days, leave_type FROM leave_records
+                WHERE employee_id = ? AND status = 'approved'
+                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+                GROUP BY leave_type
+            ''', (emp['id'], str(check_year), str(m).zfill(2))).fetchall()
+
+            for row in leaves:
+                if row['total_days']:
+                    quarterly_days += row['total_days']
+                    leave_type = (row['leave_type'] or 'casual').lower()
+                    if leave_type in leave_breakdown:
+                        leave_breakdown[leave_type] += row['total_days']
+
+        ws.append([
+            emp['name'],
+            emp['emp_code'],
+            emp['department'],
+            quarterly_days,
+            leave_breakdown['annual'],
+            leave_breakdown['sick'],
+            leave_breakdown['casual']
+        ])
+
+    for col in ['A', 'B', 'C', 'D', 'E', 'F', 'G']:
+        ws.column_dimensions[col].width = 15
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    conn.close()
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'Quarterly_Report_Q{quarter}_{year}.xlsx'
+    )
+
+
+# ─── Annual Report Routes ───
+@app.route('/admin/annual-report')
+@admin_required
+def admin_annual_report():
+    user = get_user()
+    # year parameter is the FY start year (e.g. 2025 for FY 2025-26)
+    year = int(request.args.get('year', datetime.now().year))
+
+    conn = get_db()
+    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+
+    report_data = []
+    for emp in employees:
+        carry_forward = emp['carry_forward']
+        total_allocation = 25 + carry_forward
+
+        # Get approved leaves for the entire FY (Apr year to Mar year+1)
+        fy_leaves = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) <= '03'))
+        ''', (emp['id'], str(year), str(year + 1))).fetchone()
+
+        total_taken = fy_leaves['total_days'] if fy_leaves['total_days'] else 0
+        remaining_balance = total_allocation - total_taken
+
+        # Get monthly breakdown
+        monthly_breakdown = []
+        for m in range(1, 13):
+            check_year = year if m >= 4 else year + 1
+            month_leaves = conn.execute('''
+                SELECT SUM(days) as total_days FROM leave_records
+                WHERE employee_id = ? AND status = 'approved'
+                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+            ''', (emp['id'], str(check_year), str(m).zfill(2))).fetchone()
+            month_days = month_leaves['total_days'] if month_leaves['total_days'] else 0
+            monthly_breakdown.append(month_days)
+
+        report_data.append({
+            'name': emp['name'],
+            'emp_code': emp['emp_code'],
+            'department': emp['department'],
+            'total_allocation': total_allocation,
+            'total_taken': total_taken,
+            'remaining_balance': remaining_balance,
+            'monthly_breakdown': monthly_breakdown
+        })
+
+    conn.close()
+    fy_label = f"FY {year}-{year+1}"
+
+    return render_template('admin_annual_report.html',
+                         user=user,
+                         year=year,
+                         fy_label=fy_label,
+                         report_data=report_data)
+
+
+@app.route('/admin/annual-report/download')
+@admin_required
+def admin_annual_report_download():
+    year = int(request.args.get('year', datetime.now().year))
+
+    conn = get_db()
+    employees = conn.execute('SELECT * FROM employees WHERE is_admin = 0 AND is_active = 1 ORDER BY name').fetchall()
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Annual Report {year}"
+
+    headers = ['Name', 'Employee Code', 'Department', 'Total Allocation', 'Days Taken', 'Remaining Balance']
+    # Add month headers
+    month_names = ['Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec', 'Jan', 'Feb', 'Mar']
+    headers.extend(month_names)
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color='1a56db', end_color='1a56db', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for emp in employees:
+        carry_forward = emp['carry_forward']
+        total_allocation = 25 + carry_forward
+
+        fy_leaves = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) <= '03'))
+        ''', (emp['id'], str(year), str(year + 1))).fetchone()
+
+        total_taken = fy_leaves['total_days'] if fy_leaves['total_days'] else 0
+        remaining_balance = total_allocation - total_taken
+
+        row = [emp['name'], emp['emp_code'], emp['department'], total_allocation, total_taken, remaining_balance]
+
+        # Add monthly breakdown
+        for m in range(1, 13):
+            check_year = year if m >= 4 else year + 1
+            month_leaves = conn.execute('''
+                SELECT SUM(days) as total_days FROM leave_records
+                WHERE employee_id = ? AND status = 'approved'
+                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+            ''', (emp['id'], str(check_year), str(m).zfill(2))).fetchone()
+            month_days = month_leaves['total_days'] if month_leaves['total_days'] else 0
+            row.append(month_days)
+
+        ws.append(row)
+
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['E'].width = 14
+    ws.column_dimensions['F'].width = 17
+    for i, col in enumerate(['G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R']):
+        ws.column_dimensions[col].width = 10
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    conn.close()
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'Annual_Report_FY_{year}_{year+1}.xlsx'
+    )
+
+
+
+# ─── Team Leave Report Routes ───
+@app.route('/reports/team')
+@login_required
+def team_leave_report():
+    user = get_user()
+    year = int(request.args.get('year', datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+
+    # Check if user is a manager
+    conn = get_db()
+    direct_reports = conn.execute(
+        'SELECT * FROM employees WHERE reporting_to = ? AND is_active = 1 ORDER BY name',
+        (user['id'],)
+    ).fetchall()
+
+    if not direct_reports:
+        conn.close()
+        flash('You have no direct reports', 'info')
+        return redirect(url_for('dashboard'))
+
+    report_data = []
+    for emp in direct_reports:
+        carry_forward = emp['carry_forward']
+        total_allocation = 25 + carry_forward
+        monthly_allocation = total_allocation / 12
+
+        # Get leaves for this month
+        month_leaves = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
+
+        days_taken = month_leaves['total_days'] if month_leaves['total_days'] else 0
+        balance_start = get_available_balance(emp['id'], year, month)
+        balance_available = balance_start + monthly_allocation
+
+        report_data.append({
+            'name': emp['name'],
+            'emp_code': emp['emp_code'],
+            'allocation': round(monthly_allocation, 2),
+            'balance_start': round(balance_start, 2),
+            'balance_available': round(balance_available, 2),
+            'days_taken': days_taken
+        })
+
+    conn.close()
+    month_name = calendar.month_name[month]
+
+    return render_template('team_leave_report.html',
+                         user=user,
+                         year=year,
+                         month=month,
+                         month_name=month_name,
+                         report_data=report_data)
+
+
+@app.route('/reports/team/download')
+@login_required
+def team_leave_report_download():
+    user = get_user()
+    year = int(request.args.get('year', datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+
+    conn = get_db()
+    direct_reports = conn.execute(
+        'SELECT * FROM employees WHERE reporting_to = ? AND is_active = 1 ORDER BY name',
+        (user['id'],)
+    ).fetchall()
+
+    if not direct_reports:
+        conn.close()
+        flash('You have no direct reports', 'info')
+        return redirect(url_for('team_leave_report', year=year, month=month))
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = f"Team Report {month}-{year}"
+
+    headers = ['Name', 'Employee Code', 'Monthly Allocation', 'Balance Start', 'Balance Available', 'Days Taken']
+    ws.append(headers)
+
+    header_fill = PatternFill(start_color='1a56db', end_color='1a56db', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.alignment = Alignment(horizontal='center', vertical='center')
+
+    for emp in direct_reports:
+        carry_forward = emp['carry_forward']
+        total_allocation = 25 + carry_forward
+        monthly_allocation = total_allocation / 12
+
+        month_leaves = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
+
+        days_taken = month_leaves['total_days'] if month_leaves['total_days'] else 0
+        balance_start = get_available_balance(emp['id'], year, month)
+        balance_available = balance_start + monthly_allocation
+
+        ws.append([
+            emp['name'],
+            emp['emp_code'],
+            round(monthly_allocation, 2),
+            round(balance_start, 2),
+            round(balance_available, 2),
+            days_taken
+        ])
+
+    ws.column_dimensions['A'].width = 20
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 18
+    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['E'].width = 17
+    ws.column_dimensions['F'].width = 14
+
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    conn.close()
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=f'Team_Report_{month}_{year}.xlsx'
+    )
+
+
+# ─── Redirect Routes for Report Navigation ───
+@app.route('/reports/monthly')
+@login_required
+def reports_monthly_redirect():
+    year = request.args.get('year', datetime.now().year)
+    month = request.args.get('month', datetime.now().month)
+    return redirect(url_for('my_leave_report', year=year, month=month))
+
+
+@app.route('/reports/quarterly')
+@login_required
+def reports_quarterly_redirect():
+    year = request.args.get('year', datetime.now().year)
+    quarter = request.args.get('quarter', 1)
+    return redirect(url_for('my_leave_report', year=year))
+
+
+@app.route('/reports/annual')
+@login_required
+def reports_annual_redirect():
+    year = request.args.get('year', datetime.now().year)
+    return redirect(url_for('my_leave_report', year=year))
+
+
 def ensure_management_admins():
     """Ensure MANAGEMENT_CODES employees always have is_admin = 1."""
     try:
@@ -2518,12 +3015,13 @@ def admin_leave_applications():
     rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
 
     conn.close()
+    today_str = datetime.now().strftime('%Y-%m-%d')
     return render_template('admin_leave_applications.html',
         user=user, leaves=leaves, employees=employees,
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_employee=f_employee, f_type=f_type, f_status=f_status,
-        f_from=f_from, f_to=f_to)
+        f_from=f_from, f_to=f_to, today=today_str)
 
 
 # ─── My Leave Applications ─── Employee's own leaves ───
@@ -2569,12 +3067,13 @@ def my_leave_applications():
     rejected_count = sum(1 for l in leaves if l['status'] == 'rejected')
 
     conn.close()
+    today_str = datetime.now().strftime('%Y-%m-%d')
     return render_template('my_leave_applications.html',
         user=user, leaves=leaves,
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_type=f_type, f_status=f_status,
-        f_from=f_from, f_to=f_to)
+        f_from=f_from, f_to=f_to, today=today_str)
 
 
 # ─── Team Leave Applications ─── Manager view of team leaves ───

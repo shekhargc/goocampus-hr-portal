@@ -199,6 +199,7 @@
                 <th>Reason</th>
                 <th>Status</th>
                 <th>Applied On</th>
+                <th>Action</th>
             </tr>
         </thead>
         <tbody>
@@ -207,7 +208,7 @@
                 <td>
                     <div class="emp-cell">
                         {% if leave.photo_url %}
-                        <img src="{{ leave.photo_url }}" class="emp-avatar" alt="">
+                        <img src="/static/photos/{{ leave.photo_url }}" class="emp-avatar" alt="">
                         {% else %}
                         <div class="emp-avatar-placeholder">{{ leave.name[0] }}</div>
                         {% endif %}
@@ -262,6 +263,18 @@
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
                     {{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '—' }}
+                </td>
+                <td style="white-space: nowrap;">
+                    {% if leave.leave_date >= today and leave.status not in ('retrieved', 'modified') %}
+                    <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; text-decoration: none; display: inline-block; margin-right: 0.25rem;">
+                        Edit
+                    </a>
+                    {% endif %}
+                    <form method="POST" action="/admin/delete-leave/{{ leave.id }}" style="display: inline;" onsubmit="return confirm('Delete this leave entry for {{ leave.name }} on {{ leave.leave_date }}?');">
+                        <button type="submit" class="btn-sm" style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; cursor: pointer;">
+                            Delete
+                        </button>
+                    </form>
                 </td>
             </tr>
             {% endfor %}

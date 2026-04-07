@@ -233,6 +233,9 @@
                 <td style="white-space: nowrap;">
                     {% if leave.status not in ('retrieved', 'modified') %}
                     <div class="action-btns">
+                        {% if leave.leave_date >= today %}
+                        <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0;">Edit</a>
+                        {% endif %}
                         <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm btn-retrieve">Retrieve</button>
                         <a href="/modify-leave/{{ leave.id }}" class="btn-sm btn-modify">Modify</a>
                     </div>

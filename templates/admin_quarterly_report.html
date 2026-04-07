@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+
+{% block title %}Quarterly Report - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Quarterly Leave Report</h1>
+    <p>Report for {{ quarter_name }}</p>
+</div>
+
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Filter Report</h2>
+    <form method="GET" style="display: grid; grid-template-columns: auto auto auto auto; gap: 2rem; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="quarter">Quarter</label>
+            <select id="quarter" name="quarter">
+                <option value="1" {% if quarter == 1 %}selected{% endif %}>Q1 (Apr-Jun)</option>
+                <option value="2" {% if quarter == 2 %}selected{% endif %}>Q2 (Jul-Sep)</option>
+                <option value="3" {% if quarter == 3 %}selected{% endif %}>Q3 (Oct-Dec)</option>
+                <option value="4" {% if quarter == 4 %}selected{% endif %}>Q4 (Jan-Mar)</option>
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="year">FY Year</label>
+            <select id="year" name="year">
+                {% for y in range(2024, 2027) %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}-{{ y+1 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button">View Report</button>
+        <a href="/admin/quarterly-report/download?year={{ year }}&quarter={{ quarter }}" class="button button-success">Download XLSX</a>
+    </form>
+</div>
+
+<div class="card">
+    {% if report_data %}
+    <h2 class="card-title">Quarterly Details</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Department</th>
+                <th>Total Days</th>
+                <th>Annual</th>
+                <th>Sick</th>
+                <th>Casual</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_data %}
+            <tr>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.emp_code }}</td>
+                <td>{{ row.department }}</td>
+                <td>{{ row.total_days }}</td>
+                <td>{{ row.annual }}</td>
+                <td>{{ row.sick }}</td>
+                <td>{{ row.casual }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: var(--gray-100); border-radius: 1rem;">
+        <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--navy);">Summary</h3>
+        {% set total_days = report_data | map(attribute='total_days') | sum %}
+        {% set total_annual = report_data | map(attribute='annual') | sum %}
+        {% set total_sick = report_data | map(attribute='sick') | sum %}
+        {% set total_casual = report_data | map(attribute='casual') | sum %}
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Total Days Taken: <strong style="color: var(--navy);">{{ total_days }}</strong></p>
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Annual: <strong style="color: var(--navy);">{{ total_annual }}</strong> | Sick: <strong style="color: var(--navy);">{{ total_sick }}</strong> | Casual: <strong style="color: var(--navy);">{{ total_casual }}</strong></p>
+        <p style="margin-bottom: 0; font-size: 0.95rem;">Employees with Leave: <strong style="color: var(--navy);">{{ report_data | selectattr('total_days', 'gt', 0) | list | length }}</strong></p>
+    </div>
+    {% else %}
+    <p style="color: var(--gray-500); text-align: center; padding: 2.5rem;">No data available for this period.</p>
+    {% endif %}
+</div>
+{% endblock %}

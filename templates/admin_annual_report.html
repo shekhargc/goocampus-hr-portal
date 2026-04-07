@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block title %}Annual Report - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Annual Leave Report</h1>
+    <p>Report for {{ fy_label }}</p>
+</div>
+
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Filter Report</h2>
+    <form method="GET" style="display: grid; grid-template-columns: auto auto auto; gap: 2rem; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="year">FY Year</label>
+            <select id="year" name="year">
+                {% for y in range(2024, 2027) %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}-{{ y+1 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button">View Report</button>
+        <a href="/admin/annual-report/download?year={{ year }}" class="button button-success">Download XLSX</a>
+    </form>
+</div>
+
+<div class="card">
+    {% if report_data %}
+    <h2 class="card-title">Annual Leave Summary</h2>
+    <table class="table" style="font-size: 0.9rem;">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Dept</th>
+                <th>Allocation</th>
+                <th>Taken</th>
+                <th>Balance</th>
+                <th colspan="12" style="text-align: center;">Monthly Breakdown (Apr-Mar)</th>
+            </tr>
+            <tr style="border-top: none;">
+                <th colspan="6"></th>
+                <th>Apr</th>
+                <th>May</th>
+                <th>Jun</th>
+                <th>Jul</th>
+                <th>Aug</th>
+                <th>Sep</th>
+                <th>Oct</th>
+                <th>Nov</th>
+                <th>Dec</th>
+                <th>Jan</th>
+                <th>Feb</th>
+                <th>Mar</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_data %}
+            <tr>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.emp_code }}</td>
+                <td>{{ row.department }}</td>
+                <td style="text-align: center;">{{ row.total_allocation }}</td>
+                <td style="text-align: center;">{{ row.total_taken }}</td>
+                <td style="text-align: center;">{{ row.remaining_balance }}</td>
+                {% for month_days in row.monthly_breakdown %}
+                <td style="text-align: center; font-size: 0.85rem;">{{ month_days if month_days > 0 else '-' }}</td>
+                {% endfor %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: var(--gray-100); border-radius: 1rem;">
+        <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--navy);">Summary</h3>
+        {% set total_taken = report_data | map(attribute='total_taken') | sum %}
+        {% set total_allocation = report_data | map(attribute='total_allocation') | sum %}
+        {% set total_balance = report_data | map(attribute='remaining_balance') | sum %}
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Total Allocation: <strong style="color: var(--navy);">{{ total_allocation }}</strong> days</p>
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Total Leaves Taken: <strong style="color: var(--navy);">{{ total_taken }}</strong> days</p>
+        <p style="margin-bottom: 0; font-size: 0.95rem;">Total Remaining Balance: <strong style="color: var(--navy);">{{ total_balance }}</strong> days</p>
+    </div>
+    {% else %}
+    <p style="color: var(--gray-500); text-align: center; padding: 2.5rem;">No data available for this period.</p>
+    {% endif %}
+</div>
+{% endblock %}

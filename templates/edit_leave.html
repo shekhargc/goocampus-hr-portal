@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+
+{% block title %}Edit Leave - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .edit-card {
+        max-width: 560px; margin: 0 auto; background: white;
+        border-radius: 0.75rem; border: 1px solid var(--gray-200);
+        padding: 2rem;
+    }
+    .edit-card h2 {
+        font-size: 1.15rem; color: var(--navy); margin-bottom: 0.25rem;
+    }
+    .edit-card .sub { font-size: 0.85rem; color: var(--gray-500); margin-bottom: 1.5rem; }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label {
+        display: block; font-size: 0.78rem; font-weight: 700; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.4px; margin-bottom: 0.35rem;
+    }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%; padding: 0.6rem 0.85rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.9rem; color: var(--navy); background: white;
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px rgba(245,130,32,0.15);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .info-row {
+        display: flex; gap: 1rem; margin-bottom: 1rem; padding: 0.75rem 1rem;
+        background: var(--gray-50); border-radius: 0.5rem;
+    }
+    .info-row .info-item { flex: 1; }
+    .info-row .info-label { font-size: 0.72rem; color: var(--gray-400); text-transform: uppercase; font-weight: 700; }
+    .info-row .info-value { font-size: 0.92rem; color: var(--navy); font-weight: 600; margin-top: 0.15rem; }
+    .btn-row { display: flex; gap: 0.75rem; margin-top: 1.5rem; }
+    .btn-save {
+        padding: 0.6rem 1.5rem; background: var(--orange); color: white; border: none;
+        border-radius: 0.4rem; font-size: 0.9rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-save:hover { background: #e0741a; }
+    .btn-cancel {
+        padding: 0.6rem 1.5rem; background: var(--gray-200); color: var(--gray-600);
+        border: none; border-radius: 0.4rem; font-size: 0.9rem; font-weight: 600;
+        cursor: pointer; text-decoration: none;
+    }
+    .btn-cancel:hover { background: var(--gray-300); }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Edit Leave</h1>
+    <p>Update leave details for {{ leave.name }} ({{ leave.emp_code }})</p>
+</div>
+
+<div class="edit-card">
+    <h2>Leave on {{ leave.leave_date }}</h2>
+    <p class="sub">You can change the leave type, duration, and reason. The leave date cannot be changed — use Modify if you need a different date.</p>
+
+    <div class="info-row">
+        <div class="info-item">
+            <div class="info-label">Employee</div>
+            <div class="info-value">{{ leave.name }} ({{ leave.emp_code }})</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Leave Date</div>
+            <div class="info-value">{{ leave.leave_date }}</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">Status</div>
+            <div class="info-value" style="text-transform: capitalize;">{{ leave.status }}</div>
+        </div>
+    </div>
+
+    <form method="POST">
+        <div class="form-group">
+            <label>Leave Type</label>
+            <select name="leave_type" required>
+                <option value="annual" {% if leave.leave_type == 'annual' %}selected{% endif %}>Annual Leave</option>
+                <option value="sick" {% if leave.leave_type == 'sick' %}selected{% endif %}>Sick Leave</option>
+                <option value="casual" {% if leave.leave_type == 'casual' %}selected{% endif %}>Casual Leave</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Duration</label>
+            <select name="day_portion" required>
+                <option value="full" {% if leave.day_portion == 'full' %}selected{% endif %}>Full Day</option>
+                <option value="first_half" {% if leave.day_portion == 'first_half' %}selected{% endif %}>First Half</option>
+                <option value="second_half" {% if leave.day_portion == 'second_half' %}selected{% endif %}>Second Half</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Reason</label>
+            <textarea name="reason" required>{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '') }}</textarea>
+        </div>
+        <div class="btn-row">
+            <button type="submit" class="btn-save">Save Changes</button>
+            <a href="{{ request.referrer or url_for('my_leave_applications') }}" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

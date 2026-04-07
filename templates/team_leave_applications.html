@@ -194,7 +194,7 @@
                 <td>
                     <div class="emp-cell">
                         {% if leave.photo_url %}
-                        <img src="{{ leave.photo_url }}" class="emp-avatar" alt="">
+                        <img src="/static/photos/{{ leave.photo_url }}" class="emp-avatar" alt="">
                         {% else %}
                         <div class="emp-avatar-placeholder">{{ leave.name[0] }}</div>
                         {% endif %}

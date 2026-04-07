@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+
+{% block title %}Team Leave Report - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Team Leave Report</h1>
+    <p>Direct Reports for {{ month_name }} {{ year }}</p>
+</div>
+
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Filter Report</h2>
+    <form method="GET" style="display: grid; grid-template-columns: auto auto auto auto; gap: 2rem; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="month">Month</label>
+            <select id="month" name="month">
+                {% for m in range(1, 13) %}
+                <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="year">Year</label>
+            <select id="year" name="year">
+                {% for y in range(2024, 2027) %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button">View Report</button>
+        <a href="/reports/team/download?month={{ month }}&year={{ year }}" class="button button-success">Download XLSX</a>
+    </form>
+</div>
+
+<div class="card">
+    {% if report_data %}
+    <h2 class="card-title">Team Leave Details</h2>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Employee</th>
+                <th>Code</th>
+                <th>Monthly Allocation</th>
+                <th>Balance Start</th>
+                <th>Balance Available</th>
+                <th>Days Taken</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in report_data %}
+            <tr>
+                <td><strong>{{ row.name }}</strong></td>
+                <td>{{ row.emp_code }}</td>
+                <td style="text-align: center;">{{ row.allocation }}</td>
+                <td style="text-align: center;">{{ row.balance_start }}</td>
+                <td style="text-align: center;">{{ row.balance_available }}</td>
+                <td style="text-align: center;">{% if row.days_taken > 0 %}<span style="color: var(--danger);">{{ row.days_taken }}</span>{% else %}-{% endif %}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: var(--gray-100); border-radius: 1rem;">
+        <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--navy);">Summary</h3>
+        {% set total_days = report_data | map(attribute='days_taken') | sum %}
+        {% set team_count = report_data | length %}
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Total Team Members: <strong style="color: var(--navy);">{{ team_count }}</strong></p>
+        <p style="margin-bottom: 0; font-size: 0.95rem;">Total Days Taken: <strong style="color: var(--navy);">{{ total_days }}</strong></p>
+    </div>
+    {% else %}
+    <p style="color: var(--gray-500); text-align: center; padding: 2.5rem;">No direct reports found.</p>
+    {% endif %}
+</div>
+{% endblock %}

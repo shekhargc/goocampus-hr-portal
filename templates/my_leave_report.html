@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}My Leave Report - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>My Leave Report</h1>
+    <p>{{ user.name }} ({{ user.emp_code }})</p>
+</div>
+
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Filter Report</h2>
+    <form method="GET" style="display: grid; grid-template-columns: auto auto auto; gap: 2rem; align-items: flex-end;">
+        <div class="form-group" style="margin-bottom: 0;">
+            <label for="year">Fiscal Year</label>
+            <select id="year" name="year">
+                {% for y in range(2024, 2027) %}
+                <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}-{{ y+1 }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <button type="submit" class="button">View Report</button>
+        <a href="/my-leave-report/download?year={{ year }}" class="button button-success">Download XLSX</a>
+    </form>
+</div>
+
+<div class="card">
+    <h2 class="card-title">Leave Summary</h2>
+    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 1.5rem; margin-bottom: 2rem;">
+        <div style="padding: 1rem; background: var(--blue); color: white; border-radius: 0.75rem; text-align: center;">
+            <div style="font-size: 0.9rem; opacity: 0.9;">Total Allocation</div>
+            <div style="font-size: 1.8rem; font-weight: bold; margin-top: 0.5rem;">{{ total_allocation }}</div>
+            <div style="font-size: 0.8rem; margin-top: 0.3rem;">days/year</div>
+        </div>
+    </div>
+
+    {% if report_data %}
+    <h3 style="margin-bottom: 1rem; color: var(--navy);">Monthly Breakdown</h3>
+    <table class="table">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th style="text-align: center;">Monthly Allocation</th>
+                <th style="text-align: center;">Days Taken</th>
+                <th style="text-align: center;">Running Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in report_data %}
+            <tr>
+                <td><strong>{{ item.month }}</strong></td>
+                <td style="text-align: center;">{{ item.allocation }}</td>
+                <td style="text-align: center;">{% if item.taken > 0 %}<span style="color: var(--danger);">{{ item.taken }}</span>{% else %}-{% endif %}</td>
+                <td style="text-align: center;">
+                    <strong style="{% if item.running_balance < 5 %}color: var(--danger);{% else %}color: var(--success);{% endif %}">
+                        {{ item.running_balance }}
+                    </strong>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+
+    <div style="margin-top: 2rem; padding: 1.5rem 2rem; background: var(--gray-100); border-radius: 1rem;">
+        <h3 style="margin-bottom: 1rem; font-size: 1.1rem; color: var(--navy);">Summary</h3>
+        {% set total_taken = report_data | map(attribute='taken') | sum %}
+        {% set last_balance = report_data | last | attr('running_balance') if report_data else 0 %}
+        <p style="margin-bottom: 0.75rem; font-size: 0.95rem;">Total Days Taken: <strong style="color: var(--navy);">{{ total_taken }}</strong></p>
+        <p style="margin-bottom: 0; font-size: 0.95rem;">Closing Balance: <strong style="color: var(--navy);">{{ last_balance }}</strong></p>
+    </div>
+    {% else %}
+    <p style="color: var(--gray-500); text-align: center; padding: 2.5rem;">No data available for this period.</p>
+    {% endif %}
+</div>
+{% endblock %}
