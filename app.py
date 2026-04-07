@@ -3208,6 +3208,7 @@ def ensure_crm_tables():
                 id SERIAL PRIMARY KEY,
                 employee_id INTEGER NOT NULL REFERENCES employees(id),
                 trip_type TEXT NOT NULL,
+                meeting_category TEXT DEFAULT 'face_to_face',
                 from_date TEXT NOT NULL,
                 to_date TEXT NOT NULL,
                 travel_date TEXT,
@@ -3249,6 +3250,12 @@ def ensure_crm_tables():
             conn.commit()
         except Exception:
             pass  # Column already exists
+        # Add meeting_category column to b2b_trips (migration for existing deployments)
+        try:
+            conn.execute("ALTER TABLE b2b_trips ADD COLUMN meeting_category TEXT DEFAULT 'face_to_face'")
+            conn.commit()
+        except Exception:
+            pass
         conn.close()
         logging.info("CRM tables ensured.")
     except Exception as e:
@@ -3256,7 +3263,7 @@ def ensure_crm_tables():
 
 
 def seed_default_meeting_types():
-    """Seed default meeting types if table is empty."""
+    """Seed default meeting client types if table is empty."""
     try:
         conn = get_db()
         count = conn.execute('SELECT COUNT(*) as cnt FROM meeting_types').fetchone()
@@ -3810,7 +3817,7 @@ def b2b_trips_list():
 
     query = '''
         SELECT t.*, e.name as employee_name, e.emp_code, e.photo_url as emp_photo, p.name as project_name,
-               (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
+               t.meeting_category, (SELECT COUNT(*) FROM b2b_meetings m WHERE m.trip_id = t.id) as meeting_count
         FROM b2b_trips t
         JOIN employees e ON t.employee_id = e.id
         LEFT JOIN projects p ON t.project_id = p.id
@@ -3837,7 +3844,7 @@ def b2b_trips_list():
     trips = conn.execute(query, params).fetchall()
     conn.close()
 
-    return render_template('b2b_trips.html', user=user, trips=trips,
+    return render_template('meetings_list.html', user=user, trips=trips,
                          trip_type=trip_type, f_from=f_from, f_to=f_to,
                          is_company_view=is_company_view)
 
@@ -3851,23 +3858,24 @@ def add_b2b_trip():
 
     if request.method == 'POST':
         trip_type = request.form.get('trip_type')
+        meeting_category = request.form.get('meeting_category', 'face_to_face')
         from_date = request.form.get('from_date')
         to_date = request.form.get('to_date')
         travel_date = request.form.get('travel_date', '')
         project_id = request.form.get('project_id') or None
         notes = request.form.get('notes', '').strip()
 
-        if not trip_type or not from_date or not to_date:
-            flash('Trip type, from date, and to date are required', 'error')
+        if not from_date or not to_date:
+            flash('From date and to date are required', 'error')
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
-            meeting_types = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+            meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
             conn.close()
-            return render_template('add_b2b_trip.html', user=user, projects=projects, meeting_types=meeting_types)
+            return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients)
 
         conn.execute('''
-            INSERT INTO b2b_trips (employee_id, trip_type, from_date, to_date, travel_date, project_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (user['id'], trip_type, from_date, to_date, travel_date or None, project_id, notes))
+            INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, project_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user['id'], trip_type, meeting_category, from_date, to_date, travel_date or None, project_id, notes))
         conn.commit()
 
         # Get the new trip ID
@@ -3897,13 +3905,13 @@ def add_b2b_trip():
 
         conn.commit()
         conn.close()
-        flash('B2B trip and meetings added', 'success')
+        flash('Meeting created successfully', 'success')
         return redirect(url_for('b2b_trip_detail', trip_id=trip_id))
 
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
-    meeting_types = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+    meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
     conn.close()
-    return render_template('add_b2b_trip.html', user=user, projects=projects, meeting_types=meeting_types)
+    return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients)
 
 
 @app.route('/b2b/<int:trip_id>')
@@ -3934,8 +3942,11 @@ def b2b_trip_detail(trip_id):
         ORDER BY m.meeting_date, m.id
     ''', (trip_id,)).fetchall()
 
+    meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+    projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+
     conn.close()
-    return render_template('b2b_trip_detail.html', user=user, trip=trip, meetings=meetings)
+    return render_template('meeting_detail.html', user=user, trip=trip, meetings=meetings, meeting_clients=meeting_clients, projects=projects)
 
 
 @app.route('/b2b/<int:trip_id>/add-meeting', methods=['POST'])
@@ -4024,7 +4035,7 @@ def manage_meeting_types():
 
     types = conn.execute('SELECT * FROM meeting_types ORDER BY name').fetchall()
     conn.close()
-    return render_template('manage_meeting_types.html', user=user, types=types)
+    return render_template('manage_meeting_types.html', user=user, types=types, page_title='Meeting Client Types')
 
 
 # ─── Module Access Management (Admin) ───

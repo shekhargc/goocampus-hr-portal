@@ -1,0 +1,218 @@
+{% extends "base.html" %}
+{% block title %}Meeting Details - GooCampus HR Portal{% endblock %}
+{% block extra_css %}
+<style>
+    .page-header { margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; }
+    .page-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); }
+    .back-link { color: var(--gray-500); text-decoration: none; font-size: 0.88rem; display: flex; align-items: center; gap: 0.3rem; }
+    .back-link:hover { color: var(--orange); }
+
+    .panel { background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200); box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 2rem; }
+    .panel-header { padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--gray-100); background: var(--gray-50); display: flex; justify-content: space-between; align-items: center; }
+    .panel-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); }
+    .panel-body { padding: 1.5rem 1.75rem; }
+
+    .detail-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1.5rem; }
+    .detail-item label { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 0.35rem; display: block; }
+    .detail-item .value { font-size: 1.05rem; font-weight: 600; color: var(--navy); }
+
+    .badge { padding: 0.3rem 0.85rem; border-radius: 1rem; font-size: 0.82rem; font-weight: 600; display: inline-block; }
+    .badge-online { background: #DBEAFE; color: #1E40AF; }
+    .badge-city { background: #DCFCE7; color: #15803D; }
+    .badge-outstation { background: #EDE9FE; color: #6D28D9; }
+    .badge-status { background: var(--success-light); color: #166534; }
+
+    .meeting-row { display: flex; align-items: flex-start; gap: 1.25rem; padding: 1.25rem 0; border-bottom: 1px solid var(--gray-100); }
+    .meeting-row:last-child { border-bottom: none; }
+    .meeting-date-box { text-align: center; min-width: 52px; padding: 0.6rem; border-radius: 0.6rem; background: var(--blue-light); flex-shrink: 0; }
+    .meeting-date-day { font-size: 1.2rem; font-weight: 700; color: var(--blue-dark); line-height: 1; }
+    .meeting-date-month { font-size: 0.65rem; text-transform: uppercase; font-weight: 600; color: var(--blue); margin-top: 0.1rem; }
+    .meeting-body { flex: 1; min-width: 0; }
+    .meeting-title { font-weight: 600; font-size: 0.95rem; color: var(--navy); margin-bottom: 0.25rem; }
+    .meeting-meta { font-size: 0.82rem; color: var(--gray-500); line-height: 1.5; }
+    .meeting-meta span { display: inline-flex; align-items: center; gap: 0.3rem; }
+    .client-tag { display: inline-block; font-size: 0.75rem; padding: 0.15rem 0.55rem; border-radius: 1rem; font-weight: 600; background: var(--orange-light); color: var(--orange-dark); margin-left: 0.25rem; }
+    .outcome-box { margin-top: 0.65rem; padding: 0.65rem 1rem; background: var(--gray-50); border-radius: 0.5rem; border-left: 3px solid var(--success); }
+    .outcome-label { font-size: 0.75rem; font-weight: 600; color: var(--success); text-transform: uppercase; margin-bottom: 0.2rem; }
+    .outcome-text { font-size: 0.88rem; color: var(--gray-700); }
+
+    .outcome-form { margin-top: 0.65rem; display: none; }
+    .outcome-form.open { display: block; }
+    .outcome-toggle { font-size: 0.82rem; color: var(--orange); cursor: pointer; font-weight: 600; border: none; background: none; padding: 0; }
+    .outcome-toggle:hover { text-decoration: underline; }
+
+    .form-group { margin-bottom: 1rem; }
+    .form-group label { display: block; font-weight: 600; color: var(--gray-700); font-size: 0.88rem; margin-bottom: 0.35rem; }
+    .form-group textarea, .form-group input, .form-group select {
+        width: 100%; padding: 0.65rem 0.85rem; border: 2px solid var(--gray-200); border-radius: 0.5rem;
+        font-family: inherit; font-size: 0.9rem; box-sizing: border-box;
+    }
+    .form-group textarea:focus, .form-group input:focus, .form-group select:focus { outline: none; border-color: var(--orange); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+
+    .btn-sm { padding: 0.45rem 1rem; background: var(--orange); color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600; font-size: 0.85rem; font-family: inherit; }
+    .btn-sm:hover { background: var(--orange-dark); }
+
+    .add-meeting-panel { margin-top: 1rem; }
+    .add-meeting-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 1rem; }
+    .btn-add { padding: 0.6rem 1.5rem; background: var(--success); color: white; border: none; border-radius: 0.5rem; cursor: pointer; font-weight: 600; font-size: 0.88rem; font-family: inherit; margin-top: 1rem; }
+    .btn-add:hover { background: #059669; }
+    .required { color: var(--danger); }
+
+    @media (max-width: 768px) { .detail-grid { grid-template-columns: 1fr 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<a href="/b2b" class="back-link" style="margin-bottom: 1rem; display: inline-flex;">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+    Back to Meetings
+</a>
+
+<div class="page-header">
+    <h1>Meeting Details</h1>
+</div>
+
+<!-- Trip/Meeting Info -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">{{ trip.employee_name }}</div>
+        <span class="badge badge-status">{{ trip.status }}</span>
+    </div>
+    <div class="panel-body">
+        <div class="detail-grid">
+            <div class="detail-item">
+                <label>Meeting Type</label>
+                <div class="value">
+                    {% if trip.trip_type == 'online' %}
+                    <span class="badge badge-online">Online</span>
+                    {% elif trip.trip_type == 'outstation' %}
+                    <span class="badge badge-outstation">Outstation</span>
+                    {% else %}
+                    <span class="badge badge-city">City</span>
+                    {% endif %}
+                </div>
+            </div>
+            <div class="detail-item">
+                <label>From Date</label>
+                <div class="value">{{ trip.from_date or 'N/A' }}</div>
+            </div>
+            <div class="detail-item">
+                <label>To Date</label>
+                <div class="value">{{ trip.to_date or 'N/A' }}</div>
+            </div>
+            {% if trip.travel_date %}
+            <div class="detail-item">
+                <label>Travel Date</label>
+                <div class="value">{{ trip.travel_date }}</div>
+            </div>
+            {% endif %}
+            <div class="detail-item">
+                <label>Project</label>
+                <div class="value">{{ trip.project_name or 'N/A' }}</div>
+            </div>
+        </div>
+        {% if trip.notes %}
+        <div style="margin-top: 1.25rem; padding-top: 1rem; border-top: 1px solid var(--gray-100);">
+            <label style="font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: var(--gray-500); margin-bottom: 0.35rem; display: block;">Notes</label>
+            <p style="color: var(--gray-700); font-size: 0.92rem;">{{ trip.notes }}</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Meetings List -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">Meetings ({{ trip.meetings | length if trip.meetings else 0 }})</div>
+    </div>
+    <div class="panel-body">
+        {% if trip.meetings %}
+        {% for meeting in trip.meetings %}
+        <div class="meeting-row">
+            <div class="meeting-date-box">
+                <div class="meeting-date-day">{{ meeting.meeting_date[8:] | int }}</div>
+                <div class="meeting-date-month">
+                    {% set mm = meeting.meeting_date[5:7] | int %}
+                    {% if mm==1 %}Jan{% elif mm==2 %}Feb{% elif mm==3 %}Mar{% elif mm==4 %}Apr{% elif mm==5 %}May{% elif mm==6 %}Jun{% elif mm==7 %}Jul{% elif mm==8 %}Aug{% elif mm==9 %}Sep{% elif mm==10 %}Oct{% elif mm==11 %}Nov{% elif mm==12 %}Dec{% endif %}
+                </div>
+            </div>
+            <div class="meeting-body">
+                <div class="meeting-title">{{ meeting.meeting_with }} <span class="client-tag">{{ meeting.meeting_type_name }}</span></div>
+                <div class="meeting-meta">
+                    {% if meeting.meeting_location %}<span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg> {{ meeting.meeting_location }}</span>{% endif %}
+                    {% if meeting.contact_person %}<span> &middot; {{ meeting.contact_person }}</span>{% endif %}
+                    {% if meeting.contact_phone %}<span> &middot; {{ meeting.contact_phone }}</span>{% endif %}
+                </div>
+                {% if meeting.outcome %}
+                <div class="outcome-box">
+                    <div class="outcome-label">Outcome</div>
+                    <div class="outcome-text">{{ meeting.outcome }}</div>
+                </div>
+                {% endif %}
+                <button type="button" class="outcome-toggle" onclick="document.getElementById('outcome-{{ meeting.id }}').classList.toggle('open')">
+                    {{ 'Update Outcome' if meeting.outcome else 'Add Outcome' }}
+                </button>
+                <form method="POST" action="/b2b/meeting/{{ meeting.id }}/outcome" class="outcome-form" id="outcome-{{ meeting.id }}">
+                    <div class="form-group">
+                        <label>Outcome</label>
+                        <textarea name="outcome" placeholder="Meeting outcome...">{{ meeting.outcome or '' }}</textarea>
+                    </div>
+                    <div class="form-group">
+                        <label>Notes</label>
+                        <textarea name="notes" placeholder="Additional notes...">{{ meeting.notes or '' }}</textarea>
+                    </div>
+                    <button type="submit" class="btn-sm">Save</button>
+                </form>
+            </div>
+        </div>
+        {% endfor %}
+        {% else %}
+        <p style="text-align: center; color: var(--gray-400); padding: 2rem;">No meetings scheduled yet</p>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Add Meeting -->
+<div class="panel">
+    <div class="panel-header">
+        <div class="panel-title">Add Meeting</div>
+    </div>
+    <div class="panel-body">
+        <form method="POST" action="/b2b/{{ trip.id }}/add-meeting">
+            <div class="add-meeting-grid">
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Date <span class="required">*</span></label>
+                    <input type="date" name="meeting_date" required>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Meeting Client <span class="required">*</span></label>
+                    <select name="meeting_type_id" required>
+                        <option value="">-- Select --</option>
+                        {% for mc in meeting_clients %}
+                        <option value="{{ mc.id }}">{{ mc.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Meeting With <span class="required">*</span></label>
+                    <input type="text" name="meeting_with" placeholder="Client name" required>
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Location</label>
+                    <input type="text" name="meeting_location" placeholder="Location">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Contact Person</label>
+                    <input type="text" name="contact_person" placeholder="Name">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label>Contact Phone</label>
+                    <input type="tel" name="contact_phone" placeholder="Phone">
+                </div>
+            </div>
+            <button type="submit" class="btn-add">Add Meeting</button>
+        </form>
+    </div>
+</div>
+{% endblock %}

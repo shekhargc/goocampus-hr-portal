@@ -203,7 +203,7 @@
         </div>
         <div>
             <div class="stat-value">{{ total_trips }}</div>
-            <div class="stat-label">{% if is_company_view %}Total B2B Trips{% else %}My B2B Trips{% endif %}</div>
+            <div class="stat-label">{% if is_company_view %}Total Meetings{% else %}My Meetings{% endif %}</div>
             <div class="stat-sub">{{ outstation_count }} outstation, {{ city_count }} city</div>
         </div>
     </div>
@@ -358,10 +358,10 @@
 
 <!-- Recent Trips + Recent News -->
 <div class="grid-row-equal">
-    <!-- Recent B2B Trips -->
+    <!-- Recent Meetings -->
     <div class="panel">
         <div class="panel-header">
-            <div class="panel-title">{% if is_company_view %}Recent B2B Trips{% else %}My Recent Trips{% endif %}</div>
+            <div class="panel-title">{% if is_company_view %}Recent Meetings{% else %}My Recent Meetings{% endif %}</div>
             <a href="/b2b" class="view-all-link">View All &rarr;</a>
         </div>
         <div class="panel-body">
@@ -436,7 +436,7 @@
                 <span>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
                 </span>
-                New B2B Trip
+                New Meeting
             </a>
             <a href="/projects" class="quick-link">
                 <span>
@@ -454,7 +454,7 @@
                 <span>
                     <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                 </span>
-                All B2B Trips
+                All Meetings
             </a>
         </div>
     </div>

@@ -152,7 +152,7 @@
 
 {% block content %}
 <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem;">
-    <h1 class="page-title">Manage Meeting Types</h1>
+    <h1 class="page-title">{{ page_title|default('Manage Meeting Types') }}</h1>
 
     <!-- Add Meeting Type Form -->
     <div class="add-type-card">

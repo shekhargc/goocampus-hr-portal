@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+{% block title %}New Meeting - GooCampus HR Portal{% endblock %}
+{% block extra_css %}
+<style>
+    /* Use admin dashboard quality CSS */
+    .meeting-form { max-width: 960px; margin: 0 auto; }
+    .page-header { margin-bottom: 2rem; }
+    .page-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); }
+    .page-header p { color: var(--gray-500); }
+
+    .panel { background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200); box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 2rem; }
+    .panel-header { padding: 1.25rem 1.75rem; border-bottom: 1px solid var(--gray-100); background: var(--gray-50); }
+    .panel-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
+    .panel-body { padding: 1.5rem 1.75rem; }
+
+    /* Type selector cards */
+    .type-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; }
+    .type-card { border: 2px solid var(--gray-200); border-radius: 0.85rem; padding: 1.5rem; cursor: pointer; transition: all 0.2s; text-align: center; position: relative; }
+    .type-card:hover { border-color: var(--orange); background: var(--orange-light); }
+    .type-card.selected { border-color: var(--orange); background: var(--orange-light); box-shadow: 0 0 0 3px rgba(245,130,32,0.15); }
+    .type-card input { position: absolute; opacity: 0; }
+    .type-card-icon { font-size: 2rem; margin-bottom: 0.5rem; }
+    .type-card-label { font-weight: 700; font-size: 1rem; color: var(--navy); }
+    .type-card-desc { font-size: 0.82rem; color: var(--gray-500); margin-top: 0.25rem; }
+
+    /* Mode cards (smaller) */
+    .mode-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+    .mode-card { border: 2px solid var(--gray-200); border-radius: 0.75rem; padding: 1rem 1.25rem; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 0.75rem; }
+    .mode-card:hover { border-color: var(--blue); }
+    .mode-card.selected { border-color: var(--blue); background: var(--blue-light); }
+    .mode-card input { position: absolute; opacity: 0; }
+    .mode-card-icon { width: 40px; height: 40px; border-radius: 0.6rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .mode-card-label { font-weight: 600; font-size: 0.92rem; color: var(--navy); }
+    .mode-card-desc { font-size: 0.78rem; color: var(--gray-500); }
+
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem; }
+    .form-grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1.25rem; }
+    .form-group { margin-bottom: 1.25rem; }
+    .form-group label { display: block; font-weight: 600; color: var(--gray-700); font-size: 0.9rem; margin-bottom: 0.45rem; }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200); border-radius: 0.6rem;
+        font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s, box-shadow 0.2s; background: var(--white);
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
+    }
+    .form-group textarea { resize: vertical; min-height: 80px; }
+    .required { color: var(--danger); }
+
+    /* Meeting cards */
+    .meeting-card { background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 0.85rem; padding: 1.5rem; margin-bottom: 1rem; position: relative; }
+    .meeting-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem; }
+    .meeting-card-num { font-weight: 700; font-size: 0.95rem; color: var(--navy); display: flex; align-items: center; gap: 0.5rem; }
+    .meeting-card-num span { width: 28px; height: 28px; border-radius: 50%; background: var(--orange); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.82rem; }
+    .btn-remove { padding: 0.35rem 0.75rem; background: var(--danger-light); color: var(--danger); border: 1px solid #FCA5A5; border-radius: 0.4rem; cursor: pointer; font-size: 0.78rem; font-weight: 600; font-family: inherit; }
+    .btn-remove:hover { background: var(--danger); color: white; }
+
+    .btn-add-meeting { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.65rem 1.25rem; background: var(--success-light); color: #166534; border: 1px solid #86EFAC; border-radius: 0.6rem; cursor: pointer; font-weight: 600; font-size: 0.88rem; font-family: inherit; transition: all 0.15s; }
+    .btn-add-meeting:hover { background: var(--success); color: white; }
+
+    .form-actions { display: flex; gap: 1rem; padding-top: 1.5rem; border-top: 1px solid var(--gray-200); margin-top: 1rem; }
+    .btn-submit { padding: 0.75rem 2.5rem; background: var(--orange); color: white; border: none; border-radius: 0.6rem; cursor: pointer; font-size: 1rem; font-weight: 600; font-family: inherit; transition: all 0.2s; }
+    .btn-submit:hover { background: var(--orange-dark); transform: translateY(-1px); box-shadow: 0 6px 12px rgba(245,130,32,0.25); }
+    .btn-cancel { padding: 0.75rem 2rem; background: var(--gray-200); color: var(--gray-700); border: none; border-radius: 0.6rem; cursor: pointer; font-size: 0.95rem; font-weight: 600; font-family: inherit; text-decoration: none; display: inline-flex; align-items: center; }
+    .btn-cancel:hover { background: var(--gray-300); }
+
+    #f2f-fields { display: none; }
+    #f2f-fields.show { display: block; }
+    #mode-section { display: none; }
+    #mode-section.show { display: block; }
+
+    @media (max-width: 768px) { .type-cards, .mode-cards, .form-grid, .form-grid-3 { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="meeting-form">
+    <div class="page-header">
+        <h1>New Meeting</h1>
+        <p>Schedule a new meeting with clients or partners.</p>
+    </div>
+
+    <form method="POST" action="/b2b/add" id="meetingForm">
+        <input type="hidden" name="meeting_category" id="meetingCategory" value="face_to_face">
+        <input type="hidden" name="trip_type" id="tripType" value="city">
+
+        <!-- Meeting Type -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                    Meeting Type
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="type-cards">
+                    <label class="type-card" onclick="selectType('face_to_face')">
+                        <input type="radio" name="meeting_type_radio" value="face_to_face" checked>
+                        <div class="type-card-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="1.5"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></div>
+                        <div class="type-card-label">Face to Face</div>
+                        <div class="type-card-desc">In-person meeting — city or outstation</div>
+                    </label>
+                    <label class="type-card" onclick="selectType('online')">
+                        <input type="radio" name="meeting_type_radio" value="online">
+                        <div class="type-card-icon"><svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="1.5"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></div>
+                        <div class="type-card-label">Online</div>
+                        <div class="type-card-desc">Virtual meeting — video or phone call</div>
+                    </label>
+                </div>
+
+                <!-- Mode (F2F only) -->
+                <div id="mode-section" class="show">
+                    <label style="font-weight: 600; color: var(--gray-700); font-size: 0.9rem; display: block; margin-bottom: 0.65rem;">Meeting Mode</label>
+                    <div class="mode-cards">
+                        <label class="mode-card selected" onclick="selectMode('city')">
+                            <input type="radio" name="mode_radio" value="city" checked>
+                            <div class="mode-card-icon" style="background: #DCFCE7; color: #15803D;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+                            </div>
+                            <div>
+                                <div class="mode-card-label">City Meeting</div>
+                                <div class="mode-card-desc">Local in-city visit</div>
+                            </div>
+                        </label>
+                        <label class="mode-card" onclick="selectMode('outstation')">
+                            <input type="radio" name="mode_radio" value="outstation">
+                            <div class="mode-card-icon" style="background: #DBEAFE; color: #1E40AF;">
+                                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17.8 19.2L16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.4-.1.9.3 1.1l5.5 3.1-3.8 3.8-2.1-.4c-.4-.1-.8.1-1 .4l-.3.5c-.2.3-.1.7.2.9l3.3 2.2 2.2 3.3c.2.3.6.4.9.2l.5-.3c.3-.2.5-.6.4-1l-.4-2.1 3.8-3.8 3.1 5.5c.2.4.7.5 1.1.3l.5-.3c.4-.2.6-.6.5-1.1z"/></svg>
+                            </div>
+                            <div>
+                                <div class="mode-card-label">Outstation</div>
+                                <div class="mode-card-desc">Travel to another city</div>
+                            </div>
+                        </label>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Schedule Details (F2F) -->
+        <div class="panel" id="f2f-fields" style="display: block;">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                    Travel Schedule
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="form-grid-3">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>From Date <span class="required">*</span></label>
+                        <input type="date" name="from_date" id="fromDate" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>To Date <span class="required">*</span></label>
+                        <input type="date" name="to_date" id="toDate" required>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Travel Date</label>
+                        <input type="date" name="travel_date">
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Project & Notes -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+                    Details
+                </div>
+            </div>
+            <div class="panel-body">
+                <div class="form-grid">
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Project</label>
+                        <select name="project_id">
+                            <option value="">-- Select project --</option>
+                            {% for project in projects %}
+                            <option value="{{ project.id }}">{{ project.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom: 0;">
+                        <label>Notes</label>
+                        <textarea name="notes" placeholder="Any additional notes..." rows="2"></textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Meetings -->
+        <div class="panel">
+            <div class="panel-header">
+                <div class="panel-title">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                    Meetings
+                </div>
+            </div>
+            <div class="panel-body">
+                <div id="meetings-list">
+                    <div class="meeting-card" data-index="0">
+                        <div class="meeting-card-header">
+                            <div class="meeting-card-num"><span>1</span> Meeting</div>
+                            <button type="button" class="btn-remove" onclick="removeMeeting(this)" style="display:none;">Remove</button>
+                        </div>
+                        <div class="form-grid-3">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Date <span class="required">*</span></label>
+                                <input type="date" name="meeting_date[]" required>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Meeting Client <span class="required">*</span></label>
+                                <select name="meeting_type_id[]" required>
+                                    <option value="">-- Select client type --</option>
+                                    {% for mc in meeting_clients %}
+                                    <option value="{{ mc.id }}">{{ mc.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Meeting With <span class="required">*</span></label>
+                                <input type="text" name="meeting_with[]" placeholder="Client/institution name" required>
+                            </div>
+                        </div>
+                        <div class="form-grid-3">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Location</label>
+                                <input type="text" name="meeting_location[]" placeholder="Meeting location">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Contact Person</label>
+                                <input type="text" name="contact_person[]" placeholder="Contact name">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Contact Phone</label>
+                                <input type="tel" name="contact_phone[]" placeholder="Phone number">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <button type="button" class="btn-add-meeting" onclick="addMeeting()">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                    Add Another Meeting
+                </button>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-submit">Create Meeting</button>
+            <a href="/b2b" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function selectType(type) {
+    document.querySelectorAll('.type-card').forEach(c => c.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    document.getElementById('meetingCategory').value = type;
+
+    const modeSection = document.getElementById('mode-section');
+    const f2fFields = document.getElementById('f2f-fields');
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+
+    if (type === 'online') {
+        modeSection.classList.remove('show');
+        f2fFields.style.display = 'none';
+        document.getElementById('tripType').value = 'online';
+        fromDate.removeAttribute('required');
+        toDate.removeAttribute('required');
+        fromDate.value = '';
+        toDate.value = '';
+    } else {
+        modeSection.classList.add('show');
+        f2fFields.style.display = 'block';
+        fromDate.setAttribute('required', 'required');
+        toDate.setAttribute('required', 'required');
+        // Restore last selected mode
+        const checked = document.querySelector('input[name="mode_radio"]:checked');
+        if (checked) document.getElementById('tripType').value = checked.value;
+    }
+}
+
+function selectMode(mode) {
+    document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
+    event.currentTarget.classList.add('selected');
+    document.getElementById('tripType').value = mode;
+}
+
+let meetingCount = 1;
+function addMeeting() {
+    const list = document.getElementById('meetings-list');
+    const first = list.querySelector('.meeting-card');
+    const clone = first.cloneNode(true);
+    clone.querySelectorAll('input, select, textarea').forEach(el => el.value = '');
+    meetingCount++;
+    clone.querySelector('.meeting-card-num').innerHTML = '<span>' + meetingCount + '</span> Meeting';
+    clone.querySelector('.btn-remove').style.display = '';
+    list.appendChild(clone);
+    updateRemoveButtons();
+}
+
+function removeMeeting(btn) {
+    btn.closest('.meeting-card').remove();
+    meetingCount = document.querySelectorAll('.meeting-card').length;
+    document.querySelectorAll('.meeting-card').forEach((card, i) => {
+        card.querySelector('.meeting-card-num').innerHTML = '<span>' + (i + 1) + '</span> Meeting';
+    });
+    updateRemoveButtons();
+}
+
+function updateRemoveButtons() {
+    const cards = document.querySelectorAll('.meeting-card');
+    cards.forEach(card => {
+        card.querySelector('.btn-remove').style.display = cards.length > 1 ? '' : 'none';
+    });
+}
+
+// Initialize type selection
+document.querySelector('.type-card').classList.add('selected');
+</script>
+{% endblock %}
