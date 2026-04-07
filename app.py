@@ -2948,6 +2948,54 @@ def reports_annual_redirect():
     return redirect(url_for('my_leave_report', year=year))
 
 
+# ─── Temporary cleanup route (remove after use) ───
+@app.route('/admin/cleanup-data', methods=['GET', 'POST'])
+@admin_required
+def cleanup_data():
+    conn = get_db()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        results = []
+
+        if action == 'check':
+            leaves = conn.execute('SELECT lr.id, lr.leave_date, lr.leave_type, lr.status, lr.reason, e.name, e.emp_code FROM leave_records lr JOIN employees e ON lr.employee_id = e.id ORDER BY lr.created_at DESC').fetchall()
+            notifs = conn.execute('SELECT id, title, message, type FROM notifications ORDER BY created_at DESC').fetchall()
+            late = conn.execute("SELECT name, emp_code, late_leave_count FROM employees WHERE late_leave_count > 0").fetchall()
+            conn.close()
+            return jsonify({'leaves': [dict(l) for l in leaves], 'notifications': [dict(n) for n in notifs], 'late_counts': [dict(l) for l in late]})
+
+        if action == 'delete_all_leaves':
+            conn.execute('DELETE FROM leave_records')
+            results.append('All leave records deleted')
+
+        if action == 'clear_notifications_keep_welcome':
+            conn.execute("DELETE FROM notifications WHERE type != 'announcement' AND title NOT LIKE '%Welcome%' AND title NOT LIKE '%welcome%'")
+            results.append('Non-welcome notifications cleared')
+
+        if action == 'clear_late_count':
+            conn.execute("UPDATE employees SET late_leave_count = 0 WHERE emp_code = 'GC001'")
+            results.append('GC001 late leave count cleared')
+
+        conn.commit()
+        conn.close()
+        return jsonify({'results': results})
+
+    conn.close()
+    return '''<html><body style="font-family:sans-serif;padding:2rem;">
+    <h2>Data Cleanup</h2>
+    <button onclick="doAction('check')">Check Data</button>
+    <button onclick="doAction('delete_all_leaves')" style="background:red;color:white;">Delete All Leaves</button>
+    <button onclick="doAction('clear_notifications_keep_welcome')" style="background:orange;color:white;">Clear Notifications (Keep Welcome)</button>
+    <button onclick="doAction('clear_late_count')" style="background:blue;color:white;">Clear GC001 Late Count</button>
+    <pre id="out" style="margin-top:1rem;background:#f0f0f0;padding:1rem;max-height:600px;overflow:auto;"></pre>
+    <script>
+    function doAction(action) {
+        fetch('/admin/cleanup-data', {method:'POST', headers:{'Content-Type':'application/x-www-form-urlencoded'}, body:'action='+action})
+        .then(r=>r.json()).then(d=>document.getElementById('out').textContent = JSON.stringify(d, null, 2));
+    }
+    </script></body></html>'''
+
+
 def ensure_management_admins():
     """Ensure MANAGEMENT_CODES employees always have is_admin = 1."""
     try:
