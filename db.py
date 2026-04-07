@@ -82,6 +82,10 @@ class DatabaseConnection:
         """Commit the transaction."""
         self.conn.commit()
 
+    def rollback(self):
+        """Rollback the transaction."""
+        self.conn.rollback()
+
     def close(self):
         """Close the connection."""
         self.conn.close()

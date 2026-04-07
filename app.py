@@ -3249,13 +3249,13 @@ def ensure_crm_tables():
             conn.execute('ALTER TABLE module_access ADD COLUMN is_active INTEGER DEFAULT 1')
             conn.commit()
         except Exception:
-            pass  # Column already exists
+            conn.rollback()  # Required for PostgreSQL to reset aborted transaction state
         # Add meeting_category column to b2b_trips (migration for existing deployments)
         try:
             conn.execute("ALTER TABLE b2b_trips ADD COLUMN meeting_category TEXT DEFAULT 'face_to_face'")
             conn.commit()
         except Exception:
-            pass
+            conn.rollback()
         conn.close()
         logging.info("CRM tables ensured.")
     except Exception as e:
