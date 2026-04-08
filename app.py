@@ -118,6 +118,11 @@ def get_user():
     conn.close()
     return user
 
+def get_monthly_alloc(month_num):
+    """Get monthly leave allocation for a given month number (1-12).
+    April (month 4) gets 3 days, all other months get 2 days. Base total = 25/year."""
+    return 3 if month_num == 4 else 2
+
 def is_manager(user_id):
     """Check if user has any direct reports"""
     conn = get_db()
@@ -158,12 +163,12 @@ def calculate_monthly_balance(employee_id, year, month):
 
     # Total annual allocation = 25 + carry_forward
     total_allocation = 25 + carry_forward
-    monthly_allocation = total_allocation / 12
 
     # Calculate balance up to and including the given month
-    balance = 0
+    # Carry forward is added as starting balance; monthly alloc: April=3, others=2
+    balance = carry_forward
     for m in range(4, month + 1):  # FY starts April (month 4)
-        balance += monthly_allocation
+        balance += get_monthly_alloc(m)
         # Subtract approved leaves in this month
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
@@ -185,12 +190,12 @@ def get_available_balance(employee_id, year, month):
     carry_forward = emp['carry_forward'] if emp else 0
 
     total_allocation = 25 + carry_forward
-    monthly_allocation = total_allocation / 12
 
     # Get balance from start of FY to end of previous month
-    balance = 0
+    # Carry forward added as starting balance; monthly alloc: April=3, others=2
+    balance = carry_forward
     for m in range(4, month):
-        balance += monthly_allocation
+        balance += get_monthly_alloc(m)
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
@@ -1335,7 +1340,6 @@ def my_leave_report():
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
-    monthly_alloc = round(total_allocation / 12, 2)
 
     # Pending requests count
     pending_count = conn.execute(
@@ -1345,10 +1349,11 @@ def my_leave_report():
 
     # Month-wise leave report for the full FY with running balance
     monthly_leave_data = []
-    running_balance = 0
+    running_balance = carry_forward  # Start with carry forward
     for m in range(12):
         report_month = ((m + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
+        m_alloc = get_monthly_alloc(report_month)
 
         month_data = conn.execute('''
             SELECT SUM(days) as total_days,
@@ -1362,7 +1367,7 @@ def my_leave_report():
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
         month_total = month_data['total_days'] or 0
-        running_balance = round(running_balance + monthly_alloc - month_total, 2)
+        running_balance = round(running_balance + m_alloc - month_total, 2)
 
         monthly_leave_data.append({
             'month': calendar.month_name[report_month],
@@ -1373,7 +1378,7 @@ def my_leave_report():
             'sick': month_data['sick'] or 0,
             'casual': month_data['casual'] or 0,
             'count': month_data['count'] or 0,
-            'monthly_alloc': monthly_alloc,
+            'monthly_alloc': m_alloc,
             'balance': running_balance
         })
 
@@ -1408,7 +1413,7 @@ def my_leave_report():
                          available_balance=round(available_balance, 2),
                          pending_count=pending_count,
                          carry_forward=carry_forward,
-                         monthly_alloc=monthly_alloc)
+                         monthly_alloc='Apr=3, Others=2')
 
 @app.route('/hr-dashboard')
 @login_required
@@ -1985,10 +1990,10 @@ def admin_monthly_report():
     employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     report_data = []
+    m_alloc = get_monthly_alloc(month)
     for emp in employees:
         carry_forward = emp['carry_forward']
         total_allocation = 25 + carry_forward
-        monthly_allocation = total_allocation / 12
 
         # Get leaves taken in this month
         month_leaves = conn.execute('''
@@ -2001,7 +2006,7 @@ def admin_monthly_report():
 
         # Get balance at start of month
         balance_start = get_available_balance(emp['id'], year, month)
-        balance_available = balance_start + monthly_allocation
+        balance_available = balance_start + m_alloc
 
         # Calculate deduction
         deduction = max(0, days_taken_month - balance_available)
@@ -2010,7 +2015,7 @@ def admin_monthly_report():
             'name': emp['name'],
             'emp_code': emp['emp_code'],
             'department': emp['department'],
-            'monthly_allocation': round(monthly_allocation, 2),
+            'monthly_allocation': m_alloc,
             'balance_start': round(balance_start, 2),
             'balance_available': round(balance_available, 2),
             'days_taken': round(days_taken_month, 2),
@@ -2057,10 +2062,10 @@ def admin_monthly_report_download():
             cell.alignment = Alignment(horizontal='center', vertical='center')
 
         # Data
+        dl_m_alloc = get_monthly_alloc(month)
         for emp in employees:
             carry_forward = emp['carry_forward']
             total_allocation = 25 + carry_forward
-            monthly_allocation = total_allocation / 12
 
             month_leaves = conn.execute('''
                 SELECT SUM(days) as total_days FROM leave_records
@@ -2070,14 +2075,14 @@ def admin_monthly_report_download():
 
             days_taken_month = month_leaves['total_days'] if month_leaves['total_days'] else 0
             balance_start = get_available_balance(emp['id'], year, month)
-            balance_available = balance_start + monthly_allocation
+            balance_available = balance_start + dl_m_alloc
             deduction = max(0, days_taken_month - balance_available)
 
             ws.append([
                 emp['name'],
                 emp['emp_code'],
                 emp['department'],
-                round(monthly_allocation, 2),
+                dl_m_alloc,
                 round(balance_start, 2),
                 round(balance_available, 2),
                 round(days_taken_month, 2),
@@ -2293,7 +2298,7 @@ def api_balance():
         'total_allocation': total_allocation,
         'days_taken': days_taken,
         'available_balance': max(0, available),
-        'monthly_allocation': round(total_allocation / 12, 2)
+        'monthly_allocation': 'Apr=3, Others=2'
     })
 
 @app.route('/api/employee-name')
@@ -2983,7 +2988,7 @@ def admin_employee_leave_report():
     available_balance = 0
     pending_count = 0
     carry_forward = 0
-    monthly_alloc = 0
+    monthly_alloc = 'Apr=3, Others=2'
 
     today = datetime.now()
     current_month = today.month
@@ -2994,17 +2999,17 @@ def admin_employee_leave_report():
         if selected_emp:
             carry_forward = selected_emp['carry_forward'] or 0
             total_allocation = 25 + carry_forward
-            monthly_alloc = round(total_allocation / 12, 2)
 
             pending_count = conn.execute(
                 "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
                 (selected_emp_id,)
             ).fetchone()['cnt']
 
-            running_balance = 0
+            running_balance = carry_forward  # Start with carry forward
             for m in range(12):
                 report_month = ((m + 3) % 12) + 1
                 report_year = fy_year if report_month >= 4 else fy_year + 1
+                m_alloc = get_monthly_alloc(report_month)
 
                 month_data = conn.execute('''
                     SELECT SUM(days) as total_days,
@@ -3018,7 +3023,7 @@ def admin_employee_leave_report():
                 ''', (selected_emp_id, str(report_year), str(report_month).zfill(2))).fetchone()
 
                 month_total = month_data['total_days'] or 0
-                running_balance = round(running_balance + monthly_alloc - month_total, 2)
+                running_balance = round(running_balance + m_alloc - month_total, 2)
 
                 monthly_leave_data.append({
                     'month': calendar.month_name[report_month],
@@ -3029,7 +3034,7 @@ def admin_employee_leave_report():
                     'sick': month_data['sick'] or 0,
                     'casual': month_data['casual'] or 0,
                     'count': month_data['count'] or 0,
-                    'monthly_alloc': monthly_alloc,
+                    'monthly_alloc': m_alloc,
                     'balance': running_balance
                 })
 
@@ -3092,7 +3097,7 @@ def team_leave_report():
     for emp in direct_reports:
         carry_forward = emp['carry_forward']
         total_allocation = 25 + carry_forward
-        monthly_allocation = total_allocation / 12
+        monthly_allocation = get_monthly_alloc(month)
 
         # Get leaves for this month
         month_leaves = conn.execute('''
@@ -3108,7 +3113,7 @@ def team_leave_report():
         report_data.append({
             'name': emp['name'],
             'emp_code': emp['emp_code'],
-            'allocation': round(monthly_allocation, 2),
+            'allocation': monthly_allocation,
             'balance_start': round(balance_start, 2),
             'balance_available': round(balance_available, 2),
             'days_taken': days_taken
@@ -3160,7 +3165,7 @@ def team_leave_report_download():
     for emp in direct_reports:
         carry_forward = emp['carry_forward']
         total_allocation = 25 + carry_forward
-        monthly_allocation = total_allocation / 12
+        monthly_allocation = get_monthly_alloc(month)
 
         month_leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
@@ -3175,7 +3180,7 @@ def team_leave_report_download():
         ws.append([
             emp['name'],
             emp['emp_code'],
-            round(monthly_allocation, 2),
+            monthly_allocation,
             round(balance_start, 2),
             round(balance_available, 2),
             days_taken
@@ -3353,7 +3358,6 @@ def reports_quarterly():
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
-    monthly_alloc = round(total_allocation / 12, 2)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
@@ -3370,12 +3374,12 @@ def reports_quarterly():
     ]
 
     quarters = []
-    running_balance = 0
+    running_balance = carry_forward
     annual_total = sick_total = casual_total = 0
 
     for qdef in quarter_defs:
         q_annual = q_sick = q_casual = q_total = 0
-        q_alloc = round(monthly_alloc * 3, 2)
+        q_alloc = sum(get_monthly_alloc(m) for m in qdef['months'])
         month_details = []
 
         for m in qdef['months']:
@@ -3445,7 +3449,6 @@ def reports_annual():
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
     carry_forward = emp['carry_forward'] if emp else 0
     total_allocation = 25 + carry_forward
-    monthly_alloc = round(total_allocation / 12, 2)
 
     pending_count = conn.execute(
         'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
@@ -3454,10 +3457,11 @@ def reports_annual():
 
     import calendar as cal_module
     monthly_leave_data = []
-    running_balance = 0
+    running_balance = carry_forward
     for m_idx in range(12):
         report_month = ((m_idx + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
+        m_alloc = get_monthly_alloc(report_month)
 
         month_data = conn.execute('''
             SELECT SUM(days) as total_days,
@@ -3470,7 +3474,7 @@ def reports_annual():
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
         month_total = month_data['total_days'] or 0
-        running_balance = round(running_balance + monthly_alloc - month_total, 2)
+        running_balance = round(running_balance + m_alloc - month_total, 2)
 
         monthly_leave_data.append({
             'month': cal_module.month_name[report_month],
@@ -3479,7 +3483,7 @@ def reports_annual():
             'annual': month_data['annual'] or 0,
             'sick': month_data['sick'] or 0,
             'casual': month_data['casual'] or 0,
-            'monthly_alloc': monthly_alloc,
+            'monthly_alloc': m_alloc,
             'balance': running_balance
         })
 
@@ -3511,7 +3515,7 @@ def reports_annual():
                          available_balance=available_balance,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
-                         monthly_alloc=monthly_alloc)
+                         monthly_alloc='Apr=3, Others=2')
 
 
 def ensure_crm_tables():

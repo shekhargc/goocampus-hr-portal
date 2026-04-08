@@ -102,9 +102,9 @@
         <div class="info-card-sub">Per employee per FY</div>
     </div>
     <div class="info-card" style="border-top: 3px solid var(--blue);">
-        <div class="info-card-val" style="color: var(--blue);">2.08</div>
+        <div class="info-card-val" style="color: var(--blue); font-size: 1.3rem;">Apr: 3 / Others: 2</div>
         <div class="info-card-lbl">Monthly Allocation</div>
-        <div class="info-card-sub">25 &divide; 12 months</div>
+        <div class="info-card-sub">3 (April) + 2 &times; 11 = 25</div>
     </div>
     <div class="info-card" style="border-top: 3px solid var(--success);">
         <div class="info-card-val" style="color: var(--success);">{{ my_carry_forward }}</div>
@@ -127,9 +127,9 @@
         <div class="info-section-title">Leave Allocation Structure</div>
     </div>
     <div class="info-section-body">
-        <p>Every employee at GooCampus is entitled to <strong>25 paid leave days per financial year</strong> (April to March). This base allocation is distributed equally across 12 months, giving each employee approximately <strong>2.08 leaves per month</strong>.</p>
+        <p>Every employee at GooCampus is entitled to <strong>25 paid leave days per financial year</strong> (April to March). April gets <strong>3 days</strong> and all other months get <strong>2 days</strong> each (3 + 2&times;11 = 25).</p>
 
-        <p>Leave allocation is cumulative — unused monthly allocation rolls into the next month's balance within the same financial year. For example, if you don't take any leave in April, your May balance will include April's unused allocation.</p>
+        <p>Leave allocation is cumulative — unused monthly allocation rolls into the next month's balance within the same financial year. For example, if you don't take any leave in April, your May balance will include April's unused 3 days.</p>
 
         <div class="info-grid-2" style="margin-top: 1.25rem;">
             <div>
@@ -169,46 +169,48 @@
         </thead>
         <tbody>
             {% set months = [
-                {'name': 'April ' ~ fy_year, 'q': 'Q1'},
-                {'name': 'May ' ~ fy_year, 'q': 'Q1'},
-                {'name': 'June ' ~ fy_year, 'q': 'Q1'},
-                {'name': 'July ' ~ fy_year, 'q': 'Q2'},
-                {'name': 'August ' ~ fy_year, 'q': 'Q2'},
-                {'name': 'September ' ~ fy_year, 'q': 'Q2'},
-                {'name': 'October ' ~ fy_year, 'q': 'Q3'},
-                {'name': 'November ' ~ fy_year, 'q': 'Q3'},
-                {'name': 'December ' ~ fy_year, 'q': 'Q3'},
-                {'name': 'January ' ~ (fy_year + 1), 'q': 'Q4'},
-                {'name': 'February ' ~ (fy_year + 1), 'q': 'Q4'},
-                {'name': 'March ' ~ (fy_year + 1), 'q': 'Q4'}
+                {'name': 'April ' ~ fy_year, 'q': 'Q1', 'alloc': 3},
+                {'name': 'May ' ~ fy_year, 'q': 'Q1', 'alloc': 2},
+                {'name': 'June ' ~ fy_year, 'q': 'Q1', 'alloc': 2},
+                {'name': 'July ' ~ fy_year, 'q': 'Q2', 'alloc': 2},
+                {'name': 'August ' ~ fy_year, 'q': 'Q2', 'alloc': 2},
+                {'name': 'September ' ~ fy_year, 'q': 'Q2', 'alloc': 2},
+                {'name': 'October ' ~ fy_year, 'q': 'Q3', 'alloc': 2},
+                {'name': 'November ' ~ fy_year, 'q': 'Q3', 'alloc': 2},
+                {'name': 'December ' ~ fy_year, 'q': 'Q3', 'alloc': 2},
+                {'name': 'January ' ~ (fy_year + 1), 'q': 'Q4', 'alloc': 2},
+                {'name': 'February ' ~ (fy_year + 1), 'q': 'Q4', 'alloc': 2},
+                {'name': 'March ' ~ (fy_year + 1), 'q': 'Q4', 'alloc': 2}
             ] %}
+            {% set ns = namespace(cumulative=0) %}
             {% for m in months %}
+            {% set ns.cumulative = ns.cumulative + m.alloc %}
             <tr{% if loop.index in [4, 7, 10] %} style="border-top: 2px solid var(--gray-200);"{% endif %}>
                 <td style="font-weight: 600; color: var(--navy);">{{ m.name }}</td>
-                <td>2.08</td>
-                <td style="color: var(--success);">{{ (loop.index * 2.08) | round(2) }}</td>
+                <td>{{ m.alloc }}</td>
+                <td style="color: var(--success);">{{ ns.cumulative }}</td>
                 <td><span style="background: rgba(27,42,74,0.06); padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; color: var(--navy);">{{ m.q }}</span></td>
             </tr>
             {% if loop.index == 3 %}
-            <tr class="q-row"><td>Q1 Subtotal (Apr — Jun)</td><td>6.24</td><td>6.24</td><td></td></tr>
+            <tr class="q-row"><td>Q1 Subtotal (Apr — Jun)</td><td>7</td><td>7</td><td></td></tr>
             {% elif loop.index == 6 %}
-            <tr class="q-row"><td>Q2 Subtotal (Jul — Sep)</td><td>6.24</td><td>12.48</td><td></td></tr>
+            <tr class="q-row"><td>Q2 Subtotal (Jul — Sep)</td><td>6</td><td>13</td><td></td></tr>
             {% elif loop.index == 9 %}
-            <tr class="q-row"><td>Q3 Subtotal (Oct — Dec)</td><td>6.24</td><td>18.72</td><td></td></tr>
+            <tr class="q-row"><td>Q3 Subtotal (Oct — Dec)</td><td>6</td><td>19</td><td></td></tr>
             {% endif %}
             {% endfor %}
-            <tr class="q-row"><td>Q4 Subtotal (Jan — Mar)</td><td>6.24</td><td>24.96</td><td></td></tr>
+            <tr class="q-row"><td>Q4 Subtotal (Jan — Mar)</td><td>6</td><td>25</td><td></td></tr>
             <tr class="total-row">
                 <td>Annual Total</td>
-                <td>25.00</td>
-                <td>25.00</td>
+                <td>25</td>
+                <td>25</td>
                 <td></td>
             </tr>
         </tbody>
     </table>
     </div>
     <div style="padding: 0.85rem 1.5rem; background: var(--gray-50); border-top: 1px solid var(--gray-200); font-size: 0.82rem; color: var(--gray-500);">
-        Note: Monthly allocation of 2.08 is rounded (25 &divide; 12 = 2.0833). The system uses precise calculations so your year-end total always equals 25 days.
+        Note: April gets 3 days and all other months get 2 days each. Total: 3 + (2 &times; 11) = 25 days per financial year.
     </div>
 </div>
 
@@ -232,7 +234,7 @@
         <p>&bull; <strong>Full Day leave</strong> &mdash; deducts 1.0 day from your balance<br>
         &bull; <strong>Half Day leave</strong> (First Half or Second Half) &mdash; deducts 0.5 days from your balance</p>
 
-        <p>Your balance runs on a monthly allocation cycle. Each month adds 2.08 days to your running balance. If you take more leaves than your accumulated allocation in a given month, the extra is deducted from future months' allocation. The system tracks a <strong>running balance</strong> so you can always see where you stand.</p>
+        <p>Your balance runs on a monthly allocation cycle. April adds 3 days and every other month adds 2 days to your running balance. If you take more leaves than your accumulated allocation in a given month, the extra is deducted from future months' allocation. The system tracks a <strong>running balance</strong> so you can always see where you stand.</p>
 
         <div class="highlight-box">
             <div class="highlight-box-title">Negative Balance Warning</div>
