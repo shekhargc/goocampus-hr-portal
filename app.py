@@ -3175,25 +3175,314 @@ def team_leave_report_download():
 # ─── Redirect Routes for Report Navigation ───
 @app.route('/reports/monthly')
 @login_required
-def reports_monthly_redirect():
-    year = request.args.get('year', datetime.now().year)
-    month = request.args.get('month', datetime.now().month)
-    return redirect(url_for('my_leave_report', year=year, month=month))
+def reports_monthly():
+    """Monthly calendar view of leaves for the employee."""
+    user = get_user()
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('admin_employee_leave_report'))
+
+    today = datetime.now()
+    view_year = int(request.args.get('year', today.year))
+    view_month = int(request.args.get('month', today.month))
+
+    # Clamp month
+    if view_month < 1: view_month = 12; view_year -= 1
+    if view_month > 12: view_month = 1; view_year += 1
+
+    fy_year = view_year if view_month >= 4 else view_year - 1
+
+    conn = get_db()
+
+    # Total allocation
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    total_allocation = 25 + carry_forward
+
+    # FY total taken
+    fy_leaves = conn.execute('''
+        SELECT SUM(days) as total FROM leave_records
+        WHERE employee_id = ? AND status = 'approved'
+        AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+             OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+    ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
+    total_taken = fy_leaves['total'] or 0
+    available_balance = round(total_allocation - total_taken, 2)
+
+    # Leaves for this month
+    month_leaves_raw = conn.execute('''
+        SELECT * FROM leave_records
+        WHERE employee_id = ? AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        AND status IN ('approved', 'pending')
+        ORDER BY leave_date
+    ''', (user['id'], str(view_year), str(view_month).zfill(2))).fetchall()
+
+    # Holidays for this month
+    holidays_raw = conn.execute('''
+        SELECT * FROM holidays
+        WHERE strftime('%Y', holiday_date) = ? AND strftime('%m', holiday_date) = ?
+    ''', (str(view_year), str(view_month).zfill(2))).fetchall()
+
+    holidays_map = {}
+    for h in holidays_raw:
+        day = int(h['holiday_date'][8:10])
+        holidays_map[day] = h['name']
+
+    # Build leaves map by day
+    leaves_map = {}
+    for lv in month_leaves_raw:
+        day = int(lv['leave_date'][8:10])
+        leaves_map[day] = lv
+
+    conn.close()
+
+    # Build calendar days
+    import calendar as cal_module
+    days_in_month = cal_module.monthrange(view_year, view_month)[1]
+    first_day_offset = cal_module.monthrange(view_year, view_month)[0]  # 0=Mon
+    # Convert to Sunday-start: Mon=0 -> offset=1, Sun=6 -> offset=0
+    first_day_offset = (first_day_offset + 1) % 7
+
+    calendar_days = []
+    month_leaves_count = 0
+    working_days = 0
+    for d in range(1, days_in_month + 1):
+        day_of_week = cal_module.weekday(view_year, view_month, d)  # 0=Mon, 6=Sun
+        is_weekend = day_of_week in (5, 6)  # Sat, Sun
+        is_today = (view_year == today.year and view_month == today.month and d == today.day)
+        is_holiday = d in holidays_map
+
+        if not is_weekend and not is_holiday:
+            working_days += 1
+
+        leave = leaves_map.get(d)
+        if leave:
+            month_leaves_count += 1
+
+        calendar_days.append({
+            'date': d,
+            'is_today': is_today,
+            'is_weekend': is_weekend,
+            'is_holiday': is_holiday,
+            'holiday_name': holidays_map.get(d, ''),
+            'leave': leave
+        })
+
+    # Trailing empty cells
+    total_cells = first_day_offset + days_in_month
+    trailing_empty = (7 - (total_cells % 7)) % 7
+
+    # Month leave records with day names for the table
+    month_leaves = []
+    day_names = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday']
+    for lv in month_leaves_raw:
+        d = int(lv['leave_date'][8:10])
+        dow = cal_module.weekday(view_year, view_month, d)
+        leave_dict = dict(lv)
+        leave_dict['day_name'] = day_names[dow]
+        month_leaves.append(leave_dict)
+
+    # Prev/next month
+    if view_month == 1:
+        prev_month, prev_year = 12, view_year - 1
+    else:
+        prev_month, prev_year = view_month - 1, view_year
+    if view_month == 12:
+        next_month, next_year = 1, view_year + 1
+    else:
+        next_month, next_year = view_month + 1, view_year
+
+    month_name = cal_module.month_name[view_month]
+
+    return render_template('report_monthly.html',
+                         user=user, fy_year=fy_year,
+                         view_year=view_year, view_month=view_month,
+                         month_name=month_name, days_in_month=days_in_month,
+                         first_day_offset=first_day_offset,
+                         calendar_days=calendar_days,
+                         trailing_empty=trailing_empty,
+                         month_leaves=month_leaves,
+                         month_leaves_count=month_leaves_count,
+                         working_days=working_days,
+                         total_allocation=total_allocation,
+                         available_balance=available_balance,
+                         prev_month=prev_month, prev_year=prev_year,
+                         next_month=next_month, next_year=next_year)
 
 
 @app.route('/reports/quarterly')
 @login_required
-def reports_quarterly_redirect():
-    year = request.args.get('year', datetime.now().year)
-    quarter = request.args.get('quarter', 1)
-    return redirect(url_for('my_leave_report', year=year))
+def reports_quarterly():
+    """Quarterly breakdown of leaves for the employee."""
+    user = get_user()
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('admin_employee_leave_report'))
+
+    today = datetime.now()
+    fy_year = int(request.args.get('fy', today.year if today.month >= 4 else today.year - 1))
+
+    conn = get_db()
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    total_allocation = 25 + carry_forward
+    monthly_alloc = round(total_allocation / 12, 2)
+
+    pending_count = conn.execute(
+        'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
+        (user['id'], 'pending')
+    ).fetchone()['cnt']
+
+    import calendar as cal_module
+    # Q1: Apr-Jun, Q2: Jul-Sep, Q3: Oct-Dec, Q4: Jan-Mar
+    quarter_defs = [
+        {'label': 'Q1 (Apr — Jun)', 'months_label': 'April, May, June', 'months': [4, 5, 6]},
+        {'label': 'Q2 (Jul — Sep)', 'months_label': 'July, August, September', 'months': [7, 8, 9]},
+        {'label': 'Q3 (Oct — Dec)', 'months_label': 'October, November, December', 'months': [10, 11, 12]},
+        {'label': 'Q4 (Jan — Mar)', 'months_label': 'January, February, March', 'months': [1, 2, 3]},
+    ]
+
+    quarters = []
+    running_balance = 0
+    annual_total = sick_total = casual_total = 0
+
+    for qdef in quarter_defs:
+        q_annual = q_sick = q_casual = q_total = 0
+        q_alloc = round(monthly_alloc * 3, 2)
+        month_details = []
+
+        for m in qdef['months']:
+            yr = fy_year if m >= 4 else fy_year + 1
+            mdata = conn.execute('''
+                SELECT SUM(days) as total_days,
+                       SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
+                       SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
+                       SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual
+                FROM leave_records
+                WHERE employee_id = ? AND status = 'approved'
+                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+            ''', (user['id'], str(yr), str(m).zfill(2))).fetchone()
+
+            m_total = mdata['total_days'] or 0
+            m_annual = mdata['annual'] or 0
+            m_sick = mdata['sick'] or 0
+            m_casual = mdata['casual'] or 0
+
+            q_annual += m_annual; q_sick += m_sick; q_casual += m_casual; q_total += m_total
+
+            month_details.append({
+                'name': cal_module.month_name[m],
+                'annual': m_annual, 'sick': m_sick, 'casual': m_casual, 'total': m_total
+            })
+
+        running_balance += q_alloc - q_total
+        annual_total += q_annual; sick_total += q_sick; casual_total += q_casual
+
+        quarters.append({
+            'label': qdef['label'],
+            'months_label': qdef['months_label'],
+            'months': month_details,
+            'annual': q_annual, 'sick': q_sick, 'casual': q_casual,
+            'total': q_total, 'alloc': q_alloc,
+            'balance': round(running_balance, 2)
+        })
+
+    total_taken = annual_total + sick_total + casual_total
+    available_balance = round(total_allocation - total_taken, 2)
+    conn.close()
+
+    return render_template('report_quarterly.html',
+                         user=user, fy_year=fy_year,
+                         quarters=quarters,
+                         total_allocation=total_allocation,
+                         total_taken=total_taken,
+                         annual_total=annual_total,
+                         sick_total=sick_total,
+                         casual_total=casual_total,
+                         available_balance=available_balance,
+                         pending_count=pending_count)
 
 
 @app.route('/reports/annual')
 @login_required
-def reports_annual_redirect():
-    year = request.args.get('year', datetime.now().year)
-    return redirect(url_for('my_leave_report', year=year))
+def reports_annual():
+    """Annual month-wise leave report for the employee."""
+    user = get_user()
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('admin_employee_leave_report'))
+
+    today = datetime.now()
+    fy_year = int(request.args.get('fy', today.year if today.month >= 4 else today.year - 1))
+
+    conn = get_db()
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    total_allocation = 25 + carry_forward
+    monthly_alloc = round(total_allocation / 12, 2)
+
+    pending_count = conn.execute(
+        'SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = ?',
+        (user['id'], 'pending')
+    ).fetchone()['cnt']
+
+    import calendar as cal_module
+    monthly_leave_data = []
+    running_balance = 0
+    for m_idx in range(12):
+        report_month = ((m_idx + 3) % 12) + 1
+        report_year = fy_year if report_month >= 4 else fy_year + 1
+
+        month_data = conn.execute('''
+            SELECT SUM(days) as total_days,
+                   SUM(CASE WHEN leave_type = 'annual' THEN days ELSE 0 END) as annual,
+                   SUM(CASE WHEN leave_type = 'sick' THEN days ELSE 0 END) as sick,
+                   SUM(CASE WHEN leave_type = 'casual' THEN days ELSE 0 END) as casual
+            FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
+
+        month_total = month_data['total_days'] or 0
+        running_balance = round(running_balance + monthly_alloc - month_total, 2)
+
+        monthly_leave_data.append({
+            'month': cal_module.month_name[report_month],
+            'year': report_year,
+            'total': month_total,
+            'annual': month_data['annual'] or 0,
+            'sick': month_data['sick'] or 0,
+            'casual': month_data['casual'] or 0,
+            'monthly_alloc': monthly_alloc,
+            'balance': running_balance
+        })
+
+    all_leaves = conn.execute('''
+        SELECT * FROM leave_records
+        WHERE employee_id = ?
+        AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
+             OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
+        ORDER BY leave_date DESC
+    ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchall()
+
+    total_taken = sum(m['total'] for m in monthly_leave_data)
+    annual_total = sum(m['annual'] for m in monthly_leave_data)
+    sick_total = sum(m['sick'] for m in monthly_leave_data)
+    casual_total = sum(m['casual'] for m in monthly_leave_data)
+    available_balance = round(total_allocation - total_taken, 2)
+
+    conn.close()
+
+    return render_template('report_annual.html',
+                         user=user, fy_year=fy_year,
+                         monthly_leave_data=monthly_leave_data,
+                         all_leaves=all_leaves,
+                         total_allocation=total_allocation,
+                         total_taken=total_taken,
+                         annual_total=annual_total,
+                         sick_total=sick_total,
+                         casual_total=casual_total,
+                         available_balance=available_balance,
+                         pending_count=pending_count,
+                         carry_forward=carry_forward,
+                         monthly_alloc=monthly_alloc)
 
 
 def ensure_crm_tables():

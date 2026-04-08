@@ -160,7 +160,7 @@
 <!-- Management Welcome Banner (with photo, like employee dashboard) -->
 <div class="dash-welcome">
     {% if user.photo_url %}
-    <img src="/static/photos/{{ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
+    <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
     {% else %}
     <div class="dash-photo-init">{{ user.name[0] }}</div>
     {% endif %}

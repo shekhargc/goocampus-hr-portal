@@ -17,6 +17,10 @@
     }
     .dash-name { font-size: 1.2rem; font-weight: 700; margin-bottom: 0.15rem; }
     .dash-role { opacity: 0.7; font-size: 0.85rem; }
+    .dash-leave-pills { display: flex; gap: 1.5rem; margin-top: 0.5rem; }
+    .dash-leave-pill { display: flex; flex-direction: column; align-items: center; }
+    .dash-leave-pill-val { font-size: 1.15rem; font-weight: 700; line-height: 1; }
+    .dash-leave-pill-lbl { font-size: 0.7rem; opacity: 0.7; margin-top: 0.15rem; }
     .dash-actions { margin-left: auto; display: flex; gap: 0.75rem; }
     .dash-action-btn {
         padding: 0.55rem 1.2rem; border-radius: 0.5rem; border: 1px solid rgba(255,255,255,0.3);
@@ -104,6 +108,7 @@
         .grid-3col { grid-template-columns: 1fr; }
         .dash-welcome { flex-wrap: wrap; padding: 1.25rem 1.5rem; }
         .dash-actions { margin-left: 0; width: 100%; }
+        .dash-leave-pills { gap: 1rem; }
     }
     @media (min-width: 769px) and (max-width: 1024px) {
         .grid-3col { grid-template-columns: 1fr 1fr; }
@@ -115,13 +120,33 @@
 <!-- Welcome Banner -->
 <div class="dash-welcome">
     {% if user.photo_url %}
-    <img src="/static/photos/{{ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
+    <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="dash-photo" alt="{{ user.name }}">
     {% else %}
     <div class="dash-photo-init">{{ user.name[0] }}</div>
     {% endif %}
     <div>
         <div class="dash-name">{{ user.name }}</div>
         <div class="dash-role">{{ user.department }} · {{ user.designation or 'Employee' }}</div>
+        <div class="dash-leave-pills">
+            <div class="dash-leave-pill">
+                <div class="dash-leave-pill-val">{{ total_allocation }}</div>
+                <div class="dash-leave-pill-lbl">Total Leaves</div>
+            </div>
+            <div class="dash-leave-pill">
+                <div class="dash-leave-pill-val" style="color: #6EE7B7;">{{ available_balance }}</div>
+                <div class="dash-leave-pill-lbl">Available</div>
+            </div>
+            <div class="dash-leave-pill">
+                <div class="dash-leave-pill-val" style="color: #FCD34D;">{{ days_taken }}</div>
+                <div class="dash-leave-pill-lbl">Taken</div>
+            </div>
+            {% if pending_count > 0 %}
+            <div class="dash-leave-pill">
+                <div class="dash-leave-pill-val" style="color: #FCA5A5;">{{ pending_count }}</div>
+                <div class="dash-leave-pill-lbl">Pending</div>
+            </div>
+            {% endif %}
+        </div>
     </div>
     <div class="dash-actions">
         <a href="/apply-leave" class="dash-action-btn primary">+ Apply Leave</a>
@@ -130,108 +155,6 @@
             Approvals {% if pending_team_count > 0 %}({{ pending_team_count }}){% endif %}
         </a>
         {% endif %}
-    </div>
-</div>
-
-<!-- Row 1: Balance Overview -->
-<div class="stats-grid">
-    <div class="s-card" style="border-left-color: var(--navy);">
-        <div class="s-card-icon" style="background: rgba(27,42,74,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--navy);">{{ total_allocation }}</div>
-            <div class="s-card-lbl">Total Leaves (FY)</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: var(--success);">
-        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--success);">{{ available_balance }}</div>
-            <div class="s-card-lbl">Available Balance</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: var(--warning);">
-        <div class="s-card-icon" style="background: rgba(245,158,11,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--warning)" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--warning);">{{ days_taken }}</div>
-            <div class="s-card-lbl">Days Taken (FY)</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: {% if pending_count > 0 %}var(--danger){% else %}var(--gray-300){% endif %};">
-        <div class="s-card-icon" style="background: {% if pending_count > 0 %}rgba(239,68,68,0.08){% else %}rgba(148,163,184,0.08){% endif %};">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{% if pending_count > 0 %}var(--danger){% else %}var(--gray-400){% endif %}" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: {% if pending_count > 0 %}var(--danger){% else %}var(--gray-400){% endif %};">{{ pending_count }}</div>
-            <div class="s-card-lbl">Pending Requests</div>
-        </div>
-    </div>
-</div>
-
-<!-- Row 2: Leave Type Breakdown + Allocation -->
-<div class="stats-grid">
-    <div class="s-card" style="border-left-color: var(--blue);">
-        <div class="s-card-icon" style="background: rgba(74,122,181,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--blue);">{{ annual_taken }}</div>
-            <div class="s-card-lbl">Annual Leave</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: var(--success);">
-        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--success);">{{ sick_taken }}</div>
-            <div class="s-card-lbl">Sick Leave</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: var(--orange);">
-        <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: var(--orange);">{{ casual_taken }}</div>
-            <div class="s-card-lbl">Casual Leave</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: #7c3aed;">
-        <div class="s-card-icon" style="background: rgba(124,58,237,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: #7c3aed;">{{ carry_forward }}</div>
-            <div class="s-card-lbl">Carry Forward</div>
-        </div>
-    </div>
-</div>
-
-<!-- Row 3: Monthly Stats -->
-<div class="stats-grid" style="grid-template-columns: repeat(2, 1fr);">
-    <div class="s-card" style="border-left-color: #0891b2;">
-        <div class="s-card-icon" style="background: rgba(8,145,178,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#0891b2" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8.01" y2="14"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: #0891b2;">{{ monthly_allocation }}</div>
-            <div class="s-card-lbl">Monthly Allocation</div>
-        </div>
-    </div>
-    <div class="s-card" style="border-left-color: #059669;">
-        <div class="s-card-icon" style="background: rgba(5,150,105,0.08);">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        </div>
-        <div>
-            <div class="s-card-val" style="color: #059669;">{{ current_month_available }}</div>
-            <div class="s-card-lbl">{{ current_month_name }} Available Balance</div>
-        </div>
     </div>
 </div>
 

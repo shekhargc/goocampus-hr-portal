@@ -1,0 +1,247 @@
+{% extends "base.html" %}
+
+{% block title %}Monthly Leave Report - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+    }
+    .report-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .report-header p { color: var(--gray-500); font-size: 0.9rem; margin: 0.25rem 0 0; }
+    .month-nav {
+        display: flex; align-items: center; gap: 0.75rem;
+    }
+    .month-nav a {
+        display: flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; border-radius: 50%; background: var(--white);
+        border: 1px solid var(--gray-200); color: var(--navy); text-decoration: none;
+        transition: all 0.15s;
+    }
+    .month-nav a:hover { background: var(--navy); color: white; }
+    .month-nav .current-month {
+        font-weight: 700; font-size: 1.1rem; color: var(--navy); min-width: 160px; text-align: center;
+    }
+    .summary-pills {
+        display: flex; gap: 1rem; margin-bottom: 1.5rem; flex-wrap: wrap;
+    }
+    .summary-pill {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.6rem;
+        padding: 0.85rem 1.25rem; display: flex; align-items: center; gap: 0.75rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04); flex: 1; min-width: 140px;
+    }
+    .summary-pill-val { font-size: 1.4rem; font-weight: 700; line-height: 1; }
+    .summary-pill-lbl { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.1rem; }
+    .calendar-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1.75rem;
+    }
+    .calendar-panel-header {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .calendar-panel-title { font-weight: 600; font-size: 1rem; color: var(--navy); }
+    .calendar-grid {
+        display: grid; grid-template-columns: repeat(7, 1fr); gap: 0;
+    }
+    .cal-header {
+        padding: 0.75rem 0.5rem; text-align: center; font-weight: 700;
+        font-size: 0.78rem; color: var(--gray-500); background: var(--gray-50);
+        border-bottom: 1px solid var(--gray-200); text-transform: uppercase;
+    }
+    .cal-header.sun { color: var(--danger, #dc3545); }
+    .cal-day {
+        min-height: 80px; padding: 0.5rem; border-bottom: 1px solid var(--gray-100);
+        border-right: 1px solid var(--gray-100); position: relative;
+        transition: background 0.15s;
+    }
+    .cal-day:nth-child(7n) { border-right: none; }
+    .cal-day.empty { background: var(--gray-50); }
+    .cal-day.today { background: rgba(27,42,74,0.04); }
+    .cal-day.today .cal-date { background: var(--navy); color: white; border-radius: 50%; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; }
+    .cal-day.weekend { background: rgba(148,163,184,0.06); }
+    .cal-day.holiday { background: rgba(245,158,11,0.06); }
+    .cal-date { font-size: 0.82rem; font-weight: 600; color: var(--navy); margin-bottom: 0.3rem; }
+    .cal-day.weekend .cal-date { color: var(--gray-400); }
+    .cal-leave-tag {
+        display: inline-block; padding: 0.15rem 0.45rem; border-radius: 0.3rem;
+        font-size: 0.68rem; font-weight: 600; margin-top: 0.15rem; white-space: nowrap;
+    }
+    .cal-leave-tag.annual { background: rgba(74,122,181,0.12); color: var(--blue); }
+    .cal-leave-tag.sick { background: rgba(16,185,129,0.12); color: var(--success); }
+    .cal-leave-tag.casual { background: rgba(245,130,32,0.12); color: var(--orange); }
+    .cal-leave-tag.half { font-size: 0.62rem; }
+    .cal-holiday-tag {
+        display: inline-block; padding: 0.15rem 0.45rem; border-radius: 0.3rem;
+        font-size: 0.62rem; font-weight: 600; margin-top: 0.15rem;
+        background: rgba(245,158,11,0.12); color: #92400e; white-space: nowrap;
+        max-width: 100%; overflow: hidden; text-overflow: ellipsis;
+    }
+    .legend {
+        display: flex; gap: 1.25rem; padding: 1rem 1.5rem; border-top: 1px solid var(--gray-200);
+        flex-wrap: wrap;
+    }
+    .legend-item {
+        display: flex; align-items: center; gap: 0.4rem; font-size: 0.78rem; color: var(--gray-600);
+    }
+    .legend-dot {
+        width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0;
+    }
+    .leave-list-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    @media (max-width: 768px) {
+        .cal-day { min-height: 60px; padding: 0.35rem; }
+        .cal-leave-tag { font-size: 0.6rem; padding: 0.1rem 0.3rem; }
+        .summary-pills { flex-direction: column; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <div>
+        <h1>Monthly Leave Report</h1>
+        <p>FY {{ fy_year }}&ndash;{{ fy_year + 1 }} &middot; Detailed calendar view</p>
+    </div>
+    <div class="month-nav">
+        <a href="/reports/monthly?year={{ prev_year }}&month={{ prev_month }}" title="Previous month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
+        <div class="current-month">{{ month_name }} {{ view_year }}</div>
+        <a href="/reports/monthly?year={{ next_year }}&month={{ next_month }}" title="Next month">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+    </div>
+</div>
+
+<!-- Summary Pills -->
+<div class="summary-pills">
+    <div class="summary-pill" style="border-left: 3px solid var(--navy);">
+        <div>
+            <div class="summary-pill-val" style="color: var(--navy);">{{ total_allocation }}</div>
+            <div class="summary-pill-lbl">Total Leaves (FY)</div>
+        </div>
+    </div>
+    <div class="summary-pill" style="border-left: 3px solid var(--success);">
+        <div>
+            <div class="summary-pill-val" style="color: var(--success);">{{ available_balance }}</div>
+            <div class="summary-pill-lbl">Available Balance</div>
+        </div>
+    </div>
+    <div class="summary-pill" style="border-left: 3px solid var(--orange);">
+        <div>
+            <div class="summary-pill-val" style="color: var(--orange);">{{ month_leaves_count }}</div>
+            <div class="summary-pill-lbl">Leaves This Month</div>
+        </div>
+    </div>
+    <div class="summary-pill" style="border-left: 3px solid var(--blue);">
+        <div>
+            <div class="summary-pill-val" style="color: var(--blue);">{{ working_days }}</div>
+            <div class="summary-pill-lbl">Working Days</div>
+        </div>
+    </div>
+</div>
+
+<!-- Calendar -->
+<div class="calendar-panel">
+    <div class="calendar-panel-header">
+        <div class="calendar-panel-title">{{ month_name }} {{ view_year }}</div>
+        <span style="font-size: 0.85rem; color: var(--gray-500);">{{ days_in_month }} days</span>
+    </div>
+    <div class="calendar-grid">
+        <!-- Day headers -->
+        <div class="cal-header sun">Sun</div>
+        <div class="cal-header">Mon</div>
+        <div class="cal-header">Tue</div>
+        <div class="cal-header">Wed</div>
+        <div class="cal-header">Thu</div>
+        <div class="cal-header">Fri</div>
+        <div class="cal-header">Sat</div>
+
+        <!-- Empty cells for days before 1st -->
+        {% for i in range(first_day_offset) %}
+        <div class="cal-day empty"></div>
+        {% endfor %}
+
+        <!-- Actual days -->
+        {% for day in calendar_days %}
+        <div class="cal-day{% if day.is_today %} today{% endif %}{% if day.is_weekend %} weekend{% endif %}{% if day.is_holiday %} holiday{% endif %}">
+            <div class="cal-date">{{ day.date }}</div>
+            {% if day.is_holiday %}
+            <div class="cal-holiday-tag" title="{{ day.holiday_name }}">{{ day.holiday_name }}</div>
+            {% endif %}
+            {% if day.leave %}
+            <div class="cal-leave-tag {{ day.leave.leave_type }}{% if day.leave.day_portion != 'full_day' %} half{% endif %}">
+                {{ day.leave.leave_type | capitalize }}
+                {% if day.leave.day_portion == 'first_half' %}(AM){% elif day.leave.day_portion == 'second_half' %}(PM){% endif %}
+            </div>
+            {% if day.leave.status == 'pending' %}
+            <div style="font-size: 0.6rem; color: #f59e0b; margin-top: 0.1rem; font-weight: 600;">Pending</div>
+            {% endif %}
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <!-- Empty cells after last day -->
+        {% for i in range(trailing_empty) %}
+        <div class="cal-day empty"></div>
+        {% endfor %}
+    </div>
+    <div class="legend">
+        <div class="legend-item"><div class="legend-dot" style="background: rgba(74,122,181,0.3);"></div> Annual Leave</div>
+        <div class="legend-item"><div class="legend-dot" style="background: rgba(16,185,129,0.3);"></div> Sick Leave</div>
+        <div class="legend-item"><div class="legend-dot" style="background: rgba(245,130,32,0.3);"></div> Casual Leave</div>
+        <div class="legend-item"><div class="legend-dot" style="background: rgba(245,158,11,0.3);"></div> Holiday</div>
+        <div class="legend-item"><div class="legend-dot" style="background: rgba(148,163,184,0.15);"></div> Weekend</div>
+    </div>
+</div>
+
+<!-- Leave records for this month -->
+{% if month_leaves %}
+<div class="leave-list-panel">
+    <div class="calendar-panel-header">
+        <div class="calendar-panel-title">Leave Records &mdash; {{ month_name }} {{ view_year }}</div>
+        <span style="font-size: 0.85rem; color: var(--gray-500);">{{ month_leaves | length }} records</span>
+    </div>
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Day</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in month_leaves %}
+            <tr>
+                <td style="font-weight: 600; color: var(--navy);">{{ leave.leave_date }}</td>
+                <td style="color: var(--gray-500);">{{ leave.day_name }}</td>
+                <td>
+                    {% if leave.leave_type == 'annual' %}<span style="color: var(--blue); font-weight: 600;">Annual</span>
+                    {% elif leave.leave_type == 'sick' %}<span style="color: var(--success); font-weight: 600;">Sick</span>
+                    {% else %}<span style="color: var(--orange); font-weight: 600;">Casual</span>{% endif %}
+                </td>
+                <td>{% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</td>
+                <td style="color: var(--gray-600); max-width: 250px;">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '—' }}</div>
+                </td>
+                <td>
+                    {% if leave.status == 'pending' %}<span class="badge badge-pending">Pending</span>
+                    {% elif leave.status == 'approved' %}<span class="badge badge-approved">Approved</span>
+                    {% elif leave.status == 'rejected' %}<span class="badge badge-rejected">Rejected</span>
+                    {% elif leave.status == 'retrieved' %}<span style="display:inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; background: #E5E7EB; color: #6B7280;">Retrieved</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+{% endif %}
+{% endblock %}

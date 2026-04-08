@@ -1,0 +1,284 @@
+{% extends "base.html" %}
+
+{% block title %}Annual Leave Report - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+    }
+    .report-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .report-header p { color: var(--gray-500); font-size: 0.9rem; margin: 0.25rem 0 0; }
+    .fy-selector { display: flex; align-items: center; gap: 0.75rem; }
+    .fy-selector a {
+        display: flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; border-radius: 50%; background: var(--white);
+        border: 1px solid var(--gray-200); color: var(--navy); text-decoration: none;
+        transition: all 0.15s;
+    }
+    .fy-selector a:hover { background: var(--navy); color: white; }
+    .fy-selector .fy-label { font-weight: 700; font-size: 1.05rem; color: var(--navy); min-width: 120px; text-align: center; }
+    .alloc-banner {
+        background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light, #2a3f5f) 100%);
+        border-radius: 0.85rem; padding: 1.5rem 2rem; color: white; margin-bottom: 1.5rem;
+        display: flex; justify-content: space-around; flex-wrap: wrap; gap: 1.5rem;
+    }
+    .alloc-item { text-align: center; }
+    .alloc-val { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .alloc-lbl { font-size: 0.78rem; opacity: 0.7; margin-top: 0.3rem; }
+    .type-cards {
+        display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.75rem;
+    }
+    .type-card {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.7rem;
+        padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        display: flex; align-items: center; gap: 1rem;
+    }
+    .type-icon {
+        width: 48px; height: 48px; border-radius: 0.6rem;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        font-size: 1.5rem; font-weight: 700;
+    }
+    .type-val { font-size: 1.6rem; font-weight: 700; line-height: 1; }
+    .type-lbl { font-size: 0.78rem; color: var(--gray-500); margin-top: 0.15rem; }
+    .type-sub { font-size: 0.72rem; color: var(--gray-400); margin-top: 0.1rem; }
+    .annual-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1.75rem;
+    }
+    .annual-panel-header {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+    }
+    .annual-panel-title { font-weight: 600; font-size: 1rem; color: var(--navy); }
+    .progress-cell {
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .progress-bar {
+        flex: 1; height: 6px; border-radius: 3px; background: var(--gray-100);
+        overflow: hidden; min-width: 60px;
+    }
+    .progress-fill { height: 100%; border-radius: 3px; transition: width 0.3s; }
+    .records-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    @media (max-width: 768px) {
+        .type-cards { grid-template-columns: 1fr; }
+        .alloc-banner { padding: 1.25rem; gap: 1rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <div>
+        <h1>Annual Leave Report</h1>
+        <p>Complete overview for FY {{ fy_year }}&ndash;{{ fy_year + 1 }} (April {{ fy_year }} &mdash; March {{ fy_year + 1 }})</p>
+    </div>
+    <div class="fy-selector">
+        <a href="/reports/annual?fy={{ fy_year - 1 }}" title="Previous FY">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
+        <div class="fy-label">FY {{ fy_year }}&ndash;{{ (fy_year + 1) % 100 }}</div>
+        <a href="/reports/annual?fy={{ fy_year + 1 }}" title="Next FY">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+    </div>
+</div>
+
+<!-- Allocation Banner -->
+<div class="alloc-banner">
+    <div class="alloc-item">
+        <div class="alloc-val">{{ total_allocation }}</div>
+        <div class="alloc-lbl">Total Allocation</div>
+    </div>
+    <div class="alloc-item">
+        <div class="alloc-val">25</div>
+        <div class="alloc-lbl">Base Allocation</div>
+    </div>
+    <div class="alloc-item">
+        <div class="alloc-val">{{ carry_forward }}</div>
+        <div class="alloc-lbl">Carry Forward</div>
+    </div>
+    <div class="alloc-item">
+        <div class="alloc-val" style="color: #6EE7B7;">{{ available_balance }}</div>
+        <div class="alloc-lbl">Available Balance</div>
+    </div>
+    <div class="alloc-item">
+        <div class="alloc-val" style="color: #FCD34D;">{{ total_taken }}</div>
+        <div class="alloc-lbl">Total Taken</div>
+    </div>
+    <div class="alloc-item">
+        <div class="alloc-val" style="color: #FCA5A5;">{{ pending_count }}</div>
+        <div class="alloc-lbl">Pending</div>
+    </div>
+</div>
+
+<!-- Leave Type Cards -->
+<div class="type-cards">
+    <div class="type-card">
+        <div class="type-icon" style="background: rgba(74,122,181,0.1); color: var(--blue);">{{ annual_total }}</div>
+        <div>
+            <div class="type-val" style="color: var(--blue);">{{ annual_total }}</div>
+            <div class="type-lbl">Annual Leave Taken</div>
+            <div class="type-sub">{{ ((annual_total / total_taken * 100) | round(0) | int) if total_taken > 0 else 0 }}% of total</div>
+        </div>
+    </div>
+    <div class="type-card">
+        <div class="type-icon" style="background: rgba(16,185,129,0.1); color: var(--success);">{{ sick_total }}</div>
+        <div>
+            <div class="type-val" style="color: var(--success);">{{ sick_total }}</div>
+            <div class="type-lbl">Sick Leave Taken</div>
+            <div class="type-sub">{{ ((sick_total / total_taken * 100) | round(0) | int) if total_taken > 0 else 0 }}% of total</div>
+        </div>
+    </div>
+    <div class="type-card">
+        <div class="type-icon" style="background: rgba(245,130,32,0.1); color: var(--orange);">{{ casual_total }}</div>
+        <div>
+            <div class="type-val" style="color: var(--orange);">{{ casual_total }}</div>
+            <div class="type-lbl">Casual Leave Taken</div>
+            <div class="type-sub">{{ ((casual_total / total_taken * 100) | round(0) | int) if total_taken > 0 else 0 }}% of total</div>
+        </div>
+    </div>
+</div>
+
+<!-- Month-wise Breakdown Table -->
+<div class="annual-panel">
+    <div class="annual-panel-header">
+        <div class="annual-panel-title">Month-wise Breakdown</div>
+        <span style="font-size: 0.85rem; color: var(--gray-500);">{{ monthly_alloc }} leaves/month</span>
+    </div>
+    <div style="overflow-x: auto;">
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th style="text-align: center;">Allocation</th>
+                <th style="text-align: center;">Annual</th>
+                <th style="text-align: center;">Sick</th>
+                <th style="text-align: center;">Casual</th>
+                <th style="text-align: center;">Total Taken</th>
+                <th style="text-align: center;">Running Balance</th>
+                <th style="text-align: center; width: 120px;">Utilization</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for m in monthly_leave_data %}
+            <tr style="{% if m.total > 0 %}background: rgba(245,130,32,0.04);{% endif %}">
+                <td style="font-weight: 600; color: var(--navy);">{{ m.month }} {{ m.year }}</td>
+                <td style="text-align: center; color: var(--navy); font-weight: 600;">{{ m.monthly_alloc }}</td>
+                <td style="text-align: center; color: {% if m.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.annual if m.annual > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.balance >= 0 %}var(--success){% else %}var(--danger, #dc3545){% endif %};">{{ m.balance }}</td>
+                <td style="text-align: center;">
+                    {% if m.monthly_alloc > 0 %}
+                    <div class="progress-cell">
+                        <div class="progress-bar">
+                            <div class="progress-fill" style="width: {{ [((m.total / m.monthly_alloc) * 100), 100] | min }}%; background: {% if m.total > m.monthly_alloc %}var(--danger, #dc3545){% elif m.total > 0 %}var(--orange){% else %}var(--gray-200){% endif %};"></div>
+                        </div>
+                        <span style="font-size: 0.75rem; color: var(--gray-500); min-width: 32px;">{{ ((m.total / m.monthly_alloc) * 100) | round(0) | int }}%</span>
+                    </div>
+                    {% else %}
+                    <span style="color: var(--gray-300);">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% endfor %}
+            <tr style="background: var(--navy); color: white;">
+                <td style="font-weight: 700; color: white; border: none;">FY Total</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ monthly_alloc }}/mo</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ annual_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ sick_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ casual_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ available_balance }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">
+                    {% if total_allocation > 0 %}{{ ((total_taken / total_allocation) * 100) | round(0) | int }}%{% endif %}
+                </td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+</div>
+
+<!-- All Leave Records -->
+<div class="records-panel">
+    <div class="annual-panel-header">
+        <div class="annual-panel-title">All Leave Records</div>
+        <span style="font-size: 0.88rem; color: var(--gray-500);">{{ all_leaves | length }} records</span>
+    </div>
+    {% if all_leaves %}
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Type</th>
+                <th>Duration</th>
+                <th>Reason</th>
+                <th>Status</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for leave in all_leaves %}
+            <tr{% if leave.status == 'retrieved' %} style="opacity: 0.6;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.5;"{% endif %}>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                    {{ leave.leave_date }}
+                    {% if leave.original_id %}
+                    <div style="font-size: 0.72rem; color: #3B82F6; margin-top: 0.2rem;">Modified leave</div>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if leave.leave_type == 'annual' %}<span style="color: var(--blue); font-weight: 600;">Annual</span>
+                    {% elif leave.leave_type == 'sick' %}<span style="color: var(--success); font-weight: 600;">Sick</span>
+                    {% else %}<span style="color: var(--orange); font-weight: 600;">Casual</span>{% endif %}
+                </td>
+                <td>{% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</td>
+                <td style="color: var(--gray-600); max-width: 250px;">
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '—') }}</div>
+                </td>
+                <td>
+                    {% if leave.status == 'pending' %}<span class="badge badge-pending">Pending</span>
+                    {% elif leave.status == 'approved' %}<span class="badge badge-approved">Approved</span>
+                    {% elif leave.status == 'rejected' %}<span class="badge badge-rejected">Rejected</span>
+                    {% elif leave.status == 'retrieved' %}<span style="display:inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; background: #E5E7EB; color: #6B7280;">Retrieved</span>
+                    {% elif leave.status == 'modified' %}<span style="display:inline-block; padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; background: #DBEAFE; color: #1D4ED8;">Modified</span>
+                    {% endif %}
+                </td>
+                <td style="white-space: nowrap;">
+                    {% if leave.status not in ('retrieved', 'modified') %}
+                    <div style="display: flex; gap: 0.4rem; flex-wrap: wrap;">
+                        <button onclick="document.getElementById('retrieve-form-{{ leave.id }}').style.display = document.getElementById('retrieve-form-{{ leave.id }}').style.display === 'none' ? 'block' : 'none'" class="button button-small" style="background: #E5E7EB; color: #374151; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; border: none; cursor: pointer;">Retrieve</button>
+                        <a href="/modify-leave/{{ leave.id }}" class="button button-small" style="background: #DBEAFE; color: #1D4ED8; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; text-decoration: none;">Modify</a>
+                    </div>
+                    {% else %}
+                    <span style="color: var(--gray-400); font-size: 0.78rem;">—</span>
+                    {% endif %}
+                </td>
+            </tr>
+            {% if leave.status not in ('retrieved', 'modified') %}
+            <tr id="retrieve-form-{{ leave.id }}" style="display: none; background: #F9FAFB;">
+                <td colspan="6">
+                    <form method="POST" action="/retrieve-leave/{{ leave.id }}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0;">
+                        <input type="text" name="retrieve_reason" placeholder="Reason for retrieving this leave..." required
+                               style="flex: 1; padding: 0.45rem 0.75rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
+                        <button type="submit" class="button button-small" style="background: #DC2626; color: white; font-size: 0.78rem; padding: 0.4rem 0.75rem; border: none; border-radius: 0.35rem; cursor: pointer; white-space: nowrap;">Confirm Retrieve</button>
+                        <button type="button" onclick="document.getElementById('retrieve-form-{{ leave.id }}').style.display='none'" class="button button-small" style="background: #E5E7EB; color: #374151; font-size: 0.78rem; padding: 0.4rem 0.6rem; border: none; border-radius: 0.35rem; cursor: pointer;">Cancel</button>
+                    </form>
+                </td>
+            </tr>
+            {% endif %}
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div style="padding: 3rem; text-align: center; color: var(--gray-400);">
+        No leave records found for this financial year
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

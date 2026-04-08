@@ -1,0 +1,228 @@
+{% extends "base.html" %}
+
+{% block title %}Quarterly Leave Report - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .report-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;
+    }
+    .report-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .report-header p { color: var(--gray-500); font-size: 0.9rem; margin: 0.25rem 0 0; }
+    .fy-selector { display: flex; align-items: center; gap: 0.75rem; }
+    .fy-selector a {
+        display: flex; align-items: center; justify-content: center;
+        width: 36px; height: 36px; border-radius: 50%; background: var(--white);
+        border: 1px solid var(--gray-200); color: var(--navy); text-decoration: none;
+        transition: all 0.15s;
+    }
+    .fy-selector a:hover { background: var(--navy); color: white; }
+    .fy-selector .fy-label { font-weight: 700; font-size: 1.05rem; color: var(--navy); min-width: 120px; text-align: center; }
+    .summary-row {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem;
+    }
+    .summary-card {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.7rem;
+        padding: 1.1rem 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        border-left: 3px solid var(--gray-300);
+    }
+    .summary-card-val { font-size: 1.5rem; font-weight: 700; line-height: 1; }
+    .summary-card-lbl { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.2rem; }
+    .quarter-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1.5rem;
+    }
+    .quarter-header {
+        padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .quarter-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); }
+    .quarter-subtitle { font-size: 0.85rem; color: var(--gray-500); }
+    .quarter-stats {
+        display: flex; gap: 1.5rem; padding: 1rem 1.5rem; border-bottom: 1px solid var(--gray-100);
+        flex-wrap: wrap;
+    }
+    .quarter-stat { text-align: center; }
+    .quarter-stat-val { font-size: 1.3rem; font-weight: 700; line-height: 1; }
+    .quarter-stat-lbl { font-size: 0.72rem; color: var(--gray-500); margin-top: 0.15rem; }
+    .quarter-bar {
+        height: 8px; border-radius: 4px; background: var(--gray-100); margin: 0 1.5rem 1rem;
+        overflow: hidden; display: flex;
+    }
+    .quarter-bar-seg { height: 100%; transition: width 0.3s; }
+    .month-row {
+        display: flex; align-items: center; padding: 0.85rem 1.5rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .month-row:last-child { border-bottom: none; }
+    .month-name { font-weight: 600; font-size: 0.92rem; color: var(--navy); width: 100px; flex-shrink: 0; }
+    .month-badges { display: flex; gap: 0.5rem; flex: 1; flex-wrap: wrap; }
+    .month-badge {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600;
+    }
+    .month-badge.annual { background: rgba(74,122,181,0.1); color: var(--blue); }
+    .month-badge.sick { background: rgba(16,185,129,0.1); color: var(--success); }
+    .month-badge.casual { background: rgba(245,130,32,0.1); color: var(--orange); }
+    .month-total {
+        font-weight: 700; font-size: 0.92rem; color: var(--navy); width: 60px;
+        text-align: right; flex-shrink: 0;
+    }
+    .quarter-empty {
+        padding: 2rem 1.5rem; text-align: center; color: var(--gray-400); font-size: 0.88rem;
+    }
+    .comparison-panel {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;
+    }
+    @media (max-width: 768px) {
+        .summary-row { grid-template-columns: repeat(2, 1fr); }
+        .month-row { flex-wrap: wrap; gap: 0.5rem; }
+        .month-total { width: auto; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="report-header">
+    <div>
+        <h1>Quarterly Leave Report</h1>
+        <p>Quarter-wise breakdown for FY {{ fy_year }}&ndash;{{ fy_year + 1 }}</p>
+    </div>
+    <div class="fy-selector">
+        <a href="/reports/quarterly?fy={{ fy_year - 1 }}" title="Previous FY">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+        </a>
+        <div class="fy-label">FY {{ fy_year }}&ndash;{{ (fy_year + 1) % 100 }}</div>
+        <a href="/reports/quarterly?fy={{ fy_year + 1 }}" title="Next FY">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+        </a>
+    </div>
+</div>
+
+<!-- FY Summary -->
+<div class="summary-row">
+    <div class="summary-card" style="border-left-color: var(--navy);">
+        <div class="summary-card-val" style="color: var(--navy);">{{ total_allocation }}</div>
+        <div class="summary-card-lbl">Total Allocation</div>
+    </div>
+    <div class="summary-card" style="border-left-color: var(--success);">
+        <div class="summary-card-val" style="color: var(--success);">{{ available_balance }}</div>
+        <div class="summary-card-lbl">Available Balance</div>
+    </div>
+    <div class="summary-card" style="border-left-color: var(--orange);">
+        <div class="summary-card-val" style="color: var(--orange);">{{ total_taken }}</div>
+        <div class="summary-card-lbl">Total Taken (FY)</div>
+    </div>
+    <div class="summary-card" style="border-left-color: var(--blue);">
+        <div class="summary-card-val" style="color: var(--blue);">{{ pending_count }}</div>
+        <div class="summary-card-lbl">Pending Requests</div>
+    </div>
+</div>
+
+<!-- Quarter Panels -->
+{% for q in quarters %}
+<div class="quarter-panel">
+    <div class="quarter-header">
+        <div>
+            <div class="quarter-title">{{ q.label }}</div>
+            <div class="quarter-subtitle">{{ q.months_label }}</div>
+        </div>
+        <div style="font-size: 1.3rem; font-weight: 700; color: {% if q.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">
+            {{ q.total }} day{{ 's' if q.total != 1 else '' }}
+        </div>
+    </div>
+    {% if q.total > 0 %}
+    <div class="quarter-stats">
+        <div class="quarter-stat">
+            <div class="quarter-stat-val" style="color: var(--blue);">{{ q.annual }}</div>
+            <div class="quarter-stat-lbl">Annual</div>
+        </div>
+        <div class="quarter-stat">
+            <div class="quarter-stat-val" style="color: var(--success);">{{ q.sick }}</div>
+            <div class="quarter-stat-lbl">Sick</div>
+        </div>
+        <div class="quarter-stat">
+            <div class="quarter-stat-val" style="color: var(--orange);">{{ q.casual }}</div>
+            <div class="quarter-stat-lbl">Casual</div>
+        </div>
+        <div class="quarter-stat">
+            <div class="quarter-stat-val" style="color: var(--navy);">{{ q.alloc }}</div>
+            <div class="quarter-stat-lbl">Allocated</div>
+        </div>
+        <div class="quarter-stat">
+            <div class="quarter-stat-val" style="color: {% if q.balance >= 0 %}var(--success){% else %}var(--danger, #dc3545){% endif %};">{{ q.balance }}</div>
+            <div class="quarter-stat-lbl">Quarter Balance</div>
+        </div>
+    </div>
+    <!-- Visual bar -->
+    {% if q.alloc > 0 %}
+    <div class="quarter-bar">
+        {% if q.annual > 0 %}<div class="quarter-bar-seg" style="width: {{ (q.annual / q.alloc * 100) | round(1) }}%; background: var(--blue);"></div>{% endif %}
+        {% if q.sick > 0 %}<div class="quarter-bar-seg" style="width: {{ (q.sick / q.alloc * 100) | round(1) }}%; background: var(--success);"></div>{% endif %}
+        {% if q.casual > 0 %}<div class="quarter-bar-seg" style="width: {{ (q.casual / q.alloc * 100) | round(1) }}%; background: var(--orange);"></div>{% endif %}
+    </div>
+    {% endif %}
+    <!-- Month rows -->
+    {% for m in q.months %}
+    <div class="month-row">
+        <div class="month-name">{{ m.name }}</div>
+        <div class="month-badges">
+            {% if m.annual > 0 %}<span class="month-badge annual">Annual: {{ m.annual }}</span>{% endif %}
+            {% if m.sick > 0 %}<span class="month-badge sick">Sick: {{ m.sick }}</span>{% endif %}
+            {% if m.casual > 0 %}<span class="month-badge casual">Casual: {{ m.casual }}</span>{% endif %}
+            {% if m.total == 0 %}<span style="color: var(--gray-400); font-size: 0.82rem;">No leaves</span>{% endif %}
+        </div>
+        <div class="month-total">{{ m.total if m.total > 0 else '—' }}</div>
+    </div>
+    {% endfor %}
+    {% else %}
+    <div class="quarter-empty">No leaves taken in this quarter</div>
+    {% endif %}
+</div>
+{% endfor %}
+
+<!-- Comparison Table -->
+<div class="comparison-panel">
+    <div class="quarter-header">
+        <div class="quarter-title">Quarter Comparison</div>
+    </div>
+    <table class="table" style="margin: 0;">
+        <thead>
+            <tr>
+                <th>Quarter</th>
+                <th style="text-align: center;">Annual</th>
+                <th style="text-align: center;">Sick</th>
+                <th style="text-align: center;">Casual</th>
+                <th style="text-align: center;">Total</th>
+                <th style="text-align: center;">Allocation</th>
+                <th style="text-align: center;">Balance</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for q in quarters %}
+            <tr>
+                <td style="font-weight: 600; color: var(--navy);">{{ q.label }}</td>
+                <td style="text-align: center; color: {% if q.annual > 0 %}var(--blue){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ q.annual if q.annual > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if q.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ q.sick if q.sick > 0 else '—' }}</td>
+                <td style="text-align: center; color: {% if q.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ q.casual if q.casual > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if q.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ q.total if q.total > 0 else '—' }}</td>
+                <td style="text-align: center; color: var(--gray-600);">{{ q.alloc }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if q.balance >= 0 %}var(--success){% else %}var(--danger, #dc3545){% endif %};">{{ q.balance }}</td>
+            </tr>
+            {% endfor %}
+            <tr style="background: var(--navy); color: white;">
+                <td style="font-weight: 700; color: white; border: none;">FY Total</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ annual_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ sick_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ casual_total }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_allocation }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ available_balance }}</td>
+            </tr>
+        </tbody>
+    </table>
+</div>
+{% endblock %}
