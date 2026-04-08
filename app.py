@@ -424,10 +424,13 @@ def dashboard():
     recent_activities.sort(key=lambda x: x.get('time_ago', ''), reverse=True)
     recent_activities = recent_activities[:8]
 
-    # Management data (for users with management access)
+    # Management flag
     is_management = user['emp_code'] in MANAGEMENT_CODES
+
+    # Leave data for ALL users (shown in banner pills)
+    my_leave_data = {}
     mgmt_leave_data = {}
-    if is_management or user['is_admin']:
+    if user['emp_code'] != 'admin':
         carry_forward = user['carry_forward'] or 0
         total_allocation = 25 + carry_forward
         leaves_taken = conn.execute('''
@@ -441,12 +444,15 @@ def dashboard():
             "SELECT COUNT(*) as cnt FROM leave_records WHERE employee_id = ? AND status = 'pending'",
             (user['id'],)
         ).fetchone()['cnt']
-        mgmt_leave_data = {
+        my_leave_data = {
             'total_allocation': total_allocation,
             'available_balance': round(total_allocation - days_taken, 2),
             'days_taken': days_taken,
             'pending_count': my_pending
         }
+        # Keep mgmt_leave_data for backward compatibility
+        if is_management or user['is_admin']:
+            mgmt_leave_data = my_leave_data
 
     conn.close()
 
@@ -470,7 +476,8 @@ def dashboard():
                          current_year=now.year,
                          can_announce=can_post_announcements(user),
                          is_management=is_management,
-                         mgmt_leave_data=mgmt_leave_data)
+                         mgmt_leave_data=mgmt_leave_data,
+                         my_leave_data=my_leave_data)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required

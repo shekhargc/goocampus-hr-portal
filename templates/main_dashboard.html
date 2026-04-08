@@ -816,7 +816,7 @@
     <div class="welcome-banner__user-profile">
       <div class="welcome-banner__avatar">
         {% if user.photo_url %}
-          <img src="{{ user.photo_url }}" alt="{{ user.name }}">
+          <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" alt="{{ user.name }}">
         {% else %}
           {{ user.name[0].upper() }}
         {% endif %}
@@ -826,24 +826,26 @@
         <p class="welcome-banner__subtitle">GooCampus CRM Portal — Your central hub for Sales, HR & Operations</p>
         <div class="welcome-banner__info">{{ user.designation }} • {{ user.department }}</div>
 
-        {% if is_management and mgmt_leave_data %}
+        {% if my_leave_data %}
         <div class="leave-pills">
           <div class="leave-pill">
-            <span class="leave-pill__label">Total Allocation</span>
-            <span class="leave-pill__value">{{ mgmt_leave_data.total_allocation }}</span>
+            <span class="leave-pill__label">Total Leaves</span>
+            <span class="leave-pill__value">{{ my_leave_data.total_allocation }}</span>
           </div>
           <div class="leave-pill">
-            <span class="leave-pill__label">Available Balance</span>
-            <span class="leave-pill__value">{{ mgmt_leave_data.available_balance }}</span>
+            <span class="leave-pill__label">Available</span>
+            <span class="leave-pill__value" style="color: #6EE7B7;">{{ my_leave_data.available_balance }}</span>
           </div>
           <div class="leave-pill">
-            <span class="leave-pill__label">Days Taken</span>
-            <span class="leave-pill__value">{{ mgmt_leave_data.days_taken }}</span>
+            <span class="leave-pill__label">Taken</span>
+            <span class="leave-pill__value" style="color: #FCD34D;">{{ my_leave_data.days_taken }}</span>
           </div>
+          {% if my_leave_data.pending_count > 0 %}
           <div class="leave-pill">
-            <span class="leave-pill__label">Pending Approvals</span>
-            <span class="leave-pill__value">{{ mgmt_leave_data.pending_count }}</span>
+            <span class="leave-pill__label">Pending</span>
+            <span class="leave-pill__value" style="color: #FCA5A5;">{{ my_leave_data.pending_count }}</span>
           </div>
+          {% endif %}
         </div>
         {% endif %}
       </div>
@@ -1121,7 +1123,7 @@
             <div class="employee-item">
               <div class="employee-avatar">
                 {% if employee.photo_url %}
-                  <img src="{{ employee.photo_url }}" alt="{{ employee.name }}">
+                  <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" alt="{{ employee.name }}">
                 {% else %}
                   {{ employee.name[0].upper() }}
                 {% endif %}
