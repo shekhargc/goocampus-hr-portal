@@ -3626,6 +3626,109 @@ def ensure_crm_tables():
         logging.error(f"ensure_crm_tables: {e}")
 
 
+def ensure_kra_tables():
+    """Create KRA tables if they don't exist."""
+    try:
+        conn = get_db()
+        kra_sql = [
+            '''CREATE TABLE IF NOT EXISTS kra_templates (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                department TEXT,
+                role_title TEXT,
+                fy_year INTEGER NOT NULL,
+                is_active INTEGER DEFAULT 1,
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS kra_categories (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                sort_order INTEGER DEFAULT 0,
+                is_common INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS kra_template_items (
+                id SERIAL PRIMARY KEY,
+                template_id INTEGER NOT NULL REFERENCES kra_templates(id) ON DELETE CASCADE,
+                category_id INTEGER NOT NULL REFERENCES kra_categories(id),
+                kpi_code TEXT NOT NULL,
+                measure_description TEXT NOT NULL,
+                target_value REAL,
+                percentage REAL DEFAULT 0,
+                percentage_sharing REAL NOT NULL DEFAULT 0,
+                is_target_based INTEGER DEFAULT 0,
+                sort_order INTEGER DEFAULT 0
+            )''',
+            '''CREATE TABLE IF NOT EXISTS kra_assignments (
+                id SERIAL PRIMARY KEY,
+                template_id INTEGER NOT NULL REFERENCES kra_templates(id),
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                fy_year INTEGER NOT NULL,
+                assigned_by INTEGER REFERENCES employees(id),
+                assigned_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                is_active INTEGER DEFAULT 1
+            )''',
+            '''CREATE TABLE IF NOT EXISTS kra_monthly_ratings (
+                id SERIAL PRIMARY KEY,
+                assignment_id INTEGER NOT NULL REFERENCES kra_assignments(id),
+                template_item_id INTEGER NOT NULL REFERENCES kra_template_items(id),
+                month INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                achieved_value REAL,
+                employee_rating REAL,
+                manager_rating REAL,
+                employee_result REAL,
+                manager_result REAL,
+                employee_submitted INTEGER DEFAULT 0,
+                manager_submitted INTEGER DEFAULT 0,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS kra_monthly_notes (
+                id SERIAL PRIMARY KEY,
+                assignment_id INTEGER NOT NULL REFERENCES kra_assignments(id),
+                month INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                notes TEXT,
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+        ]
+        for sql in kra_sql:
+            conn.execute(sql)
+        conn.commit()
+        conn.close()
+        logging.info("KRA tables ensured.")
+    except Exception as e:
+        logging.error(f"ensure_kra_tables: {e}")
+
+
+def seed_kra_categories():
+    """Seed the 6 default KRA categories if not present."""
+    try:
+        conn = get_db()
+        count = conn.execute('SELECT COUNT(*) as cnt FROM kra_categories').fetchone()
+        if count['cnt'] == 0:
+            cats = [
+                ('Target', 1, 0),
+                ('Knowledge', 2, 1),
+                ('Customer Handling', 3, 1),
+                ('HR', 4, 1),
+                ('Extra Mile', 5, 1),
+                ('Interpersonal Skill', 6, 1),
+            ]
+            for name, sort_order, is_common in cats:
+                conn.execute(
+                    'INSERT INTO kra_categories (name, sort_order, is_common) VALUES (?, ?, ?)',
+                    (name, sort_order, is_common)
+                )
+            conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"seed_kra_categories: {e}")
+
+
 def seed_default_meeting_types():
     """Seed default meeting client types if table is empty."""
     try:
@@ -4691,8 +4794,788 @@ def team_leave_applications():
         f_from=f_from, f_to=f_to)
 
 
+# ─── KRA (Key Result Area) Routes ───
+
+@app.route('/kra/admin/templates')
+@login_required
+@admin_required
+def kra_admin_templates():
+    """Admin: list all KRA templates."""
+    user = get_user()
+    conn = get_db()
+    templates = conn.execute('''
+        SELECT t.*, e.name as creator_name,
+               (SELECT COUNT(*) FROM kra_template_items WHERE template_id = t.id) as item_count,
+               (SELECT COUNT(*) FROM kra_assignments WHERE template_id = t.id AND is_active = 1) as assign_count
+        FROM kra_templates t
+        LEFT JOIN employees e ON t.created_by = e.id
+        ORDER BY t.fy_year DESC, t.name
+    ''').fetchall()
+    conn.close()
+    return render_template('kra_admin_templates.html', user=user, templates=templates)
+
+
+@app.route('/kra/admin/templates/create', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def kra_admin_template_create():
+    """Admin: create a new KRA template."""
+    user = get_user()
+    conn = get_db()
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        department = request.form.get('department', '').strip()
+        role_title = request.form.get('role_title', '').strip()
+        now = datetime.now()
+        fy_year = int(request.form.get('fy_year', now.year if now.month >= 4 else now.year - 1))
+
+        if not name:
+            flash('Template name is required', 'error')
+            conn.close()
+            return redirect(url_for('kra_admin_template_create'))
+
+        conn.execute(
+            'INSERT INTO kra_templates (name, department, role_title, fy_year, created_by) VALUES (?, ?, ?, ?, ?)',
+            (name, department, role_title, fy_year, user['id'])
+        )
+        conn.commit()
+        tid = conn.execute('SELECT MAX(id) as mid FROM kra_templates').fetchone()['mid']
+
+        # Auto-add common KPIs (categories 2-6)
+        common_cats = conn.execute('SELECT * FROM kra_categories WHERE is_common = 1 ORDER BY sort_order').fetchall()
+        common_kpis = {
+            'Knowledge': [
+                ('Product Knowledge & Training', 0.5, 0.05),
+                ('Process Knowledge', 0.5, 0.05),
+                ('Industry news & awareness', 0.2, 0.025),
+            ],
+            'Customer Handling': [
+                ('Call Quality', 0.6, 0.05),
+                ('Handling Customer Queries', 0.6, 0.02),
+                ('Issue Management', 0.5, 0.02),
+                ('Customer Follow-up', 0.5, 0.02),
+                ('Rapport with Customer', 0.6, 0.02),
+            ],
+            'HR': [
+                ('Training', 0.8, 0.02),
+                ('Time Management', 0.8, 0.02),
+                ('HR & Leave Policy', 0.6, 0.02),
+            ],
+            'Extra Mile': [
+                ('Idea Generation', 0.1, 0.02),
+                ('Discussion & feedback', 0.2, 0.01),
+                ('Inter functional relationship', 0.5, 0.025),
+            ],
+            'Interpersonal Skill': [
+                ('Communication with Co-workers', 0.75, 0.015),
+                ('Office Equipment Care', 0.75, 0.02),
+                ('Table & Office hygiene', 0.7, 0.02),
+            ],
+        }
+        for cat in common_cats:
+            kpis = common_kpis.get(cat['name'], [])
+            cat_num = cat['sort_order']
+            for idx, (desc, pct, pct_share) in enumerate(kpis, 1):
+                kpi_code = f"{cat_num}.1.{idx}"
+                conn.execute(
+                    '''INSERT INTO kra_template_items
+                    (template_id, category_id, kpi_code, measure_description, percentage, percentage_sharing, is_target_based, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, 0, ?)''',
+                    (tid, cat['id'], kpi_code, desc, pct, pct_share, idx)
+                )
+        conn.commit()
+        conn.close()
+        flash(f'Template "{name}" created with common KPIs. Add Target KPIs now.', 'success')
+        return redirect(url_for('kra_admin_template_edit', template_id=tid))
+
+    categories = conn.execute('SELECT * FROM kra_categories ORDER BY sort_order').fetchall()
+    conn.close()
+    now = datetime.now()
+    fy_year = now.year if now.month >= 4 else now.year - 1
+    return render_template('kra_admin_template_create.html', user=user, categories=categories, fy_year=fy_year)
+
+
+@app.route('/kra/admin/templates/<int:template_id>/edit', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def kra_admin_template_edit(template_id):
+    """Admin: edit a KRA template — add/remove/reorder KPIs."""
+    user = get_user()
+    conn = get_db()
+    template = conn.execute('SELECT * FROM kra_templates WHERE id = ?', (template_id,)).fetchone()
+    if not template:
+        conn.close()
+        flash('Template not found', 'error')
+        return redirect(url_for('kra_admin_templates'))
+
+    if request.method == 'POST':
+        action = request.form.get('action')
+
+        if action == 'add_item':
+            cat_id = int(request.form.get('category_id'))
+            kpi_code = request.form.get('kpi_code', '').strip()
+            desc = request.form.get('measure_description', '').strip()
+            target_val = request.form.get('target_value', '').strip()
+            pct = float(request.form.get('percentage', 0) or 0)
+            pct_share = float(request.form.get('percentage_sharing', 0) or 0)
+            is_target = 1 if request.form.get('is_target_based') else 0
+
+            if not kpi_code or not desc:
+                flash('KPI code and description are required', 'error')
+            else:
+                conn.execute(
+                    '''INSERT INTO kra_template_items
+                    (template_id, category_id, kpi_code, measure_description, target_value, percentage, percentage_sharing, is_target_based, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (template_id, cat_id, kpi_code, desc,
+                     float(target_val) if target_val else None, pct, pct_share, is_target,
+                     conn.execute('SELECT COALESCE(MAX(sort_order),0)+1 as n FROM kra_template_items WHERE template_id = ?', (template_id,)).fetchone()['n'])
+                )
+                conn.commit()
+                flash('KPI added', 'success')
+
+        elif action == 'delete_item':
+            item_id = int(request.form.get('item_id'))
+            conn.execute('DELETE FROM kra_template_items WHERE id = ? AND template_id = ?', (item_id, template_id))
+            conn.commit()
+            flash('KPI removed', 'success')
+
+        elif action == 'update_item':
+            item_id = int(request.form.get('item_id'))
+            desc = request.form.get('measure_description', '').strip()
+            target_val = request.form.get('target_value', '').strip()
+            pct = float(request.form.get('percentage', 0) or 0)
+            pct_share = float(request.form.get('percentage_sharing', 0) or 0)
+            conn.execute(
+                '''UPDATE kra_template_items SET measure_description = ?, target_value = ?, percentage = ?, percentage_sharing = ?
+                WHERE id = ? AND template_id = ?''',
+                (desc, float(target_val) if target_val else None, pct, pct_share, item_id, template_id)
+            )
+            conn.commit()
+            flash('KPI updated', 'success')
+
+        elif action == 'update_template':
+            name = request.form.get('name', '').strip()
+            department = request.form.get('department', '').strip()
+            role_title = request.form.get('role_title', '').strip()
+            fy_year = int(request.form.get('fy_year', template['fy_year']))
+            conn.execute(
+                'UPDATE kra_templates SET name = ?, department = ?, role_title = ?, fy_year = ? WHERE id = ?',
+                (name, department, role_title, fy_year, template_id)
+            )
+            conn.commit()
+            flash('Template updated', 'success')
+
+        return redirect(url_for('kra_admin_template_edit', template_id=template_id))
+
+    # GET
+    template = conn.execute('SELECT * FROM kra_templates WHERE id = ?', (template_id,)).fetchone()
+    categories = conn.execute('SELECT * FROM kra_categories ORDER BY sort_order').fetchall()
+    items = conn.execute('''
+        SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
+        FROM kra_template_items ti
+        JOIN kra_categories c ON ti.category_id = c.id
+        WHERE ti.template_id = ?
+        ORDER BY c.sort_order, ti.sort_order
+    ''', (template_id,)).fetchall()
+
+    total_weight = sum(item['percentage_sharing'] for item in items)
+    conn.close()
+    return render_template('kra_admin_template_edit.html', user=user, template=template,
+                         categories=categories, items=items, total_weight=total_weight)
+
+
+@app.route('/kra/admin/templates/<int:template_id>/duplicate')
+@login_required
+@admin_required
+def kra_admin_template_duplicate(template_id):
+    """Admin: duplicate a KRA template."""
+    user = get_user()
+    conn = get_db()
+    orig = conn.execute('SELECT * FROM kra_templates WHERE id = ?', (template_id,)).fetchone()
+    if not orig:
+        conn.close()
+        flash('Template not found', 'error')
+        return redirect(url_for('kra_admin_templates'))
+
+    now = datetime.now()
+    fy_year = now.year if now.month >= 4 else now.year - 1
+    conn.execute(
+        'INSERT INTO kra_templates (name, department, role_title, fy_year, created_by) VALUES (?, ?, ?, ?, ?)',
+        (orig['name'] + ' (Copy)', orig['department'], orig['role_title'], fy_year, user['id'])
+    )
+    conn.commit()
+    new_id = conn.execute('SELECT MAX(id) as mid FROM kra_templates').fetchone()['mid']
+
+    items = conn.execute('SELECT * FROM kra_template_items WHERE template_id = ?', (template_id,)).fetchall()
+    for item in items:
+        conn.execute(
+            '''INSERT INTO kra_template_items
+            (template_id, category_id, kpi_code, measure_description, target_value, percentage, percentage_sharing, is_target_based, sort_order)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (new_id, item['category_id'], item['kpi_code'], item['measure_description'],
+             item['target_value'], item['percentage'], item['percentage_sharing'],
+             item['is_target_based'], item['sort_order'])
+        )
+    conn.commit()
+    conn.close()
+    flash('Template duplicated', 'success')
+    return redirect(url_for('kra_admin_template_edit', template_id=new_id))
+
+
+@app.route('/kra/admin/assignments', methods=['GET', 'POST'])
+@login_required
+@admin_required
+def kra_admin_assignments():
+    """Admin: assign KRA templates to employees."""
+    user = get_user()
+    conn = get_db()
+
+    if request.method == 'POST':
+        template_id = int(request.form.get('template_id'))
+        employee_ids = request.form.getlist('employee_ids')
+        now = datetime.now()
+        fy_year = int(request.form.get('fy_year', now.year if now.month >= 4 else now.year - 1))
+
+        assigned_count = 0
+        for eid in employee_ids:
+            eid = int(eid)
+            existing = conn.execute(
+                'SELECT id FROM kra_assignments WHERE employee_id = ? AND fy_year = ? AND is_active = 1',
+                (eid, fy_year)
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    'UPDATE kra_assignments SET template_id = ?, assigned_by = ?, assigned_at = CURRENT_TIMESTAMP WHERE id = ?',
+                    (template_id, user['id'], existing['id'])
+                )
+            else:
+                conn.execute(
+                    'INSERT INTO kra_assignments (template_id, employee_id, fy_year, assigned_by) VALUES (?, ?, ?, ?)',
+                    (template_id, eid, fy_year, user['id'])
+                )
+            assigned_count += 1
+
+        conn.commit()
+        flash(f'KRA template assigned to {assigned_count} employee(s)', 'success')
+        return redirect(url_for('kra_admin_assignments'))
+
+    templates = conn.execute('SELECT * FROM kra_templates WHERE is_active = 1 ORDER BY fy_year DESC, name').fetchall()
+    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
+    now = datetime.now()
+    fy_year = now.year if now.month >= 4 else now.year - 1
+
+    assignments = conn.execute('''
+        SELECT a.*, e.name as emp_name, e.emp_code, e.department, t.name as template_name, t.fy_year as t_fy
+        FROM kra_assignments a
+        JOIN employees e ON a.employee_id = e.id
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.is_active = 1
+        ORDER BY t.fy_year DESC, e.name
+    ''').fetchall()
+
+    conn.close()
+    return render_template('kra_admin_assignments.html', user=user, templates=templates,
+                         employees=employees, assignments=assignments, fy_year=fy_year)
+
+
+@app.route('/kra/admin/assignments/<int:assignment_id>/remove')
+@login_required
+@admin_required
+def kra_admin_assignment_remove(assignment_id):
+    """Admin: deactivate a KRA assignment."""
+    conn = get_db()
+    conn.execute('UPDATE kra_assignments SET is_active = 0 WHERE id = ?', (assignment_id,))
+    conn.commit()
+    conn.close()
+    flash('Assignment removed', 'success')
+    return redirect(url_for('kra_admin_assignments'))
+
+
+@app.route('/kra/admin/report')
+@login_required
+@admin_required
+def kra_admin_report():
+    """Admin: KRA overview report across all employees."""
+    user = get_user()
+    conn = get_db()
+    now = datetime.now()
+    fy_year = int(request.args.get('fy', now.year if now.month >= 4 else now.year - 1))
+    view_month = int(request.args.get('month', now.month))
+    view_year = int(request.args.get('year', now.year))
+
+    assignments = conn.execute('''
+        SELECT a.id as assignment_id, a.employee_id, a.template_id,
+               e.name as emp_name, e.emp_code, e.department, e.photo_url,
+               t.name as template_name
+        FROM kra_assignments a
+        JOIN employees e ON a.employee_id = e.id
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.fy_year = ? AND a.is_active = 1
+        ORDER BY e.name
+    ''', (fy_year,)).fetchall()
+
+    report_data = []
+    for asn in assignments:
+        ratings = conn.execute('''
+            SELECT r.employee_result, r.manager_result, r.employee_submitted, r.manager_submitted
+            FROM kra_monthly_ratings r
+            WHERE r.assignment_id = ? AND r.month = ? AND r.year = ?
+        ''', (asn['assignment_id'], view_month, view_year)).fetchall()
+
+        emp_total = sum(r['employee_result'] or 0 for r in ratings)
+        mgr_total = sum(r['manager_result'] or 0 for r in ratings)
+        emp_submitted = all(r['employee_submitted'] for r in ratings) if ratings else False
+        mgr_submitted = all(r['manager_submitted'] for r in ratings) if ratings else False
+
+        report_data.append({
+            'emp_name': asn['emp_name'],
+            'emp_code': asn['emp_code'],
+            'department': asn['department'],
+            'photo_url': asn['photo_url'],
+            'template_name': asn['template_name'],
+            'employee_id': asn['employee_id'],
+            'emp_score': round(emp_total, 4),
+            'mgr_score': round(mgr_total, 4),
+            'emp_submitted': emp_submitted,
+            'mgr_submitted': mgr_submitted,
+        })
+
+    conn.close()
+    return render_template('kra_admin_report.html', user=user, report_data=report_data,
+                         fy_year=fy_year, view_month=view_month, view_year=view_year)
+
+
+# ─── Employee KRA Routes ───
+
+@app.route('/kra/dashboard')
+@login_required
+def kra_dashboard():
+    """Employee KRA dashboard with stats and charts."""
+    user = get_user()
+    conn = get_db()
+    now = datetime.now()
+    fy_year = int(request.args.get('fy', now.year if now.month >= 4 else now.year - 1))
+
+    assignment = conn.execute('''
+        SELECT a.*, t.name as template_name, t.department, t.role_title
+        FROM kra_assignments a
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.employee_id = ? AND a.fy_year = ? AND a.is_active = 1
+    ''', (user['id'], fy_year)).fetchone()
+
+    if not assignment:
+        conn.close()
+        return render_template('kra_dashboard.html', user=user, assignment=None, fy_year=fy_year,
+                             monthly_scores=[], items=[], categories=[])
+
+    items = conn.execute('''
+        SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
+        FROM kra_template_items ti
+        JOIN kra_categories c ON ti.category_id = c.id
+        WHERE ti.template_id = ?
+        ORDER BY c.sort_order, ti.sort_order
+    ''', (assignment['template_id'],)).fetchall()
+
+    # Monthly scores for chart
+    monthly_scores = []
+    fy_months = [(m, fy_year if m >= 4 else fy_year + 1) for m in [4,5,6,7,8,9,10,11,12,1,2,3]]
+    for m, yr in fy_months:
+        ratings = conn.execute('''
+            SELECT SUM(employee_result) as emp_total, SUM(manager_result) as mgr_total,
+                   MAX(employee_submitted) as emp_sub, MAX(manager_submitted) as mgr_sub
+            FROM kra_monthly_ratings
+            WHERE assignment_id = ? AND month = ? AND year = ?
+        ''', (assignment['id'], m, yr)).fetchone()
+        monthly_scores.append({
+            'month': calendar.month_abbr[m],
+            'month_num': m,
+            'year': yr,
+            'emp_score': round(ratings['emp_total'] or 0, 4),
+            'mgr_score': round(ratings['mgr_total'] or 0, 4),
+            'emp_submitted': bool(ratings['emp_sub']),
+            'mgr_submitted': bool(ratings['mgr_sub']),
+        })
+
+    # Category-wise scores for current month
+    current_month = now.month
+    current_year = now.year
+    cat_scores = []
+    categories = conn.execute('SELECT * FROM kra_categories ORDER BY sort_order').fetchall()
+    for cat in categories:
+        cat_items = [i for i in items if i['category_name'] == cat['name']]
+        if not cat_items:
+            continue
+        cat_ratings = conn.execute('''
+            SELECT SUM(r.employee_result) as emp, SUM(r.manager_result) as mgr
+            FROM kra_monthly_ratings r
+            JOIN kra_template_items ti ON r.template_item_id = ti.id
+            WHERE r.assignment_id = ? AND r.month = ? AND r.year = ? AND ti.category_id = ?
+        ''', (assignment['id'], current_month, current_year, cat['id'])).fetchone()
+        cat_weight = sum(i['percentage_sharing'] for i in cat_items)
+        cat_scores.append({
+            'name': cat['name'],
+            'emp_score': round(cat_ratings['emp'] or 0, 4),
+            'mgr_score': round(cat_ratings['mgr'] or 0, 4),
+            'max_score': round(cat_weight * 5, 4),
+            'weight': round(cat_weight * 100, 1),
+        })
+
+    conn.close()
+    return render_template('kra_dashboard.html', user=user, assignment=assignment,
+                         fy_year=fy_year, monthly_scores=monthly_scores,
+                         items=items, cat_scores=cat_scores, categories=categories)
+
+
+@app.route('/kra/rate/<int:month>/<int:year>', methods=['GET', 'POST'])
+@login_required
+def kra_employee_rate(month, year):
+    """Employee: enter self-ratings for a month."""
+    user = get_user()
+    conn = get_db()
+    fy_year = year if month >= 4 else year - 1
+
+    assignment = conn.execute('''
+        SELECT a.*, t.name as template_name, t.department, t.role_title
+        FROM kra_assignments a
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.employee_id = ? AND a.fy_year = ? AND a.is_active = 1
+    ''', (user['id'], fy_year)).fetchone()
+
+    if not assignment:
+        conn.close()
+        flash('No KRA assigned for this period', 'error')
+        return redirect(url_for('kra_dashboard'))
+
+    items = conn.execute('''
+        SELECT ti.*, c.name as category_name, c.sort_order as cat_sort, c.id as cat_id
+        FROM kra_template_items ti
+        JOIN kra_categories c ON ti.category_id = c.id
+        WHERE ti.template_id = ?
+        ORDER BY c.sort_order, ti.sort_order
+    ''', (assignment['template_id'],)).fetchall()
+
+    if request.method == 'POST':
+        for item in items:
+            rating_id_key = f"rating_id_{item['id']}"
+            existing_id = request.form.get(rating_id_key)
+
+            achieved = request.form.get(f"achieved_{item['id']}", '').strip()
+            emp_rating = request.form.get(f"emp_rating_{item['id']}", '').strip()
+
+            achieved_val = float(achieved) if achieved else None
+            if item['is_target_based'] and item['target_value'] and achieved_val is not None:
+                pct = min(achieved_val / item['target_value'], 1.0) if item['target_value'] > 0 else 0
+                emp_rating_val = round(pct * 5, 6)
+            else:
+                emp_rating_val = float(emp_rating) if emp_rating else None
+
+            emp_result = round(emp_rating_val * item['percentage_sharing'], 6) if emp_rating_val is not None else None
+
+            if existing_id:
+                conn.execute('''
+                    UPDATE kra_monthly_ratings
+                    SET achieved_value = ?, employee_rating = ?, employee_result = ?,
+                        employee_submitted = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (achieved_val, emp_rating_val, emp_result, int(existing_id)))
+            else:
+                conn.execute('''
+                    INSERT INTO kra_monthly_ratings
+                    (assignment_id, template_item_id, month, year, achieved_value, employee_rating, employee_result, employee_submitted)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, 1)
+                ''', (assignment['id'], item['id'], month, year, achieved_val, emp_rating_val, emp_result))
+
+        conn.commit()
+        conn.close()
+        flash(f'Self-ratings submitted for {calendar.month_name[month]} {year}', 'success')
+        return redirect(url_for('kra_dashboard'))
+
+    # GET — load existing ratings
+    existing_ratings = {}
+    ratings = conn.execute('''
+        SELECT * FROM kra_monthly_ratings
+        WHERE assignment_id = ? AND month = ? AND year = ?
+    ''', (assignment['id'], month, year)).fetchall()
+    for r in ratings:
+        existing_ratings[r['template_item_id']] = r
+
+    # Notes
+    notes = conn.execute('''
+        SELECT * FROM kra_monthly_notes
+        WHERE assignment_id = ? AND month = ? AND year = ?
+    ''', (assignment['id'], month, year)).fetchall()
+
+    conn.close()
+    month_name = calendar.month_name[month]
+    return render_template('kra_employee_rate.html', user=user, assignment=assignment,
+                         items=items, existing_ratings=existing_ratings,
+                         month=month, year=year, month_name=month_name, notes=notes)
+
+
+# ─── Manager KRA Rating Routes ───
+
+@app.route('/kra/manager/team')
+@login_required
+def kra_manager_team():
+    """Manager: view team KRA assignments for rating."""
+    user = get_user()
+    conn = get_db()
+    now = datetime.now()
+    fy_year = int(request.args.get('fy', now.year if now.month >= 4 else now.year - 1))
+    view_month = int(request.args.get('month', now.month))
+    view_year = int(request.args.get('year', now.year))
+
+    # Get direct reports
+    direct_reports = conn.execute(
+        'SELECT id, name, emp_code, department, photo_url FROM employees WHERE reporting_to = ? AND is_active = 1 ORDER BY name',
+        (user['id'],)
+    ).fetchall()
+
+    if not direct_reports:
+        conn.close()
+        flash('You have no direct reports with KRA assignments', 'info')
+        return redirect(url_for('kra_dashboard'))
+
+    team_data = []
+    for emp in direct_reports:
+        asn = conn.execute('''
+            SELECT a.id as assignment_id, t.name as template_name
+            FROM kra_assignments a
+            JOIN kra_templates t ON a.template_id = t.id
+            WHERE a.employee_id = ? AND a.fy_year = ? AND a.is_active = 1
+        ''', (emp['id'], fy_year)).fetchone()
+        if not asn:
+            continue
+
+        ratings = conn.execute('''
+            SELECT SUM(employee_result) as emp_total, SUM(manager_result) as mgr_total,
+                   MAX(employee_submitted) as emp_sub, MAX(manager_submitted) as mgr_sub
+            FROM kra_monthly_ratings
+            WHERE assignment_id = ? AND month = ? AND year = ?
+        ''', (asn['assignment_id'], view_month, view_year)).fetchone()
+
+        team_data.append({
+            'id': emp['id'],
+            'name': emp['name'],
+            'emp_code': emp['emp_code'],
+            'department': emp['department'],
+            'photo_url': emp['photo_url'],
+            'template_name': asn['template_name'],
+            'assignment_id': asn['assignment_id'],
+            'emp_score': round(ratings['emp_total'] or 0, 4),
+            'mgr_score': round(ratings['mgr_total'] or 0, 4),
+            'emp_submitted': bool(ratings['emp_sub']),
+            'mgr_submitted': bool(ratings['mgr_sub']),
+        })
+
+    conn.close()
+    return render_template('kra_manager_team.html', user=user, team_data=team_data,
+                         fy_year=fy_year, view_month=view_month, view_year=view_year)
+
+
+@app.route('/kra/manager/rate/<int:employee_id>/<int:month>/<int:year>', methods=['GET', 'POST'])
+@login_required
+def kra_manager_rate(employee_id, month, year):
+    """Manager: rate a direct report's KRA for a given month."""
+    user = get_user()
+    conn = get_db()
+    fy_year = year if month >= 4 else year - 1
+
+    # Verify this is a direct report (or admin)
+    emp = conn.execute('SELECT * FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    if not emp:
+        conn.close()
+        flash('Employee not found', 'error')
+        return redirect(url_for('kra_manager_team'))
+
+    is_admin = user['is_admin']
+    is_reporting_manager = (emp['reporting_to'] == user['id'])
+    if not is_admin and not is_reporting_manager:
+        conn.close()
+        flash('You can only rate your direct reports', 'error')
+        return redirect(url_for('kra_manager_team'))
+
+    assignment = conn.execute('''
+        SELECT a.*, t.name as template_name, t.department, t.role_title
+        FROM kra_assignments a
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.employee_id = ? AND a.fy_year = ? AND a.is_active = 1
+    ''', (employee_id, fy_year)).fetchone()
+
+    if not assignment:
+        conn.close()
+        flash('No KRA assigned to this employee', 'error')
+        return redirect(url_for('kra_manager_team'))
+
+    items = conn.execute('''
+        SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
+        FROM kra_template_items ti
+        JOIN kra_categories c ON ti.category_id = c.id
+        WHERE ti.template_id = ?
+        ORDER BY c.sort_order, ti.sort_order
+    ''', (assignment['template_id'],)).fetchall()
+
+    if request.method == 'POST':
+        for item in items:
+            mgr_rating = request.form.get(f"mgr_rating_{item['id']}", '').strip()
+            existing_id = request.form.get(f"rating_id_{item['id']}")
+
+            if item['is_target_based'] and item['target_value']:
+                # For target items, manager rating = same as employee (auto-calculated from achievement)
+                existing_row = conn.execute(
+                    'SELECT achieved_value FROM kra_monthly_ratings WHERE id = ?', (int(existing_id),)
+                ).fetchone() if existing_id else None
+                if existing_row and existing_row['achieved_value'] is not None:
+                    pct = min(existing_row['achieved_value'] / item['target_value'], 1.0) if item['target_value'] > 0 else 0
+                    mgr_rating_val = round(pct * 5, 6)
+                else:
+                    mgr_rating_val = float(mgr_rating) if mgr_rating else None
+            else:
+                mgr_rating_val = float(mgr_rating) if mgr_rating else None
+
+            mgr_result = round(mgr_rating_val * item['percentage_sharing'], 6) if mgr_rating_val is not None else None
+
+            if existing_id:
+                conn.execute('''
+                    UPDATE kra_monthly_ratings
+                    SET manager_rating = ?, manager_result = ?, manager_submitted = 1, updated_at = CURRENT_TIMESTAMP
+                    WHERE id = ?
+                ''', (mgr_rating_val, mgr_result, int(existing_id)))
+            else:
+                conn.execute('''
+                    INSERT INTO kra_monthly_ratings
+                    (assignment_id, template_item_id, month, year, manager_rating, manager_result, manager_submitted)
+                    VALUES (?, ?, ?, ?, ?, ?, 1)
+                ''', (assignment['id'], item['id'], month, year, mgr_rating_val, mgr_result))
+
+        # Save manager notes
+        mgr_notes = request.form.get('manager_notes', '').strip()
+        if mgr_notes:
+            existing_note = conn.execute(
+                'SELECT id FROM kra_monthly_notes WHERE assignment_id = ? AND month = ? AND year = ? AND created_by = ?',
+                (assignment['id'], month, year, user['id'])
+            ).fetchone()
+            if existing_note:
+                conn.execute('UPDATE kra_monthly_notes SET notes = ? WHERE id = ?', (mgr_notes, existing_note['id']))
+            else:
+                conn.execute(
+                    'INSERT INTO kra_monthly_notes (assignment_id, month, year, notes, created_by) VALUES (?, ?, ?, ?, ?)',
+                    (assignment['id'], month, year, mgr_notes, user['id'])
+                )
+
+        conn.commit()
+        conn.close()
+        flash(f'Manager ratings submitted for {emp["name"]} — {calendar.month_name[month]} {year}', 'success')
+        return redirect(url_for('kra_manager_team', month=month, year=year))
+
+    # GET
+    existing_ratings = {}
+    ratings = conn.execute('''
+        SELECT * FROM kra_monthly_ratings
+        WHERE assignment_id = ? AND month = ? AND year = ?
+    ''', (assignment['id'], month, year)).fetchall()
+    for r in ratings:
+        existing_ratings[r['template_item_id']] = r
+
+    notes = conn.execute('''
+        SELECT * FROM kra_monthly_notes
+        WHERE assignment_id = ? AND month = ? AND year = ?
+    ''', (assignment['id'], month, year)).fetchall()
+
+    conn.close()
+    month_name = calendar.month_name[month]
+    return render_template('kra_manager_rate.html', user=user, emp=emp, assignment=assignment,
+                         items=items, existing_ratings=existing_ratings,
+                         month=month, year=year, month_name=month_name, notes=notes)
+
+
+@app.route('/kra/report')
+@login_required
+def kra_report():
+    """Employee: annual KRA report with monthly scores."""
+    user = get_user()
+    conn = get_db()
+    now = datetime.now()
+    fy_year = int(request.args.get('fy', now.year if now.month >= 4 else now.year - 1))
+
+    assignment = conn.execute('''
+        SELECT a.*, t.name as template_name, t.department, t.role_title
+        FROM kra_assignments a
+        JOIN kra_templates t ON a.template_id = t.id
+        WHERE a.employee_id = ? AND a.fy_year = ? AND a.is_active = 1
+    ''', (user['id'], fy_year)).fetchone()
+
+    if not assignment:
+        conn.close()
+        return render_template('kra_report.html', user=user, assignment=None, fy_year=fy_year,
+                             monthly_data=[], avg_emp=0, avg_mgr=0)
+
+    items = conn.execute('''
+        SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
+        FROM kra_template_items ti
+        JOIN kra_categories c ON ti.category_id = c.id
+        WHERE ti.template_id = ?
+        ORDER BY c.sort_order, ti.sort_order
+    ''', (assignment['template_id'],)).fetchall()
+
+    fy_months = [(m, fy_year if m >= 4 else fy_year + 1) for m in [4,5,6,7,8,9,10,11,12,1,2,3]]
+    monthly_data = []
+    total_emp = total_mgr = rated_months = 0
+
+    for m, yr in fy_months:
+        ratings = conn.execute('''
+            SELECT r.*, ti.kpi_code, ti.measure_description, ti.percentage_sharing, ti.is_target_based,
+                   ti.target_value, c.name as category_name
+            FROM kra_monthly_ratings r
+            JOIN kra_template_items ti ON r.template_item_id = ti.id
+            JOIN kra_categories c ON ti.category_id = c.id
+            WHERE r.assignment_id = ? AND r.month = ? AND r.year = ?
+            ORDER BY c.sort_order, ti.sort_order
+        ''', (assignment['id'], m, yr)).fetchall()
+
+        emp_total = sum(r['employee_result'] or 0 for r in ratings)
+        mgr_total = sum(r['manager_result'] or 0 for r in ratings)
+        emp_sub = any(r['employee_submitted'] for r in ratings)
+        mgr_sub = any(r['manager_submitted'] for r in ratings)
+
+        if emp_sub or mgr_sub:
+            total_emp += emp_total
+            total_mgr += mgr_total
+            rated_months += 1
+
+        notes = conn.execute('''
+            SELECT n.*, e.name as author_name FROM kra_monthly_notes n
+            LEFT JOIN employees e ON n.created_by = e.id
+            WHERE n.assignment_id = ? AND n.month = ? AND n.year = ?
+        ''', (assignment['id'], m, yr)).fetchall()
+
+        monthly_data.append({
+            'month': calendar.month_name[m],
+            'month_num': m,
+            'year': yr,
+            'ratings': ratings,
+            'emp_score': round(emp_total, 4),
+            'mgr_score': round(mgr_total, 4),
+            'emp_submitted': emp_sub,
+            'mgr_submitted': mgr_sub,
+            'notes': notes,
+        })
+
+    avg_emp = round(total_emp / rated_months, 4) if rated_months > 0 else 0
+    avg_mgr = round(total_mgr / rated_months, 4) if rated_months > 0 else 0
+
+    conn.close()
+    return render_template('kra_report.html', user=user, assignment=assignment,
+                         fy_year=fy_year, monthly_data=monthly_data, items=items,
+                         avg_emp=avg_emp, avg_mgr=avg_mgr, rated_months=rated_months)
+
+
 # Run on startup
 ensure_crm_tables()
+ensure_kra_tables()
+seed_kra_categories()
 seed_default_meeting_types()
 ensure_management_admins()
 

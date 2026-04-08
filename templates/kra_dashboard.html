@@ -1,0 +1,251 @@
+{% extends "base.html" %}
+
+{% block title %}KRA Dashboard - Employee{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <!-- Header Banner -->
+    <div style="background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); color: white; padding: 2.5rem 2rem; border-radius: 1rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(27,42,74,0.15);">
+        <h1 style="font-size: 2.2rem; margin-bottom: 0.5rem;">KRA Dashboard — FY {{ fy_year }}-{{ fy_year + 1 }}</h1>
+        {% if assignment %}
+        <p style="font-size: 0.95rem; opacity: 0.9;">
+            <strong>Template:</strong> {{ assignment.template_name }} |
+            <strong>Role:</strong> {{ assignment.role_title }}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- No KRA Assigned Message -->
+    {% if not assignment %}
+    <div class="card" style="background: var(--blue-light); border-left: 4px solid var(--blue); padding: 2rem; text-align: center;">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem;">📋</div>
+        <h2 style="font-size: 1.3rem; color: var(--navy); margin-bottom: 0.5rem;">No KRA Assigned Yet</h2>
+        <p style="color: var(--gray-700); font-size: 0.95rem;">
+            Your manager hasn't assigned a KRA template for this fiscal year. Check back soon or contact your manager for more information.
+        </p>
+    </div>
+    {% else %}
+
+    <!-- Summary Stat Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <!-- Current Month Score (Employee) -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Current Month Score</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--navy);">
+                    {% if monthly_scores and monthly_scores[0] %}{{ "%.2f"|format(monthly_scores[0].emp_score or 0) }}{% else %}—{% endif %}
+                </span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/5.0</span>
+            </div>
+            {% if monthly_scores and monthly_scores[0] and monthly_scores[0].emp_submitted %}
+            <div style="font-size: 0.8rem; color: var(--success); display: flex; align-items: center; gap: 0.35rem;">
+                <span style="color: var(--success);">✓</span> Self Submitted
+            </div>
+            {% else %}
+            <div style="font-size: 0.8rem; color: var(--gray-500);">Pending submission</div>
+            {% endif %}
+        </div>
+
+        <!-- Manager Score -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Manager Score</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--orange);">
+                    {% if monthly_scores and monthly_scores[0] %}{{ "%.2f"|format(monthly_scores[0].mgr_score or 0) }}{% else %}—{% endif %}
+                </span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/5.0</span>
+            </div>
+            {% if monthly_scores and monthly_scores[0] and monthly_scores[0].mgr_submitted %}
+            <div style="font-size: 0.8rem; color: var(--success); display: flex; align-items: center; gap: 0.35rem;">
+                <span style="color: var(--success);">✓</span> Manager Rated
+            </div>
+            {% else %}
+            <div style="font-size: 0.8rem; color: var(--gray-500);">Pending rating</div>
+            {% endif %}
+        </div>
+
+        <!-- FY Average -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column; background: linear-gradient(135deg, var(--success-light) 0%, rgba(16,185,129,0.05) 100%);">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">FY Average Score</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--success);">
+                    {% set fy_avg_emp = (monthly_scores|map(attribute='emp_score')|list|sum / (monthly_scores|length) if monthly_scores|length > 0 else 0) %}
+                    {{ "%.2f"|format(fy_avg_emp) }}
+                </span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/5.0</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Based on {{ rated_months|default(monthly_scores|length, true) }} months</div>
+        </div>
+
+        <!-- Total KPIs -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Total KPIs</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--blue);">{{ items|length }}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Across {{ categories|length }} categories</div>
+        </div>
+    </div>
+
+    <!-- Monthly Trend Chart -->
+    <div class="card" style="padding: 2rem; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--navy); margin-bottom: 1.5rem;">Monthly Trend</h2>
+        {% if monthly_scores %}
+        <div style="position: relative; height: 300px; display: flex; align-items: flex-end; justify-content: space-around; gap: 1rem; padding: 2rem 0;">
+            {% for month_data in monthly_scores %}
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 0.5rem; flex: 1;">
+                <!-- Bars -->
+                <div style="display: flex; align-items: flex-end; gap: 0.25rem; height: 200px;">
+                    <!-- Employee Score Bar -->
+                    <div style="width: 35%; background: var(--navy); border-radius: 0.35rem 0.35rem 0 0; height: {{ (month_data.emp_score or 0) * 40 }}px; position: relative;" title="Employee: {{ month_data.emp_score or 0 }}">
+                    </div>
+                    <!-- Manager Score Bar -->
+                    <div style="width: 35%; background: var(--orange); border-radius: 0.35rem 0.35rem 0 0; height: {{ (month_data.mgr_score or 0) * 40 }}px; position: relative;" title="Manager: {{ month_data.mgr_score or 0 }}">
+                    </div>
+                </div>
+                <!-- Label -->
+                <div style="text-align: center; width: 100%;">
+                    <div style="font-size: 0.75rem; font-weight: 600; color: var(--navy);">{{ month_data.month[:3] }}</div>
+                    <div style="font-size: 0.7rem; color: var(--gray-500);">{{ month_data.year }}</div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+        <div style="display: flex; justify-content: center; gap: 2rem; padding: 1rem 0; border-top: 1px solid var(--gray-200); margin-top: 1rem; font-size: 0.85rem;">
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 12px; height: 12px; background: var(--navy); border-radius: 0.2rem;"></div>
+                <span>Employee Score</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                <div style="width: 12px; height: 12px; background: var(--orange); border-radius: 0.2rem;"></div>
+                <span>Manager Score</span>
+            </div>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 3rem 2rem; color: var(--gray-500);">
+            <p>No monthly scores available yet.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Category Breakdown -->
+    {% if cat_scores %}
+    <div class="card" style="padding: 2rem; margin-bottom: 2rem;">
+        <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--navy); margin-bottom: 1.5rem;">Category Breakdown</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 1.5rem;">
+            {% for cat in cat_scores %}
+            <div style="padding: 1.5rem; background: var(--gray-50); border-radius: 0.8rem; border: 1px solid var(--gray-200);">
+                <div style="display: flex; justify-content: space-between; align-items: start; margin-bottom: 1rem;">
+                    <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--navy);">{{ cat.name }}</h3>
+                    <span style="font-size: 0.8rem; background: var(--blue-light); color: var(--blue); padding: 0.35rem 0.6rem; border-radius: 0.4rem; font-weight: 600;">{{ cat.weight }}%</span>
+                </div>
+                <div style="margin-bottom: 1.5rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.5rem;">
+                        <span style="color: var(--gray-600);">Employee</span>
+                        <span style="font-weight: 600; color: var(--navy);">{{ "%.2f"|format(cat.emp_score or 0) }}/{{ cat.max_score }}</span>
+                    </div>
+                    <div style="height: 8px; background: var(--gray-200); border-radius: 0.4rem; overflow: hidden;">
+                        <div style="height: 100%; background: var(--navy); width: {{ ((cat.emp_score or 0) / cat.max_score * 100)|int }}%;"></div>
+                    </div>
+                </div>
+                <div style="margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; margin-bottom: 0.5rem;">
+                        <span style="color: var(--gray-600);">Manager</span>
+                        <span style="font-weight: 600; color: var(--orange);">{{ "%.2f"|format(cat.mgr_score or 0) }}/{{ cat.max_score }}</span>
+                    </div>
+                    <div style="height: 8px; background: var(--gray-200); border-radius: 0.4rem; overflow: hidden;">
+                        <div style="height: 100%; background: var(--orange); width: {{ ((cat.mgr_score or 0) / cat.max_score * 100)|int }}%;"></div>
+                    </div>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    <!-- Quick Actions -->
+    <div style="display: flex; gap: 1rem; margin-bottom: 2rem;">
+        {% set current_month = monthly_scores[0] if monthly_scores else None %}
+        {% if current_month %}
+        <a href="/kra/rate/{{ current_month.month_num }}/{{ current_month.year }}" class="button" style="gap: 0.5rem;">
+            <span>✏️</span> Rate Current Month
+        </a>
+        {% endif %}
+        <a href="/kra/report" class="button button-secondary" style="gap: 0.5rem;">
+            <span>📊</span> View Full Report
+        </a>
+    </div>
+
+    <!-- Monthly Grid -->
+    {% if monthly_scores %}
+    <div class="card" style="padding: 2rem;">
+        <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--navy); margin-bottom: 1.5rem;">Monthly Ratings</h2>
+        <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 1rem;">
+            {% for month_data in monthly_scores %}
+            <a href="/kra/rate/{{ month_data.month_num }}/{{ month_data.year }}" style="text-decoration: none; display: flex; flex-direction: column; padding: 1.25rem; background: var(--gray-50); border: 1px solid var(--gray-200); border-radius: 0.8rem; transition: all 0.2s; cursor: pointer;"
+               onmouseover="this.style.borderColor='var(--navy)'; this.style.boxShadow='0 4px 8px rgba(27,42,74,0.1)';"
+               onmouseout="this.style.borderColor='var(--gray-200)'; this.style.boxShadow='none';">
+                <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); font-weight: 600; margin-bottom: 0.5rem;">{{ month_data.month }}</div>
+                <div style="font-size: 1.25rem; font-weight: 700; color: var(--navy); margin-bottom: 0.75rem;">{{ "%.1f"|format(month_data.emp_score or 0) }}</div>
+                <div style="display: flex; gap: 0.35rem; font-size: 0.7rem;">
+                    {% if month_data.emp_submitted %}
+                    <span style="background: var(--success-light); color: var(--success); padding: 0.25rem 0.5rem; border-radius: 0.3rem; font-weight: 600;">Done</span>
+                    {% else %}
+                    <span style="background: var(--gray-200); color: var(--gray-600); padding: 0.25rem 0.5rem; border-radius: 0.3rem; font-weight: 600;">Pending</span>
+                    {% endif %}
+                </div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
+
+    {% endif %}
+</div>
+
+<style>
+    .card {
+        background: var(--white);
+        border-radius: 0.8rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        transition: all 0.2s;
+    }
+
+    .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.06);
+    }
+
+    .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button:hover {
+        background: var(--navy-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(27,42,74,0.25);
+    }
+
+    .button-secondary {
+        background: var(--gray-400);
+        color: white;
+    }
+
+    .button-secondary:hover {
+        background: var(--gray-500);
+    }
+</style>
+{% endblock %}

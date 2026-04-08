@@ -1,0 +1,145 @@
+{% extends "base.html" %}
+
+{% block title %}KRA Templates - Admin{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <!-- Header with Title and Create Button -->
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 2rem;">
+        <div>
+            <h1 style="font-size: 2rem; color: var(--navy); margin-bottom: 0.5rem;">KRA Templates</h1>
+            <p style="color: var(--gray-600); font-size: 0.95rem;">Manage Key Result Area templates for different roles and departments</p>
+        </div>
+        <a href="/kra/admin/templates/create" class="button" style="gap: 0.5rem;">
+            <span style="font-size: 1.1rem;">+</span> Create Template
+        </a>
+    </div>
+
+    <!-- Empty State -->
+    {% if not templates %}
+    <div class="card" style="text-align: center; padding: 3rem 2rem;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">📋</div>
+        <h2 class="card-title" style="margin-bottom: 0.5rem;">No KRA Templates Yet</h2>
+        <p style="color: var(--gray-600); margin-bottom: 2rem; max-width: 400px; margin-left: auto; margin-right: auto;">
+            Create your first KRA template to get started. Templates define the Key Result Areas and KPIs that employees will be evaluated on.
+        </p>
+        <a href="/kra/admin/templates/create" class="button">Create First Template</a>
+    </div>
+    {% else %}
+    <!-- Templates Grid -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 2rem;">
+        {% for template in templates %}
+        <div class="card" style="display: flex; flex-direction: column; position: relative;">
+            <!-- Active Badge -->
+            {% if template.is_active %}
+            <div style="position: absolute; top: 1.5rem; right: 1.5rem; background: var(--success); color: white; font-size: 0.75rem; padding: 0.35rem 0.75rem; border-radius: 0.85rem; font-weight: 600;">
+                Active
+            </div>
+            {% else %}
+            <div style="position: absolute; top: 1.5rem; right: 1.5rem; background: var(--gray-400); color: white; font-size: 0.75rem; padding: 0.35rem 0.75rem; border-radius: 0.85rem; font-weight: 600;">
+                Inactive
+            </div>
+            {% endif %}
+
+            <!-- Template Info -->
+            <div style="margin-bottom: 1.5rem; padding-right: 120px;">
+                <h3 style="font-size: 1.1rem; font-weight: 600; color: var(--navy); margin-bottom: 0.5rem;">{{ template.name }}</h3>
+                <div style="display: grid; gap: 0.5rem; font-size: 0.85rem; color: var(--gray-600);">
+                    <div><strong style="color: var(--navy);">Department:</strong> {{ template.department }}</div>
+                    <div><strong style="color: var(--navy);">Role:</strong> {{ template.role_title }}</div>
+                    <div><strong style="color: var(--navy);">FY Year:</strong> {{ template.fy_year }}</div>
+                </div>
+            </div>
+
+            <!-- Stats -->
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--gray-200);">
+                <div style="text-align: center; padding: 0.75rem; background: var(--orange-light); border-radius: 0.6rem;">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--orange);">{{ template.item_count }}</div>
+                    <div style="font-size: 0.8rem; color: var(--gray-600);">KPIs</div>
+                </div>
+                <div style="text-align: center; padding: 0.75rem; background: var(--blue-light); border-radius: 0.6rem;">
+                    <div style="font-size: 1.5rem; font-weight: 700; color: var(--blue);">{{ template.assign_count }}</div>
+                    <div style="font-size: 0.8rem; color: var(--gray-600);">Assigned</div>
+                </div>
+            </div>
+
+            <!-- Creator Info -->
+            <div style="font-size: 0.8rem; color: var(--gray-500); margin-bottom: 1.5rem;">
+                <div><strong>Created by:</strong> {{ template.creator_name }}</div>
+                <div><strong>On:</strong> {{ template.created_at }}</div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div style="display: flex; flex-direction: column; gap: 0.75rem; margin-top: auto;">
+                <a href="/kra/admin/templates/{{ template.id }}/edit" class="button" style="width: 100%; text-align: center; justify-content: center;">
+                    ✏️ Edit Template
+                </a>
+                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem;">
+                    <a href="/kra/admin/templates/{{ template.id }}/duplicate" class="button button-secondary" style="text-align: center; justify-content: center; font-size: 0.85rem;">
+                        📋 Duplicate
+                    </a>
+                    <form method="POST" action="/kra/admin/templates/{{ template.id }}/toggle-active" style="width: 100%;">
+                        {% if template.is_active %}
+                        <button type="submit" class="button-danger" style="width: 100%; padding: 0.7rem 1.4rem; border: none; border-radius: 0.6rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                            ✖️ Deactivate
+                        </button>
+                        {% else %}
+                        <button type="submit" class="button-success" style="width: 100%; padding: 0.7rem 1.4rem; border: none; border-radius: 0.6rem; font-size: 0.85rem; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                            ✓ Activate
+                        </button>
+                        {% endif %}
+                    </form>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .button-danger {
+        background: var(--danger);
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        border: none;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        font-size: 0.92rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+    .button-danger:hover {
+        background: #DC2626;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
+    }
+
+    .button-success {
+        background: var(--success);
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        border: none;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        font-size: 0.92rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+    .button-success:hover {
+        background: #059669;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(16,185,129,0.25);
+    }
+</style>
+{% endblock %}

@@ -1,0 +1,338 @@
+{% extends "base.html" %}
+
+{% block title %}KRA Report - Annual{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <!-- Header Banner -->
+    <div style="background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%); color: white; padding: 2.5rem 2rem; border-radius: 1rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(27,42,74,0.15);">
+        <h1 style="font-size: 2.2rem; margin-bottom: 0.5rem;">KRA Report — FY {{ fy_year }}-{{ fy_year + 1 }}</h1>
+        {% if assignment %}
+        <p style="font-size: 0.95rem; opacity: 0.9;">
+            <strong>Employee:</strong> {{ user.name }} | <strong>Template:</strong> {{ assignment.template_name }}
+        </p>
+        {% endif %}
+    </div>
+
+    <!-- No KRA Assigned Message -->
+    {% if not assignment %}
+    <div class="card" style="background: var(--blue-light); border-left: 4px solid var(--blue); padding: 2rem; text-align: center;">
+        <div style="font-size: 2.5rem; margin-bottom: 1rem;">📋</div>
+        <h2 style="font-size: 1.3rem; color: var(--navy); margin-bottom: 0.5rem;">No KRA Report Available</h2>
+        <p style="color: var(--gray-700); font-size: 0.95rem;">
+            No KRA assignment found for this fiscal year. Please check back later or contact your manager.
+        </p>
+    </div>
+    {% else %}
+
+    <!-- Summary Cards -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 1.5rem; margin-bottom: 2rem;">
+        <!-- FY Average (Employee) -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column; background: linear-gradient(135deg, var(--navy-light) 0%, rgba(27,42,74,0.05) 100%);">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">FY Average (Employee)</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--navy);">{{ "%.2f"|format(avg_emp or 0) }}</span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/5.0</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Across {{ rated_months or (monthly_data|length) }} months</div>
+        </div>
+
+        <!-- FY Average (Manager) -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column; background: linear-gradient(135deg, var(--orange-light) 0%, rgba(245,130,32,0.05) 100%);">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">FY Average (Manager)</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--orange);">{{ "%.2f"|format(avg_mgr or 0) }}</span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/5.0</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Manager's assessment</div>
+        </div>
+
+        <!-- Months Rated -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Months Rated</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--blue);">{{ rated_months or (monthly_data|length) }}</span>
+                <span style="font-size: 1rem; color: var(--gray-600);">/12</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Months in FY</div>
+        </div>
+
+        <!-- Total KPIs -->
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column;">
+            <div style="font-size: 0.85rem; color: var(--gray-600); font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 1rem;">Total KPIs</div>
+            <div style="display: flex; align-items: baseline; gap: 0.5rem; margin-bottom: 0.75rem;">
+                <span style="font-size: 2.5rem; font-weight: 700; color: var(--success);">{{ items|length }}</span>
+            </div>
+            <div style="font-size: 0.8rem; color: var(--gray-600);">Key Performance Indicators</div>
+        </div>
+    </div>
+
+    <!-- Monthly Scores Table with Accordion -->
+    <div class="card" style="padding: 2rem; overflow-x: auto;">
+        <h2 style="font-size: 1.1rem; font-weight: 600; color: var(--navy); margin-bottom: 1.5rem;">Monthly Performance Breakdown</h2>
+
+        {% if monthly_data %}
+        <table style="width: 100%; border-collapse: collapse;">
+            <thead>
+                <tr style="background: var(--navy); color: white;">
+                    <th style="padding: 1rem; text-align: left; font-weight: 600; border: none;">Month</th>
+                    <th style="padding: 1rem; text-align: center; font-weight: 600; border: none;">Employee Score</th>
+                    <th style="padding: 1rem; text-align: center; font-weight: 600; border: none;">Manager Score</th>
+                    <th style="padding: 1rem; text-align: center; font-weight: 600; border: none;">Status</th>
+                    <th style="padding: 1rem; text-align: center; font-weight: 600; border: none;">Details</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for month_row in monthly_data %}
+                <tr class="accordion-row" data-month="{{ month_row.month }}" style="border-bottom: 1px solid var(--gray-200); cursor: pointer; transition: all 0.2s;"
+                    onmouseover="this.style.backgroundColor='var(--gray-50)';"
+                    onmouseout="this.style.backgroundColor='var(--white)';">
+                    <td style="padding: 1rem; text-align: left;">
+                        <strong style="color: var(--navy); font-size: 0.95rem;">{{ month_row.month }}</strong>
+                        <div style="font-size: 0.8rem; color: var(--gray-600); margin-top: 0.2rem;">{{ month_row.year }}</div>
+                    </td>
+                    <td style="padding: 1rem; text-align: center;">
+                        <span style="display: inline-block; padding: 0.5rem 0.75rem; background: {% if month_row.emp_score %}linear-gradient(135deg, var(--navy-light), rgba(27,42,74,0.1)){% else %}var(--gray-100){% endif %}; border-radius: 0.4rem; color: var(--navy); font-weight: 600;">
+                            {% if month_row.emp_score %}{{ "%.2f"|format(month_row.emp_score) }}/5.0{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td style="padding: 1rem; text-align: center;">
+                        <span style="display: inline-block; padding: 0.5rem 0.75rem; background: {% if month_row.mgr_score %}linear-gradient(135deg, var(--orange-light), rgba(245,130,32,0.1)){% else %}var(--gray-100){% endif %}; border-radius: 0.4rem; color: var(--orange); font-weight: 600;">
+                            {% if month_row.mgr_score %}{{ "%.2f"|format(month_row.mgr_score) }}/5.0{% else %}—{% endif %}
+                        </span>
+                    </td>
+                    <td style="padding: 1rem; text-align: center;">
+                        <div style="display: flex; justify-content: center; gap: 0.5rem; flex-wrap: wrap;">
+                            {% if month_row.emp_submitted %}
+                            <span style="font-size: 0.7rem; font-weight: 600; background: var(--success-light); color: var(--success); padding: 0.3rem 0.5rem; border-radius: 0.3rem;">Emp ✓</span>
+                            {% else %}
+                            <span style="font-size: 0.7rem; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 0.3rem 0.5rem; border-radius: 0.3rem;">Emp ◯</span>
+                            {% endif %}
+                            {% if month_row.mgr_submitted %}
+                            <span style="font-size: 0.7rem; font-weight: 600; background: var(--success-light); color: var(--success); padding: 0.3rem 0.5rem; border-radius: 0.3rem;">Mgr ✓</span>
+                            {% else %}
+                            <span style="font-size: 0.7rem; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 0.3rem 0.5rem; border-radius: 0.3rem;">Mgr ◯</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td style="padding: 1rem; text-align: center;">
+                        <button type="button" class="accordion-toggle" data-month="{{ month_row.month }}" style="background: none; border: none; color: var(--blue); cursor: pointer; font-weight: 600; font-size: 1.2rem;">▼</button>
+                    </td>
+                </tr>
+
+                <!-- Expandable Detail Row -->
+                <tr class="accordion-content" data-month="{{ month_row.month }}" style="display: none; background: var(--gray-50);">
+                    <td colspan="5" style="padding: 1.5rem;">
+                        <div style="max-width: 100%; overflow-x: auto;">
+                            <h3 style="font-size: 0.95rem; font-weight: 600; color: var(--navy); margin-bottom: 1rem;">KPI Details for {{ month_row.month }} {{ month_row.year }}</h3>
+
+                            {% if month_row.ratings %}
+                            <table style="width: 100%; border-collapse: collapse; font-size: 0.9rem;">
+                                <thead>
+                                    <tr style="background: var(--gray-200); border-radius: 0.4rem;">
+                                        <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: var(--navy); border: none;">KPI Code</th>
+                                        <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: var(--navy); border: none;">Description</th>
+                                        <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: var(--navy); border: none;">Employee Rating</th>
+                                        <th style="padding: 0.75rem; text-align: center; font-weight: 600; color: var(--navy); border: none;">Manager Rating</th>
+                                        <th style="padding: 0.75rem; text-align: left; font-weight: 600; color: var(--navy); border: none;">Notes</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for rating in month_row.ratings %}
+                                    <tr style="border-bottom: 1px solid var(--gray-300);">
+                                        <td style="padding: 0.75rem; color: var(--navy); font-weight: 600;">{{ rating.kpi_code }}</td>
+                                        <td style="padding: 0.75rem; color: var(--gray-800);">{{ rating.description }}</td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            <span style="display: inline-block; padding: 0.35rem 0.6rem; background: var(--blue-light); color: var(--blue); border-radius: 0.3rem; font-weight: 600;">
+                                                {{ rating.employee_rating or '—' }}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.75rem; text-align: center;">
+                                            <span style="display: inline-block; padding: 0.35rem 0.6rem; background: var(--orange-light); color: var(--orange); border-radius: 0.3rem; font-weight: 600;">
+                                                {{ rating.manager_rating or '—' }}
+                                            </span>
+                                        </td>
+                                        <td style="padding: 0.75rem; color: var(--gray-700);">
+                                            {% if rating.manager_result %}
+                                            <span title="{{ rating.manager_result }}">{{ rating.manager_result[:40] }}{% if rating.manager_result|length > 40 %}...{% endif %}</span>
+                                            {% else %}
+                                            <span style="color: var(--gray-500); font-style: italic;">No notes</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                            {% else %}
+                            <div style="padding: 1rem; background: white; border-radius: 0.5rem; color: var(--gray-600);">
+                                <p>No KPI ratings available for this month.</p>
+                            </div>
+                            {% endif %}
+
+                            <!-- Month Notes -->
+                            {% if month_row.notes %}
+                            <div style="margin-top: 1.5rem; padding: 1rem; background: white; border-radius: 0.5rem; border-left: 3px solid var(--blue);">
+                                <h4 style="font-size: 0.85rem; font-weight: 600; color: var(--navy); margin-bottom: 0.5rem;">Manager Feedback</h4>
+                                <p style="color: var(--gray-800); font-size: 0.9rem;">{{ month_row.notes }}</p>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: 3rem 2rem; color: var(--gray-500);">
+            <p>No monthly data available for this fiscal year.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Quick Actions -->
+    <div style="display: flex; gap: 1rem; margin-top: 2rem;">
+        <a href="/kra/dashboard" class="button" style="gap: 0.5rem;">
+            <span>←</span> Back to Dashboard
+        </a>
+        <button onclick="window.print()" class="button button-secondary" style="gap: 0.5rem; cursor: pointer;">
+            <span>🖨️</span> Print Report
+        </button>
+    </div>
+
+    {% endif %}
+</div>
+
+<style>
+    .card {
+        background: var(--white);
+        border-radius: 0.8rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+
+    table {
+        width: 100%;
+    }
+
+    thead tr {
+        border-bottom: 2px solid var(--gray-300);
+    }
+
+    th {
+        text-align: left;
+        padding: 1rem;
+        background: var(--navy);
+        color: white;
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    td {
+        padding: 1rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .accordion-row {
+        cursor: pointer;
+        transition: background 0.2s;
+    }
+
+    .accordion-row:hover {
+        background: var(--gray-50);
+    }
+
+    .accordion-toggle {
+        background: none;
+        border: none;
+        color: var(--blue);
+        cursor: pointer;
+        font-size: 1.2rem;
+        font-weight: 600;
+        transition: transform 0.2s;
+    }
+
+    .accordion-toggle.active {
+        transform: rotate(180deg);
+    }
+
+    .accordion-content {
+        display: none;
+    }
+
+    .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button:hover {
+        background: var(--navy-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(27,42,74,0.25);
+    }
+
+    .button-secondary {
+        background: var(--gray-400);
+        color: white;
+    }
+
+    .button-secondary:hover {
+        background: var(--gray-500);
+    }
+
+    @media print {
+        .accordion-content {
+            display: table-row !important;
+        }
+        .accordion-toggle {
+            display: none;
+        }
+    }
+</style>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const toggles = document.querySelectorAll('.accordion-toggle');
+
+    toggles.forEach(toggle => {
+        toggle.addEventListener('click', function(e) {
+            e.preventDefault();
+            const month = this.getAttribute('data-month');
+            const content = document.querySelector(`.accordion-content[data-month="${month}"]`);
+            const row = document.querySelector(`.accordion-row[data-month="${month}"]`);
+
+            if (content.style.display === 'none' || content.style.display === '') {
+                content.style.display = 'table-row';
+                this.classList.add('active');
+            } else {
+                content.style.display = 'none';
+                this.classList.remove('active');
+            }
+        });
+    });
+
+    // Allow clicking anywhere on the row to toggle
+    const rows = document.querySelectorAll('.accordion-row');
+    rows.forEach(row => {
+        row.addEventListener('click', function(e) {
+            if (e.target.tagName !== 'BUTTON') {
+                const month = this.getAttribute('data-month');
+                const toggle = this.querySelector('.accordion-toggle');
+                toggle.click();
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

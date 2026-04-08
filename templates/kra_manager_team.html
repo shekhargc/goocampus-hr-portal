@@ -1,0 +1,207 @@
+{% extends "base.html" %}
+
+{% block title %}Team KRA - Manager{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, var(--orange) 0%, #E8750E 100%); color: white; padding: 2.5rem 2rem; border-radius: 1rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(245,130,32,0.15);">
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Team KRA Overview</h1>
+        {% set month_names = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] %}
+        <p style="font-size: 0.95rem; opacity: 0.9;">
+            <strong>FY {{ fy_year }}-{{ fy_year + 1 }}</strong> | Period: {{ month_names[view_month] if view_month <= 12 else 'Month ' ~ view_month }} {{ view_year }}
+        </p>
+    </div>
+
+    <!-- Month Selector -->
+    <div class="card" style="padding: 1.5rem; margin-bottom: 2rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap;">
+        <form method="GET" style="display: flex; gap: 1rem; align-items: center;">
+            <label style="font-size: 0.9rem; font-weight: 600; color: var(--gray-700);">View Month:</label>
+            <select name="month" style="padding: 0.6rem 1rem; border: 1px solid var(--gray-300); border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit; cursor: pointer;">
+                {% for i in range(1, 13) %}
+                <option value="{{ i }}" {% if i == view_month %}selected{% endif %}>{{ month_names[i] }}</option>
+                {% endfor %}
+            </select>
+            <select name="year" style="padding: 0.6rem 1rem; border: 1px solid var(--gray-300); border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit; cursor: pointer;">
+                {% for y in range(view_year - 1, view_year + 2) %}
+                <option value="{{ y }}" {% if y == view_year %}selected{% endif %}>{{ y }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit" class="button" style="gap: 0.5rem;">
+                <span>🔍</span> Filter
+            </button>
+        </form>
+    </div>
+
+    <!-- Team Members -->
+    {% if team_data %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1.5rem;">
+        {% for member in team_data %}
+        <div class="card" style="padding: 1.5rem; display: flex; flex-direction: column; position: relative;">
+            <!-- Member Header -->
+            <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-start;">
+                <!-- Photo -->
+                {% if member.photo_url %}
+                <img src="{{ member.photo_url }}" alt="{{ member.name }}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--gray-200);">
+                {% else %}
+                <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--navy), var(--blue)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
+                    {{ member.name[0].upper() }}
+                </div>
+                {% endif %}
+                <!-- Info -->
+                <div style="flex: 1;">
+                    <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 0.2rem;">{{ member.name }}</h3>
+                    <div style="font-size: 0.8rem; color: var(--gray-600); margin-bottom: 0.25rem;">
+                        <strong>Code:</strong> {{ member.emp_code or 'N/A' }}
+                    </div>
+                    <div style="font-size: 0.8rem; color: var(--gray-600);">
+                        <strong>Dept:</strong> {{ member.department or 'N/A' }}
+                    </div>
+                </div>
+            </div>
+
+            <!-- Template Name -->
+            <div style="font-size: 0.8rem; color: var(--gray-600); padding: 0.75rem; background: var(--gray-50); border-radius: 0.4rem; margin-bottom: 1rem;">
+                <strong>Template:</strong> {{ member.template_name }}
+            </div>
+
+            <!-- Score Bars -->
+            <div style="margin-bottom: 1.5rem; padding-bottom: 1.5rem; border-bottom: 1px solid var(--gray-200);">
+                <!-- Employee Score -->
+                <div style="margin-bottom: 1rem;">
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.4rem;">
+                        <span>Employee Score</span>
+                        <span style="color: var(--navy);">{{ "%.1f"|format(member.emp_score or 0) }}/5.0</span>
+                    </div>
+                    <div style="height: 8px; background: var(--gray-200); border-radius: 0.4rem; overflow: hidden;">
+                        <div style="height: 100%; background: var(--navy); width: {{ ((member.emp_score or 0) / 5 * 100)|int }}%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+                <!-- Manager Score -->
+                <div>
+                    <div style="display: flex; justify-content: space-between; font-size: 0.8rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.4rem;">
+                        <span>Manager Score</span>
+                        <span style="color: var(--orange);">{{ "%.1f"|format(member.mgr_score or 0) }}/5.0</span>
+                    </div>
+                    <div style="height: 8px; background: var(--gray-200); border-radius: 0.4rem; overflow: hidden;">
+                        <div style="height: 100%; background: var(--orange); width: {{ ((member.mgr_score or 0) / 5 * 100)|int }}%; transition: width 0.3s;"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Status Badges -->
+            <div style="display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap;">
+                {% if member.emp_submitted %}
+                <span style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; background: var(--success-light); color: var(--success); padding: 0.4rem 0.75rem; border-radius: 0.4rem;">
+                    <span style="color: var(--success);">✓</span> Employee Submitted
+                </span>
+                {% else %}
+                <span style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; background: var(--gray-200); color: var(--gray-600); padding: 0.4rem 0.75rem; border-radius: 0.4rem;">
+                    <span>◯</span> Pending Employee
+                </span>
+                {% endif %}
+
+                {% if member.mgr_submitted %}
+                <span style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; background: var(--success-light); color: var(--success); padding: 0.4rem 0.75rem; border-radius: 0.4rem;">
+                    <span style="color: var(--success);">✓</span> Manager Rated
+                </span>
+                {% else %}
+                <span style="display: inline-flex; align-items: center; gap: 0.35rem; font-size: 0.75rem; font-weight: 600; background: var(--warning-light); color: var(--warning); padding: 0.4rem 0.75rem; border-radius: 0.4rem;">
+                    <span>!</span> Pending Manager
+                </span>
+                {% endif %}
+            </div>
+
+            <!-- Rate Button -->
+            <div style="margin-top: auto;">
+                <a href="/kra/manager/rate/{{ member.id }}/{{ view_month }}/{{ view_year }}" class="button-orange" style="width: 100%; text-align: center; justify-content: center; gap: 0.5rem;">
+                    <span>✏️</span> Rate This Employee
+                </a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <!-- Empty State -->
+    <div class="card" style="padding: 3rem 2rem; text-align: center;">
+        <div style="font-size: 3rem; margin-bottom: 1rem;">👥</div>
+        <h2 style="font-size: 1.3rem; color: var(--navy); margin-bottom: 0.5rem;">No Team Members</h2>
+        <p style="color: var(--gray-600); font-size: 0.95rem;">
+            You don't have any team members assigned KRAs for this period, or no data is available.
+        </p>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .card {
+        background: var(--white);
+        border-radius: 0.8rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+        transition: all 0.2s;
+    }
+
+    .card:hover {
+        box-shadow: 0 4px 8px rgba(0,0,0,0.06);
+    }
+
+    .button {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button:hover {
+        background: var(--navy-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(27,42,74,0.25);
+    }
+
+    .button-orange {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+        width: 100%;
+    }
+
+    .button-orange:hover {
+        background: var(--orange-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(245,130,32,0.25);
+    }
+
+    select {
+        background: var(--white);
+        cursor: pointer;
+    }
+
+    select:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgba(245,130,32,0.1);
+    }
+</style>
+{% endblock %}

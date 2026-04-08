@@ -1,0 +1,51 @@
+{% extends "base.html" %}
+
+{% block title %}Create KRA Template - Admin{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <a href="/kra/admin/templates" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Templates</a>
+    <h1 style="font-size: 2rem; color: var(--navy); margin-bottom: 2rem;">Create New KRA Template</h1>
+</div>
+
+<div class="card" style="max-width: 700px;">
+    <form method="POST" action="/kra/admin/templates/create">
+        <!-- Template Name -->
+        <div class="form-group">
+            <label for="name">Template Name</label>
+            <input type="text" id="name" name="name" placeholder="e.g., Sales Manager FY2025" required>
+        </div>
+
+        <!-- Department -->
+        <div class="form-group">
+            <label for="department">Department</label>
+            <input type="text" id="department" name="department" placeholder="e.g., Sales, HR, Operations" required>
+        </div>
+
+        <!-- Role Title -->
+        <div class="form-group">
+            <label for="role_title">Role Title</label>
+            <input type="text" id="role_title" name="role_title" placeholder="e.g., Sales Manager, HR Executive" required>
+        </div>
+
+        <!-- FY Year -->
+        <div class="form-group">
+            <label for="fy_year">Fiscal Year</label>
+            <input type="number" id="fy_year" name="fy_year" value="{{ fy_year }}" required>
+        </div>
+
+        <!-- Info Note -->
+        <div style="background: var(--blue-light); border-left: 4px solid var(--blue); padding: 1rem 1.25rem; border-radius: 0.6rem; margin-bottom: 2rem;">
+            <p style="margin: 0; font-size: 0.9rem; color: var(--blue-dark); line-height: 1.5;">
+                <strong style="color: var(--blue-dark);">📝 Note:</strong> Common KPIs (Knowledge, Customer Handling, HR, Extra Mile, Interpersonal Skill) will be auto-added. You can customize them after creation.
+            </p>
+        </div>
+
+        <!-- Submit Button -->
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button" style="flex: 1; justify-content: center;">Create Template</button>
+            <a href="/kra/admin/templates" class="button button-secondary" style="justify-content: center;">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

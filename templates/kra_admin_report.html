@@ -1,0 +1,580 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  .months_list = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December']
+
+  .header-container {
+    margin-bottom: 2rem;
+  }
+
+  .header-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+  }
+
+  .header-title {
+    color: var(--navy);
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0;
+  }
+
+  .nav-buttons {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+  }
+
+  .btn-nav {
+    padding: 0.5rem 1rem;
+    background: var(--blue);
+    color: var(--white);
+    border: none;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: all 0.2s;
+  }
+
+  .btn-nav:hover {
+    background: #3d6a99;
+  }
+
+  .current-period {
+    color: var(--gray-600, #666);
+    font-size: 0.95rem;
+    margin: 0 1rem;
+    min-width: 150px;
+    text-align: center;
+  }
+
+  .card {
+    background: var(--white, #fff);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+  }
+
+  .card-title {
+    color: var(--navy);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--gray-200, #e8e8e8);
+  }
+
+  .filter-container {
+    display: grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap: 1rem;
+    align-items: flex-end;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  label {
+    color: var(--navy);
+    font-weight: 500;
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    padding: 0.75rem;
+    border: 1px solid var(--gray-300, #d0d0d0);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+    background: var(--white, #fff);
+    color: var(--navy);
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(74, 122, 181, 0.1);
+  }
+
+  .btn-filter {
+    padding: 0.75rem 1.5rem;
+    background: var(--blue);
+    color: var(--white);
+    border: none;
+    border-radius: 8px;
+    cursor: pointer;
+    font-weight: 500;
+    transition: all 0.2s;
+  }
+
+  .btn-filter:hover {
+    background: #3d6a99;
+  }
+
+  .stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+  }
+
+  .stat-card {
+    background: var(--white, #fff);
+    border-radius: 12px;
+    padding: 1.5rem;
+    border-left: 4px solid var(--blue);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  }
+
+  .stat-label {
+    color: var(--gray-600, #666);
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin-bottom: 0.5rem;
+  }
+
+  .stat-value {
+    color: var(--navy);
+    font-size: 2rem;
+    font-weight: 700;
+  }
+
+  .stat-unit {
+    color: var(--gray-500, #888);
+    font-size: 0.8rem;
+    margin-left: 0.25rem;
+  }
+
+  .table-container {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+
+  thead {
+    background: var(--gray-100, #f5f5f5);
+    border-bottom: 2px solid var(--gray-300, #d0d0d0);
+  }
+
+  thead th {
+    padding: 1rem;
+    text-align: left;
+    color: var(--navy);
+    font-weight: 600;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--gray-200, #e8e8e8);
+    transition: background-color 0.2s;
+    cursor: pointer;
+  }
+
+  tbody tr:hover {
+    background: var(--gray-50, #fafafa);
+  }
+
+  tbody td {
+    padding: 1rem;
+    color: var(--gray-800, #222);
+  }
+
+  .employee-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .employee-photo {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: var(--gray-300, #d0d0d0);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    color: var(--white);
+    font-weight: 600;
+    overflow: hidden;
+  }
+
+  .employee-photo img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+
+  .employee-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.1rem;
+  }
+
+  .employee-name {
+    font-weight: 500;
+    color: var(--navy);
+  }
+
+  .employee-code {
+    font-size: 0.8rem;
+    color: var(--gray-500, #888);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .badge-primary {
+    background: rgba(74, 122, 181, 0.1);
+    color: var(--blue);
+  }
+
+  .progress-bar {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+  }
+
+  .progress-fill {
+    flex: 1;
+    height: 8px;
+    background: var(--gray-200, #e8e8e8);
+    border-radius: 4px;
+    overflow: hidden;
+  }
+
+  .progress-bar-inner {
+    height: 100%;
+    transition: width 0.3s ease;
+  }
+
+  .progress-score {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--navy);
+    min-width: 40px;
+    text-align: right;
+  }
+
+  .progress-green .progress-bar-inner {
+    background: #28a745;
+  }
+
+  .progress-orange .progress-bar-inner {
+    background: var(--orange);
+  }
+
+  .progress-red .progress-bar-inner {
+    background: #dc3545;
+  }
+
+  .status-indicator {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    font-size: 1rem;
+  }
+
+  .status-complete {
+    background: rgba(40, 167, 69, 0.1);
+    color: #28a745;
+  }
+
+  .status-partial {
+    background: rgba(245, 130, 32, 0.1);
+    color: var(--orange);
+  }
+
+  .status-none {
+    background: var(--gray-200, #e8e8e8);
+    color: var(--gray-500, #888);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--gray-600, #666);
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state-text {
+    font-size: 0.95rem;
+    color: var(--gray-600, #666);
+  }
+
+  @media (max-width: 768px) {
+    .header-row {
+      flex-direction: column;
+      gap: 1rem;
+      align-items: flex-start;
+    }
+
+    .nav-buttons {
+      width: 100%;
+    }
+
+    .filter-container {
+      grid-template-columns: 1fr;
+    }
+
+    .stats-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .header-title {
+      font-size: 1.5rem;
+    }
+
+    table {
+      font-size: 0.85rem;
+    }
+
+    thead th,
+    tbody td {
+      padding: 0.75rem 0.5rem;
+    }
+
+    .employee-photo {
+      width: 28px;
+      height: 28px;
+    }
+  }
+</style>
+
+{% set months = ['', 'January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'] %}
+{% set current_month_name = months[view_month|int] if view_month|int < months|length else 'Month' %}
+
+<div class="header-container">
+  <div class="header-row">
+    <h1 class="header-title">KRA Report — {{ current_month_name }} {{ view_year }}</h1>
+    <div class="nav-buttons">
+      <a href="?month={% if view_month|int == 1 %}12{% else %}{{ view_month|int - 1 }}{% endif %}&year={% if view_month|int == 1 %}{{ view_year|int - 1 }}{% else %}{{ view_year }}{% endif %}" class="btn-nav">← Previous</a>
+      <span class="current-period">{{ current_month_name }} {{ view_year }}</span>
+      <a href="?month={% if view_month|int == 12 %}1{% else %}{{ view_month|int + 1 }}{% endif %}&year={% if view_month|int == 12 %}{{ view_year|int + 1 }}{% else %}{{ view_year }}{% endif %}" class="btn-nav">Next →</a>
+    </div>
+  </div>
+</div>
+
+<!-- Filter Card -->
+<div class="card">
+  <h2 class="card-title">Filter Report</h2>
+
+  <form method="GET" action="{{ request.path }}">
+    <div class="filter-container">
+      <div class="form-group">
+        <label for="month">Month</label>
+        <select id="month" name="month" required>
+          {% for i in range(1, 13) %}
+            <option value="{{ i }}" {% if i|string == view_month|string %}selected{% endif %}>
+              {{ months[i] }}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="year">Year</label>
+        <input type="number" id="year" name="year" value="{{ view_year }}" required min="2020" max="2050">
+      </div>
+
+      <button type="submit" class="btn-filter">Update Report</button>
+    </div>
+  </form>
+</div>
+
+<!-- Summary Stats Cards -->
+<div class="stats-grid">
+  <div class="stat-card">
+    <div class="stat-label">Total Employees</div>
+    <div class="stat-value">{{ report_data|length }}</div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Avg Employee Score</div>
+    <div class="stat-value">
+      {% if report_data|length > 0 %}
+        {% set total_emp_score = report_data|selectattr('emp_score')|map(attribute='emp_score')|sum %}
+        {% set avg_emp = (total_emp_score / report_data|length)|round(2) %}
+        {{ avg_emp }}
+        <span class="stat-unit">/ 5.0</span>
+      {% else %}
+        --
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Avg Manager Score</div>
+    <div class="stat-value">
+      {% if report_data|length > 0 %}
+        {% set total_mgr_score = report_data|selectattr('mgr_score')|map(attribute='mgr_score')|sum %}
+        {% set avg_mgr = (total_mgr_score / report_data|length)|round(2) %}
+        {{ avg_mgr }}
+        <span class="stat-unit">/ 5.0</span>
+      {% else %}
+        --
+      {% endif %}
+    </div>
+  </div>
+
+  <div class="stat-card">
+    <div class="stat-label">Completion Rate</div>
+    <div class="stat-value">
+      {% if report_data|length > 0 %}
+        {% set completed = report_data|selectattr('emp_submitted')|selectattr('mgr_submitted')|list|length %}
+        {{ ((completed / report_data|length) * 100)|round(1) }}
+        <span class="stat-unit">%</span>
+      {% else %}
+        --
+      {% endif %}
+    </div>
+  </div>
+</div>
+
+<!-- Employee Report Table -->
+{% if report_data %}
+  <div class="card">
+    <h2 class="card-title">Employee KRA Ratings</h2>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Code</th>
+            <th>Department</th>
+            <th>Template</th>
+            <th>Employee Score</th>
+            <th>Manager Score</th>
+            <th>Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for row in report_data %}
+            <tr onclick="window.location.href='/kra/manager/rate/{{ row.employee_id }}/{{ view_month }}/{{ view_year }}'">
+              <td>
+                <div class="employee-cell">
+                  <div class="employee-photo">
+                    {% if row.photo_url %}
+                      <img src="{{ row.photo_url }}" alt="{{ row.emp_name }}">
+                    {% else %}
+                      {{ row.emp_name[0]|upper }}
+                    {% endif %}
+                  </div>
+                  <div class="employee-info">
+                    <span class="employee-name">{{ row.emp_name }}</span>
+                  </div>
+                </div>
+              </td>
+              <td>
+                <span class="badge badge-primary">{{ row.emp_code }}</span>
+              </td>
+              <td>{{ row.department }}</td>
+              <td>{{ row.template_name }}</td>
+              <td>
+                {% if row.emp_score %}
+                  {% set score_pct = (row.emp_score / 5.0) * 100 %}
+                  {% if row.emp_score > 3.5 %}
+                    <div class="progress-bar progress-green">
+                  {% elif row.emp_score >= 2 %}
+                    <div class="progress-bar progress-orange">
+                  {% else %}
+                    <div class="progress-bar progress-red">
+                  {% endif %}
+                    <div class="progress-fill">
+                      <div class="progress-bar-inner" style="width: {{ score_pct }}%"></div>
+                    </div>
+                    <span class="progress-score">{{ row.emp_score|round(1) }}</span>
+                  </div>
+                {% else %}
+                  <span style="color: var(--gray-500, #888);">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.mgr_score %}
+                  {% set mgr_score_pct = (row.mgr_score / 5.0) * 100 %}
+                  {% if row.mgr_score > 3.5 %}
+                    <div class="progress-bar progress-green">
+                  {% elif row.mgr_score >= 2 %}
+                    <div class="progress-bar progress-orange">
+                  {% else %}
+                    <div class="progress-bar progress-red">
+                  {% endif %}
+                    <div class="progress-fill">
+                      <div class="progress-bar-inner" style="width: {{ mgr_score_pct }}%"></div>
+                    </div>
+                    <span class="progress-score">{{ row.mgr_score|round(1) }}</span>
+                  </div>
+                {% else %}
+                  <span style="color: var(--gray-500, #888);">—</span>
+                {% endif %}
+              </td>
+              <td>
+                {% if row.emp_submitted and row.mgr_submitted %}
+                  <div class="status-indicator status-complete" title="Both submitted">✓</div>
+                {% elif row.emp_submitted or row.mgr_submitted %}
+                  <div class="status-indicator status-partial" title="Partially submitted">⏱</div>
+                {% else %}
+                  <div class="status-indicator status-none" title="Not submitted">○</div>
+                {% endif %}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📊</div>
+      <div class="empty-state-title">No Data Available</div>
+      <p class="empty-state-text">No KRA ratings found for {{ current_month_name }} {{ view_year }}.</p>
+    </div>
+  </div>
+{% endif %}
+
+<script>
+  // Make table rows clickable
+  document.querySelectorAll('tbody tr').forEach(row => {
+    row.style.cursor = 'pointer';
+  });
+</script>
+
+{% endblock %}

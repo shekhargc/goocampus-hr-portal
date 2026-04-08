@@ -1,0 +1,325 @@
+{% extends "base.html" %}
+
+{% block title %}Edit KRA Template - Admin{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <a href="/kra/admin/templates" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Templates</a>
+    <h1 style="font-size: 2rem; color: var(--navy); margin-bottom: 0.5rem;">Edit KRA Template</h1>
+    <p style="color: var(--gray-600); font-size: 0.95rem;">{{ template.name }}</p>
+</div>
+
+<!-- Template Info Card -->
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Template Information</h2>
+    <form method="POST" action="/kra/admin/templates/{{ template.id }}/edit">
+        <input type="hidden" name="action" value="update_template">
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <!-- Template Name -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="name">Template Name</label>
+                <input type="text" id="name" name="name" value="{{ template.name }}" required>
+            </div>
+
+            <!-- Department -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="department">Department</label>
+                <input type="text" id="department" name="department" value="{{ template.department }}" required>
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <!-- Role Title -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="role_title">Role Title</label>
+                <input type="text" id="role_title" name="role_title" value="{{ template.role_title }}" required>
+            </div>
+
+            <!-- FY Year -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="fy_year">Fiscal Year</label>
+                <input type="number" id="fy_year" name="fy_year" value="{{ template.fy_year }}" required>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
+            <button type="submit" class="button">Save Changes</button>
+        </div>
+    </form>
+</div>
+
+<!-- Weight Indicator -->
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Total Weight Distribution</h2>
+    <div style="margin-bottom: 1rem;">
+        <div style="display: flex; justify-content: space-between; margin-bottom: 0.75rem; font-size: 0.9rem;">
+            <span style="font-weight: 600; color: var(--navy);">Total Weight</span>
+            <span style="font-weight: 600; color: {% if total_weight == 1.0 %}var(--success){% else %}var(--danger){% endif %};">{{ "%.2f"|format(total_weight) }} / 1.00</span>
+        </div>
+        <div style="width: 100%; height: 10px; background: var(--gray-200); border-radius: 5px; overflow: hidden;">
+            <div style="width: {{ [total_weight * 100, 100] | min }}%; height: 100%; background: {% if total_weight == 1.0 %}var(--success){% elif total_weight > 1.0 %}var(--danger){% else %}var(--warning){% endif %}; transition: width 0.3s; border-radius: 5px;"></div>
+        </div>
+    </div>
+    <div style="font-size: 0.85rem; color: var(--gray-600);">
+        {% if total_weight == 1.0 %}
+        <span style="color: var(--success); font-weight: 500;">✓ Perfect weight distribution</span>
+        {% elif total_weight > 1.0 %}
+        <span style="color: var(--danger); font-weight: 500;">⚠ Total weight exceeds 1.0 - adjust KPI weights</span>
+        {% else %}
+        <span style="color: var(--warning); font-weight: 500;">⚠ Total weight is {{ "%.2f"|format(1.0 - total_weight) }} below 1.0</span>
+        {% endif %}
+    </div>
+</div>
+
+<!-- KPIs by Category -->
+<div class="card" style="margin-bottom: 3rem;">
+    <h2 class="card-title">Key Performance Indicators</h2>
+
+    {% if not items %}
+    <div style="text-align: center; padding: 2rem; color: var(--gray-600);">
+        <p>No KPIs defined yet. Add your first KPI below.</p>
+    </div>
+    {% else %}
+    <!-- Grouped by Category -->
+    {% set grouped_items = {} %}
+    {% for item in items %}
+        {% if item.category_name not in grouped_items %}
+            {% set _ = grouped_items.update({item.category_name: []}) %}
+        {% endif %}
+        {% set _ = grouped_items[item.category_name].append(item) %}
+    {% endfor %}
+
+    {% for category_name in grouped_items | sort %}
+    <div style="margin-bottom: 2.5rem;">
+        <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin-bottom: 1rem; padding-bottom: 0.5rem; border-bottom: 2px solid var(--orange);">{{ category_name }}</h3>
+
+        <div style="overflow-x: auto;">
+            <table class="table" style="margin-bottom: 1.5rem;">
+                <thead>
+                    <tr style="background: var(--navy); color: white;">
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">KPI Code</th>
+                        <th style="padding: 1rem; text-align: left; font-weight: 600;">Description</th>
+                        {% if grouped_items[category_name][0].is_target_based %}
+                        <th style="padding: 1rem; text-align: center; font-weight: 600;">Target</th>
+                        {% endif %}
+                        <th style="padding: 1rem; text-align: center; font-weight: 600;">Percentage</th>
+                        <th style="padding: 1rem; text-align: center; font-weight: 600;">Weight</th>
+                        <th style="padding: 1rem; text-align: center; font-weight: 600;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in grouped_items[category_name] %}
+                    <tr style="border-bottom: 1px solid var(--gray-200); transition: background 0.2s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
+                        <td style="padding: 1rem; font-weight: 600; color: var(--navy);">{{ item.kpi_code }}</td>
+                        <td style="padding: 1rem; color: var(--gray-700);">{{ item.measure_description }}</td>
+                        {% if item.is_target_based %}
+                        <td style="padding: 1rem; text-align: center; color: var(--gray-600);">{{ item.target_value or '-' }}</td>
+                        {% endif %}
+                        <td style="padding: 1rem; text-align: center; color: var(--gray-600);">{{ item.percentage or '-' }}%</td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <span style="background: var(--orange-light); color: var(--orange); padding: 0.4rem 0.8rem; border-radius: 0.4rem; font-weight: 600; font-size: 0.85rem;">{{ item.percentage_sharing }}</span>
+                        </td>
+                        <td style="padding: 1rem; text-align: center;">
+                            <div style="display: flex; gap: 0.5rem; justify-content: center;">
+                                <button type="button" class="button-small button" data-item-id="{{ item.id }}" onclick="toggleEditForm('{{ item.id }}')" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;">✏️ Edit</button>
+                                <form method="POST" action="/kra/admin/templates/{{ template.id }}/edit" style="display: inline;">
+                                    <input type="hidden" name="action" value="delete_item">
+                                    <input type="hidden" name="item_id" value="{{ item.id }}">
+                                    <button type="submit" class="button-small button-danger" style="padding: 0.4rem 0.8rem; font-size: 0.8rem;" onclick="return confirm('Are you sure you want to delete this KPI?');">🗑️ Delete</button>
+                                </form>
+                            </div>
+                        </td>
+                    </tr>
+                    <!-- Hidden Edit Form -->
+                    <tr id="edit-form-{{ item.id }}" style="display: none; background: var(--blue-light);">
+                        <td colspan="6" style="padding: 1.5rem;">
+                            <form method="POST" action="/kra/admin/templates/{{ template.id }}/edit">
+                                <input type="hidden" name="action" value="update_item">
+                                <input type="hidden" name="item_id" value="{{ item.id }}">
+
+                                <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1rem;">
+                                    <!-- KPI Code -->
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">KPI Code</label>
+                                        <input type="text" name="kpi_code" value="{{ item.kpi_code }}" required>
+                                    </div>
+
+                                    <!-- Description -->
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Description</label>
+                                        <input type="text" name="measure_description" value="{{ item.measure_description }}" required>
+                                    </div>
+
+                                    <!-- Target Value -->
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Target Value</label>
+                                        <input type="number" name="target_value" value="{{ item.target_value or '' }}" step="0.01">
+                                    </div>
+
+                                    <!-- Percentage -->
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Percentage</label>
+                                        <input type="number" name="percentage" value="{{ item.percentage or '' }}" step="0.01">
+                                    </div>
+
+                                    <!-- Weight / Percentage Sharing -->
+                                    <div class="form-group" style="margin-bottom: 0;">
+                                        <label style="font-size: 0.8rem;">Weight</label>
+                                        <input type="number" name="percentage_sharing" value="{{ item.percentage_sharing }}" step="0.01" required>
+                                    </div>
+                                </div>
+
+                                <div style="margin-bottom: 1rem;">
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+                                        <input type="checkbox" name="is_target_based" value="1" {% if item.is_target_based %}checked{% endif %} style="width: 18px; height: 18px;">
+                                        <span>Target-based KPI</span>
+                                    </label>
+                                </div>
+
+                                <div style="display: flex; gap: 1rem;">
+                                    <button type="submit" class="button" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Save Changes</button>
+                                    <button type="button" class="button button-secondary" onclick="toggleEditForm('{{ item.id }}')" style="padding: 0.5rem 1rem; font-size: 0.9rem;">Cancel</button>
+                                </div>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+    {% endfor %}
+    {% endif %}
+</div>
+
+<!-- Add KPI Form -->
+<div class="card">
+    <h2 class="card-title">Add New KPI</h2>
+    <form method="POST" action="/kra/admin/templates/{{ template.id }}/edit">
+        <input type="hidden" name="action" value="add_item">
+
+        <div style="display: grid; grid-template-columns: 1fr 2fr 1fr 1fr 1fr; gap: 1rem; margin-bottom: 1.5rem;">
+            <!-- Category -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_category">Category</label>
+                <select id="add_category" name="category_name" required>
+                    <option value="">-- Select Category --</option>
+                    {% for category in categories %}
+                    <option value="{{ category.name }}">{{ category.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- KPI Code -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_kpi_code">KPI Code</label>
+                <input type="text" id="add_kpi_code" name="kpi_code" placeholder="e.g., KPI-001" required>
+            </div>
+
+            <!-- Description -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_description">Description</label>
+                <input type="text" id="add_description" name="measure_description" placeholder="Brief description" required>
+            </div>
+
+            <!-- Target Value -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_target">Target Value</label>
+                <input type="number" id="add_target" name="target_value" placeholder="Optional" step="0.01">
+            </div>
+
+            <!-- Percentage -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_percentage">Percentage</label>
+                <input type="number" id="add_percentage" name="percentage" placeholder="Optional" step="0.01">
+            </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 1.5rem;">
+            <!-- Weight / Percentage Sharing -->
+            <div class="form-group" style="margin-bottom: 0;">
+                <label for="add_weight">Weight (Percentage Sharing)</label>
+                <input type="number" id="add_weight" name="percentage_sharing" placeholder="e.g., 0.25" step="0.01" required>
+            </div>
+
+            <!-- Target-based Checkbox -->
+            <div style="display: flex; align-items: flex-end;">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer; font-size: 0.9rem;">
+                    <input type="checkbox" name="is_target_based" value="1" style="width: 18px; height: 18px;">
+                    <span style="color: var(--gray-700);">Target-based KPI</span>
+                </label>
+            </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem;">
+            <button type="submit" class="button">Add KPI</button>
+            <a href="/kra/admin/templates" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<style>
+    .button-small {
+        padding: 0.4rem 0.9rem;
+        font-size: 0.85rem;
+    }
+
+    .button-danger {
+        background: var(--danger);
+        color: white;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.4rem;
+        border: none;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        font-size: 0.92rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button-danger:hover {
+        background: #DC2626;
+        transform: translateY(-1px);
+        box-shadow: 0 6px 12px rgba(239,68,68,0.25);
+    }
+
+    .table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+
+    .table th {
+        background: var(--navy);
+        color: white;
+        padding: 1rem;
+        text-align: left;
+        font-weight: 600;
+    }
+
+    .table td {
+        padding: 1rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .table tbody tr:hover {
+        background: var(--gray-50);
+    }
+</style>
+
+<script>
+function toggleEditForm(itemId) {
+    const form = document.getElementById('edit-form-' + itemId);
+    if (form.style.display === 'none') {
+        form.style.display = 'table-row';
+    } else {
+        form.style.display = 'none';
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,441 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+  .header-container {
+    margin-bottom: 2rem;
+  }
+
+  .header-title {
+    color: var(--navy);
+    font-size: 2rem;
+    font-weight: 600;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .header-subtitle {
+    color: var(--gray-600, #666);
+    font-size: 0.95rem;
+  }
+
+  .card {
+    background: var(--white, #fff);
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    margin-bottom: 2rem;
+  }
+
+  .card-title {
+    color: var(--navy);
+    font-size: 1.25rem;
+    font-weight: 600;
+    margin: 0 0 1.5rem 0;
+    padding-bottom: 1rem;
+    border-bottom: 2px solid var(--gray-200, #e8e8e8);
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  label {
+    display: block;
+    color: var(--navy);
+    font-weight: 500;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    width: 100%;
+    padding: 0.75rem;
+    border: 1px solid var(--gray-300, #d0d0d0);
+    border-radius: 8px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s;
+    background: var(--white, #fff);
+    color: var(--navy);
+  }
+
+  input[type="text"]:focus,
+  input[type="number"]:focus,
+  select:focus {
+    outline: none;
+    border-color: var(--blue);
+    box-shadow: 0 0 0 3px rgba(74, 122, 181, 0.1);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .form-row-full {
+    grid-column: 1 / -1;
+  }
+
+  .checkbox-group {
+    border: 1px solid var(--gray-300, #d0d0d0);
+    border-radius: 8px;
+    padding: 1rem;
+    max-height: 300px;
+    overflow-y: auto;
+    background: var(--gray-50, #fafafa);
+  }
+
+  .checkbox-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 0;
+    margin-bottom: 0.25rem;
+  }
+
+  .checkbox-item:last-child {
+    margin-bottom: 0;
+  }
+
+  .checkbox-item input[type="checkbox"] {
+    width: auto;
+    margin-right: 0.75rem;
+    cursor: pointer;
+  }
+
+  .checkbox-label {
+    margin: 0;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-weight: normal;
+    color: var(--gray-700, #333);
+  }
+
+  .checkbox-label-text {
+    display: flex;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+  }
+
+  .checkbox-label-code {
+    color: var(--gray-500, #888);
+    font-size: 0.85rem;
+  }
+
+  .checkbox-label-dept {
+    color: var(--gray-500, #888);
+    font-size: 0.8rem;
+  }
+
+  .select-all-item {
+    padding-bottom: 0.75rem;
+    margin-bottom: 0.75rem;
+    border-bottom: 1px solid var(--gray-300, #d0d0d0);
+  }
+
+  .select-all-item .checkbox-label {
+    font-weight: 600;
+    color: var(--navy);
+  }
+
+  .button-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+  }
+
+  .btn {
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--blue);
+    color: var(--white);
+  }
+
+  .btn-primary:hover {
+    background: #3d6a99;
+    box-shadow: 0 4px 12px rgba(74, 122, 181, 0.3);
+  }
+
+  .btn-secondary {
+    background: var(--gray-200, #e8e8e8);
+    color: var(--navy);
+  }
+
+  .btn-secondary:hover {
+    background: var(--gray-300, #d0d0d0);
+  }
+
+  .table-container {
+    overflow-x: auto;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.95rem;
+  }
+
+  thead {
+    background: var(--gray-100, #f5f5f5);
+    border-bottom: 2px solid var(--gray-300, #d0d0d0);
+  }
+
+  thead th {
+    padding: 1rem;
+    text-align: left;
+    color: var(--navy);
+    font-weight: 600;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--gray-200, #e8e8e8);
+    transition: background-color 0.2s;
+  }
+
+  tbody tr:hover {
+    background: var(--gray-50, #fafafa);
+  }
+
+  tbody td {
+    padding: 1rem;
+    color: var(--gray-800, #222);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+  }
+
+  .badge-primary {
+    background: rgba(74, 122, 181, 0.1);
+    color: var(--blue);
+  }
+
+  .action-buttons {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .btn-sm {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+
+  .btn-danger {
+    background: #dc3545;
+    color: var(--white);
+  }
+
+  .btn-danger:hover {
+    background: #c82333;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: var(--gray-600, #666);
+  }
+
+  .empty-state-icon {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state-title {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 0.5rem;
+  }
+
+  .empty-state-text {
+    font-size: 0.95rem;
+    color: var(--gray-600, #666);
+  }
+
+  @media (max-width: 768px) {
+    .form-row {
+      grid-template-columns: 1fr;
+    }
+
+    .header-title {
+      font-size: 1.5rem;
+    }
+
+    table {
+      font-size: 0.85rem;
+    }
+
+    thead th,
+    tbody td {
+      padding: 0.75rem 0.5rem;
+    }
+  }
+</style>
+
+<div class="header-container">
+  <h1 class="header-title">KRA Assignments</h1>
+  <p class="header-subtitle">
+    {% if assignments %}
+      {{ assignments|length }} assignment{{ assignments|length != 1 and 's' or '' }} active
+    {% else %}
+      No active assignments
+    {% endif %}
+  </p>
+</div>
+
+<!-- Assignment Form Card -->
+<div class="card">
+  <h2 class="card-title">Assign Template to Employees</h2>
+
+  <form method="POST" action="/kra/admin/assignments" id="assignmentForm">
+    <div class="form-row">
+      <div class="form-group">
+        <label for="template">Select Template</label>
+        <select id="template" name="template" required>
+          <option value="">-- Choose a template --</option>
+          {% for template in templates %}
+            <option value="{{ template.id }}">
+              {{ template.name }} (FY {{ template.fy_year }})
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label for="fy_year">FY Year</label>
+        <input type="number" id="fy_year" name="fy_year" value="{{ fy_year }}" required min="2020" max="2050">
+      </div>
+    </div>
+
+    <div class="form-group">
+      <label>Select Employees</label>
+      <div class="checkbox-group">
+        <div class="checkbox-item select-all-item">
+          <input type="checkbox" id="selectAll" class="select-all-checkbox">
+          <label for="selectAll" class="checkbox-label">
+            <span class="checkbox-label-text">Select All Employees</span>
+          </label>
+        </div>
+
+        {% if employees %}
+          {% for employee in employees %}
+            <div class="checkbox-item">
+              <input type="checkbox" id="emp_{{ employee.id }}" name="employees" value="{{ employee.id }}" class="employee-checkbox">
+              <label for="emp_{{ employee.id }}" class="checkbox-label">
+                <span class="checkbox-label-text">
+                  <span>{{ employee.name }}</span>
+                  <span class="checkbox-label-code">({{ employee.emp_code }})</span>
+                  <span class="checkbox-label-dept">{{ employee.department }}</span>
+                </span>
+              </label>
+            </div>
+          {% endfor %}
+        {% else %}
+          <p style="color: var(--gray-500, #888); font-size: 0.9rem;">No active employees available</p>
+        {% endif %}
+      </div>
+    </div>
+
+    <div class="button-group">
+      <button type="submit" class="btn btn-primary">Assign Template</button>
+      <button type="reset" class="btn btn-secondary">Clear</button>
+    </div>
+  </form>
+</div>
+
+<!-- Current Assignments Table -->
+{% if assignments %}
+  <div class="card">
+    <h2 class="card-title">Current Assignments</h2>
+
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Employee</th>
+            <th>Code</th>
+            <th>Department</th>
+            <th>Template</th>
+            <th>FY Year</th>
+            <th>Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for assignment in assignments %}
+            <tr>
+              <td><strong>{{ assignment.emp_name }}</strong></td>
+              <td>
+                <span class="badge badge-primary">{{ assignment.emp_code }}</span>
+              </td>
+              <td>{{ assignment.department }}</td>
+              <td>{{ assignment.template_name }}</td>
+              <td>{{ assignment.t_fy }}</td>
+              <td>
+                <div class="action-buttons">
+                  <a href="/kra/admin/assignments/{{ assignment.id }}/remove"
+                     class="btn btn-sm btn-danger"
+                     onclick="return confirm('Remove this assignment?')">
+                    Remove
+                  </a>
+                </div>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+{% else %}
+  <div class="card">
+    <div class="empty-state">
+      <div class="empty-state-icon">📋</div>
+      <div class="empty-state-title">No Assignments Yet</div>
+      <p class="empty-state-text">Create your first KRA assignment using the form above.</p>
+    </div>
+  </div>
+{% endif %}
+
+<script>
+  // Select All functionality
+  const selectAllCheckbox = document.getElementById('selectAll');
+  const employeeCheckboxes = document.querySelectorAll('.employee-checkbox');
+
+  selectAllCheckbox.addEventListener('change', function() {
+    employeeCheckboxes.forEach(checkbox => {
+      checkbox.checked = this.checked;
+    });
+  });
+
+  // Update "Select All" checkbox state based on individual selections
+  employeeCheckboxes.forEach(checkbox => {
+    checkbox.addEventListener('change', function() {
+      const allChecked = Array.from(employeeCheckboxes).every(cb => cb.checked);
+      const someChecked = Array.from(employeeCheckboxes).some(cb => cb.checked);
+
+      selectAllCheckbox.checked = allChecked;
+      selectAllCheckbox.indeterminate = someChecked && !allChecked;
+    });
+  });
+</script>
+
+{% endblock %}

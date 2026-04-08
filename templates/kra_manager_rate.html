@@ -1,0 +1,208 @@
+{% extends "base.html" %}
+
+{% block title %}Manager Assessment - KRA{% endblock %}
+
+{% block content %}
+<div style="margin-bottom: 3rem;">
+    <!-- Header -->
+    <div style="background: linear-gradient(135deg, var(--orange) 0%, #E8750E 100%); color: white; padding: 2.5rem 2rem; border-radius: 1rem; margin-bottom: 2rem; box-shadow: 0 4px 12px rgba(245,130,32,0.15);">
+        <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Manager Assessment</h1>
+        <p style="font-size: 1.1rem; margin-bottom: 0.5rem; opacity: 0.95;">
+            <strong>Employee:</strong> {{ emp.name }} ({{ emp.emp_code or 'N/A' }})
+        </p>
+        <p style="font-size: 0.95rem; opacity: 0.9;">
+            <strong>Period:</strong> {{ month_name }} {{ year }} | <strong>Template:</strong> {{ assignment.template_name }}
+        </p>
+    </div>
+
+    <!-- Form -->
+    <form method="POST" style="margin-bottom: 2rem;">
+        <div class="card" style="padding: 2rem;">
+            <!-- Items grouped by category -->
+            {% set grouped_items = {} %}
+            {% for item in items %}
+                {% set cat_key = item.category_name or 'Uncategorized' %}
+                {% if cat_key not in grouped_items %}
+                    {% set _ = grouped_items.update({cat_key: []}) %}
+                {% endif %}
+                {% set _ = grouped_items[cat_key].append(item) %}
+            {% endfor %}
+
+            {% for category_name in grouped_items|sort %}
+                {% set category_items = grouped_items[category_name]|sort(attribute='cat_sort') %}
+                <div style="margin-bottom: 2.5rem;">
+                    <!-- Category Header -->
+                    <div style="background: linear-gradient(90deg, var(--orange) 0%, #E8750E 100%); color: white; padding: 1rem 1.5rem; border-radius: 0.6rem 0.6rem 0 0; margin-bottom: 0;">
+                        <h2 style="font-size: 1.05rem; font-weight: 600; margin: 0;">{{ category_name }}</h2>
+                    </div>
+
+                    <!-- Items in this category -->
+                    <div style="border: 1px solid var(--gray-200); border-top: none; border-radius: 0 0 0.6rem 0.6rem; overflow: hidden;">
+                        {% for item in category_items %}
+                            {% set existing = existing_ratings.get(item.id, {}) %}
+                            <div style="padding: 1.5rem; border-bottom: 1px solid var(--gray-200); {% if item.is_target_based %}background: rgba(74,122,181,0.02);{% endif %}{% if loop.last %}border-bottom: none;{% endif %}">
+                                <!-- KPI Code, Description, Weight -->
+                                <div style="display: grid; grid-template-columns: auto 1fr auto; gap: 1.5rem; margin-bottom: 1.5rem; align-items: start;">
+                                    <div>
+                                        <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); font-weight: 600; margin-bottom: 0.35rem;">KPI Code</div>
+                                        <div style="font-size: 0.95rem; font-weight: 600; color: var(--navy);">{{ item.kpi_code }}</div>
+                                    </div>
+                                    <div>
+                                        <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); font-weight: 600; margin-bottom: 0.35rem;">Description</div>
+                                        <div style="font-size: 0.95rem; color: var(--gray-800);">{{ item.measure_description }}</div>
+                                    </div>
+                                    <div style="text-align: right;">
+                                        <div style="font-size: 0.75rem; text-transform: uppercase; color: var(--gray-600); font-weight: 600; margin-bottom: 0.35rem;">Weight</div>
+                                        <div style="font-size: 1.05rem; font-weight: 700; color: var(--orange);">{{ item.percentage_sharing }}%</div>
+                                    </div>
+                                </div>
+
+                                <!-- Employee Self-Rating (Read-only) -->
+                                <div style="margin-bottom: 1.5rem; padding: 1rem; background: var(--blue-light); border-radius: 0.5rem; border-left: 3px solid var(--blue);">
+                                    <div style="font-size: 0.8rem; color: var(--gray-700); font-weight: 600; margin-bottom: 0.35rem;">Employee's Self Rating</div>
+                                    {% if item.is_target_based %}
+                                        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 1rem;">
+                                            <div>
+                                                <div style="font-size: 0.75rem; color: var(--gray-700); margin-bottom: 0.35rem;">Target</div>
+                                                <div style="font-size: 0.95rem; font-weight: 600; color: var(--navy);">{{ item.target_value }}</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size: 0.75rem; color: var(--gray-700); margin-bottom: 0.35rem;">Achieved</div>
+                                                <div style="font-size: 0.95rem; font-weight: 600; color: var(--navy);">{{ existing.achieved_value or '—' }}</div>
+                                            </div>
+                                            <div>
+                                                <div style="font-size: 0.75rem; color: var(--gray-700); margin-bottom: 0.35rem;">Auto-Calculated Rating</div>
+                                                <div style="font-size: 1.1rem; font-weight: 700; color: var(--navy);">{{ existing.employee_rating or '—' }}</div>
+                                            </div>
+                                        </div>
+                                    {% else %}
+                                        <div style="display: grid; grid-template-columns: auto 1fr; gap: 1rem;">
+                                            <div>
+                                                <span style="font-size: 1.25rem; font-weight: 700; color: var(--navy);">{{ existing.employee_rating or '—' }}</span>
+                                                <span style="color: var(--gray-600);">/5</span>
+                                            </div>
+                                            {% if existing.employee_result %}
+                                            <div style="font-size: 0.9rem; color: var(--gray-800);">{{ existing.employee_result }}</div>
+                                            {% else %}
+                                            <div style="font-size: 0.9rem; color: var(--gray-600); font-style: italic;">No comments provided</div>
+                                            {% endif %}
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <!-- Manager Rating Input -->
+                                {% if not item.is_target_based %}
+                                    <div>
+                                        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.5rem;">Your Manager Rating (1-5) *</label>
+                                        <input type="number" name="manager_rating_{{ item.id }}" min="1" max="5" step="0.5" placeholder="e.g., 4.5"
+                                               value="{{ existing.manager_rating or '' }}"
+                                               style="width: 100%; max-width: 300px; padding: 0.65rem 1rem; border: 1px solid var(--gray-300); border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit; transition: all 0.2s;">
+                                    </div>
+                                    <div style="margin-top: 0.75rem;">
+                                        <label style="display: block; font-size: 0.85rem; font-weight: 600; color: var(--gray-700); margin-bottom: 0.5rem;">Your Comments</label>
+                                        <textarea name="manager_result_{{ item.id }}" placeholder="Provide feedback and observations"
+                                                  style="width: 100%; padding: 0.65rem 1rem; border: 1px solid var(--gray-300); border-radius: 0.5rem; font-size: 0.95rem; font-family: inherit; min-height: 80px; resize: vertical; transition: all 0.2s;">{{ existing.manager_result or '' }}</textarea>
+                                    </div>
+                                {% else %}
+                                    <div style="padding: 1rem; background: var(--gray-100); border-radius: 0.5rem; font-size: 0.9rem; color: var(--gray-700);">
+                                        <strong>Note:</strong> This is a target-based KPI. The rating is auto-calculated based on achieved vs target value. No manual rating needed.
+                                    </div>
+                                {% endif %}
+
+                                <input type="hidden" name="rating_id_{{ item.id }}" value="{{ existing.id or '' }}">
+                            </div>
+                        {% endfor %}
+                    </div>
+                </div>
+            {% endfor %}
+
+            <!-- Manager Notes Section -->
+            <div style="margin-top: 2rem;">
+                <label style="display: block; font-size: 0.95rem; font-weight: 600; color: var(--navy); margin-bottom: 1rem;">
+                    Overall Manager Notes (Optional)
+                </label>
+                <textarea name="manager_notes" placeholder="Add overall feedback, strengths, areas for improvement, or development notes..."
+                          style="width: 100%; padding: 1rem; border: 1px solid var(--gray-300); border-radius: 0.6rem; font-size: 0.95rem; font-family: inherit; min-height: 120px; resize: vertical; transition: all 0.2s;">{% if notes %}{{ notes[0].notes if notes else '' }}{% endif %}</textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <div style="margin-top: 2rem; display: flex; gap: 1rem;">
+                <button type="submit" class="button-primary" style="gap: 0.5rem;">
+                    <span>✓</span> Submit Manager Assessment
+                </button>
+                <a href="/kra/manager/team" class="button-secondary" style="text-decoration: none; gap: 0.5rem;">
+                    <span>←</span> Back to Team
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<style>
+    .card {
+        background: var(--white);
+        border-radius: 0.8rem;
+        border: 1px solid var(--gray-200);
+        box-shadow: 0 2px 4px rgba(0,0,0,0.04);
+    }
+
+    input[type="number"],
+    input[type="text"],
+    textarea {
+        transition: all 0.2s;
+    }
+
+    input[type="number"]:focus,
+    input[type="text"]:focus,
+    textarea:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgba(245,130,32,0.1);
+    }
+
+    .button-primary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button-primary:hover {
+        background: var(--orange-dark);
+        transform: translateY(-2px);
+        box-shadow: 0 6px 12px rgba(245,130,32,0.25);
+    }
+
+    .button-secondary {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.75rem 1.5rem;
+        background: var(--gray-400);
+        color: white;
+        border: none;
+        border-radius: 0.6rem;
+        font-size: 0.95rem;
+        font-weight: 600;
+        cursor: pointer;
+        text-decoration: none;
+        transition: all 0.2s;
+        font-family: inherit;
+    }
+
+    .button-secondary:hover {
+        background: var(--gray-500);
+        transform: translateY(-2px);
+    }
+</style>
+{% endblock %}
