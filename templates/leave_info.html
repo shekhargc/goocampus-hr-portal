@@ -1,0 +1,350 @@
+{% extends "base.html" %}
+
+{% block title %}Leave Info - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .info-header {
+        background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light, #2a3f5f) 100%);
+        border-radius: 0.85rem; padding: 2rem 2.5rem; color: white; margin-bottom: 2rem;
+    }
+    .info-header h1 { font-size: 1.6rem; font-weight: 700; margin: 0 0 0.35rem; }
+    .info-header p { opacity: 0.75; font-size: 0.95rem; margin: 0; }
+    .info-cards {
+        display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem;
+    }
+    .info-card {
+        background: var(--white); border-radius: 0.7rem; padding: 1.25rem;
+        border: 1px solid var(--gray-200); box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+        text-align: center;
+    }
+    .info-card-val { font-size: 2rem; font-weight: 700; line-height: 1; }
+    .info-card-lbl { font-size: 0.78rem; color: var(--gray-500); margin-top: 0.35rem; }
+    .info-card-sub { font-size: 0.72rem; color: var(--gray-400); margin-top: 0.15rem; }
+    .info-section {
+        background: var(--white); border-radius: 0.85rem; border: 1px solid var(--gray-200);
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden; margin-bottom: 1.75rem;
+    }
+    .info-section-header {
+        padding: 1.15rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; align-items: center; gap: 0.75rem;
+        background: var(--gray-50);
+    }
+    .info-section-icon {
+        width: 32px; height: 32px; border-radius: 0.5rem;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .info-section-title { font-weight: 700; font-size: 1.05rem; color: var(--navy); }
+    .info-section-body { padding: 1.5rem; }
+    .info-section-body p { margin: 0 0 1rem; line-height: 1.7; color: var(--gray-700); font-size: 0.92rem; }
+    .info-section-body p:last-child { margin-bottom: 0; }
+    .month-table { width: 100%; border-collapse: collapse; }
+    .month-table th {
+        background: var(--navy); color: white; padding: 0.75rem 1rem;
+        font-size: 0.82rem; font-weight: 600; text-align: left;
+    }
+    .month-table th:not(:first-child) { text-align: center; }
+    .month-table td {
+        padding: 0.7rem 1rem; border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem; color: var(--gray-700);
+    }
+    .month-table td:not(:first-child) { text-align: center; font-weight: 600; }
+    .month-table tr:hover { background: rgba(245,130,32,0.04); }
+    .month-table .q-row { background: var(--gray-50); font-weight: 700; }
+    .month-table .q-row td { color: var(--navy); border-top: 2px solid var(--gray-200); }
+    .month-table .total-row { background: var(--navy); }
+    .month-table .total-row td { color: white; font-weight: 700; border: none; }
+    .highlight-box {
+        background: rgba(245,130,32,0.06); border: 1px solid rgba(245,130,32,0.2);
+        border-radius: 0.6rem; padding: 1rem 1.25rem; margin: 1rem 0;
+    }
+    .highlight-box-title { font-weight: 700; font-size: 0.92rem; color: var(--orange-dark); margin-bottom: 0.4rem; }
+    .highlight-box p { margin: 0; font-size: 0.88rem; color: var(--gray-700); line-height: 1.6; }
+    .info-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1.75rem; }
+    .step-list { counter-reset: step-counter; list-style: none; padding: 0; margin: 0; }
+    .step-item {
+        counter-increment: step-counter; display: flex; gap: 1rem; margin-bottom: 1.25rem;
+        padding-bottom: 1.25rem; border-bottom: 1px solid var(--gray-100);
+    }
+    .step-item:last-child { border-bottom: none; margin-bottom: 0; padding-bottom: 0; }
+    .step-num {
+        width: 32px; height: 32px; border-radius: 50%; background: var(--navy);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 0.85rem; flex-shrink: 0;
+    }
+    .step-content { flex: 1; }
+    .step-title { font-weight: 600; font-size: 0.92rem; color: var(--navy); margin-bottom: 0.2rem; }
+    .step-desc { font-size: 0.85rem; color: var(--gray-600); line-height: 1.6; }
+    .tag { display: inline-block; padding: 0.2rem 0.5rem; border-radius: 0.3rem; font-size: 0.75rem; font-weight: 600; }
+    .tag-annual { background: rgba(74,122,181,0.1); color: var(--blue); }
+    .tag-sick { background: rgba(16,185,129,0.1); color: var(--success); }
+    .tag-casual { background: rgba(245,130,32,0.1); color: var(--orange); }
+    @media (max-width: 768px) {
+        .info-cards { grid-template-columns: repeat(2, 1fr); }
+        .info-grid-2 { grid-template-columns: 1fr; }
+        .info-header { padding: 1.5rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<!-- Header -->
+<div class="info-header">
+    <h1>Leave Policy &amp; Structure</h1>
+    <p>Financial Year {{ fy_year }}&ndash;{{ fy_year + 1 }} (April {{ fy_year }} to March {{ fy_year + 1 }}) &middot; GooCampus Leave Guidelines</p>
+</div>
+
+<!-- Quick Stats -->
+<div class="info-cards">
+    <div class="info-card" style="border-top: 3px solid var(--navy);">
+        <div class="info-card-val" style="color: var(--navy);">25</div>
+        <div class="info-card-lbl">Base Annual Allocation</div>
+        <div class="info-card-sub">Per employee per FY</div>
+    </div>
+    <div class="info-card" style="border-top: 3px solid var(--blue);">
+        <div class="info-card-val" style="color: var(--blue);">2.08</div>
+        <div class="info-card-lbl">Monthly Allocation</div>
+        <div class="info-card-sub">25 &divide; 12 months</div>
+    </div>
+    <div class="info-card" style="border-top: 3px solid var(--success);">
+        <div class="info-card-val" style="color: var(--success);">{{ my_carry_forward }}</div>
+        <div class="info-card-lbl">Your Carry Forward</div>
+        <div class="info-card-sub">From FY {{ fy_year - 1 }}&ndash;{{ fy_year }}</div>
+    </div>
+    <div class="info-card" style="border-top: 3px solid var(--orange);">
+        <div class="info-card-val" style="color: var(--orange);">{{ my_total_allocation }}</div>
+        <div class="info-card-lbl">Your Total (FY)</div>
+        <div class="info-card-sub">Base 25 + {{ my_carry_forward }} CF</div>
+    </div>
+</div>
+
+<!-- Leave Structure Section -->
+<div class="info-section">
+    <div class="info-section-header">
+        <div class="info-section-icon" style="background: rgba(27,42,74,0.08);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--navy)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        </div>
+        <div class="info-section-title">Leave Allocation Structure</div>
+    </div>
+    <div class="info-section-body">
+        <p>Every employee at GooCampus is entitled to <strong>25 paid leave days per financial year</strong> (April to March). This base allocation is distributed equally across 12 months, giving each employee approximately <strong>2.08 leaves per month</strong>.</p>
+
+        <p>Leave allocation is cumulative — unused monthly allocation rolls into the next month's balance within the same financial year. For example, if you don't take any leave in April, your May balance will include April's unused allocation.</p>
+
+        <div class="info-grid-2" style="margin-top: 1.25rem;">
+            <div>
+                <p style="font-weight: 600; color: var(--navy); margin-bottom: 0.5rem;">Three Types of Leave:</p>
+                <p><span class="tag tag-annual">Annual Leave</span> &mdash; Planned leave for vacations, personal commitments, or any pre-planned absence. Should be applied at least 2 days in advance when possible.</p>
+                <p><span class="tag tag-sick">Sick Leave</span> &mdash; For illness or medical appointments. Medical documentation may be requested for sick leave exceeding 2 consecutive days.</p>
+                <p><span class="tag tag-casual">Casual Leave</span> &mdash; For unforeseen or urgent situations that require immediate time off. Limited to short durations.</p>
+            </div>
+            <div>
+                <p style="font-weight: 600; color: var(--navy); margin-bottom: 0.5rem;">Half-Day Leave:</p>
+                <p>Employees can apply for half-day leave (First Half or Second Half) for all three leave types. A half-day leave counts as <strong>0.5 days</strong> against your balance.</p>
+
+                <p style="font-weight: 600; color: var(--navy); margin-bottom: 0.5rem; margin-top: 1rem;">Late Leave Application:</p>
+                <p>If you forget to apply for leave before or on the date, you can submit a <strong>Late Leave Application</strong> with a reason for the delay. Late applications go through the same approval process.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Monthly Breakdown Table -->
+<div class="info-section">
+    <div class="info-section-header">
+        <div class="info-section-icon" style="background: rgba(74,122,181,0.08);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+        </div>
+        <div class="info-section-title">Month-wise Allocation Breakdown (FY {{ fy_year }}&ndash;{{ fy_year + 1 }})</div>
+    </div>
+    <div style="overflow-x: auto;">
+    <table class="month-table">
+        <thead>
+            <tr>
+                <th>Month</th>
+                <th>Monthly Alloc.</th>
+                <th>Cumulative Alloc.</th>
+                <th>Quarter</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% set months = [
+                {'name': 'April ' ~ fy_year, 'q': 'Q1'},
+                {'name': 'May ' ~ fy_year, 'q': 'Q1'},
+                {'name': 'June ' ~ fy_year, 'q': 'Q1'},
+                {'name': 'July ' ~ fy_year, 'q': 'Q2'},
+                {'name': 'August ' ~ fy_year, 'q': 'Q2'},
+                {'name': 'September ' ~ fy_year, 'q': 'Q2'},
+                {'name': 'October ' ~ fy_year, 'q': 'Q3'},
+                {'name': 'November ' ~ fy_year, 'q': 'Q3'},
+                {'name': 'December ' ~ fy_year, 'q': 'Q3'},
+                {'name': 'January ' ~ (fy_year + 1), 'q': 'Q4'},
+                {'name': 'February ' ~ (fy_year + 1), 'q': 'Q4'},
+                {'name': 'March ' ~ (fy_year + 1), 'q': 'Q4'}
+            ] %}
+            {% for m in months %}
+            <tr{% if loop.index in [4, 7, 10] %} style="border-top: 2px solid var(--gray-200);"{% endif %}>
+                <td style="font-weight: 600; color: var(--navy);">{{ m.name }}</td>
+                <td>2.08</td>
+                <td style="color: var(--success);">{{ (loop.index * 2.08) | round(2) }}</td>
+                <td><span style="background: rgba(27,42,74,0.06); padding: 0.15rem 0.5rem; border-radius: 9999px; font-size: 0.78rem; font-weight: 600; color: var(--navy);">{{ m.q }}</span></td>
+            </tr>
+            {% if loop.index == 3 %}
+            <tr class="q-row"><td>Q1 Subtotal (Apr — Jun)</td><td>6.24</td><td>6.24</td><td></td></tr>
+            {% elif loop.index == 6 %}
+            <tr class="q-row"><td>Q2 Subtotal (Jul — Sep)</td><td>6.24</td><td>12.48</td><td></td></tr>
+            {% elif loop.index == 9 %}
+            <tr class="q-row"><td>Q3 Subtotal (Oct — Dec)</td><td>6.24</td><td>18.72</td><td></td></tr>
+            {% endif %}
+            {% endfor %}
+            <tr class="q-row"><td>Q4 Subtotal (Jan — Mar)</td><td>6.24</td><td>24.96</td><td></td></tr>
+            <tr class="total-row">
+                <td>Annual Total</td>
+                <td>25.00</td>
+                <td>25.00</td>
+                <td></td>
+            </tr>
+        </tbody>
+    </table>
+    </div>
+    <div style="padding: 0.85rem 1.5rem; background: var(--gray-50); border-top: 1px solid var(--gray-200); font-size: 0.82rem; color: var(--gray-500);">
+        Note: Monthly allocation of 2.08 is rounded (25 &divide; 12 = 2.0833). The system uses precise calculations so your year-end total always equals 25 days.
+    </div>
+</div>
+
+<!-- Deduction & Balance Section -->
+<div class="info-section">
+    <div class="info-section-header">
+        <div class="info-section-icon" style="background: rgba(245,130,32,0.08);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M12 2v20M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+        </div>
+        <div class="info-section-title">How Leave Deduction Works</div>
+    </div>
+    <div class="info-section-body">
+        <p>When you apply for leave, the system checks whether your <strong>available balance</strong> covers the request. Your balance is calculated as:</p>
+
+        <div class="highlight-box">
+            <div class="highlight-box-title">Balance Formula</div>
+            <p><strong>Available Balance</strong> = (Base Allocation: 25) + (Carry Forward) &minus; (Total Days Taken This FY)</p>
+        </div>
+
+        <p>Leave deduction is straightforward:</p>
+        <p>&bull; <strong>Full Day leave</strong> &mdash; deducts 1.0 day from your balance<br>
+        &bull; <strong>Half Day leave</strong> (First Half or Second Half) &mdash; deducts 0.5 days from your balance</p>
+
+        <p>Your balance runs on a monthly allocation cycle. Each month adds 2.08 days to your running balance. If you take more leaves than your accumulated allocation in a given month, the extra is deducted from future months' allocation. The system tracks a <strong>running balance</strong> so you can always see where you stand.</p>
+
+        <div class="highlight-box">
+            <div class="highlight-box-title">Negative Balance Warning</div>
+            <p>If your total leave taken exceeds your total allocation (base + carry forward), your balance will go negative. Negative balances may result in salary deductions as per company policy. Always check your available balance before applying.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Carry Forward & Encashment Section -->
+<div class="info-section">
+    <div class="info-section-header">
+        <div class="info-section-icon" style="background: rgba(16,185,129,0.08);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--success)" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+        </div>
+        <div class="info-section-title">Carry Forward &amp; Encashment Policy</div>
+    </div>
+    <div class="info-section-body">
+        <p>At the end of each financial year (March 31), unused leave is handled as follows:</p>
+
+        <div class="info-grid-2" style="margin: 1rem 0;">
+            <div class="highlight-box" style="background: rgba(16,185,129,0.06); border-color: rgba(16,185,129,0.2);">
+                <div class="highlight-box-title" style="color: var(--success);">Carry Forward Rules</div>
+                <p>&bull; Employees with <strong>more than 2 unused leave days</strong> at year-end are eligible for carry forward.<br>
+                &bull; A <strong>maximum of 8 days</strong> can be carried forward to the next financial year.<br>
+                &bull; Carried forward days are added to your next year's base allocation of 25, giving you up to <strong>33 total days</strong> maximum.<br>
+                &bull; If you have 2 or fewer unused days, no carry forward applies — these days simply lapse.</p>
+            </div>
+            <div class="highlight-box" style="background: rgba(74,122,181,0.06); border-color: rgba(74,122,181,0.2);">
+                <div class="highlight-box-title" style="color: var(--blue);">Leave Encashment Rules</div>
+                <p>&bull; Employees with <strong>more than 8 unused leave days</strong> at year-end have an option to encash the excess.<br>
+                &bull; For example: if you have 12 unused days, you can carry forward up to 8 and <strong>encash the remaining 4 days</strong>.<br>
+                &bull; Encashment is <strong>optional</strong> — you may choose to carry forward only (up to 8 days) and let the rest lapse.<br>
+                &bull; Encashment is paid at your basic daily salary rate and is processed in the April payroll of the new FY.</p>
+            </div>
+        </div>
+
+        <div class="highlight-box">
+            <div class="highlight-box-title">Example: End of FY {{ fy_year - 1 }}&ndash;{{ fy_year }}</div>
+            <p><strong>Case 1:</strong> Employee A had 1.5 unused days &rarr; No carry forward (below 2-day threshold). Balance starts at 25 days for FY {{ fy_year }}&ndash;{{ fy_year + 1 }}.<br>
+            <strong>Case 2:</strong> Employee B had 5 unused days &rarr; All 5 days carry forward. Total allocation for FY {{ fy_year }}&ndash;{{ fy_year + 1 }} = 25 + 5 = <strong>30 days</strong>.<br>
+            <strong>Case 3:</strong> Employee C had 14 unused days &rarr; Carries forward 8 days (maximum). Can encash up to 6 days. Total allocation = 25 + 8 = <strong>33 days</strong>. Encashment of 6 days paid in April salary.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Approval Process Section -->
+<div class="info-section">
+    <div class="info-section-header">
+        <div class="info-section-icon" style="background: rgba(124,58,237,0.08);">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#7c3aed" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <div class="info-section-title">Leave Approval Process</div>
+    </div>
+    <div class="info-section-body">
+        <ol class="step-list">
+            <li class="step-item">
+                <div class="step-num">1</div>
+                <div class="step-content">
+                    <div class="step-title">Employee Applies for Leave</div>
+                    <div class="step-desc">Submit your leave application through the CRM portal by selecting the date(s), leave type (annual, sick, or casual), and providing a reason. You can also apply for half-day leave if needed.</div>
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">2</div>
+                <div class="step-content">
+                    <div class="step-title">Reporting Manager Reviews</div>
+                    <div class="step-desc">Your direct reporting manager receives a notification and reviews your leave request. They can see your current balance, team availability, and any overlapping leave in the team before making a decision.</div>
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">3</div>
+                <div class="step-content">
+                    <div class="step-title">Approved or Rejected</div>
+                    <div class="step-desc">The manager approves or rejects the request. If approved, the leave is deducted from your balance immediately. If rejected, your balance remains unchanged and you'll see the rejection reason in your applications.</div>
+                </div>
+            </li>
+            <li class="step-item">
+                <div class="step-num">4</div>
+                <div class="step-content">
+                    <div class="step-title">Retrieve or Modify (Optional)</div>
+                    <div class="step-desc">Plans changed? You can <strong>retrieve</strong> an approved leave (cancels it and restores your balance) or <strong>modify</strong> it (change date or type). Both actions require providing a reason and go through the approval flow again.</div>
+                </div>
+            </li>
+        </ol>
+
+        <div class="highlight-box" style="margin-top: 1.25rem;">
+            <div class="highlight-box-title">Important Notes</div>
+            <p>&bull; <strong>Pending requests</strong> are not deducted from your balance until approved.<br>
+            &bull; Leave applications should ideally be submitted <strong>before</strong> the leave date. For emergencies, use the Late Leave Application feature.<br>
+            &bull; Managers can view team leave calendars to ensure adequate staffing before approving.<br>
+            &bull; Management (GC001, GC002, GC003) leave applications follow the same process but may have additional approval from senior leadership.</p>
+        </div>
+    </div>
+</div>
+
+<!-- Quick Links -->
+<div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 0.5rem;">
+    <a href="/apply-leave" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; background: var(--orange); color: white; border-radius: 0.5rem; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: background 0.15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+        Apply Leave
+    </a>
+    <a href="/my-leave-report" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; background: var(--navy); color: white; border-radius: 0.5rem; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: background 0.15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+        View My Leave Report
+    </a>
+    <a href="/reports/monthly" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; background: var(--blue); color: white; border-radius: 0.5rem; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: background 0.15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+        Monthly Calendar
+    </a>
+    <a href="/holidays" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.75rem 1.25rem; background: var(--white); color: var(--navy); border: 1px solid var(--gray-200); border-radius: 0.5rem; text-decoration: none; font-weight: 600; font-size: 0.9rem; transition: background 0.15s;">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/></svg>
+        View Holidays
+    </a>
+</div>
+{% endblock %}

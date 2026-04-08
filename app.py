@@ -1288,6 +1288,28 @@ def employee_org_chart():
     conn.close()
     return render_template('employee_org_chart.html', user=user, employees=employees, departments=departments)
 
+@app.route('/leave-info')
+@login_required
+def leave_info():
+    """Leave policy and structure information page."""
+    user = get_user()
+    today = datetime.now()
+    fy_year = today.year if today.month >= 4 else today.year - 1
+
+    # Get employee's carry forward
+    conn = get_db()
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (user['id'],)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    total_allocation = 25 + carry_forward
+    conn.close()
+
+    return render_template('leave_info.html',
+                         user=user,
+                         fy_year=fy_year,
+                         my_carry_forward=carry_forward,
+                         my_total_allocation=total_allocation)
+
+
 @app.route('/my-leave-report')
 @login_required
 def my_leave_report():
