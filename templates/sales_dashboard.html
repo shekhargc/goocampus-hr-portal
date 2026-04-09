@@ -292,7 +292,7 @@
                         {{ loop.index }}
                     </div>
                     {% if p.photo_url %}
-                    <img src="/static/photos/{{ p.photo_url }}" class="performer-avatar" alt="{{ p.name }}">
+                    <img src="{{ p.photo_url if p.photo_url.startswith('http') else '/static/photos/' ~ p.photo_url }}" class="performer-avatar" alt="{{ p.name }}">
                     {% else %}
                     <div class="performer-avatar-init" style="background: var(--navy);">{{ p.name[0] }}</div>
                     {% endif %}
@@ -369,7 +369,7 @@
             {% for trip in recent_trips %}
             <div class="trip-row">
                 {% if trip.emp_photo %}
-                <img src="/static/photos/{{ trip.emp_photo }}" class="trip-avatar" alt="{{ trip.employee_name }}">
+                <img src="{{ trip.emp_photo if trip.emp_photo.startswith('http') else '/static/photos/' ~ trip.emp_photo }}" class="trip-avatar" alt="{{ trip.employee_name }}">
                 {% else %}
                 <div class="trip-avatar-init" style="background: var(--navy);">{{ trip.employee_name[0] }}</div>
                 {% endif %}
@@ -405,7 +405,7 @@
             {% for item in recent_news %}
             <div class="trip-row">
                 {% if item.photo_url %}
-                <img src="/static/photos/{{ item.photo_url }}" class="trip-avatar" alt="{{ item.posted_by_name }}">
+                <img src="{{ item.photo_url if item.photo_url.startswith('http') else '/static/photos/' ~ item.photo_url }}" class="trip-avatar" alt="{{ item.posted_by_name }}">
                 {% else %}
                 <div class="trip-avatar-init" style="background: var(--orange);">{{ item.posted_by_name[0] }}</div>
                 {% endif %}

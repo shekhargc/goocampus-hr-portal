@@ -15,7 +15,7 @@
     <h2 class="card-title">Employee Photo</h2>
     <div style="margin-bottom: 1.5rem;">
         {% if employee.photo_url %}
-        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
+        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" alt="{{ employee.name }}" style="width: 160px; height: 160px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
         {% else %}
         <div style="width: 160px; height: 160px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 3.5rem; font-weight: 700; margin: 0 auto;">
             {{ employee.name[0] }}

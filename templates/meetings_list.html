@@ -86,7 +86,7 @@
     {% for trip in trips %}
     <a href="/b2b/{{ trip.id }}" class="meeting-card-row">
         {% if trip.emp_photo %}
-        <img src="/static/photos/{{ trip.emp_photo }}" class="mc-avatar" alt="">
+        <img src="{{ trip.emp_photo if trip.emp_photo.startswith('http') else '/static/photos/' ~ trip.emp_photo }}" class="mc-avatar" alt="">
         {% else %}
         <div class="mc-avatar-init" style="background: var(--navy);">{{ trip.employee_name[0] }}</div>
         {% endif %}

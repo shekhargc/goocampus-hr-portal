@@ -125,7 +125,7 @@
             <div class="tree-node">
                 <div class="tree-card mgmt">
                     {% if emp.photo_url %}
-                    <img src="/static/photos/{{ emp.photo_url }}" alt="{{ emp.name }}">
+                    <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" alt="{{ emp.name }}">
                     {% else %}
                     <div class="tree-init" style="background: var(--blue);">{{ emp.name[0] }}</div>
                     {% endif %}
@@ -147,7 +147,7 @@
                         {% set color = dept_colors.get(report.department, '#94a3b8') %}
                         <div class="tree-card lead">
                             {% if report.photo_url %}
-                            <img src="/static/photos/{{ report.photo_url }}" alt="{{ report.name }}">
+                            <img src="{{ report.photo_url if report.photo_url.startswith('http') else '/static/photos/' ~ report.photo_url }}" alt="{{ report.name }}">
                             {% else %}
                             <div class="tree-init" style="background: {{ color }};">{{ report.name[0] }}</div>
                             {% endif %}
@@ -170,7 +170,7 @@
                                 {% set sr_color = dept_colors.get(sr.department, '#94a3b8') %}
                                 <div class="tree-card">
                                     {% if sr.photo_url %}
-                                    <img src="/static/photos/{{ sr.photo_url }}" alt="{{ sr.name }}">
+                                    <img src="{{ sr.photo_url if sr.photo_url.startswith('http') else '/static/photos/' ~ sr.photo_url }}" alt="{{ sr.name }}">
                                     {% else %}
                                     <div class="tree-init" style="background: {{ sr_color }};">{{ sr.name[0] }}</div>
                                     {% endif %}
@@ -207,7 +207,7 @@
             {% for emp in employees if emp.department == dept.department %}
             <div class="org-member">
                 {% if emp.photo_url %}
-                <img src="/static/photos/{{ emp.photo_url }}" class="org-photo" alt="{{ emp.name }}">
+                <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" class="org-photo" alt="{{ emp.name }}">
                 {% else %}
                 <div class="org-photo-init" style="background: {{ color }};">{{ emp.name[0] }}</div>
                 {% endif %}

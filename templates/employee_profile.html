@@ -106,7 +106,7 @@
     <div class="profile-header">
         <div class="profile-photo-wrap">
             {% if user.photo_url %}
-            <img src="/static/photos/{{ user.photo_url }}" class="profile-photo" alt="{{ user.name }}">
+            <img src="{{ user.photo_url if user.photo_url.startswith('http') else '/static/photos/' ~ user.photo_url }}" class="profile-photo" alt="{{ user.name }}">
             {% else %}
             <div class="profile-photo-init">{{ user.name[0] }}</div>
             {% endif %}

@@ -459,6 +459,131 @@ def dashboard():
         if is_management or user['is_admin']:
             mgmt_leave_data = my_leave_data
 
+    # ── Employee-specific data ──
+
+    # My pending leave applications (employee's own)
+    my_pending_leaves = []
+    if user['emp_code'] != 'admin':
+        my_pending_leaves = conn.execute('''
+            SELECT lr.*, e.name, e.emp_code
+            FROM leave_records lr JOIN employees e ON lr.employee_id = e.id
+            WHERE lr.employee_id = ? AND lr.status = 'pending'
+            ORDER BY lr.leave_date ASC
+        ''', (user['id'],)).fetchall()
+
+    # My recent activity (employee's own leaves and meetings)
+    my_recent_activity = []
+    if user['emp_code'] != 'admin':
+        try:
+            my_leaves_recent = conn.execute('''
+                SELECT lr.leave_date as date, lr.leave_type, lr.status, lr.created_at, lr.day_portion
+                FROM leave_records lr
+                WHERE lr.employee_id = ?
+                ORDER BY lr.created_at DESC LIMIT 6
+            ''', (user['id'],)).fetchall()
+            for l in my_leaves_recent:
+                my_recent_activity.append({
+                    'type': 'leave',
+                    'title': f"{l['leave_type'].capitalize()} Leave - {l['date']}",
+                    'subtitle': f"Status: {l['status'].capitalize()} | {'Full Day' if l['day_portion'] == 'full_day' else 'Half Day'}",
+                    'time_ago': l['created_at'][:10] if l['created_at'] else '',
+                    'icon_color': '#10B981' if l['status'] == 'approved' else '#F59E0B' if l['status'] == 'pending' else '#EF4444'
+                })
+        except:
+            pass
+        try:
+            my_meetings_recent = conn.execute('''
+                SELECT t.from_date, t.trip_type, t.created_at, t.city
+                FROM b2b_trips t
+                WHERE t.employee_id = ?
+                ORDER BY t.created_at DESC LIMIT 4
+            ''', (user['id'],)).fetchall()
+            for m in my_meetings_recent:
+                my_recent_activity.append({
+                    'type': 'meeting',
+                    'title': f"{(m['trip_type'] or 'Meeting').capitalize()} - {m['city'] or 'N/A'}",
+                    'subtitle': f"Date: {m['from_date']}",
+                    'time_ago': m['created_at'][:10] if m['created_at'] else '',
+                    'icon_color': '#4A7AB5'
+                })
+        except:
+            pass
+        my_recent_activity.sort(key=lambda x: x.get('time_ago', ''), reverse=True)
+        my_recent_activity = my_recent_activity[:8]
+
+    # Birthdays this month
+    birthdays_this_month = []
+    try:
+        month_str = now.strftime('%m')
+        birthdays_this_month = conn.execute('''
+            SELECT id, name, photo_url, dob, department
+            FROM employees
+            WHERE is_active = 1 AND emp_code != 'admin'
+            AND strftime('%m', dob) = ?
+            ORDER BY strftime('%d', dob)
+        ''', (month_str,)).fetchall()
+    except:
+        pass
+
+    # Work anniversaries this month
+    anniversaries_this_month = []
+    try:
+        anniversaries_this_month = conn.execute('''
+            SELECT id, name, photo_url, joining_date, department,
+                   (strftime('%Y', 'now') - strftime('%Y', joining_date)) as years
+            FROM employees
+            WHERE is_active = 1 AND emp_code != 'admin'
+            AND joining_date IS NOT NULL AND joining_date != ''
+            AND strftime('%m', joining_date) = ?
+            AND (strftime('%Y', 'now') - strftime('%Y', joining_date)) >= 1
+            ORDER BY strftime('%d', joining_date)
+        ''', (month_str,)).fetchall()
+    except:
+        pass
+
+    # Unread notification count for this employee
+    my_unread_notifs = 0
+    try:
+        nr = conn.execute(
+            'SELECT COUNT(*) as cnt FROM notifications WHERE employee_id = ? AND is_read = 0',
+            (user['id'],)
+        ).fetchone()
+        my_unread_notifs = nr['cnt'] if nr else 0
+    except:
+        pass
+
+    # My KRA score (if assigned)
+    my_kra_score = None
+    try:
+        current_month = now.month
+        current_year_val = now.year
+        kra_row = conn.execute('''
+            SELECT kr.final_score
+            FROM kra_ratings kr
+            JOIN kra_assignments ka ON kr.assignment_id = ka.id
+            WHERE ka.employee_id = ? AND kr.month = ? AND kr.year = ?
+            AND kr.final_score IS NOT NULL
+        ''', (user['id'], current_month, current_year_val)).fetchone()
+        if kra_row:
+            my_kra_score = kra_row['final_score']
+    except:
+        pass
+
+    # Approvals I need to action (for managers) - their team members' pending leaves
+    team_pending_approvals = []
+    if not user['is_admin']:
+        try:
+            team_pending_approvals = conn.execute('''
+                SELECT lr.id, lr.leave_date, lr.leave_type, lr.day_portion, lr.reason, lr.status,
+                       e.name, e.emp_code, e.photo_url
+                FROM leave_records lr
+                JOIN employees e ON lr.employee_id = e.id
+                WHERE e.reporting_manager_id = ? AND lr.status = 'pending'
+                ORDER BY lr.leave_date ASC
+            ''', (user['id'],)).fetchall()
+        except:
+            pass
+
     conn.close()
 
     return render_template('main_dashboard.html',
@@ -482,7 +607,15 @@ def dashboard():
                          can_announce=can_post_announcements(user),
                          is_management=is_management,
                          mgmt_leave_data=mgmt_leave_data,
-                         my_leave_data=my_leave_data)
+                         my_leave_data=my_leave_data,
+                         my_pending_leaves=my_pending_leaves,
+                         my_recent_activity=my_recent_activity,
+                         birthdays_this_month=birthdays_this_month,
+                         anniversaries_this_month=anniversaries_this_month,
+                         my_unread_notifs=my_unread_notifs,
+                         my_kra_score=my_kra_score,
+                         team_pending_approvals=team_pending_approvals,
+                         today=today)
 
 @app.route('/profile', methods=['GET', 'POST'])
 @login_required
@@ -1186,6 +1319,11 @@ def employee_approve_leave(leave_id):
     conn.execute('''
         UPDATE leave_records SET status = 'approved', approved_by = ?, approved_at = ? WHERE id = ?
     ''', (user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), leave_id))
+    # Notify employee
+    create_notification(conn, leave['employee_id'],
+        'Leave Approved',
+        f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been approved by {user["name"]}.',
+        'success', '/my-leaves')
     conn.commit()
     conn.close()
 
@@ -1215,6 +1353,11 @@ def employee_reject_leave(leave_id):
     conn.execute('''
         UPDATE leave_records SET status = 'rejected', approved_by = ?, approved_at = ? WHERE id = ?
     ''', (user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), leave_id))
+    # Notify employee
+    create_notification(conn, leave['employee_id'],
+        'Leave Rejected',
+        f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been rejected by {user["name"]}.',
+        'danger', '/my-leaves')
     conn.commit()
     conn.close()
 
@@ -2227,6 +2370,11 @@ def approve_leave(leave_id):
         SET status = 'approved', approved_by = ?, approved_at = ?
         WHERE id = ?
     ''', (user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), leave_id))
+    # Notify employee
+    create_notification(conn, leave['employee_id'],
+        'Leave Approved',
+        f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been approved by {user["name"]}.',
+        'success', '/my-leaves')
     conn.commit()
     conn.close()
 
@@ -2257,6 +2405,11 @@ def reject_leave(leave_id):
         SET status = 'rejected', approved_by = ?, approved_at = ?
         WHERE id = ?
     ''', (user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), leave_id))
+    # Notify employee
+    create_notification(conn, leave['employee_id'],
+        'Leave Rejected',
+        f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been rejected by {user["name"]}.',
+        'danger', '/my-leaves')
     conn.commit()
     conn.close()
 
@@ -3704,6 +3857,35 @@ def ensure_kra_tables():
         logging.error(f"ensure_kra_tables: {e}")
 
 
+def ensure_notification_tables():
+    """Create notifications table if not exists."""
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER NOT NULL REFERENCES employees(id),
+            title TEXT NOT NULL,
+            message TEXT NOT NULL,
+            type TEXT DEFAULT 'info',
+            link TEXT,
+            is_read INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+        conn.close()
+        logging.info("Notification tables ensured.")
+    except Exception as e:
+        logging.error(f"ensure_notification_tables: {e}")
+
+
+def create_notification(conn, employee_id, title, message, notif_type='info', link=None):
+    """Helper to create a notification for an employee."""
+    conn.execute(
+        'INSERT INTO notifications (employee_id, title, message, type, link) VALUES (?, ?, ?, ?, ?)',
+        (employee_id, title, message, notif_type, link)
+    )
+
+
 def seed_kra_categories():
     """Seed the 6 default KRA categories if not present."""
     try:
@@ -4794,6 +4976,63 @@ def team_leave_applications():
         f_from=f_from, f_to=f_to)
 
 
+# ─── Notification Routes ───
+
+@app.route('/notifications')
+@login_required
+def notifications_page():
+    """Show all notifications for the logged-in employee."""
+    user = get_user()
+    conn = get_db()
+    notifs = conn.execute(
+        'SELECT * FROM notifications WHERE employee_id = ? ORDER BY created_at DESC LIMIT 50',
+        (user['id'],)
+    ).fetchall()
+    unread = sum(1 for n in notifs if not n['is_read'])
+    conn.close()
+    return render_template('notifications.html', notifications=notifs, unread_count=unread)
+
+
+@app.route('/notifications/mark-read/<int:notif_id>', methods=['POST'])
+@login_required
+def mark_notification_read(notif_id):
+    """Mark a single notification as read."""
+    user = get_user()
+    conn = get_db()
+    conn.execute('UPDATE notifications SET is_read = 1 WHERE id = ? AND employee_id = ?',
+                 (notif_id, user['id']))
+    conn.commit()
+    conn.close()
+    return redirect(request.referrer or url_for('notifications_page'))
+
+
+@app.route('/notifications/mark-all-read', methods=['POST'])
+@login_required
+def mark_all_notifications_read():
+    """Mark all notifications as read."""
+    user = get_user()
+    conn = get_db()
+    conn.execute('UPDATE notifications SET is_read = 1 WHERE employee_id = ? AND is_read = 0',
+                 (user['id'],))
+    conn.commit()
+    conn.close()
+    return redirect(url_for('notifications_page'))
+
+
+@app.route('/api/notifications/count')
+@login_required
+def api_notification_count():
+    """Return unread notification count as JSON."""
+    user = get_user()
+    conn = get_db()
+    row = conn.execute(
+        'SELECT COUNT(*) as cnt FROM notifications WHERE employee_id = ? AND is_read = 0',
+        (user['id'],)
+    ).fetchone()
+    conn.close()
+    return jsonify({'unread': row['cnt'] if row else 0})
+
+
 # ─── KRA (Key Result Area) Routes ───
 
 @app.route('/kra/admin/templates')
@@ -5575,6 +5814,7 @@ def kra_report():
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
+ensure_notification_tables()
 seed_kra_categories()
 seed_default_meeting_types()
 ensure_management_admins()

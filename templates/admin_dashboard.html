@@ -257,7 +257,7 @@
             {% for leave in recent_leaves %}
             <div class="leave-row">
                 {% if leave.photo_url %}
-                <img src="/static/photos/{{ leave.photo_url }}" class="leave-avatar" alt="{{ leave.name }}">
+                <img src="{{ leave.photo_url if leave.photo_url.startswith('http') else '/static/photos/' ~ leave.photo_url }}" class="leave-avatar" alt="{{ leave.name }}">
                 {% else %}
                 <div class="leave-avatar-init" style="background: var(--navy);">{{ leave.name[0] }}</div>
                 {% endif %}
@@ -301,7 +301,7 @@
                 {% for emp in on_leave_today %}
                 <div class="leave-row">
                     {% if emp.photo_url %}
-                    <img src="/static/photos/{{ emp.photo_url }}" class="leave-avatar" alt="{{ emp.name }}">
+                    <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" class="leave-avatar" alt="{{ emp.name }}">
                     {% else %}
                     <div class="leave-avatar-init" style="background: var(--orange);">{{ emp.name[0] }}</div>
                     {% endif %}

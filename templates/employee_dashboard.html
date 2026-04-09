@@ -327,7 +327,7 @@
             {% for report in direct_reports %}
             <div class="team-member">
                 {% if report.photo_url %}
-                <img src="/static/photos/{{ report.photo_url }}" class="team-avatar" alt="{{ report.name }}">
+                <img src="{{ report.photo_url if report.photo_url.startswith('http') else '/static/photos/' ~ report.photo_url }}" class="team-avatar" alt="{{ report.name }}">
                 {% else %}
                 <div class="team-avatar-init" style="background: var(--blue);">{{ report.name[0] }}</div>
                 {% endif %}

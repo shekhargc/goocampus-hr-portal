@@ -48,6 +48,10 @@
     .notif-row-icon.announcement { background: #dbeafe; }
     .notif-row-icon.holiday { background: #d1fae5; }
     .notif-row-icon.leave_request { background: #fce7f3; }
+    .notif-row-icon.success { background: #d1fae5; }
+    .notif-row-icon.danger { background: #fee2e2; }
+    .notif-row-icon.info { background: #dbeafe; }
+    .notif-row-icon.warning { background: #fef3c7; }
 
     .notif-row-body { flex: 1; min-width: 0; }
     .notif-row-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.2rem; }
@@ -61,6 +65,10 @@
     .notif-row-type.announcement { background: rgba(59,130,246,0.12); color: #1d4ed8; }
     .notif-row-type.holiday { background: rgba(16,185,129,0.12); color: #059669; }
     .notif-row-type.leave_request { background: rgba(236,72,153,0.12); color: #be185d; }
+    .notif-row-type.success { background: rgba(16,185,129,0.12); color: #059669; }
+    .notif-row-type.danger { background: rgba(239,68,68,0.12); color: #dc2626; }
+    .notif-row-type.info { background: rgba(59,130,246,0.12); color: #1d4ed8; }
+    .notif-row-type.warning { background: rgba(245,158,11,0.12); color: #b45309; }
 
     .notif-row-msg { font-size: 0.84rem; color: var(--gray-600); line-height: 1.5; margin-top: 0.15rem; }
     .notif-row-time { font-size: 0.72rem; color: var(--gray-400); margin-top: 0.35rem; }
@@ -93,6 +101,8 @@
                 <option value="anniversary">Anniversaries</option>
                 <option value="holiday">Holidays</option>
                 <option value="leave_request">Leave Requests</option>
+                <option value="success">Approved</option>
+                <option value="danger">Rejected</option>
             </select>
             {% if unread_count > 0 %}
             <button class="notif-mark-all" onclick="markAllReadPage()">Mark all as read</button>
@@ -111,7 +121,7 @@
                 {% endif %}
                 <div class="notif-row {{ 'unread' if n.is_read == 0 else '' }}" data-type="{{ n.type }}" data-id="{{ n.id }}" onclick="markReadRow(this, {{ n.id }})">
                     <div class="notif-row-icon {{ n.type }}">
-                        {% if n.type == 'birthday' %}🎂{% elif n.type == 'anniversary' %}🌟{% elif n.type == 'announcement' %}📢{% elif n.type == 'holiday' %}🏖️{% elif n.type == 'leave_request' %}📋{% else %}🔔{% endif %}
+                        {% if n.type == 'birthday' %}🎂{% elif n.type == 'anniversary' %}🌟{% elif n.type == 'announcement' %}📢{% elif n.type == 'holiday' %}🏖️{% elif n.type == 'leave_request' %}📋{% elif n.type == 'success' %}✅{% elif n.type == 'danger' %}❌{% elif n.type == 'warning' %}⚠️{% else %}🔔{% endif %}
                     </div>
                     <div class="notif-row-body">
                         <div class="notif-row-top">

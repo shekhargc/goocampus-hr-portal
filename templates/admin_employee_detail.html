@@ -7,7 +7,7 @@
     <a href="/admin/manage-employees" class="button button-secondary" style="margin-bottom: 1.5rem;">← Back to Employees</a>
     <div style="display: flex; align-items: center; gap: 2rem; margin-top: 1.5rem;">
         {% if employee.photo_url %}
-        <img src="/static/photos/{{ employee.photo_url }}" alt="{{ employee.name }}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
+        <img src="{{ employee.photo_url if employee.photo_url.startswith('http') else '/static/photos/' ~ employee.photo_url }}" alt="{{ employee.name }}" style="width: 100px; height: 100px; object-fit: cover; border-radius: 50%; border: 4px solid var(--blue);">
         {% else %}
         <div style="width: 100px; height: 100px; border-radius: 50%; background: var(--blue); color: white; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; font-weight: 700; flex-shrink: 0;">
             {{ employee.name[0] }}

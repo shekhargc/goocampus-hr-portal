@@ -268,7 +268,7 @@
                 <td>
                     <div class="emp-cell">
                         {% if req.photo_url %}
-                        <img src="/static/photos/{{ req.photo_url }}" class="emp-avatar" alt="">
+                        <img src="{{ req.photo_url if req.photo_url.startswith('http') else '/static/photos/' ~ req.photo_url }}" class="emp-avatar" alt="">
                         {% else %}
                         <div class="emp-avatar-placeholder">{{ req.employee_name[0] if req.employee_name else '?' }}</div>
                         {% endif %}

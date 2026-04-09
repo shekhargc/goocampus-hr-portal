@@ -137,7 +137,7 @@
             </div>
             <div class="emp-card-top">
                 {% if emp.photo_url %}
-                <img src="/static/photos/{{ emp.photo_url }}" class="emp-avatar" alt="{{ emp.name }}">
+                <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" class="emp-avatar" alt="{{ emp.name }}">
                 {% else %}
                 <div class="emp-avatar-init" style="background: {{ color }};">{{ emp.name[0] }}</div>
                 {% endif %}

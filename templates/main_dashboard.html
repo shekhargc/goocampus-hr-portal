@@ -894,8 +894,13 @@
     <div class="stat-card">
       <div class="stat-card__header">
         <div>
+          {% if session.get('is_admin') %}
           <p class="stat-card__label">Pending Approvals</p>
           <h2 class="stat-card__value">{{ pending_leaves }}</h2>
+          {% else %}
+          <p class="stat-card__label">My Pending Leaves</p>
+          <h2 class="stat-card__value">{{ my_leave_data.pending_count if my_leave_data else 0 }}</h2>
+          {% endif %}
         </div>
         <div class="stat-card__icon red">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -956,6 +961,143 @@
       </div>
     </div>
   </div>
+
+  <!-- Birthday & Anniversary Cards -->
+  {% if birthdays_this_month or anniversaries_this_month %}
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2.5rem;">
+    {% if birthdays_this_month %}
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
+        <span style="font-size: 1.4rem;">🎂</span>
+        <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">Birthdays This Month</h3>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+        {% for emp in birthdays_this_month[:5] %}
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.6rem; border-radius: 0.5rem; background: #FFFBEB; border: 1px solid #FDE68A;">
+          {% if emp.photo_url %}
+          <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #FCD34D;">
+          {% else %}
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #F59E0B; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem;">{{ emp.name[0] }}</div>
+          {% endif %}
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--navy);">{{ emp.name }}</div>
+            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • {{ emp.dob[5:] if emp.dob else '' }}</div>
+          </div>
+        </div>
+        {% endfor %}
+        {% if birthdays_this_month|length > 5 %}
+        <div style="text-align: center; font-size: 0.82rem; color: var(--gray-400);">+{{ birthdays_this_month|length - 5 }} more</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if anniversaries_this_month %}
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
+        <span style="font-size: 1.4rem;">🌟</span>
+        <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">Work Anniversaries This Month</h3>
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 0.6rem;">
+        {% for emp in anniversaries_this_month[:5] %}
+        <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.6rem; border-radius: 0.5rem; background: #F5F3FF; border: 1px solid #C4B5FD;">
+          {% if emp.photo_url %}
+          <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" style="width: 36px; height: 36px; border-radius: 50%; object-fit: cover; border: 2px solid #A78BFA;">
+          {% else %}
+          <div style="width: 36px; height: 36px; border-radius: 50%; background: #7C3AED; color: white; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.8rem;">{{ emp.name[0] }}</div>
+          {% endif %}
+          <div style="flex: 1; min-width: 0;">
+            <div style="font-weight: 600; font-size: 0.88rem; color: var(--navy);">{{ emp.name }}</div>
+            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • {{ emp.years }} year{{ 's' if emp.years|int > 1 else '' }}</div>
+          </div>
+        </div>
+        {% endfor %}
+        {% if anniversaries_this_month|length > 5 %}
+        <div style="text-align: center; font-size: 0.82rem; color: var(--gray-400);">+{{ anniversaries_this_month|length - 5 }} more</div>
+        {% endif %}
+      </div>
+    </div>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  <!-- Team Pending Approvals (for managers, non-admin) -->
+  {% if team_pending_approvals and not session.get('is_admin') %}
+  <div style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; margin-bottom: 2.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+      <div style="display: flex; align-items: center; gap: 0.6rem;">
+        <div style="width: 36px; height: 36px; border-radius: 8px; background: var(--danger-light); color: var(--danger); display: flex; align-items: center; justify-content: center;">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        </div>
+        <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">Team Leave Requests Pending Your Approval</h3>
+        <span style="background: var(--danger); color: white; font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 9999px; font-weight: 700;">{{ team_pending_approvals|length }}</span>
+      </div>
+      <a href="/employee/approvals" style="font-size: 0.85rem; color: var(--blue); font-weight: 600; text-decoration: none;">View All &rarr;</a>
+    </div>
+    <div style="overflow-x: auto;">
+      <table style="width: 100%; border-collapse: collapse; font-size: 0.88rem;">
+        <thead>
+          <tr style="background: var(--gray-50);">
+            <th style="padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase;">Employee</th>
+            <th style="padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase;">Date</th>
+            <th style="padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase;">Type</th>
+            <th style="padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase;">Duration</th>
+            <th style="padding: 0.5rem 0.75rem; text-align: left; font-size: 0.75rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase;">Action</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for leave in team_pending_approvals[:5] %}
+          <tr style="border-bottom: 1px solid var(--gray-100);">
+            <td style="padding: 0.6rem 0.75rem;">
+              <div style="display: flex; align-items: center; gap: 0.5rem;">
+                {% if leave.photo_url %}
+                <img src="{{ leave.photo_url if leave.photo_url.startswith('http') else '/static/photos/' ~ leave.photo_url }}" style="width: 28px; height: 28px; border-radius: 50%; object-fit: cover;">
+                {% else %}
+                <div style="width: 28px; height: 28px; border-radius: 50%; background: var(--navy); color: white; display: flex; align-items: center; justify-content: center; font-size: 0.7rem; font-weight: 700;">{{ leave.name[0] }}</div>
+                {% endif %}
+                <span style="font-weight: 600; color: var(--navy);">{{ leave.name }}</span>
+              </div>
+            </td>
+            <td style="padding: 0.6rem 0.75rem; color: var(--gray-600);">{{ leave.leave_date }}</td>
+            <td style="padding: 0.6rem 0.75rem;"><span style="font-weight: 600; color: var(--orange);">{{ leave.leave_type|capitalize }}</span></td>
+            <td style="padding: 0.6rem 0.75rem; color: var(--gray-600);">{% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</td>
+            <td style="padding: 0.6rem 0.75rem;">
+              <form method="POST" action="/approve/{{ leave.id }}" style="display: inline;">
+                <button type="submit" style="padding: 0.25rem 0.6rem; background: #D1FAE5; color: #065F46; border: 1px solid #6EE7B7; border-radius: 0.3rem; font-size: 0.78rem; font-weight: 600; cursor: pointer; margin-right: 0.25rem;">Approve</button>
+              </form>
+              <form method="POST" action="/reject/{{ leave.id }}" style="display: inline;">
+                <button type="submit" style="padding: 0.25rem 0.6rem; background: #FEE2E2; color: #991B1B; border: 1px solid #FCA5A5; border-radius: 0.3rem; font-size: 0.78rem; font-weight: 600; cursor: pointer;">Reject</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- My Pending Leave Requests (employee's own) -->
+  {% if my_pending_leaves and not session.get('is_admin') %}
+  <div style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; margin-bottom: 2.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
+    <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
+      <div style="width: 36px; height: 36px; border-radius: 8px; background: var(--warning-light); color: var(--warning); display: flex; align-items: center; justify-content: center;">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      </div>
+      <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">My Pending Leave Requests</h3>
+      <span style="background: #F59E0B; color: white; font-size: 0.72rem; padding: 0.1rem 0.45rem; border-radius: 9999px; font-weight: 700;">{{ my_pending_leaves|length }}</span>
+    </div>
+    <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
+      {% for leave in my_pending_leaves[:4] %}
+      <div style="flex: 1; min-width: 200px; padding: 0.75rem 1rem; border-radius: 0.5rem; background: #FFFBEB; border: 1px solid #FDE68A;">
+        <div style="font-weight: 700; color: var(--navy); font-size: 0.9rem;">{{ leave.leave_date }}</div>
+        <div style="font-size: 0.82rem; color: var(--gray-600); margin-top: 0.2rem;">{{ leave.leave_type|capitalize }} Leave • {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</div>
+        <span class="badge badge-pending" style="margin-top: 0.4rem; font-size: 0.72rem;">Pending</span>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
 
   <!-- Department Cards -->
   <div class="department-cards">
@@ -1067,33 +1209,27 @@
     <!-- Left: Activity Feed -->
     <div class="activity-feed">
       <div class="activity-feed__header">
-        <h2 class="activity-feed__title">Recent Activity</h2>
+        <h2 class="activity-feed__title">{% if session.get('is_admin') %}Recent Activity{% else %}My Recent Activity{% endif %}</h2>
       </div>
       <div class="activity-items">
-        {% if recent_activities %}
-          {% for activity in recent_activities %}
+        {% set activities_to_show = recent_activities if session.get('is_admin') else my_recent_activity %}
+        {% if activities_to_show %}
+          {% for activity in activities_to_show %}
           <div class="activity-item">
-            <div class="activity-icon {{ activity.type }}">
+            <div class="activity-icon {{ activity.type }}" style="{% if activity.icon_color %}border-color: {{ activity.icon_color }};{% endif %}">
               {% if activity.type == 'leave' %}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ activity.icon_color or 'currentColor' }}" stroke-width="2">
                   <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
                   <polyline points="9 22 9 12 15 12 15 22"></polyline>
                 </svg>
               {% elif activity.type == 'meeting' %}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ activity.icon_color or 'currentColor' }}" stroke-width="2">
                   <path d="M23 7l-7 5 7 5V7z"></path>
                   <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
                 </svg>
-              {% elif activity.type == 'news' %}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
-                  <line x1="4" y1="8" x2="20" y2="8"></line>
-                  <line x1="4" y1="13" x2="20" y2="13"></line>
-                </svg>
               {% else %}
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                  <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
-                  <polyline points="9 22 9 12 15 12 15 22"></polyline>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="{{ activity.icon_color or 'currentColor' }}" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
                 </svg>
               {% endif %}
             </div>
@@ -1212,15 +1348,17 @@
       <div class="quick-link-title">Apply Leave</div>
     </a>
 
-    <a href="/admin/pending-approvals" class="quick-link-card">
+    <a href="{% if session.get('is_admin') %}/admin/pending-approvals{% else %}/employee/approvals{% endif %}" class="quick-link-card">
       <div class="quick-link-icon orange">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <polyline points="20 6 9 17 4 12"></polyline>
         </svg>
       </div>
       <div class="quick-link-title">Approvals</div>
-      {% if pending_leaves > 0 %}
+      {% if session.get('is_admin') and pending_leaves > 0 %}
       <span class="quick-link-badge">{{ pending_leaves }}</span>
+      {% elif not session.get('is_admin') and team_pending_approvals %}
+      <span class="quick-link-badge">{{ team_pending_approvals|length }}</span>
       {% endif %}
     </a>
 
@@ -1244,7 +1382,7 @@
       <div class="quick-link-title">Sales Dashboard</div>
     </a>
 
-    <a href="/admin/org-chart" class="quick-link-card">
+    <a href="{% if session.get('is_admin') %}/admin/org-chart{% else %}/org-chart{% endif %}" class="quick-link-card">
       <div class="quick-link-icon teal">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
@@ -1256,7 +1394,7 @@
       <div class="quick-link-title">Org Chart</div>
     </a>
 
-    <a href="/admin/calendar" class="quick-link-card">
+    <a href="{% if session.get('is_admin') %}/admin/calendar{% else %}/calendar{% endif %}" class="quick-link-card">
       <div class="quick-link-icon green">
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -1267,6 +1405,32 @@
       </div>
       <div class="quick-link-title">Calendar</div>
     </a>
+
+    <a href="/notifications" class="quick-link-card">
+      <div class="quick-link-icon red">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+        </svg>
+      </div>
+      <div class="quick-link-title">Notifications</div>
+      {% if my_unread_notifs > 0 %}
+      <span class="quick-link-badge">{{ my_unread_notifs }}</span>
+      {% endif %}
+    </a>
+
+    {% if not session.get('is_admin') %}
+    <a href="/kra/dashboard" class="quick-link-card">
+      <div class="quick-link-icon green">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+        </svg>
+      </div>
+      <div class="quick-link-title">My KRA</div>
+      {% if my_kra_score %}
+      <span class="quick-link-badge" style="background: var(--success); border-color: var(--success);">{{ '%.1f'|format(my_kra_score) }}</span>
+      {% endif %}
+    </a>
+    {% endif %}
   </div>
 </div>
 {% endblock %}

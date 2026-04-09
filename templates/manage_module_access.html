@@ -225,7 +225,7 @@
                         <label class="select-box-item" data-name="{{ emp.name | lower }}" data-dept="{{ (emp.department or '') | lower }}">
                             <input type="checkbox" name="employee_ids" value="{{ emp.id }}" onchange="updateSummary()">
                             {% if emp.photo_url %}
-                            <img src="/static/photos/{{ emp.photo_url }}" class="emp-avatar" alt="">
+                            <img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" class="emp-avatar" alt="">
                             {% else %}
                             <div class="emp-avatar-init" style="background: {{ dept_colors.get(emp.department, '#94a3b8') }};">{{ emp.name[0] }}</div>
                             {% endif %}
@@ -307,7 +307,7 @@
         {% for access in access_list %}
         <div class="access-row" data-module="{{ access.module }}" data-active="{{ access.is_active }}">
             {% if access.photo_url %}
-            <img src="/static/photos/{{ access.photo_url }}" class="access-avatar" alt="">
+            <img src="{{ access.photo_url if access.photo_url.startswith('http') else '/static/photos/' ~ access.photo_url }}" class="access-avatar" alt="">
             {% else %}
             <div class="access-avatar-init" style="background: {{ dept_colors.get(access.department, '#94a3b8') }};">{{ access.name[0] }}</div>
             {% endif %}
