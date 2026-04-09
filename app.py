@@ -5929,69 +5929,102 @@ def finance_dashboard():
     fy_months = get_fy_months(fy_year)
     conn = get_db()
 
-    # Get all categories
-    expense_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 ORDER BY sort_order"
-    ).fetchall()
-    dept_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
-    ).fetchall()
-    revenue_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
-    ).fetchall()
+    # Single aggregated query: monthly totals by cat_type
+    try:
+        monthly_agg = conn.execute('''
+            SELECT be.month, be.year, bc.cat_type,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_entries be
+            JOIN budget_categories bc ON be.category_id = bc.id
+            WHERE be.fy_year = ? AND bc.is_active = 1
+            GROUP BY be.month, be.year, bc.cat_type
+        ''', (fy_year,)).fetchall()
+    except Exception as e:
+        logging.error(f"finance_dashboard agg query: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        monthly_agg = []
 
-    # Get all entries for this FY
-    entries = conn.execute(
-        "SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)
-    ).fetchall()
+    # Department totals
+    try:
+        dept_agg = conn.execute('''
+            SELECT bc.name, bc.department,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_categories bc
+            LEFT JOIN budget_entries be ON bc.id = be.category_id AND be.fy_year = ?
+            WHERE bc.cat_type = 'department' AND bc.is_active = 1
+            GROUP BY bc.id, bc.name, bc.department
+            ORDER BY bc.sort_order
+        ''', (fy_year,)).fetchall()
+    except Exception as e:
+        logging.error(f"finance_dashboard dept query: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        dept_agg = []
+
+    # Locked months
+    try:
+        locked_rows = conn.execute(
+            "SELECT DISTINCT month, year FROM budget_entries WHERE fy_year = ? AND is_locked = 1",
+            (fy_year,)
+        ).fetchall()
+    except Exception as e:
+        logging.error(f"finance_dashboard locked query: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        locked_rows = []
+
     conn.close()
 
-    # Build lookup: (category_id, month, year) -> entry
-    entry_map = {}
-    for e in entries:
-        key = (e['category_id'], e['month'], e['year'])
-        entry_map[key] = e
+    # Build monthly lookup
+    monthly_data = {}
+    for r in monthly_agg:
+        key = (r['month'], r['year'])
+        if key not in monthly_data:
+            monthly_data[key] = {'expense_budget': 0, 'expense_actual': 0, 'dept_budget': 0, 'dept_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}
+        ct = r['cat_type']
+        if ct == 'expense':
+            monthly_data[key]['expense_budget'] += float(r['total_budget'] or 0)
+            monthly_data[key]['expense_actual'] += float(r['total_actual'] or 0)
+        elif ct == 'department':
+            monthly_data[key]['dept_budget'] += float(r['total_budget'] or 0)
+            monthly_data[key]['dept_actual'] += float(r['total_actual'] or 0)
+        elif ct == 'revenue':
+            monthly_data[key]['revenue_budget'] += float(r['total_budget'] or 0)
+            monthly_data[key]['revenue_actual'] += float(r['total_actual'] or 0)
 
-    # Calculate totals
-    total_expense_budget = 0
-    total_expense_actual = 0
-    total_revenue_budget = 0
-    total_revenue_actual = 0
-    total_dept_budget = 0
-    total_dept_actual = 0
-
-    # Monthly aggregates for chart
-    monthly_expense_budget = []
-    monthly_expense_actual = []
-    monthly_revenue_budget = []
-    monthly_revenue_actual = []
+    # Build arrays
+    total_expense_budget = 0; total_expense_actual = 0
+    total_revenue_budget = 0; total_revenue_actual = 0
+    monthly_expense_budget = []; monthly_expense_actual = []
+    monthly_revenue_budget = []; monthly_revenue_actual = []
     month_labels = []
 
     for fm in fy_months:
-        m, y = fm['month'], fm['year']
+        key = (fm['month'], fm['year'])
+        d = monthly_data.get(key, {})
         month_labels.append(fm['label'])
-        eb = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in expense_cats)
-        ea = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in expense_cats)
-        db_ = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in dept_cats)
-        da = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in dept_cats)
-        rb = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in revenue_cats)
-        ra = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in revenue_cats)
-        total_expense_budget += eb + db_
-        total_expense_actual += ea + da
-        total_dept_budget += db_
-        total_dept_actual += da
-        total_revenue_budget += rb
-        total_revenue_actual += ra
-        monthly_expense_budget.append(round(eb + db_, 2))
-        monthly_expense_actual.append(round(ea + da, 2))
+        eb = d.get('expense_budget', 0) + d.get('dept_budget', 0)
+        ea = d.get('expense_actual', 0) + d.get('dept_actual', 0)
+        rb = d.get('revenue_budget', 0)
+        ra = d.get('revenue_actual', 0)
+        total_expense_budget += eb; total_expense_actual += ea
+        total_revenue_budget += rb; total_revenue_actual += ra
+        monthly_expense_budget.append(round(eb, 2))
+        monthly_expense_actual.append(round(ea, 2))
         monthly_revenue_budget.append(round(rb, 2))
         monthly_revenue_actual.append(round(ra, 2))
 
     # Quarterly aggregates
-    quarters = {'Q1': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
-                'Q2': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
-                'Q3': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
-                'Q4': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}}
+    quarters = {q: {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0} for q in ['Q1','Q2','Q3','Q4']}
     for i, fm in enumerate(fy_months):
         q = get_quarter_label(fm['month'])
         quarters[q]['expense_budget'] += monthly_expense_budget[i]
@@ -6001,21 +6034,15 @@ def finance_dashboard():
 
     # Department breakdown
     dept_data = []
-    for dc in dept_cats:
-        b = sum(entry_map.get((dc['id'], fm['month'], fm['year']), {}).get('budget_amount', 0) or 0 for fm in fy_months)
-        a = sum(entry_map.get((dc['id'], fm['month'], fm['year']), {}).get('actual_amount', 0) or 0 for fm in fy_months)
+    for dc in dept_agg:
+        b = float(dc['total_budget'] or 0)
+        a = float(dc['total_actual'] or 0)
         dept_data.append({'name': dc['name'].replace(' - Department Budget', ''), 'budget': round(b, 2), 'actual': round(a, 2),
                           'variance': round(b - a, 2), 'utilization': round((a / b * 100) if b > 0 else 0, 1)})
 
-    # Locked months
-    locked_months = set()
-    for e in entries:
-        if e.get('is_locked'):
-            locked_months.add((e['month'], e['year']))
+    locked_months = set((r['month'], r['year']) for r in locked_rows)
 
     return render_template('finance_dashboard.html', user=user, fy_year=fy_year, fy_months=fy_months,
-                           expense_cats=expense_cats, dept_cats=dept_cats, revenue_cats=revenue_cats,
-                           entry_map=entry_map,
                            total_expense_budget=round(total_expense_budget, 2),
                            total_expense_actual=round(total_expense_actual, 2),
                            total_revenue_budget=round(total_revenue_budget, 2),

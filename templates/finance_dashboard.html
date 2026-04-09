@@ -305,6 +305,29 @@
         </div>
     </div>
 
+    <!-- Monthly Entry Tiles (quick access) -->
+    <div class="chart-card" style="margin-bottom: 1.5rem;">
+        <h3>Monthly Data Entry</h3>
+        <p style="font-size: 0.75rem; color: var(--gray-400); margin: -0.5rem 0 1rem;">Click a month to enter or update budget and actual amounts</p>
+        <div class="month-grid">
+            {% for fm in fy_months %}
+            {% set is_month_locked = (fm.month, fm.year) in locked_months %}
+            <a href="/finance/budget/edit/{{ fm.month }}/{{ fm.year }}?fy={{ fy_year }}" class="month-tile {{ 'locked' if is_month_locked }}">
+                <div class="month-tile__name">
+                    {{ fm.label }}
+                    {% if is_month_locked %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" style="vertical-align: -1px;">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="month-tile__stat">Expense: <span>{{ "₹{:,.0f}".format(monthly_expense_actual[loop.index0]) }}</span></div>
+                <div class="month-tile__stat">Revenue: <span>{{ "₹{:,.0f}".format(monthly_revenue_actual[loop.index0]) }}</span></div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+
     <!-- Charts Row -->
     <div class="chart-row">
         <div class="chart-card">
@@ -369,31 +392,6 @@
                 </tr>
             </tbody>
         </table>
-    </div>
-
-    <!-- Monthly Entry Tiles -->
-    <div class="chart-card">
-        <h3>Monthly Data Entry</h3>
-        <p style="font-size: 0.75rem; color: var(--gray-400); margin: -0.5rem 0 1rem;">Click a month to enter or update budget and actual amounts</p>
-        <div class="month-grid">
-            {% for fm in fy_months %}
-            {% set m_expense_b = 0 %}
-            {% set m_revenue_b = 0 %}
-            {% set is_month_locked = (fm.month, fm.year) in locked_months %}
-            <a href="/finance/budget/edit/{{ fm.month }}/{{ fm.year }}?fy={{ fy_year }}" class="month-tile {{ 'locked' if is_month_locked }}">
-                <div class="month-tile__name">
-                    {{ fm.label }}
-                    {% if is_month_locked %}
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" style="vertical-align: -1px;">
-                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
-                    </svg>
-                    {% endif %}
-                </div>
-                <div class="month-tile__stat">Expense: <span>{{ "₹{:,.0f}".format(monthly_expense_actual[loop.index0]) }}</span></div>
-                <div class="month-tile__stat">Revenue: <span>{{ "₹{:,.0f}".format(monthly_revenue_actual[loop.index0]) }}</span></div>
-            </a>
-            {% endfor %}
-        </div>
     </div>
 </div>
 
