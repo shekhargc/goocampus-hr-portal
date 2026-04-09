@@ -5794,6 +5794,7 @@ def ensure_budget_tables():
                 department TEXT,
                 sort_order INTEGER DEFAULT 0,
                 is_active INTEGER DEFAULT 1,
+                is_recurring INTEGER DEFAULT 0,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
             '''CREATE TABLE IF NOT EXISTS budget_entries (
@@ -5821,6 +5822,16 @@ def ensure_budget_tables():
         ]
         for sql in tables_sql:
             conn.execute(sql)
+        # Migration: add is_recurring column if missing
+        try:
+            conn.execute("ALTER TABLE budget_categories ADD COLUMN is_recurring INTEGER DEFAULT 0")
+            conn.commit()
+            logging.info("Added is_recurring column to budget_categories")
+        except Exception:
+            try:
+                conn.rollback()
+            except:
+                pass
         conn.commit()
         conn.close()
         logging.info("Budget tables ensured.")
@@ -6123,6 +6134,8 @@ def finance_edit_month(month, year):
             "SELECT * FROM budget_categories WHERE is_active = 1 ORDER BY cat_type, sort_order"
         ).fetchall()
 
+        recurring_fills = []  # Track recurring categories that need auto-fill
+
         for cat in all_cats:
             budget_val = request.form.get(f'budget_{cat["id"]}', '0')
             actual_val = request.form.get(f'actual_{cat["id"]}', '0')
@@ -6154,8 +6167,45 @@ def finance_edit_month(month, year):
                         (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, user['id'], user['id'])
                     )
 
+            # Track recurring categories with budget > 0
+            is_recurring = cat.get('is_recurring', 0) if hasattr(cat, 'get') else (cat['is_recurring'] if 'is_recurring' in cat.keys() else 0)
+            if is_recurring and budget_val > 0:
+                recurring_fills.append({'cat_id': cat['id'], 'budget': budget_val, 'notes': notes_val})
+
+        # Auto-fill recurring budgets to other unlocked months
+        if recurring_fills:
+            all_fy_months = get_fy_months(fy_year)
+            for fm in all_fy_months:
+                if fm['month'] == month and fm['year'] == year:
+                    continue  # Skip the current month
+                # Check if month is locked
+                lock_chk = conn.execute(
+                    "SELECT is_locked FROM budget_entries WHERE fy_year = ? AND month = ? AND year = ? AND is_locked = 1 LIMIT 1",
+                    (fy_year, fm['month'], fm['year'])
+                ).fetchone()
+                if lock_chk:
+                    continue
+                for rc in recurring_fills:
+                    existing_rc = conn.execute(
+                        "SELECT id, budget_amount FROM budget_entries WHERE category_id = ? AND fy_year = ? AND month = ? AND year = ?",
+                        (rc['cat_id'], fy_year, fm['month'], fm['year'])
+                    ).fetchone()
+                    if existing_rc:
+                        # Only fill if budget is still 0 (don't overwrite manual edits)
+                        if float(existing_rc['budget_amount'] or 0) == 0:
+                            conn.execute(
+                                "UPDATE budget_entries SET budget_amount = ?, notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                                (rc['budget'], rc['notes'], user['id'], existing_rc['id'])
+                            )
+                    else:
+                        conn.execute(
+                            "INSERT INTO budget_entries (category_id, fy_year, month, year, budget_amount, actual_amount, notes, created_by, updated_by) VALUES (?, ?, ?, ?, ?, 0, ?, ?, ?)",
+                            (rc['cat_id'], fy_year, fm['month'], fm['year'], rc['budget'], rc['notes'], user['id'], user['id'])
+                        )
+
         conn.commit()
-        flash(f'Budget data for {calendar.month_name[month]} {year} saved successfully!', 'success')
+        recurring_msg = f' Recurring budgets auto-filled to other months.' if recurring_fills else ''
+        flash(f'Budget data for {calendar.month_name[month]} {year} saved successfully!{recurring_msg}', 'success')
         conn.close()
         return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
 
@@ -6252,9 +6302,12 @@ def finance_add_category():
     cat_type = request.form.get('cat_type', 'expense')
     department = request.form.get('department', '').strip() or None
     fy = request.form.get('fy', '2026-2027')
+    source = request.form.get('source', '')  # 'settings' if from settings page
 
     if not name:
         flash('Category name is required', 'error')
+        if source == 'settings':
+            return redirect(url_for('finance_settings', fy=fy))
         return redirect(url_for('finance_dashboard', fy=fy))
 
     conn = get_db()
@@ -6271,9 +6324,128 @@ def finance_add_category():
     conn.close()
     flash(f'Category "{name}" added successfully!', 'success')
 
+    if source == 'settings':
+        return redirect(url_for('finance_settings', fy=fy))
     if cat_type == 'revenue':
         return redirect(url_for('finance_revenue', fy=fy))
     return redirect(url_for('finance_expenses', fy=fy))
+
+
+@app.route('/finance/budget/settings')
+@admin_required
+def finance_settings():
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    conn = get_db()
+    expense_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'expense' ORDER BY sort_order"
+    ).fetchall()
+    dept_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'department' ORDER BY sort_order"
+    ).fetchall()
+    revenue_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' ORDER BY sort_order"
+    ).fetchall()
+    # Get unique departments for the dropdown
+    departments = sorted(set(d['department'] for d in dept_cats if d['department']))
+    conn.close()
+    return render_template('finance_settings.html', user=user, fy_year=fy_year,
+                           expense_cats=expense_cats, dept_cats=dept_cats,
+                           revenue_cats=revenue_cats, departments=departments)
+
+
+@app.route('/finance/budget/category/edit/<int:cat_id>', methods=['POST'])
+@admin_required
+def finance_edit_category(cat_id):
+    fy = request.form.get('fy', '2026-2027')
+    name = request.form.get('name', '').strip()
+    department = request.form.get('department', '').strip() or None
+    is_recurring = 1 if request.form.get('is_recurring') else 0
+    is_active = 1 if request.form.get('is_active') else 0
+
+    if not name:
+        flash('Category name is required', 'error')
+        return redirect(url_for('finance_settings', fy=fy))
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE budget_categories SET name = ?, department = ?, is_recurring = ?, is_active = ? WHERE id = ?",
+        (name, department, is_recurring, is_active, cat_id)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'Category "{name}" updated!', 'success')
+    return redirect(url_for('finance_settings', fy=fy))
+
+
+@app.route('/finance/budget/category/toggle/<int:cat_id>', methods=['POST'])
+@admin_required
+def finance_toggle_category(cat_id):
+    fy = request.form.get('fy', '2026-2027')
+    conn = get_db()
+    cat = conn.execute("SELECT * FROM budget_categories WHERE id = ?", (cat_id,)).fetchone()
+    if cat:
+        new_status = 0 if cat['is_active'] else 1
+        conn.execute("UPDATE budget_categories SET is_active = ? WHERE id = ?", (new_status, cat_id))
+        conn.commit()
+        action = 'activated' if new_status else 'deactivated'
+        flash(f'Category "{cat["name"]}" {action}!', 'success')
+    conn.close()
+    return redirect(url_for('finance_settings', fy=fy))
+
+
+@app.route('/finance/budget/department/add', methods=['POST'])
+@admin_required
+def finance_add_department():
+    fy = request.form.get('fy', '2026-2027')
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash('Department name is required', 'error')
+        return redirect(url_for('finance_settings', fy=fy))
+
+    conn = get_db()
+    # Check if dept already exists
+    existing = conn.execute(
+        "SELECT id FROM budget_categories WHERE cat_type = 'department' AND department = ?", (name,)
+    ).fetchone()
+    if existing:
+        flash(f'Department "{name}" already exists', 'error')
+        conn.close()
+        return redirect(url_for('finance_settings', fy=fy))
+
+    max_sort = conn.execute(
+        "SELECT MAX(sort_order) as mx FROM budget_categories WHERE cat_type = 'department'"
+    ).fetchone()
+    next_sort = (max_sort['mx'] or 0) + 1
+    conn.execute(
+        "INSERT INTO budget_categories (name, cat_type, department, sort_order) VALUES (?, 'department', ?, ?)",
+        (f'{name} - Department Budget', name, next_sort)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'Department "{name}" added!', 'success')
+    return redirect(url_for('finance_settings', fy=fy))
+
+
+@app.route('/finance/budget/department/edit/<int:cat_id>', methods=['POST'])
+@admin_required
+def finance_edit_department(cat_id):
+    fy = request.form.get('fy', '2026-2027')
+    name = request.form.get('name', '').strip()
+    is_active = 1 if request.form.get('is_active') else 0
+    if not name:
+        flash('Department name is required', 'error')
+        return redirect(url_for('finance_settings', fy=fy))
+
+    conn = get_db()
+    conn.execute(
+        "UPDATE budget_categories SET name = ?, department = ?, is_active = ? WHERE id = ?",
+        (f'{name} - Department Budget', name, is_active, cat_id)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'Department "{name}" updated!', 'success')
+    return redirect(url_for('finance_settings', fy=fy))
 
 
 # Run on startup

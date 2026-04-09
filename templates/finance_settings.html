@@ -1,0 +1,274 @@
+{% extends "base.html" %}
+{% block title %}Finance Settings - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .finance-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .finance-nav a { padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .finance-nav a.active { background: var(--navy); color: white; }
+    .finance-nav a:not(.active) { background: var(--gray-100); color: var(--gray-600); }
+    .finance-nav a:not(.active):hover { background: var(--gray-200); }
+
+    .settings-section { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .settings-section h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.6rem; border-bottom: 2px solid var(--gray-100); }
+    .settings-section h3 .count-badge { background: var(--navy); color: white; font-size: 0.6rem; padding: 0.1rem 0.5rem; border-radius: 10px; }
+
+    .cat-list { list-style: none; padding: 0; margin: 0; }
+    .cat-item { display: flex; align-items: center; gap: 0.6rem; padding: 0.6rem 0; border-bottom: 1px solid var(--gray-50); flex-wrap: wrap; }
+    .cat-item:last-child { border-bottom: none; }
+    .cat-item__name { font-size: 0.82rem; font-weight: 600; color: var(--navy); flex: 1; min-width: 150px; }
+    .cat-item__badges { display: flex; gap: 0.3rem; align-items: center; }
+    .badge-recurring { background: #F59E0B; color: white; font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 8px; font-weight: 600; }
+    .badge-dept { background: #3B82F6; color: white; font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 8px; font-weight: 600; }
+    .badge-inactive { background: #EF4444; color: white; font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 8px; font-weight: 600; }
+    .badge-active { background: #10B981; color: white; font-size: 0.6rem; padding: 0.1rem 0.45rem; border-radius: 8px; font-weight: 600; }
+
+    .cat-item__actions { display: flex; gap: 0.3rem; }
+    .btn-sm { padding: 0.25rem 0.6rem; border-radius: 5px; font-size: 0.7rem; font-weight: 600; cursor: pointer; border: 1px solid var(--gray-200); background: white; color: var(--gray-600); transition: all 0.2s; }
+    .btn-sm:hover { background: var(--gray-50); border-color: var(--navy); color: var(--navy); }
+    .btn-sm.toggle-active { border-color: #10B981; color: #10B981; }
+    .btn-sm.toggle-inactive { border-color: #EF4444; color: #EF4444; }
+
+    /* Edit Modal / Inline Form */
+    .edit-form { display: none; background: var(--gray-50); border-radius: 8px; padding: 0.8rem; margin-top: 0.4rem; width: 100%; }
+    .edit-form.open { display: block; }
+    .edit-form .form-row { display: flex; gap: 0.5rem; align-items: center; flex-wrap: wrap; margin-bottom: 0.4rem; }
+    .edit-form label { font-size: 0.7rem; font-weight: 600; color: var(--gray-600); min-width: 80px; }
+    .edit-form input[type="text"], .edit-form select { padding: 0.35rem 0.5rem; border: 1px solid var(--gray-200); border-radius: 5px; font-size: 0.78rem; flex: 1; min-width: 120px; }
+    .edit-form .checkbox-row { display: flex; align-items: center; gap: 0.4rem; font-size: 0.75rem; color: var(--gray-600); }
+    .edit-form .checkbox-row input[type="checkbox"] { width: 15px; height: 15px; }
+    .btn-save-sm { padding: 0.3rem 0.8rem; background: var(--navy); color: white; border: none; border-radius: 5px; font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+    .btn-cancel-sm { padding: 0.3rem 0.8rem; background: var(--gray-200); color: var(--gray-600); border: none; border-radius: 5px; font-size: 0.72rem; font-weight: 600; cursor: pointer; }
+
+    .add-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 0.8rem; flex-wrap: wrap; padding-top: 0.8rem; border-top: 1px solid var(--gray-100); }
+    .add-form input, .add-form select { padding: 0.4rem 0.6rem; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 0.8rem; }
+    .add-form input[type="text"] { flex: 1; min-width: 180px; }
+    .add-form button { padding: 0.4rem 1rem; background: var(--navy); color: white; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; }
+
+    @media (max-width: 768px) {
+        .cat-item { flex-direction: column; align-items: flex-start; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Finance Settings</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div class="finance-nav">
+            <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
+            <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
+            <a href="/finance/budget/settings?fy={{ fy_year }}" class="active">Settings</a>
+        </div>
+    </div>
+
+    <!-- Expense Categories -->
+    <div class="settings-section">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+            Expense Categories
+            <span class="count-badge">{{ expense_cats|length }}</span>
+        </h3>
+
+        <ul class="cat-list">
+            {% for cat in expense_cats %}
+            <li class="cat-item" id="cat-{{ cat.id }}">
+                <div class="cat-item__name">{{ cat.name }}</div>
+                <div class="cat-item__badges">
+                    {% if cat.is_recurring %}<span class="badge-recurring">Recurring</span>{% endif %}
+                    {% if cat.department %}<span class="badge-dept">{{ cat.department }}</span>{% endif %}
+                    {% if cat.is_active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}
+                </div>
+                <div class="cat-item__actions">
+                    <button class="btn-sm" onclick="toggleEdit({{ cat.id }})">Edit</button>
+                    <form method="POST" action="/finance/budget/category/toggle/{{ cat.id }}" style="display:inline;">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <button type="submit" class="btn-sm {{ 'toggle-inactive' if cat.is_active else 'toggle-active' }}">{{ 'Deactivate' if cat.is_active else 'Activate' }}</button>
+                    </form>
+                </div>
+                <div class="edit-form" id="edit-{{ cat.id }}">
+                    <form method="POST" action="/finance/budget/category/edit/{{ cat.id }}">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <div class="form-row">
+                            <label>Name</label>
+                            <input type="text" name="name" value="{{ cat.name }}" required>
+                        </div>
+                        <div class="form-row">
+                            <label>Department</label>
+                            <select name="department">
+                                <option value="">— No Department —</option>
+                                {% for dept in departments %}
+                                <option value="{{ dept }}" {{ 'selected' if cat.department == dept }}>{{ dept }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <div class="checkbox-row">
+                                <input type="checkbox" name="is_recurring" id="recurring-{{ cat.id }}" {{ 'checked' if cat.is_recurring }}>
+                                <label for="recurring-{{ cat.id }}" style="min-width: auto;">Mark as recurring (auto-fills budget to all months)</label>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="checkbox-row">
+                                <input type="checkbox" name="is_active" id="active-{{ cat.id }}" {{ 'checked' if cat.is_active }}>
+                                <label for="active-{{ cat.id }}" style="min-width: auto;">Active</label>
+                            </div>
+                        </div>
+                        <div class="form-row" style="gap: 0.3rem;">
+                            <button type="submit" class="btn-save-sm">Save</button>
+                            <button type="button" class="btn-cancel-sm" onclick="toggleEdit({{ cat.id }})">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <form class="add-form" method="POST" action="/finance/budget/category/add">
+            <input type="hidden" name="cat_type" value="expense">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <input type="text" name="name" placeholder="New expense category name..." required>
+            <select name="department">
+                <option value="">No Department</option>
+                {% for dept in departments %}
+                <option value="{{ dept }}">{{ dept }}</option>
+                {% endfor %}
+            </select>
+            <button type="submit">+ Add Expense</button>
+        </form>
+    </div>
+
+    <!-- Departments -->
+    <div class="settings-section">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Departments
+            <span class="count-badge" style="background: #3B82F6;">{{ dept_cats|length }}</span>
+        </h3>
+
+        <ul class="cat-list">
+            {% for cat in dept_cats %}
+            <li class="cat-item" id="dept-{{ cat.id }}">
+                <div class="cat-item__name">{{ cat.department or cat.name|replace(' - Department Budget', '') }}</div>
+                <div class="cat-item__badges">
+                    {% if cat.is_active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}
+                </div>
+                <div class="cat-item__actions">
+                    <button class="btn-sm" onclick="toggleEdit('dept-{{ cat.id }}')">Edit</button>
+                    <form method="POST" action="/finance/budget/category/toggle/{{ cat.id }}" style="display:inline;">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <button type="submit" class="btn-sm {{ 'toggle-inactive' if cat.is_active else 'toggle-active' }}">{{ 'Deactivate' if cat.is_active else 'Activate' }}</button>
+                    </form>
+                </div>
+                <div class="edit-form" id="edit-dept-{{ cat.id }}">
+                    <form method="POST" action="/finance/budget/department/edit/{{ cat.id }}">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <div class="form-row">
+                            <label>Name</label>
+                            <input type="text" name="name" value="{{ cat.department or cat.name|replace(' - Department Budget', '') }}" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="checkbox-row">
+                                <input type="checkbox" name="is_active" id="dept-active-{{ cat.id }}" {{ 'checked' if cat.is_active }}>
+                                <label for="dept-active-{{ cat.id }}" style="min-width: auto;">Active</label>
+                            </div>
+                        </div>
+                        <div class="form-row" style="gap: 0.3rem;">
+                            <button type="submit" class="btn-save-sm">Save</button>
+                            <button type="button" class="btn-cancel-sm" onclick="toggleEdit('dept-{{ cat.id }}')">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <form class="add-form" method="POST" action="/finance/budget/department/add">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <input type="text" name="name" placeholder="New department name..." required>
+            <button type="submit">+ Add Department</button>
+        </form>
+    </div>
+
+    <!-- Revenue Categories -->
+    <div class="settings-section">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Revenue Streams
+            <span class="count-badge" style="background: #10B981;">{{ revenue_cats|length }}</span>
+        </h3>
+
+        <ul class="cat-list">
+            {% for cat in revenue_cats %}
+            <li class="cat-item" id="rev-{{ cat.id }}">
+                <div class="cat-item__name">{{ cat.name }}</div>
+                <div class="cat-item__badges">
+                    {% if cat.is_recurring %}<span class="badge-recurring">Recurring</span>{% endif %}
+                    {% if cat.is_active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}
+                </div>
+                <div class="cat-item__actions">
+                    <button class="btn-sm" onclick="toggleEdit('rev-{{ cat.id }}')">Edit</button>
+                    <form method="POST" action="/finance/budget/category/toggle/{{ cat.id }}" style="display:inline;">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <button type="submit" class="btn-sm {{ 'toggle-inactive' if cat.is_active else 'toggle-active' }}">{{ 'Deactivate' if cat.is_active else 'Activate' }}</button>
+                    </form>
+                </div>
+                <div class="edit-form" id="edit-rev-{{ cat.id }}">
+                    <form method="POST" action="/finance/budget/category/edit/{{ cat.id }}">
+                        <input type="hidden" name="fy" value="{{ fy_year }}">
+                        <div class="form-row">
+                            <label>Name</label>
+                            <input type="text" name="name" value="{{ cat.name }}" required>
+                        </div>
+                        <div class="form-row">
+                            <div class="checkbox-row">
+                                <input type="checkbox" name="is_recurring" id="rev-recurring-{{ cat.id }}" {{ 'checked' if cat.is_recurring }}>
+                                <label for="rev-recurring-{{ cat.id }}" style="min-width: auto;">Mark as recurring</label>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="checkbox-row">
+                                <input type="checkbox" name="is_active" id="rev-active-{{ cat.id }}" {{ 'checked' if cat.is_active }}>
+                                <label for="rev-active-{{ cat.id }}" style="min-width: auto;">Active</label>
+                            </div>
+                        </div>
+                        <div class="form-row" style="gap: 0.3rem;">
+                            <button type="submit" class="btn-save-sm">Save</button>
+                            <button type="button" class="btn-cancel-sm" onclick="toggleEdit('rev-{{ cat.id }}')">Cancel</button>
+                        </div>
+                    </form>
+                </div>
+            </li>
+            {% endfor %}
+        </ul>
+
+        <form class="add-form" method="POST" action="/finance/budget/category/add">
+            <input type="hidden" name="cat_type" value="revenue">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <input type="text" name="name" placeholder="New revenue stream name..." required>
+            <button type="submit" style="background: #10B981;">+ Add Revenue</button>
+        </form>
+    </div>
+
+    <!-- Info box -->
+    <div style="background: #FEF3C7; border-radius: 10px; padding: 0.8rem 1rem; font-size: 0.78rem; color: #92400E; line-height: 1.5;">
+        <strong>About Recurring:</strong> When a category is marked as recurring, entering a budget amount for any month will auto-fill that amount to all other unlocked months (only where budget is still zero — your manual edits are preserved).
+    </div>
+</div>
+
+<script>
+function toggleEdit(id) {
+    const el = document.getElementById('edit-' + id);
+    if (el) el.classList.toggle('open');
+}
+</script>
+{% endblock %}

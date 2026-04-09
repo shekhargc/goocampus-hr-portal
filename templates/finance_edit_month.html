@@ -103,7 +103,11 @@
             {% for cat in expense_cats %}
             {% set e = entry_map.get(cat.id, {}) %}
             <div class="entry-row">
-                <div class="entry-row__label">{{ cat.name }}</div>
+                <div class="entry-row__label">
+                    {{ cat.name }}
+                    {% if cat.is_recurring %}<span style="background: #F59E0B; color: white; font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 8px; font-weight: 600; margin-left: 0.3rem; vertical-align: middle;">RECURRING</span>{% endif %}
+                    {% if cat.department %}<small>Dept: {{ cat.department }}</small>{% endif %}
+                </div>
                 <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
@@ -149,7 +153,10 @@
             {% for cat in revenue_cats %}
             {% set e = entry_map.get(cat.id, {}) %}
             <div class="entry-row">
-                <div class="entry-row__label">{{ cat.name }}</div>
+                <div class="entry-row__label">
+                    {{ cat.name }}
+                    {% if cat.is_recurring %}<span style="background: #F59E0B; color: white; font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 8px; font-weight: 600; margin-left: 0.3rem; vertical-align: middle;">RECURRING</span>{% endif %}
+                </div>
                 <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
