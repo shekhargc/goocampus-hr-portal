@@ -342,8 +342,13 @@ def dashboard():
     try:
         tm_result = conn.execute("SELECT COUNT(*) as count FROM b2b_trips WHERE from_date >= ? AND from_date <= ?", (month_start, month_end)).fetchone()
         total_meetings = tm_result['count'] if tm_result else 0
-    except:
+    except Exception as e:
+        logging.error(f"Dashboard total_meetings query error: {e}")
         total_meetings = 0
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Meetings this week
     week_start = (now - timedelta(days=now.weekday())).strftime('%Y-%m-%d')
@@ -352,16 +357,26 @@ def dashboard():
     try:
         mtw_result = conn.execute("SELECT COUNT(*) as count FROM b2b_trips WHERE from_date >= ? AND from_date <= ?", (week_start, week_end)).fetchone()
         meetings_this_week = mtw_result['count'] if mtw_result else 0
-    except:
+    except Exception as e:
+        logging.error(f"Dashboard meetings_this_week query error: {e}")
         meetings_this_week = 0
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Sales news count
     total_news = 0
     try:
         tn_result = conn.execute("SELECT COUNT(*) as count FROM sales_news").fetchone()
         total_news = tn_result['count'] if tn_result else 0
-    except:
+    except Exception as e:
+        logging.error(f"Dashboard total_news query error: {e}")
         total_news = 0
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # On leave today list
     on_leave_today = conn.execute('''
@@ -404,8 +419,12 @@ def dashboard():
                 'time_ago': l['created_at'][:10] if l['created_at'] else '',
                 'icon_color': 'var(--orange)'
             })
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard recent_leaves_act query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Recent meetings
     try:
@@ -422,8 +441,12 @@ def dashboard():
                 'time_ago': m['created_at'][:10] if m['created_at'] else '',
                 'icon_color': 'var(--blue)'
             })
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard recent_meetings query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Sort by time_ago desc and limit to 8
     recent_activities.sort(key=lambda x: x.get('time_ago', ''), reverse=True)
@@ -489,8 +512,12 @@ def dashboard():
                     'time_ago': l['created_at'][:10] if l['created_at'] else '',
                     'icon_color': '#10B981' if l['status'] == 'approved' else '#F59E0B' if l['status'] == 'pending' else '#EF4444'
                 })
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Dashboard my_leaves_recent query error: {e}")
+            try:
+                conn.rollback()
+            except:
+                pass
         try:
             my_meetings_recent = conn.execute('''
                 SELECT t.from_date, t.trip_type, t.created_at, t.city
@@ -506,8 +533,12 @@ def dashboard():
                     'time_ago': m['created_at'][:10] if m['created_at'] else '',
                     'icon_color': '#4A7AB5'
                 })
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Dashboard my_meetings_recent query error: {e}")
+            try:
+                conn.rollback()
+            except:
+                pass
         my_recent_activity.sort(key=lambda x: x.get('time_ago', ''), reverse=True)
         my_recent_activity = my_recent_activity[:8]
 
@@ -525,6 +556,10 @@ def dashboard():
         ''', (month_str,)).fetchall()
     except Exception as e:
         logging.error(f"Dashboard birthdays query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Work anniversaries this month
     anniversaries_this_month = []
@@ -542,6 +577,10 @@ def dashboard():
         ''', (current_year_str, month_str, current_year_str)).fetchall()
     except Exception as e:
         logging.error(f"Dashboard anniversaries query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Unread notification count for this employee
     my_unread_notifs = 0
@@ -551,8 +590,12 @@ def dashboard():
             (user['id'],)
         ).fetchone()
         my_unread_notifs = nr['cnt'] if nr else 0
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard unread_notifs query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # My KRA score (if assigned)
     my_kra_score = None
@@ -568,8 +611,12 @@ def dashboard():
         ''', (user['id'], current_month, current_year_val)).fetchone()
         if kra_row:
             my_kra_score = kra_row['final_score']
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard kra_score query error: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
 
     # Approvals I need to action (for managers) - their team members' pending leaves
     team_pending_approvals = []
@@ -583,8 +630,12 @@ def dashboard():
                 WHERE e.reporting_manager_id = ? AND lr.status = 'pending'
                 ORDER BY lr.leave_date ASC
             ''', (user['id'],)).fetchall()
-        except:
-            pass
+        except Exception as e:
+            logging.error(f"Dashboard team_pending_approvals query error: {e}")
+            try:
+                conn.rollback()
+            except:
+                pass
 
     conn.close()
 
