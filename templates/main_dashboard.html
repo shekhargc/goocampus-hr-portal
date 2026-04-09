@@ -1105,7 +1105,7 @@
           {% endif %}
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; font-size: 0.88rem; color: var(--navy);">{{ emp.name }}</div>
-            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • {{ emp.years }} year{{ 's' if emp.years|int > 1 else '' }}</div>
+            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • Joined {{ emp.joining_date }}</div>
           </div>
         </div>
         {% endfor %}
