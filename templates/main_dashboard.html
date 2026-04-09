@@ -15,34 +15,35 @@
   .welcome-banner {
     background: linear-gradient(135deg, var(--navy) 0%, var(--navy-dark) 100%);
     border-radius: 12px;
-    padding: 2.5rem;
+    padding: 1.4rem 2rem;
     margin-bottom: 2.5rem;
     color: white;
     box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
-    display: grid;
-    grid-template-columns: auto 1fr auto;
-    gap: 2rem;
+    display: flex;
     align-items: center;
+    gap: 1.5rem;
   }
 
   .welcome-banner__user-profile {
     display: flex;
-    gap: 1rem;
+    gap: 0.9rem;
     align-items: center;
+    flex-shrink: 0;
   }
 
   .welcome-banner__avatar {
-    width: 80px;
-    height: 80px;
+    width: 52px;
+    height: 52px;
     border-radius: 50%;
     background: rgba(255, 255, 255, 0.2);
-    border: 3px solid white;
+    border: 2px solid white;
     display: flex;
     align-items: center;
     justify-content: center;
-    font-size: 2rem;
+    font-size: 1.3rem;
     font-weight: 600;
     overflow: hidden;
+    flex-shrink: 0;
   }
 
   .welcome-banner__avatar img {
@@ -53,44 +54,55 @@
 
   .welcome-banner__greeting {
     flex: 1;
+    min-width: 0;
   }
 
   .welcome-banner__title {
-    font-size: 1.75rem;
+    font-size: 1.15rem;
     font-weight: 700;
-    margin: 0 0 0.25rem 0;
+    margin: 0 0 0.15rem 0;
     line-height: 1.2;
   }
 
   .welcome-banner__subtitle {
-    font-size: 0.95rem;
-    opacity: 0.9;
+    font-size: 0.8rem;
+    opacity: 0.85;
     margin: 0;
   }
 
   .welcome-banner__info {
-    font-size: 0.85rem;
-    opacity: 0.75;
-    margin-top: 0.5rem;
+    font-size: 0.78rem;
+    opacity: 0.7;
+    margin-top: 0.2rem;
+  }
+
+  .welcome-banner__right {
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+    margin-left: auto;
+    flex-shrink: 0;
   }
 
   .welcome-banner__actions {
     display: flex;
-    gap: 0.75rem;
+    gap: 0.5rem;
     flex-wrap: wrap;
     justify-content: flex-end;
+    align-items: center;
   }
 
   .banner-btn {
-    padding: 0.65rem 1.25rem;
+    padding: 0.45rem 1rem;
     border-radius: 6px;
-    font-size: 0.9rem;
+    font-size: 0.82rem;
     font-weight: 500;
     border: none;
     cursor: pointer;
     transition: all 0.2s ease;
     text-decoration: none;
     display: inline-block;
+    white-space: nowrap;
   }
 
   .banner-btn--primary {
@@ -115,33 +127,35 @@
     transform: translateY(-2px);
   }
 
-  /* Management Leave Pills */
+  /* Leave Pills */
   .leave-pills {
     display: flex;
-    gap: 1rem;
-    flex-wrap: wrap;
-    margin-top: 1rem;
+    gap: 0.6rem;
+    flex-wrap: nowrap;
+    align-items: center;
   }
 
   .leave-pill {
-    background: rgba(255, 255, 255, 0.15);
-    border: 1px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.12);
+    border: 1px solid rgba(255, 255, 255, 0.2);
     border-radius: 8px;
-    padding: 0.75rem 1rem;
-    font-size: 0.85rem;
+    padding: 0.45rem 0.75rem;
+    font-size: 0.8rem;
+    text-align: center;
+    min-width: 60px;
   }
 
   .leave-pill__label {
     opacity: 0.8;
     display: block;
-    font-size: 0.75rem;
+    font-size: 0.6rem;
     text-transform: uppercase;
     letter-spacing: 0.5px;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.1rem;
   }
 
   .leave-pill__value {
-    font-size: 1.5rem;
+    font-size: 1.15rem;
     font-weight: 700;
     display: block;
   }
@@ -738,9 +752,25 @@
   /* Responsive */
   @media (max-width: 768px) {
     .welcome-banner {
-      grid-template-columns: 1fr;
-      gap: 1.5rem;
+      flex-direction: column;
+      gap: 1rem;
       text-align: center;
+      padding: 1.2rem;
+    }
+
+    .welcome-banner__user-profile {
+      flex-direction: column;
+    }
+
+    .welcome-banner__right {
+      flex-direction: column;
+      gap: 0.8rem;
+      margin-left: 0;
+    }
+
+    .leave-pills {
+      flex-wrap: wrap;
+      justify-content: center;
     }
 
     .welcome-banner__actions {
@@ -825,41 +855,43 @@
         <h1 class="welcome-banner__title">Welcome back, {{ user.name }}</h1>
         <p class="welcome-banner__subtitle">GooCampus CRM Portal — Your central hub for Sales, HR & Operations</p>
         <div class="welcome-banner__info">{{ user.designation }} • {{ user.department }}</div>
-
-        {% if my_leave_data %}
-        <div class="leave-pills">
-          <div class="leave-pill">
-            <span class="leave-pill__label">Total Leaves</span>
-            <span class="leave-pill__value">{{ my_leave_data.total_allocation }}</span>
-          </div>
-          <div class="leave-pill">
-            <span class="leave-pill__label">Available</span>
-            <span class="leave-pill__value" style="color: #6EE7B7;">{{ my_leave_data.available_balance }}</span>
-          </div>
-          <div class="leave-pill">
-            <span class="leave-pill__label">Taken</span>
-            <span class="leave-pill__value" style="color: #FCD34D;">{{ my_leave_data.days_taken }}</span>
-          </div>
-          {% if my_leave_data.pending_count > 0 %}
-          <div class="leave-pill">
-            <span class="leave-pill__label">Pending</span>
-            <span class="leave-pill__value" style="color: #FCA5A5;">{{ my_leave_data.pending_count }}</span>
-          </div>
-          {% endif %}
-        </div>
-        {% endif %}
       </div>
     </div>
 
-    <div class="welcome-banner__actions">
-      {% if session.get('is_admin') %}
-      <a href="/hr-dashboard" class="banner-btn banner-btn--primary">HR Dashboard</a>
-      <a href="/sales" class="banner-btn banner-btn--secondary">Sales Dashboard</a>
-      {% else %}
-      <a href="/apply-leave" class="banner-btn banner-btn--primary">Apply Leave</a>
-      <a href="/my-leaves" class="banner-btn banner-btn--secondary">My Leaves</a>
-      <a href="/kra/dashboard" class="banner-btn banner-btn--secondary">My KRA</a>
+    <div class="welcome-banner__right">
+      {% if my_leave_data %}
+      <div class="leave-pills">
+        <div class="leave-pill">
+          <span class="leave-pill__label">Total Leaves</span>
+          <span class="leave-pill__value">{{ my_leave_data.total_allocation }}</span>
+        </div>
+        <div class="leave-pill">
+          <span class="leave-pill__label">Available</span>
+          <span class="leave-pill__value" style="color: #6EE7B7;">{{ my_leave_data.available_balance }}</span>
+        </div>
+        <div class="leave-pill">
+          <span class="leave-pill__label">Taken</span>
+          <span class="leave-pill__value" style="color: #FCD34D;">{{ my_leave_data.days_taken }}</span>
+        </div>
+        {% if my_leave_data.pending_count > 0 %}
+        <div class="leave-pill">
+          <span class="leave-pill__label">Pending</span>
+          <span class="leave-pill__value" style="color: #FCA5A5;">{{ my_leave_data.pending_count }}</span>
+        </div>
+        {% endif %}
+      </div>
       {% endif %}
+
+      <div class="welcome-banner__actions">
+        {% if session.get('is_admin') %}
+        <a href="/hr-dashboard" class="banner-btn banner-btn--primary">HR Dashboard</a>
+        <a href="/sales" class="banner-btn banner-btn--secondary">Sales Dashboard</a>
+        {% else %}
+        <a href="/apply-leave" class="banner-btn banner-btn--primary">Apply Leave</a>
+        <a href="/my-leaves" class="banner-btn banner-btn--secondary">My Leaves</a>
+        <a href="/kra/dashboard" class="banner-btn banner-btn--secondary">My KRA</a>
+        {% endif %}
+      </div>
     </div>
   </div>
 
