@@ -3768,9 +3768,21 @@ def ensure_kra_tables():
 
 
 def ensure_notification_tables():
-    """Create notifications table if not exists."""
+    """Create or migrate notifications table to use employee_id schema."""
     try:
         conn = get_db()
+        # Check if the table exists and has the old schema (target_user_id)
+        if conn.is_postgres:
+            col_check = conn.execute(
+                "SELECT column_name FROM information_schema.columns WHERE table_name = 'notifications' AND column_name = 'target_user_id'",
+                ()
+            ).fetchone()
+            if col_check:
+                # Old schema detected — drop and recreate
+                logging.info("Old notifications schema detected (target_user_id). Migrating to employee_id schema...")
+                conn.execute('DROP TABLE notifications', ())
+                conn.commit()
+
         conn.execute('''CREATE TABLE IF NOT EXISTS notifications (
             id SERIAL PRIMARY KEY,
             employee_id INTEGER NOT NULL REFERENCES employees(id),
