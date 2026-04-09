@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+{% block title %}Expense Budget - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .finance-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .finance-nav a { padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .finance-nav a.active { background: var(--navy); color: white; }
+    .finance-nav a:not(.active) { background: var(--gray-100); color: var(--gray-600); }
+    .finance-nav a:not(.active):hover { background: var(--gray-200); }
+
+    .section-card { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .section-card h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; }
+    .section-card h3 .badge { background: #EF4444; color: white; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 10px; }
+
+    .budget-table-wrap { overflow-x: auto; }
+    .budget-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 0.72rem;
+        min-width: 900px;
+    }
+    .budget-table th {
+        background: var(--gray-50);
+        padding: 0.5rem 0.4rem;
+        text-align: right;
+        font-weight: 600;
+        color: var(--gray-600);
+        border-bottom: 2px solid var(--gray-200);
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    .budget-table th:first-child { text-align: left; min-width: 180px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
+    .budget-table td {
+        padding: 0.45rem 0.4rem;
+        text-align: right;
+        border-bottom: 1px solid var(--gray-100);
+        color: var(--gray-700);
+    }
+    .budget-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); position: sticky; left: 0; background: white; z-index: 1; }
+    .budget-table .quarter-col { background: rgba(59,130,246,0.04); font-weight: 600; }
+    .budget-table .total-col { background: rgba(15,27,51,0.06); font-weight: 700; }
+    .budget-table .subtotal-row td { font-weight: 700; border-top: 2px solid var(--gray-200); background: var(--gray-50); }
+    .budget-table .subtotal-row td:first-child { background: var(--gray-50); }
+    .budget-table .actual-row td { font-size: 0.65rem; color: var(--gray-500); border-bottom: 1px solid var(--gray-50); }
+    .budget-table .actual-row td:first-child { font-weight: 400; padding-left: 1rem; }
+    .budget-table .variance-row td { font-size: 0.65rem; border-bottom: 2px solid var(--gray-100); }
+    .budget-table .variance-row td:first-child { font-weight: 400; padding-left: 1rem; font-style: italic; }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
+
+    .add-cat-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .add-cat-form input { padding: 0.4rem 0.7rem; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 0.8rem; flex: 1; min-width: 200px; }
+    .add-cat-form button { padding: 0.4rem 1rem; background: var(--navy); color: white; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .add-cat-form select { padding: 0.4rem; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 0.8rem; }
+
+    .view-toggle { display: flex; gap: 0.3rem; background: var(--gray-100); border-radius: 8px; padding: 0.2rem; }
+    .view-toggle button { padding: 0.35rem 0.8rem; border: none; border-radius: 6px; font-size: 0.75rem; font-weight: 600; cursor: pointer; background: transparent; color: var(--gray-500); }
+    .view-toggle button.active { background: white; color: var(--navy); box-shadow: 0 1px 3px rgba(0,0,0,0.1); }
+
+    @media (max-width: 768px) {
+        .budget-table { font-size: 0.65rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Expense Budget</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div class="finance-nav">
+            <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
+            <a href="/finance/budget/expenses?fy={{ fy_year }}" class="active">Expenses</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
+        </div>
+    </div>
+
+    <!-- By Category -->
+    <div class="section-card">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                Expense by Category
+                <span class="badge">{{ expense_cats|length }} categories</span>
+            </h3>
+        </div>
+
+        <div class="budget-table-wrap">
+            <table class="budget-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        {% for fm in fy_months %}
+                        <th{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ fm.label }}</th>
+                        {% endfor %}
+                        <th class="total-col">Annual Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(grand_budget=0, grand_actual=0) %}
+                    {% for cat in expense_cats %}
+                    {% set ns2 = namespace(cat_budget=0, cat_actual=0) %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set ns2.cat_budget = ns2.cat_budget + b %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(b) if b > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns2.cat_budget) }}</td>
+                    </tr>
+                    <tr class="actual-row">
+                        <td>↳ Actual</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ns2.cat_actual = ns2.cat_actual + a %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(a) if a > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns2.cat_actual) }}</td>
+                    </tr>
+                    <tr class="variance-row">
+                        <td>↳ Variance</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set v = b - a %}
+                        <td class="{{ 'positive' if v >= 0 else 'negative' }}"{% if loop.index in [3,6,9,12] %} style="background: rgba(59,130,246,0.04);"{% endif %}>{{ "₹{:,.0f}".format(v) if b > 0 or a > 0 else '–' }}</td>
+                        {% endfor %}
+                        {% set total_var = ns2.cat_budget - ns2.cat_actual %}
+                        <td class="total-col {{ 'positive' if total_var >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(total_var) }}</td>
+                    </tr>
+                    {% set ns.grand_budget = ns.grand_budget + ns2.cat_budget %}
+                    {% set ns.grand_actual = ns.grand_actual + ns2.cat_actual %}
+                    {% endfor %}
+                    <tr class="subtotal-row">
+                        <td>Total Expenses (Category)</td>
+                        {% for fm in fy_months %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>–</td>
+                        {% endfor %}
+                        <td class="total-col">B: {{ "₹{:,.0f}".format(ns.grand_budget) }} / A: {{ "₹{:,.0f}".format(ns.grand_actual) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <form class="add-cat-form" method="POST" action="/finance/budget/category/add">
+            <input type="hidden" name="cat_type" value="expense">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <input type="text" name="name" placeholder="Add new expense category..." required>
+            <button type="submit">+ Add Category</button>
+        </form>
+    </div>
+
+    <!-- By Department -->
+    <div class="section-card">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            Department Budgets
+            <span class="badge" style="background: #3B82F6;">{{ dept_cats|length }} depts</span>
+        </h3>
+
+        <div class="budget-table-wrap">
+            <table class="budget-table">
+                <thead>
+                    <tr>
+                        <th>Department</th>
+                        {% for fm in fy_months %}
+                        <th{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ fm.label }}</th>
+                        {% endfor %}
+                        <th class="total-col">Annual Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for cat in dept_cats %}
+                    {% set ns3 = namespace(dept_budget=0, dept_actual=0) %}
+                    <tr>
+                        <td>{{ cat.name|replace(' - Department Budget', '') }}</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set ns3.dept_budget = ns3.dept_budget + b %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(b) if b > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns3.dept_budget) }}</td>
+                    </tr>
+                    <tr class="actual-row">
+                        <td>↳ Actual</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ns3.dept_actual = ns3.dept_actual + a %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(a) if a > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns3.dept_actual) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,248 @@
+{% extends "base.html" %}
+{% block title %}Annual Budget Report - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .finance-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .finance-nav a { padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .finance-nav a.active { background: var(--navy); color: white; }
+    .finance-nav a:not(.active) { background: var(--gray-100); color: var(--gray-600); }
+    .finance-nav a:not(.active):hover { background: var(--gray-200); }
+
+    .report-section { background: white; border-radius: 12px; padding: 1.5rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .report-section h2 { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; padding-bottom: 0.6rem; border-bottom: 2px solid var(--gray-100); }
+
+    .report-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.72rem; }
+    .report-table th { background: var(--gray-50); padding: 0.5rem 0.5rem; text-align: right; font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200); white-space: nowrap; }
+    .report-table th:first-child { text-align: left; min-width: 180px; }
+    .report-table td { padding: 0.45rem 0.5rem; text-align: right; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+    .report-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); }
+    .report-table .q-col { background: rgba(59,130,246,0.03); }
+    .report-table .subtotal td { font-weight: 700; border-top: 2px solid var(--gray-300); background: var(--gray-50); }
+    .report-table .grand-total td { font-weight: 700; border-top: 3px solid var(--navy); background: rgba(15,27,51,0.05); font-size: 0.8rem; }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
+
+    .print-btn { padding: 0.5rem 1.2rem; background: white; border: 2px solid var(--navy); color: var(--navy); border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+    .print-btn:hover { background: var(--navy); color: white; }
+
+    @media print {
+        .finance-nav, .print-btn, nav, footer { display: none !important; }
+        .report-section { box-shadow: none; border: 1px solid #ddd; page-break-inside: avoid; }
+        body { font-size: 10px; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Annual Budget Report</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div style="display: flex; gap: 0.8rem; align-items: center;">
+            <a href="javascript:window.print()" class="print-btn">🖨 Print Report</a>
+            <div class="finance-nav">
+                <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
+                <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
+                <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+                <a href="/finance/budget/report?fy={{ fy_year }}" class="active">Report</a>
+            </div>
+        </div>
+    </div>
+
+    <!-- EXPENSE REPORT -->
+    <div class="report-section">
+        <h2>Expense Budget vs Actuals</h2>
+        <div style="overflow-x: auto;">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Category</th>
+                        <th>Q1 Budget</th><th>Q1 Actual</th>
+                        <th class="q-col">Q2 Budget</th><th class="q-col">Q2 Actual</th>
+                        <th>Q3 Budget</th><th>Q3 Actual</th>
+                        <th class="q-col">Q4 Budget</th><th class="q-col">Q4 Actual</th>
+                        <th style="background: rgba(15,27,51,0.06);">Annual Budget</th>
+                        <th style="background: rgba(15,27,51,0.06);">Annual Actual</th>
+                        <th style="background: rgba(15,27,51,0.06);">Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set grand_e = namespace(budget=0, actual=0) %}
+                    {% for cat in expense_cats %}
+                    {% set q = namespace(q1b=0,q1a=0,q2b=0,q2a=0,q3b=0,q3a=0,q4b=0,q4a=0) %}
+                    {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ql = get_quarter_label(fm.month) %}
+                        {% if ql == 'Q1' %}{% set q.q1b = q.q1b + b %}{% set q.q1a = q.q1a + a %}
+                        {% elif ql == 'Q2' %}{% set q.q2b = q.q2b + b %}{% set q.q2a = q.q2a + a %}
+                        {% elif ql == 'Q3' %}{% set q.q3b = q.q3b + b %}{% set q.q3a = q.q3a + a %}
+                        {% else %}{% set q.q4b = q.q4b + b %}{% set q.q4a = q.q4a + a %}{% endif %}
+                    {% endfor %}
+                    {% set total_b = q.q1b + q.q2b + q.q3b + q.q4b %}
+                    {% set total_a = q.q1a + q.q2a + q.q3a + q.q4a %}
+                    {% set grand_e.budget = grand_e.budget + total_b %}
+                    {% set grand_e.actual = grand_e.actual + total_a %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        <td>{{ "₹{:,.0f}".format(q.q1b) }}</td><td>{{ "₹{:,.0f}".format(q.q1a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q2b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q2a) }}</td>
+                        <td>{{ "₹{:,.0f}".format(q.q3b) }}</td><td>{{ "₹{:,.0f}".format(q.q3a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q4b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q4a) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_b) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_a) }}</td>
+                        <td class="{{ 'positive' if total_b - total_a >= 0 else 'negative' }}" style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_b - total_a) }}</td>
+                    </tr>
+                    {% endfor %}
+
+                    <!-- Department rows -->
+                    {% for cat in dept_cats %}
+                    {% set q = namespace(q1b=0,q1a=0,q2b=0,q2a=0,q3b=0,q3a=0,q4b=0,q4a=0) %}
+                    {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ql = get_quarter_label(fm.month) %}
+                        {% if ql == 'Q1' %}{% set q.q1b = q.q1b + b %}{% set q.q1a = q.q1a + a %}
+                        {% elif ql == 'Q2' %}{% set q.q2b = q.q2b + b %}{% set q.q2a = q.q2a + a %}
+                        {% elif ql == 'Q3' %}{% set q.q3b = q.q3b + b %}{% set q.q3a = q.q3a + a %}
+                        {% else %}{% set q.q4b = q.q4b + b %}{% set q.q4a = q.q4a + a %}{% endif %}
+                    {% endfor %}
+                    {% set total_b = q.q1b + q.q2b + q.q3b + q.q4b %}
+                    {% set total_a = q.q1a + q.q2a + q.q3a + q.q4a %}
+                    {% set grand_e.budget = grand_e.budget + total_b %}
+                    {% set grand_e.actual = grand_e.actual + total_a %}
+                    <tr>
+                        <td>{{ cat.name|replace(' - Department Budget', '') }} (Dept)</td>
+                        <td>{{ "₹{:,.0f}".format(q.q1b) }}</td><td>{{ "₹{:,.0f}".format(q.q1a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q2b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q2a) }}</td>
+                        <td>{{ "₹{:,.0f}".format(q.q3b) }}</td><td>{{ "₹{:,.0f}".format(q.q3a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q4b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q4a) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_b) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_a) }}</td>
+                        <td class="{{ 'positive' if total_b - total_a >= 0 else 'negative' }}" style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_b - total_a) }}</td>
+                    </tr>
+                    {% endfor %}
+
+                    <tr class="subtotal">
+                        <td>Total Expenses</td>
+                        <td colspan="8"></td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_e.budget) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_e.actual) }}</td>
+                        <td class="{{ 'positive' if grand_e.budget - grand_e.actual >= 0 else 'negative' }}" style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_e.budget - grand_e.actual) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- REVENUE REPORT -->
+    <div class="report-section">
+        <h2>Revenue Projection vs Actuals</h2>
+        <div style="overflow-x: auto;">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th>Revenue Stream</th>
+                        <th>Q1 Projected</th><th>Q1 Actual</th>
+                        <th class="q-col">Q2 Projected</th><th class="q-col">Q2 Actual</th>
+                        <th>Q3 Projected</th><th>Q3 Actual</th>
+                        <th class="q-col">Q4 Projected</th><th class="q-col">Q4 Actual</th>
+                        <th style="background: rgba(15,27,51,0.06);">Annual Projected</th>
+                        <th style="background: rgba(15,27,51,0.06);">Annual Actual</th>
+                        <th style="background: rgba(15,27,51,0.06);">Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set grand_r = namespace(budget=0, actual=0) %}
+                    {% for cat in revenue_cats %}
+                    {% set q = namespace(q1b=0,q1a=0,q2b=0,q2a=0,q3b=0,q3a=0,q4b=0,q4a=0) %}
+                    {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ql = get_quarter_label(fm.month) %}
+                        {% if ql == 'Q1' %}{% set q.q1b = q.q1b + b %}{% set q.q1a = q.q1a + a %}
+                        {% elif ql == 'Q2' %}{% set q.q2b = q.q2b + b %}{% set q.q2a = q.q2a + a %}
+                        {% elif ql == 'Q3' %}{% set q.q3b = q.q3b + b %}{% set q.q3a = q.q3a + a %}
+                        {% else %}{% set q.q4b = q.q4b + b %}{% set q.q4a = q.q4a + a %}{% endif %}
+                    {% endfor %}
+                    {% set total_b = q.q1b + q.q2b + q.q3b + q.q4b %}
+                    {% set total_a = q.q1a + q.q2a + q.q3a + q.q4a %}
+                    {% set grand_r.budget = grand_r.budget + total_b %}
+                    {% set grand_r.actual = grand_r.actual + total_a %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        <td>{{ "₹{:,.0f}".format(q.q1b) }}</td><td>{{ "₹{:,.0f}".format(q.q1a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q2b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q2a) }}</td>
+                        <td>{{ "₹{:,.0f}".format(q.q3b) }}</td><td>{{ "₹{:,.0f}".format(q.q3a) }}</td>
+                        <td class="q-col">{{ "₹{:,.0f}".format(q.q4b) }}</td><td class="q-col">{{ "₹{:,.0f}".format(q.q4a) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_b) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_a) }}</td>
+                        <td class="{{ 'positive' if total_a - total_b >= 0 else 'negative' }}" style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(total_a - total_b) }}</td>
+                    </tr>
+                    {% endfor %}
+                    <tr class="subtotal">
+                        <td>Total Revenue</td>
+                        <td colspan="8"></td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_r.budget) }}</td>
+                        <td style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_r.actual) }}</td>
+                        <td class="{{ 'positive' if grand_r.actual - grand_r.budget >= 0 else 'negative' }}" style="background: rgba(15,27,51,0.06);">{{ "₹{:,.0f}".format(grand_r.actual - grand_r.budget) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- PROFIT / LOSS SUMMARY -->
+    <div class="report-section">
+        <h2>Net Profit / Loss Summary</h2>
+        <div style="overflow-x: auto;">
+            <table class="report-table">
+                <thead>
+                    <tr>
+                        <th style="min-width: 180px;">Item</th>
+                        <th>Annual Budget</th>
+                        <th>Annual Actual</th>
+                        <th>Variance</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td>Total Revenue</td>
+                        <td>{{ "₹{:,.0f}".format(grand_r.budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(grand_r.actual) }}</td>
+                        <td class="{{ 'positive' if grand_r.actual - grand_r.budget >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(grand_r.actual - grand_r.budget) }}</td>
+                    </tr>
+                    <tr>
+                        <td>Total Expenses</td>
+                        <td>{{ "₹{:,.0f}".format(grand_e.budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(grand_e.actual) }}</td>
+                        <td class="{{ 'positive' if grand_e.budget - grand_e.actual >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(grand_e.budget - grand_e.actual) }}</td>
+                    </tr>
+                    {% set net_budget = grand_r.budget - grand_e.budget %}
+                    {% set net_actual = grand_r.actual - grand_e.actual %}
+                    <tr class="grand-total">
+                        <td>Net Profit / Loss</td>
+                        <td class="{{ 'positive' if net_budget >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_budget) }}</td>
+                        <td class="{{ 'positive' if net_actual >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_actual) }}</td>
+                        <td class="{{ 'positive' if net_actual - net_budget >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_actual - net_budget) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <p style="font-size: 0.7rem; color: var(--gray-400); text-align: center; margin-top: 2rem;">
+        GooCampus Edu Solutions Pvt Ltd &middot; Annual Budget Report FY {{ fy_year }} &middot; Admin Only
+    </p>
+</div>
+{% endblock %}

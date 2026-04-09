@@ -5779,12 +5779,484 @@ def kra_report():
                          avg_emp=avg_emp, avg_mgr=avg_mgr, rated_months=rated_months)
 
 
+# ─── Budget & Finance Module ───
+
+def ensure_budget_tables():
+    """Create budget/finance tables if they don't exist."""
+    try:
+        conn = get_db()
+        tables_sql = [
+            '''CREATE TABLE IF NOT EXISTS budget_categories (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                parent_id INTEGER REFERENCES budget_categories(id),
+                cat_type TEXT NOT NULL DEFAULT 'expense',
+                department TEXT,
+                sort_order INTEGER DEFAULT 0,
+                is_active INTEGER DEFAULT 1,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS budget_entries (
+                id SERIAL PRIMARY KEY,
+                category_id INTEGER NOT NULL REFERENCES budget_categories(id),
+                fy_year TEXT NOT NULL DEFAULT '2026-2027',
+                month INTEGER NOT NULL,
+                year INTEGER NOT NULL,
+                budget_amount REAL DEFAULT 0,
+                actual_amount REAL DEFAULT 0,
+                notes TEXT,
+                is_locked INTEGER DEFAULT 0,
+                created_by INTEGER REFERENCES employees(id),
+                updated_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS budget_settings (
+                id SERIAL PRIMARY KEY,
+                fy_year TEXT NOT NULL DEFAULT '2026-2027',
+                setting_key TEXT NOT NULL,
+                setting_value TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )'''
+        ]
+        for sql in tables_sql:
+            conn.execute(sql)
+        conn.commit()
+        conn.close()
+        logging.info("Budget tables ensured.")
+    except Exception as e:
+        logging.error(f"ensure_budget_tables: {e}")
+
+
+def seed_budget_categories():
+    """Seed default budget categories for expense and revenue."""
+    try:
+        conn = get_db()
+        count = conn.execute('SELECT COUNT(*) as cnt FROM budget_categories').fetchone()
+        if count['cnt'] > 0:
+            conn.close()
+            return
+
+        # Expense categories (top-level)
+        expense_cats = [
+            ('Salaries & Wages', None, 'expense', None, 1),
+            ('Rent & Utilities', None, 'expense', None, 2),
+            ('Marketing & Advertising', None, 'expense', None, 3),
+            ('Travel & Conveyance', None, 'expense', None, 4),
+            ('Software & Tools', None, 'expense', None, 5),
+            ('Office Supplies', None, 'expense', None, 6),
+            ('Professional Services', None, 'expense', None, 7),
+            ('Communication & Internet', None, 'expense', None, 8),
+            ('Insurance', None, 'expense', None, 9),
+            ('Miscellaneous Expenses', None, 'expense', None, 10),
+        ]
+
+        # Department budget categories
+        departments = ['Human Resources', 'Marketing', 'Sales', 'Operations', 'Technology']
+
+        # Revenue categories (top-level)
+        revenue_cats = [
+            ('Student Consulting / Counseling Fees', None, 'revenue', None, 1),
+            ('University Placement Commissions', None, 'revenue', None, 2),
+            ('Medical PG International Pathways', None, 'revenue', None, 3),
+            ('Online & Offline Trainings', None, 'revenue', None, 4),
+            ('B2B Services', None, 'revenue', None, 5),
+            ('Portfolio Services', None, 'revenue', None, 6),
+            ('Other Products / Services', None, 'revenue', None, 7),
+        ]
+
+        # Insert expense categories
+        for name, parent_id, cat_type, dept, sort_order in expense_cats:
+            conn.execute(
+                'INSERT INTO budget_categories (name, parent_id, cat_type, department, sort_order) VALUES (?, ?, ?, ?, ?)',
+                (name, parent_id, cat_type, dept, sort_order)
+            )
+
+        # Insert department expense categories
+        dept_sort = 20
+        for dept in departments:
+            conn.execute(
+                'INSERT INTO budget_categories (name, parent_id, cat_type, department, sort_order) VALUES (?, ?, ?, ?, ?)',
+                (f'{dept} - Department Budget', None, 'department', dept, dept_sort)
+            )
+            dept_sort += 1
+
+        # Insert revenue categories
+        for name, parent_id, cat_type, dept, sort_order in revenue_cats:
+            conn.execute(
+                'INSERT INTO budget_categories (name, parent_id, cat_type, department, sort_order) VALUES (?, ?, ?, ?, ?)',
+                (name, parent_id, cat_type, dept, sort_order)
+            )
+
+        conn.commit()
+        conn.close()
+        logging.info("Budget categories seeded.")
+    except Exception as e:
+        logging.error(f"seed_budget_categories: {e}")
+
+
+# Budget helper: get FY months in order (Apr 2026 - Mar 2027)
+def get_fy_months(fy_year='2026-2027'):
+    parts = fy_year.split('-')
+    start_year = int(parts[0])
+    end_year = int(parts[1]) if len(parts) > 1 else start_year + 1
+    months = []
+    for m in range(4, 13):  # Apr to Dec
+        months.append({'month': m, 'year': start_year, 'label': f"{calendar.month_abbr[m]} {start_year}"})
+    for m in range(1, 4):  # Jan to Mar
+        months.append({'month': m, 'year': end_year, 'label': f"{calendar.month_abbr[m]} {end_year}"})
+    return months
+
+
+def get_quarter_label(month):
+    if month in [4, 5, 6]:
+        return 'Q1'
+    elif month in [7, 8, 9]:
+        return 'Q2'
+    elif month in [10, 11, 12]:
+        return 'Q3'
+    else:
+        return 'Q4'
+
+
+# ─── Finance / Budget Routes ───
+
+@app.route('/finance/budget')
+@admin_required
+def finance_dashboard():
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    fy_months = get_fy_months(fy_year)
+    conn = get_db()
+
+    # Get all categories
+    expense_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    dept_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    revenue_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+
+    # Get all entries for this FY
+    entries = conn.execute(
+        "SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)
+    ).fetchall()
+    conn.close()
+
+    # Build lookup: (category_id, month, year) -> entry
+    entry_map = {}
+    for e in entries:
+        key = (e['category_id'], e['month'], e['year'])
+        entry_map[key] = e
+
+    # Calculate totals
+    total_expense_budget = 0
+    total_expense_actual = 0
+    total_revenue_budget = 0
+    total_revenue_actual = 0
+    total_dept_budget = 0
+    total_dept_actual = 0
+
+    # Monthly aggregates for chart
+    monthly_expense_budget = []
+    monthly_expense_actual = []
+    monthly_revenue_budget = []
+    monthly_revenue_actual = []
+    month_labels = []
+
+    for fm in fy_months:
+        m, y = fm['month'], fm['year']
+        month_labels.append(fm['label'])
+        eb = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in expense_cats)
+        ea = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in expense_cats)
+        db_ = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in dept_cats)
+        da = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in dept_cats)
+        rb = sum(entry_map.get((c['id'], m, y), {}).get('budget_amount', 0) or 0 for c in revenue_cats)
+        ra = sum(entry_map.get((c['id'], m, y), {}).get('actual_amount', 0) or 0 for c in revenue_cats)
+        total_expense_budget += eb + db_
+        total_expense_actual += ea + da
+        total_dept_budget += db_
+        total_dept_actual += da
+        total_revenue_budget += rb
+        total_revenue_actual += ra
+        monthly_expense_budget.append(round(eb + db_, 2))
+        monthly_expense_actual.append(round(ea + da, 2))
+        monthly_revenue_budget.append(round(rb, 2))
+        monthly_revenue_actual.append(round(ra, 2))
+
+    # Quarterly aggregates
+    quarters = {'Q1': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
+                'Q2': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
+                'Q3': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0},
+                'Q4': {'expense_budget': 0, 'expense_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}}
+    for i, fm in enumerate(fy_months):
+        q = get_quarter_label(fm['month'])
+        quarters[q]['expense_budget'] += monthly_expense_budget[i]
+        quarters[q]['expense_actual'] += monthly_expense_actual[i]
+        quarters[q]['revenue_budget'] += monthly_revenue_budget[i]
+        quarters[q]['revenue_actual'] += monthly_revenue_actual[i]
+
+    # Department breakdown
+    dept_data = []
+    for dc in dept_cats:
+        b = sum(entry_map.get((dc['id'], fm['month'], fm['year']), {}).get('budget_amount', 0) or 0 for fm in fy_months)
+        a = sum(entry_map.get((dc['id'], fm['month'], fm['year']), {}).get('actual_amount', 0) or 0 for fm in fy_months)
+        dept_data.append({'name': dc['name'].replace(' - Department Budget', ''), 'budget': round(b, 2), 'actual': round(a, 2),
+                          'variance': round(b - a, 2), 'utilization': round((a / b * 100) if b > 0 else 0, 1)})
+
+    # Locked months
+    locked_months = set()
+    for e in entries:
+        if e.get('is_locked'):
+            locked_months.add((e['month'], e['year']))
+
+    return render_template('finance_dashboard.html', user=user, fy_year=fy_year, fy_months=fy_months,
+                           expense_cats=expense_cats, dept_cats=dept_cats, revenue_cats=revenue_cats,
+                           entry_map=entry_map,
+                           total_expense_budget=round(total_expense_budget, 2),
+                           total_expense_actual=round(total_expense_actual, 2),
+                           total_revenue_budget=round(total_revenue_budget, 2),
+                           total_revenue_actual=round(total_revenue_actual, 2),
+                           monthly_expense_budget=monthly_expense_budget,
+                           monthly_expense_actual=monthly_expense_actual,
+                           monthly_revenue_budget=monthly_revenue_budget,
+                           monthly_revenue_actual=monthly_revenue_actual,
+                           month_labels=month_labels,
+                           quarters=quarters, dept_data=dept_data, locked_months=locked_months)
+
+
+@app.route('/finance/budget/expenses')
+@admin_required
+def finance_expenses():
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    fy_months = get_fy_months(fy_year)
+    conn = get_db()
+
+    expense_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    dept_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    entries = conn.execute("SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)).fetchall()
+    conn.close()
+
+    entry_map = {}
+    for e in entries:
+        entry_map[(e['category_id'], e['month'], e['year'])] = e
+
+    return render_template('finance_expenses.html', user=user, fy_year=fy_year, fy_months=fy_months,
+                           expense_cats=expense_cats, dept_cats=dept_cats, entry_map=entry_map,
+                           get_quarter_label=get_quarter_label)
+
+
+@app.route('/finance/budget/revenue')
+@admin_required
+def finance_revenue():
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    fy_months = get_fy_months(fy_year)
+    conn = get_db()
+
+    revenue_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    entries = conn.execute("SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)).fetchall()
+    conn.close()
+
+    entry_map = {}
+    for e in entries:
+        entry_map[(e['category_id'], e['month'], e['year'])] = e
+
+    return render_template('finance_revenue.html', user=user, fy_year=fy_year, fy_months=fy_months,
+                           revenue_cats=revenue_cats, entry_map=entry_map,
+                           get_quarter_label=get_quarter_label)
+
+
+@app.route('/finance/budget/edit/<int:month>/<int:year>', methods=['GET', 'POST'])
+@admin_required
+def finance_edit_month(month, year):
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    conn = get_db()
+
+    # Check if month is locked
+    lock_check = conn.execute(
+        "SELECT is_locked FROM budget_entries WHERE fy_year = ? AND month = ? AND year = ? AND is_locked = 1 LIMIT 1",
+        (fy_year, month, year)
+    ).fetchone()
+    is_locked = lock_check is not None
+
+    if request.method == 'POST' and not is_locked:
+        all_cats = conn.execute(
+            "SELECT * FROM budget_categories WHERE is_active = 1 ORDER BY cat_type, sort_order"
+        ).fetchall()
+
+        for cat in all_cats:
+            budget_val = request.form.get(f'budget_{cat["id"]}', '0')
+            actual_val = request.form.get(f'actual_{cat["id"]}', '0')
+            notes_val = request.form.get(f'notes_{cat["id"]}', '').strip()
+
+            try:
+                budget_val = float(budget_val) if budget_val else 0
+            except ValueError:
+                budget_val = 0
+            try:
+                actual_val = float(actual_val) if actual_val else 0
+            except ValueError:
+                actual_val = 0
+
+            existing = conn.execute(
+                "SELECT id FROM budget_entries WHERE category_id = ? AND fy_year = ? AND month = ? AND year = ?",
+                (cat['id'], fy_year, month, year)
+            ).fetchone()
+
+            if existing:
+                conn.execute(
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (budget_val, actual_val, notes_val, user['id'], existing['id'])
+                )
+            else:
+                if budget_val > 0 or actual_val > 0 or notes_val:
+                    conn.execute(
+                        "INSERT INTO budget_entries (category_id, fy_year, month, year, budget_amount, actual_amount, notes, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, user['id'], user['id'])
+                    )
+
+        conn.commit()
+        flash(f'Budget data for {calendar.month_name[month]} {year} saved successfully!', 'success')
+        conn.close()
+        return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
+
+    # GET: load existing data
+    expense_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    dept_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+    revenue_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
+    ).fetchall()
+
+    entries = conn.execute(
+        "SELECT * FROM budget_entries WHERE fy_year = ? AND month = ? AND year = ?",
+        (fy_year, month, year)
+    ).fetchall()
+    conn.close()
+
+    entry_map = {}
+    for e in entries:
+        entry_map[e['category_id']] = e
+
+    month_name = calendar.month_name[month]
+    return render_template('finance_edit_month.html', user=user, fy_year=fy_year,
+                           month=month, year=year, month_name=month_name,
+                           expense_cats=expense_cats, dept_cats=dept_cats,
+                           revenue_cats=revenue_cats, entry_map=entry_map,
+                           is_locked=is_locked, get_fy_months=get_fy_months)
+
+
+@app.route('/finance/budget/lock/<int:month>/<int:year>', methods=['POST'])
+@admin_required
+def finance_lock_month(month, year):
+    fy_year = request.form.get('fy', '2026-2027')
+    conn = get_db()
+    conn.execute(
+        "UPDATE budget_entries SET is_locked = 1 WHERE fy_year = ? AND month = ? AND year = ?",
+        (fy_year, month, year)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'{calendar.month_name[month]} {year} has been locked.', 'success')
+    return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
+
+
+@app.route('/finance/budget/unlock/<int:month>/<int:year>', methods=['POST'])
+@admin_required
+def finance_unlock_month(month, year):
+    fy_year = request.form.get('fy', '2026-2027')
+    conn = get_db()
+    conn.execute(
+        "UPDATE budget_entries SET is_locked = 0 WHERE fy_year = ? AND month = ? AND year = ?",
+        (fy_year, month, year)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'{calendar.month_name[month]} {year} has been unlocked.', 'success')
+    return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
+
+
+@app.route('/finance/budget/report')
+@admin_required
+def finance_report():
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    fy_months = get_fy_months(fy_year)
+    conn = get_db()
+
+    all_cats = conn.execute(
+        "SELECT * FROM budget_categories WHERE is_active = 1 ORDER BY cat_type, sort_order"
+    ).fetchall()
+    entries = conn.execute("SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)).fetchall()
+    conn.close()
+
+    entry_map = {}
+    for e in entries:
+        entry_map[(e['category_id'], e['month'], e['year'])] = e
+
+    expense_cats = [c for c in all_cats if c['cat_type'] == 'expense']
+    dept_cats = [c for c in all_cats if c['cat_type'] == 'department']
+    revenue_cats = [c for c in all_cats if c['cat_type'] == 'revenue']
+
+    return render_template('finance_report.html', user=user, fy_year=fy_year, fy_months=fy_months,
+                           expense_cats=expense_cats, dept_cats=dept_cats, revenue_cats=revenue_cats,
+                           entry_map=entry_map, get_quarter_label=get_quarter_label)
+
+
+@app.route('/finance/budget/category/add', methods=['POST'])
+@admin_required
+def finance_add_category():
+    name = request.form.get('name', '').strip()
+    cat_type = request.form.get('cat_type', 'expense')
+    department = request.form.get('department', '').strip() or None
+    fy = request.form.get('fy', '2026-2027')
+
+    if not name:
+        flash('Category name is required', 'error')
+        return redirect(url_for('finance_dashboard', fy=fy))
+
+    conn = get_db()
+    max_sort = conn.execute(
+        "SELECT MAX(sort_order) as mx FROM budget_categories WHERE cat_type = ?", (cat_type,)
+    ).fetchone()
+    next_sort = (max_sort['mx'] or 0) + 1
+
+    conn.execute(
+        "INSERT INTO budget_categories (name, cat_type, department, sort_order) VALUES (?, ?, ?, ?)",
+        (name, cat_type, department, next_sort)
+    )
+    conn.commit()
+    conn.close()
+    flash(f'Category "{name}" added successfully!', 'success')
+
+    if cat_type == 'revenue':
+        return redirect(url_for('finance_revenue', fy=fy))
+    return redirect(url_for('finance_expenses', fy=fy))
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
 ensure_notification_tables()
+ensure_budget_tables()
 seed_kra_categories()
 seed_default_meeting_types()
+seed_budget_categories()
 ensure_management_admins()
 
 if __name__ == '__main__':

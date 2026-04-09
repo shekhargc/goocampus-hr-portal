@@ -1,0 +1,490 @@
+{% extends "base.html" %}
+{% block title %}Budget Dashboard - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+    .finance-header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin: 0;
+    }
+    .finance-header .fy-badge {
+        background: var(--navy);
+        color: white;
+        padding: 0.3rem 0.8rem;
+        border-radius: 6px;
+        font-size: 0.8rem;
+        font-weight: 600;
+    }
+    .finance-nav {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .finance-nav a {
+        padding: 0.45rem 1rem;
+        border-radius: 8px;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+    }
+    .finance-nav a.active {
+        background: var(--navy);
+        color: white;
+    }
+    .finance-nav a:not(.active) {
+        background: var(--gray-100);
+        color: var(--gray-600);
+    }
+    .finance-nav a:not(.active):hover {
+        background: var(--gray-200);
+    }
+
+    /* Summary Cards */
+    .summary-cards {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .summary-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+        position: relative;
+        overflow: hidden;
+    }
+    .summary-card::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 4px;
+        height: 100%;
+    }
+    .summary-card.expense::before { background: #EF4444; }
+    .summary-card.revenue::before { background: #10B981; }
+    .summary-card.profit::before { background: #3B82F6; }
+    .summary-card.variance::before { background: #F59E0B; }
+
+    .summary-card__label {
+        font-size: 0.7rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray-500);
+        margin-bottom: 0.4rem;
+    }
+    .summary-card__row {
+        display: flex;
+        justify-content: space-between;
+        align-items: baseline;
+        margin-bottom: 0.2rem;
+    }
+    .summary-card__sublabel {
+        font-size: 0.7rem;
+        color: var(--gray-400);
+    }
+    .summary-card__value {
+        font-size: 1.3rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .summary-card__value.green { color: #10B981; }
+    .summary-card__value.red { color: #EF4444; }
+    .summary-card__sub {
+        font-size: 0.85rem;
+        font-weight: 600;
+    }
+    .summary-card__sub.green { color: #10B981; }
+    .summary-card__sub.red { color: #EF4444; }
+    .summary-card__sub.blue { color: #3B82F6; }
+
+    /* Charts */
+    .chart-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr;
+        gap: 1.2rem;
+        margin-bottom: 2rem;
+    }
+    .chart-card {
+        background: white;
+        border-radius: 12px;
+        padding: 1.2rem;
+        box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+    }
+    .chart-card h3 {
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin: 0 0 1rem 0;
+    }
+
+    /* Quarter Table */
+    .quarter-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 0.8rem;
+    }
+    .quarter-table th {
+        background: var(--gray-50);
+        padding: 0.6rem 0.8rem;
+        text-align: right;
+        font-weight: 600;
+        color: var(--gray-600);
+        border-bottom: 2px solid var(--gray-200);
+    }
+    .quarter-table th:first-child { text-align: left; }
+    .quarter-table td {
+        padding: 0.6rem 0.8rem;
+        text-align: right;
+        border-bottom: 1px solid var(--gray-100);
+        color: var(--gray-700);
+    }
+    .quarter-table td:first-child {
+        text-align: left;
+        font-weight: 600;
+        color: var(--navy);
+    }
+    .quarter-table .total-row td {
+        font-weight: 700;
+        border-top: 2px solid var(--gray-300);
+        color: var(--navy);
+    }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
+
+    /* Department bars */
+    .dept-item {
+        margin-bottom: 0.8rem;
+    }
+    .dept-item__header {
+        display: flex;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        margin-bottom: 0.3rem;
+    }
+    .dept-item__name { font-weight: 600; color: var(--navy); }
+    .dept-item__pct { font-weight: 600; }
+    .dept-bar {
+        height: 8px;
+        background: var(--gray-100);
+        border-radius: 4px;
+        overflow: hidden;
+    }
+    .dept-bar__fill {
+        height: 100%;
+        border-radius: 4px;
+        transition: width 0.5s ease;
+    }
+
+    /* Month grid */
+    .month-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.6rem;
+        margin-top: 1.5rem;
+    }
+    .month-tile {
+        background: white;
+        border-radius: 8px;
+        padding: 0.8rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+        text-decoration: none;
+        transition: all 0.2s;
+        border: 1px solid var(--gray-100);
+    }
+    .month-tile:hover {
+        box-shadow: 0 3px 8px rgba(0,0,0,0.1);
+        border-color: var(--navy);
+    }
+    .month-tile.locked {
+        border-left: 3px solid #10B981;
+    }
+    .month-tile__name {
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.3rem;
+    }
+    .month-tile__stat {
+        font-size: 0.65rem;
+        color: var(--gray-500);
+    }
+    .month-tile__stat span {
+        font-weight: 600;
+    }
+
+    @media (max-width: 768px) {
+        .summary-cards { grid-template-columns: repeat(2, 1fr); }
+        .chart-row { grid-template-columns: 1fr; }
+        .month-grid { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+    <!-- Header -->
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Budget & Finance</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div class="finance-nav">
+            <a href="/finance/budget?fy={{ fy_year }}" class="active">Dashboard</a>
+            <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    {% set net_budget = total_revenue_budget - total_expense_budget %}
+    {% set net_actual = total_revenue_actual - total_expense_actual %}
+    {% set expense_var = total_expense_budget - total_expense_actual %}
+    {% set revenue_var = total_revenue_actual - total_revenue_budget %}
+
+    <div class="summary-cards">
+        <div class="summary-card expense">
+            <div class="summary-card__label">Total Expenses</div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Budget</span>
+                <span class="summary-card__value">{{ "₹{:,.0f}".format(total_expense_budget) }}</span>
+            </div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Actual</span>
+                <span class="summary-card__sub red">{{ "₹{:,.0f}".format(total_expense_actual) }}</span>
+            </div>
+        </div>
+        <div class="summary-card revenue">
+            <div class="summary-card__label">Total Revenue</div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Projected</span>
+                <span class="summary-card__value green">{{ "₹{:,.0f}".format(total_revenue_budget) }}</span>
+            </div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Actual</span>
+                <span class="summary-card__sub green">{{ "₹{:,.0f}".format(total_revenue_actual) }}</span>
+            </div>
+        </div>
+        <div class="summary-card profit">
+            <div class="summary-card__label">Net Profit / Loss</div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Budget</span>
+                <span class="summary-card__value {{ 'green' if net_budget >= 0 else 'red' }}">{{ "₹{:,.0f}".format(net_budget) }}</span>
+            </div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Actual</span>
+                <span class="summary-card__sub {{ 'green' if net_actual >= 0 else 'red' }}">{{ "₹{:,.0f}".format(net_actual) }}</span>
+            </div>
+        </div>
+        <div class="summary-card variance">
+            <div class="summary-card__label">Variance</div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Expense</span>
+                <span class="summary-card__sub {{ 'green' if expense_var >= 0 else 'red' }}">{{ "₹{:,.0f}".format(expense_var) }} {{ '↓' if expense_var >= 0 else '↑' }}</span>
+            </div>
+            <div class="summary-card__row">
+                <span class="summary-card__sublabel">Revenue</span>
+                <span class="summary-card__sub {{ 'green' if revenue_var >= 0 else 'red' }}">{{ "₹{:,.0f}".format(revenue_var) }} {{ '↑' if revenue_var >= 0 else '↓' }}</span>
+            </div>
+        </div>
+    </div>
+
+    <!-- Charts Row -->
+    <div class="chart-row">
+        <div class="chart-card">
+            <h3>Monthly Budget vs Actuals</h3>
+            <canvas id="monthlyChart" height="220"></canvas>
+        </div>
+        <div class="chart-card">
+            <h3>Department Budget Utilization</h3>
+            {% for d in dept_data %}
+            <div class="dept-item">
+                <div class="dept-item__header">
+                    <span class="dept-item__name">{{ d.name }}</span>
+                    <span class="dept-item__pct {{ 'red' if d.utilization > 100 else 'green' if d.utilization > 0 else '' }}">{{ d.utilization }}%</span>
+                </div>
+                <div class="dept-bar">
+                    <div class="dept-bar__fill" style="width: {{ [d.utilization, 100]|min }}%; background: {{ '#EF4444' if d.utilization > 100 else '#3B82F6' if d.utilization > 50 else '#10B981' }};"></div>
+                </div>
+            </div>
+            {% endfor %}
+            {% if not dept_data %}
+            <p style="font-size: 0.8rem; color: var(--gray-400); text-align: center; padding: 2rem 0;">No department budgets set yet</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- Quarterly Summary -->
+    <div class="chart-card" style="margin-bottom: 2rem;">
+        <h3>Quarterly Summary</h3>
+        <table class="quarter-table">
+            <thead>
+                <tr>
+                    <th>Quarter</th>
+                    <th>Expense Budget</th>
+                    <th>Expense Actual</th>
+                    <th>Revenue Projected</th>
+                    <th>Revenue Actual</th>
+                    <th>Net (Budget)</th>
+                    <th>Net (Actual)</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for q_name in ['Q1', 'Q2', 'Q3', 'Q4'] %}
+                {% set q = quarters[q_name] %}
+                <tr>
+                    <td>{{ q_name }} {% if q_name == 'Q1' %}(Apr–Jun){% elif q_name == 'Q2' %}(Jul–Sep){% elif q_name == 'Q3' %}(Oct–Dec){% else %}(Jan–Mar){% endif %}</td>
+                    <td>{{ "₹{:,.0f}".format(q.expense_budget) }}</td>
+                    <td>{{ "₹{:,.0f}".format(q.expense_actual) }}</td>
+                    <td>{{ "₹{:,.0f}".format(q.revenue_budget) }}</td>
+                    <td>{{ "₹{:,.0f}".format(q.revenue_actual) }}</td>
+                    <td class="{{ 'positive' if q.revenue_budget - q.expense_budget >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(q.revenue_budget - q.expense_budget) }}</td>
+                    <td class="{{ 'positive' if q.revenue_actual - q.expense_actual >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(q.revenue_actual - q.expense_actual) }}</td>
+                </tr>
+                {% endfor %}
+                <tr class="total-row">
+                    <td>Annual Total</td>
+                    <td>{{ "₹{:,.0f}".format(total_expense_budget) }}</td>
+                    <td>{{ "₹{:,.0f}".format(total_expense_actual) }}</td>
+                    <td>{{ "₹{:,.0f}".format(total_revenue_budget) }}</td>
+                    <td>{{ "₹{:,.0f}".format(total_revenue_actual) }}</td>
+                    <td class="{{ 'positive' if net_budget >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_budget) }}</td>
+                    <td class="{{ 'positive' if net_actual >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_actual) }}</td>
+                </tr>
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Monthly Entry Tiles -->
+    <div class="chart-card">
+        <h3>Monthly Data Entry</h3>
+        <p style="font-size: 0.75rem; color: var(--gray-400); margin: -0.5rem 0 1rem;">Click a month to enter or update budget and actual amounts</p>
+        <div class="month-grid">
+            {% for fm in fy_months %}
+            {% set m_expense_b = 0 %}
+            {% set m_revenue_b = 0 %}
+            {% set is_month_locked = (fm.month, fm.year) in locked_months %}
+            <a href="/finance/budget/edit/{{ fm.month }}/{{ fm.year }}?fy={{ fy_year }}" class="month-tile {{ 'locked' if is_month_locked }}">
+                <div class="month-tile__name">
+                    {{ fm.label }}
+                    {% if is_month_locked %}
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2.5" style="vertical-align: -1px;">
+                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/>
+                    </svg>
+                    {% endif %}
+                </div>
+                <div class="month-tile__stat">Expense: <span>{{ "₹{:,.0f}".format(monthly_expense_actual[loop.index0]) }}</span></div>
+                <div class="month-tile__stat">Revenue: <span>{{ "₹{:,.0f}".format(monthly_revenue_actual[loop.index0]) }}</span></div>
+            </a>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+const ctx = document.getElementById('monthlyChart').getContext('2d');
+new Chart(ctx, {
+    type: 'bar',
+    data: {
+        labels: {{ month_labels|tojson }},
+        datasets: [
+            {
+                label: 'Expense Budget',
+                data: {{ monthly_expense_budget|tojson }},
+                backgroundColor: 'rgba(239,68,68,0.15)',
+                borderColor: '#EF4444',
+                borderWidth: 1.5,
+                borderRadius: 3,
+                barPercentage: 0.4,
+                categoryPercentage: 0.8,
+                order: 2
+            },
+            {
+                label: 'Expense Actual',
+                data: {{ monthly_expense_actual|tojson }},
+                backgroundColor: 'rgba(239,68,68,0.6)',
+                borderColor: '#EF4444',
+                borderWidth: 0,
+                borderRadius: 3,
+                barPercentage: 0.4,
+                categoryPercentage: 0.8,
+                order: 2
+            },
+            {
+                label: 'Revenue Projected',
+                type: 'line',
+                data: {{ monthly_revenue_budget|tojson }},
+                borderColor: '#10B981',
+                borderWidth: 2,
+                borderDash: [5, 3],
+                pointRadius: 3,
+                pointBackgroundColor: '#10B981',
+                fill: false,
+                tension: 0.3,
+                order: 1
+            },
+            {
+                label: 'Revenue Actual',
+                type: 'line',
+                data: {{ monthly_revenue_actual|tojson }},
+                borderColor: '#059669',
+                borderWidth: 2.5,
+                pointRadius: 4,
+                pointBackgroundColor: '#059669',
+                fill: false,
+                tension: 0.3,
+                order: 1
+            }
+        ]
+    },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: {
+                position: 'bottom',
+                labels: { boxWidth: 12, padding: 15, font: { size: 11 } }
+            },
+            tooltip: {
+                callbacks: {
+                    label: function(ctx) {
+                        return ctx.dataset.label + ': ₹' + ctx.parsed.y.toLocaleString('en-IN');
+                    }
+                }
+            }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(v) { return '₹' + (v >= 100000 ? (v/100000).toFixed(1) + 'L' : v.toLocaleString('en-IN')); },
+                    font: { size: 10 }
+                },
+                grid: { color: 'rgba(0,0,0,0.04)' }
+            },
+            x: {
+                ticks: { font: { size: 10 } },
+                grid: { display: false }
+            }
+        }
+    }
+});
+</script>
+{% endblock %}

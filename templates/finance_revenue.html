@@ -1,0 +1,235 @@
+{% extends "base.html" %}
+{% block title %}Sales Projection - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .finance-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .finance-nav a { padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .finance-nav a.active { background: var(--navy); color: white; }
+    .finance-nav a:not(.active) { background: var(--gray-100); color: var(--gray-600); }
+    .finance-nav a:not(.active):hover { background: var(--gray-200); }
+
+    .section-card { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .section-card h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; }
+    .section-card h3 .badge { background: #10B981; color: white; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 10px; }
+
+    .budget-table-wrap { overflow-x: auto; }
+    .budget-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: 900px; }
+    .budget-table th { background: var(--gray-50); padding: 0.5rem 0.4rem; text-align: right; font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
+    .budget-table th:first-child { text-align: left; min-width: 200px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
+    .budget-table td { padding: 0.45rem 0.4rem; text-align: right; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+    .budget-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); position: sticky; left: 0; background: white; z-index: 1; }
+    .budget-table .quarter-col { background: rgba(16,185,129,0.04); font-weight: 600; }
+    .budget-table .total-col { background: rgba(15,27,51,0.06); font-weight: 700; }
+    .budget-table .actual-row td { font-size: 0.65rem; color: var(--gray-500); border-bottom: 1px solid var(--gray-50); }
+    .budget-table .actual-row td:first-child { font-weight: 400; padding-left: 1rem; }
+    .budget-table .variance-row td { font-size: 0.65rem; border-bottom: 2px solid var(--gray-100); }
+    .budget-table .variance-row td:first-child { font-weight: 400; padding-left: 1rem; font-style: italic; }
+    .budget-table .subtotal-row td { font-weight: 700; border-top: 2px solid var(--gray-200); background: var(--gray-50); }
+    .budget-table .subtotal-row td:first-child { background: var(--gray-50); }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
+
+    .add-cat-form { display: flex; gap: 0.5rem; align-items: center; margin-top: 1rem; flex-wrap: wrap; }
+    .add-cat-form input { padding: 0.4rem 0.7rem; border: 1px solid var(--gray-200); border-radius: 6px; font-size: 0.8rem; flex: 1; min-width: 200px; }
+    .add-cat-form button { padding: 0.4rem 1rem; background: var(--navy); color: white; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+
+    /* Revenue stream cards */
+    .revenue-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; margin-bottom: 1.5rem; }
+    .rev-card { background: white; border-radius: 10px; padding: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-left: 3px solid #10B981; }
+    .rev-card__name { font-size: 0.72rem; font-weight: 600; color: var(--gray-600); margin-bottom: 0.3rem; }
+    .rev-card__projected { font-size: 1.1rem; font-weight: 700; color: var(--navy); }
+    .rev-card__actual { font-size: 0.75rem; color: var(--gray-500); }
+    .rev-card__pct { font-size: 0.7rem; font-weight: 600; margin-top: 0.2rem; }
+
+    @media (max-width: 768px) {
+        .revenue-summary { grid-template-columns: repeat(2, 1fr); }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Sales Projection</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div class="finance-nav">
+            <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
+            <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}" class="active">Revenue</a>
+            <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
+        </div>
+    </div>
+
+    <!-- Revenue Stream Summary Cards -->
+    <div class="revenue-summary">
+        {% for cat in revenue_cats %}
+        {% set ns = namespace(total_b=0, total_a=0) %}
+        {% for fm in fy_months %}
+            {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+            {% set ns.total_b = ns.total_b + (e.get('budget_amount', 0) or 0) %}
+            {% set ns.total_a = ns.total_a + (e.get('actual_amount', 0) or 0) %}
+        {% endfor %}
+        <div class="rev-card">
+            <div class="rev-card__name">{{ cat.name }}</div>
+            <div class="rev-card__projected">{{ "₹{:,.0f}".format(ns.total_b) }}</div>
+            <div class="rev-card__actual">Actual: {{ "₹{:,.0f}".format(ns.total_a) }}</div>
+            {% if ns.total_b > 0 %}
+            {% set pct = (ns.total_a / ns.total_b * 100)|round(1) %}
+            <div class="rev-card__pct {{ 'positive' if pct >= 80 else 'negative' }}">{{ pct }}% achieved</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+
+    <!-- Revenue Detail Table -->
+    <div class="section-card">
+        <h3>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+            Revenue Streams — Monthly Breakdown
+            <span class="badge">{{ revenue_cats|length }} streams</span>
+        </h3>
+
+        <div class="budget-table-wrap">
+            <table class="budget-table">
+                <thead>
+                    <tr>
+                        <th>Revenue Stream</th>
+                        {% for fm in fy_months %}
+                        <th{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ fm.label }}</th>
+                        {% endfor %}
+                        <th class="total-col">Annual Total</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set grand = namespace(budget=0, actual=0) %}
+                    {% for cat in revenue_cats %}
+                    {% set ns2 = namespace(cat_budget=0, cat_actual=0) %}
+                    <tr>
+                        <td>{{ cat.name }}</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set ns2.cat_budget = ns2.cat_budget + b %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(b) if b > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns2.cat_budget) }}</td>
+                    </tr>
+                    <tr class="actual-row">
+                        <td>↳ Actual</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set ns2.cat_actual = ns2.cat_actual + a %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(a) if a > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(ns2.cat_actual) }}</td>
+                    </tr>
+                    <tr class="variance-row">
+                        <td>↳ Variance</td>
+                        {% for fm in fy_months %}
+                        {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+                        {% set b = e.get('budget_amount', 0) or 0 %}
+                        {% set a = e.get('actual_amount', 0) or 0 %}
+                        {% set v = a - b %}
+                        <td class="{{ 'positive' if v >= 0 else 'negative' }}"{% if loop.index in [3,6,9,12] %} style="background: rgba(16,185,129,0.04);"{% endif %}>{{ "₹{:,.0f}".format(v) if b > 0 or a > 0 else '–' }}</td>
+                        {% endfor %}
+                        {% set total_var = ns2.cat_actual - ns2.cat_budget %}
+                        <td class="total-col {{ 'positive' if total_var >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(total_var) }}</td>
+                    </tr>
+                    {% set grand.budget = grand.budget + ns2.cat_budget %}
+                    {% set grand.actual = grand.actual + ns2.cat_actual %}
+                    {% endfor %}
+                    <tr class="subtotal-row">
+                        <td>Total Revenue</td>
+                        {% for fm in fy_months %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>–</td>
+                        {% endfor %}
+                        <td class="total-col">B: {{ "₹{:,.0f}".format(grand.budget) }} / A: {{ "₹{:,.0f}".format(grand.actual) }}</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <form class="add-cat-form" method="POST" action="/finance/budget/category/add">
+            <input type="hidden" name="cat_type" value="revenue">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <input type="text" name="name" placeholder="Add new revenue stream..." required>
+            <button type="submit">+ Add Stream</button>
+        </form>
+    </div>
+
+    <!-- Chart -->
+    <div class="section-card">
+        <h3>Revenue Trend</h3>
+        <canvas id="revenueChart" height="200"></canvas>
+    </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+const labels = {{ fy_months|map(attribute='label')|list|tojson }};
+const datasets = [];
+const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1'];
+{% for cat in revenue_cats %}
+{
+    const budgetData = [];
+    const actualData = [];
+    {% for fm in fy_months %}
+    {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
+    budgetData.push({{ e.get('budget_amount', 0) or 0 }});
+    actualData.push({{ e.get('actual_amount', 0) or 0 }});
+    {% endfor %}
+    datasets.push({
+        label: '{{ cat.name }}' + ' (Projected)',
+        data: budgetData,
+        borderColor: colors[{{ loop.index0 }} % colors.length],
+        borderWidth: 1.5,
+        borderDash: [4, 2],
+        pointRadius: 2,
+        fill: false,
+        tension: 0.3
+    });
+    datasets.push({
+        label: '{{ cat.name }}' + ' (Actual)',
+        data: actualData,
+        borderColor: colors[{{ loop.index0 }} % colors.length],
+        borderWidth: 2.5,
+        pointRadius: 3,
+        fill: false,
+        tension: 0.3
+    });
+}
+{% endfor %}
+
+new Chart(document.getElementById('revenueChart'), {
+    type: 'line',
+    data: { labels, datasets },
+    options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+            legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 10 } } },
+            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ₹' + ctx.parsed.y.toLocaleString('en-IN') } }
+        },
+        scales: {
+            y: {
+                beginAtZero: true,
+                ticks: {
+                    callback: function(v) { return v >= 100000 ? '₹' + (v/100000).toFixed(1) + 'L' : '₹' + v.toLocaleString('en-IN'); },
+                    font: { size: 10 }
+                },
+                grid: { color: 'rgba(0,0,0,0.04)' }
+            },
+            x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+        }
+    }
+});
+</script>
+{% endblock %}

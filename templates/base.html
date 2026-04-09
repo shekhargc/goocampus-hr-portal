@@ -910,6 +910,34 @@
                         </div>
                     </li>
 
+                    <!-- Finance Dropdown (Admin Only) -->
+                    <li class="nav-dropdown" id="finance-dropdown-admin">
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('finance-dropdown-admin', event)">
+                            Finance
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                            <div class="nav-dropdown-menu-inner">
+                                <a href="/finance/budget">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
+                                    Budget Dashboard
+                                </a>
+                                <a href="/finance/budget/expenses" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                                    Expense Budget
+                                </a>
+                                <a href="/finance/budget/revenue" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                                    Sales Projection
+                                </a>
+                                <a href="/finance/budget/report" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                                    Annual Report
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+
                     <!-- Company Dropdown -->
                     <li class="nav-dropdown" id="company-dropdown-admin">
                         <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-admin', event)">

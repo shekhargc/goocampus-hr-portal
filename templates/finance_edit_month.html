@@ -1,0 +1,177 @@
+{% extends "base.html" %}
+{% block title %}Budget Entry - {{ month_name }} {{ year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .month-nav { display: flex; gap: 0.4rem; flex-wrap: wrap; }
+    .month-nav a { padding: 0.3rem 0.6rem; border-radius: 6px; font-size: 0.7rem; font-weight: 600; text-decoration: none; background: var(--gray-100); color: var(--gray-500); }
+    .month-nav a.active { background: var(--navy); color: white; }
+    .month-nav a:hover:not(.active) { background: var(--gray-200); }
+
+    .locked-banner { background: linear-gradient(135deg, #10B981, #059669); color: white; padding: 0.8rem 1.2rem; border-radius: 10px; margin-bottom: 1.5rem; display: flex; align-items: center; gap: 0.6rem; font-size: 0.85rem; font-weight: 600; }
+    .locked-banner svg { flex-shrink: 0; }
+
+    .entry-section { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
+    .entry-section h3 { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.6rem; border-bottom: 2px solid var(--gray-100); }
+
+    .entry-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.5fr; gap: 0.6rem; padding: 0.5rem 0; border-bottom: 1px solid var(--gray-50); align-items: center; }
+    .entry-row:last-child { border-bottom: none; }
+    .entry-row__label { font-size: 0.8rem; font-weight: 600; color: var(--navy); }
+    .entry-row__label small { display: block; font-weight: 400; font-size: 0.65rem; color: var(--gray-400); }
+    .entry-row input[type="number"] {
+        width: 100%;
+        padding: 0.4rem 0.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 6px;
+        font-size: 0.8rem;
+        color: var(--gray-700);
+        background: var(--gray-50);
+    }
+    .entry-row input[type="number"]:focus { border-color: var(--navy); outline: none; background: white; }
+    .entry-row input[type="text"] {
+        width: 100%;
+        padding: 0.4rem 0.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 6px;
+        font-size: 0.75rem;
+        color: var(--gray-500);
+    }
+    .entry-row input:disabled { background: var(--gray-100); color: var(--gray-400); cursor: not-allowed; }
+
+    .entry-header { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.5fr; gap: 0.6rem; padding: 0.5rem 0; font-size: 0.7rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); margin-bottom: 0.3rem; }
+
+    .actions-bar { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
+    .btn-save { padding: 0.6rem 2rem; background: var(--navy); color: white; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
+    .btn-save:hover { opacity: 0.9; }
+    .btn-lock { padding: 0.5rem 1rem; border: 2px solid #10B981; background: white; color: #10B981; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .btn-unlock { padding: 0.5rem 1rem; border: 2px solid #EF4444; background: white; color: #EF4444; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
+    .btn-back { padding: 0.5rem 1rem; background: var(--gray-100); color: var(--gray-600); border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
+
+    @media (max-width: 768px) {
+        .entry-row { grid-template-columns: 1fr; gap: 0.3rem; padding: 0.8rem 0; }
+        .entry-header { display: none; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 900px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>{{ month_name }} {{ year }}</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <a href="/finance/budget?fy={{ fy_year }}" class="btn-back">← Back to Dashboard</a>
+    </div>
+
+    <!-- Month Quick Nav -->
+    <div class="month-nav" style="margin-bottom: 1.2rem;">
+        {% set all_months = get_fy_months(fy_year) %}
+        {% for fm in all_months %}
+        <a href="/finance/budget/edit/{{ fm.month }}/{{ fm.year }}?fy={{ fy_year }}" class="{{ 'active' if fm.month == month and fm.year == year else '' }}">{{ fm.label }}</a>
+        {% endfor %}
+    </div>
+
+    {% if is_locked %}
+    <div class="locked-banner">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+        This month is locked. Unlock it to make changes.
+        <form method="POST" action="/finance/budget/unlock/{{ month }}/{{ year }}" style="margin-left: auto;">
+            <input type="hidden" name="fy" value="{{ fy_year }}">
+            <button type="submit" class="btn-unlock">Unlock Month</button>
+        </form>
+    </div>
+    {% endif %}
+
+    <form method="POST">
+        <!-- Expense Categories -->
+        <div class="entry-section">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
+                Expense Categories
+            </h3>
+            <div class="entry-header">
+                <div>Category</div>
+                <div>Budget (₹)</div>
+                <div>Actual (₹)</div>
+                <div>Notes</div>
+            </div>
+            {% for cat in expense_cats %}
+            {% set e = entry_map.get(cat.id, {}) %}
+            <div class="entry-row">
+                <div class="entry-row__label">{{ cat.name }}</div>
+                <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Department Budgets -->
+        <div class="entry-section">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                Department Budgets
+            </h3>
+            <div class="entry-header">
+                <div>Department</div>
+                <div>Budget (₹)</div>
+                <div>Actual (₹)</div>
+                <div>Notes</div>
+            </div>
+            {% for cat in dept_cats %}
+            {% set e = entry_map.get(cat.id, {}) %}
+            <div class="entry-row">
+                <div class="entry-row__label">{{ cat.name|replace(' - Department Budget', '') }}<small>Department allocation</small></div>
+                <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Revenue Categories -->
+        <div class="entry-section">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+                Revenue Streams
+            </h3>
+            <div class="entry-header">
+                <div>Revenue Stream</div>
+                <div>Projected (₹)</div>
+                <div>Actual (₹)</div>
+                <div>Notes</div>
+            </div>
+            {% for cat in revenue_cats %}
+            {% set e = entry_map.get(cat.id, {}) %}
+            <div class="entry-row">
+                <div class="entry-row__label">{{ cat.name }}</div>
+                <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Actions -->
+        <div class="actions-bar">
+            {% if not is_locked %}
+            <button type="submit" class="btn-save">Save {{ month_name }} {{ year }}</button>
+            {% endif %}
+            {% if not is_locked %}
+            <form method="POST" action="/finance/budget/lock/{{ month }}/{{ year }}" style="display: inline;">
+                <input type="hidden" name="fy" value="{{ fy_year }}">
+                <button type="submit" class="btn-lock" onclick="return confirm('Lock {{ month_name }} {{ year }}? This prevents further edits until unlocked.')">
+                    🔒 Lock Month
+                </button>
+            </form>
+            {% endif %}
+            <a href="/finance/budget?fy={{ fy_year }}" class="btn-back">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}
