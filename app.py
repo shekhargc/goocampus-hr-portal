@@ -520,7 +520,7 @@ def dashboard():
                 pass
         try:
             my_meetings_recent = conn.execute('''
-                SELECT t.from_date, t.trip_type, t.created_at, t.city
+                SELECT t.from_date, t.trip_type, t.created_at
                 FROM b2b_trips t
                 WHERE t.employee_id = ?
                 ORDER BY t.created_at DESC LIMIT 4
@@ -528,7 +528,7 @@ def dashboard():
             for m in my_meetings_recent:
                 my_recent_activity.append({
                     'type': 'meeting',
-                    'title': f"{(m['trip_type'] or 'Meeting').capitalize()} - {m['city'] or 'N/A'}",
+                    'title': f"{(m['trip_type'] or 'Meeting').capitalize()} Meeting",
                     'subtitle': f"Date: {m['from_date']}",
                     'time_ago': m['created_at'][:10] if m['created_at'] else '',
                     'icon_color': '#4A7AB5'
@@ -566,15 +566,14 @@ def dashboard():
     try:
         current_year_str = str(now.year)
         anniversaries_this_month = conn.execute('''
-            SELECT id, name, photo_url, joining_date, department,
-                   (? - strftime('%Y', joining_date)) as years
+            SELECT id, name, photo_url, joining_date, department
             FROM employees
             WHERE is_active = 1 AND emp_code != 'admin'
             AND joining_date IS NOT NULL AND joining_date != ''
             AND strftime('%m', joining_date) = ?
-            AND (? - strftime('%Y', joining_date)) >= 1
+            AND strftime('%Y', joining_date) != ?
             ORDER BY strftime('%d', joining_date)
-        ''', (current_year_str, month_str, current_year_str)).fetchall()
+        ''', (month_str, current_year_str)).fetchall()
     except Exception as e:
         logging.error(f"Dashboard anniversaries query error: {e}")
         try:
