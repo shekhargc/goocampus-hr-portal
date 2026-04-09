@@ -852,13 +852,21 @@
     </div>
 
     <div class="welcome-banner__actions">
+      {% if session.get('is_admin') %}
       <a href="/hr-dashboard" class="banner-btn banner-btn--primary">HR Dashboard</a>
       <a href="/sales" class="banner-btn banner-btn--secondary">Sales Dashboard</a>
+      {% else %}
+      <a href="/apply-leave" class="banner-btn banner-btn--primary">Apply Leave</a>
+      <a href="/my-leaves" class="banner-btn banner-btn--secondary">My Leaves</a>
+      <a href="/kra/dashboard" class="banner-btn banner-btn--secondary">My KRA</a>
+      {% endif %}
     </div>
   </div>
 
   <!-- Stats Grid -->
   <div class="stats-grid">
+    {% if session.get('is_admin') %}
+    <!-- Admin Stats -->
     <div class="stat-card">
       <div class="stat-card__header">
         <div>
@@ -894,13 +902,8 @@
     <div class="stat-card">
       <div class="stat-card__header">
         <div>
-          {% if session.get('is_admin') %}
           <p class="stat-card__label">Pending Approvals</p>
           <h2 class="stat-card__value">{{ pending_leaves }}</h2>
-          {% else %}
-          <p class="stat-card__label">My Pending Leaves</p>
-          <h2 class="stat-card__value">{{ my_leave_data.pending_count if my_leave_data else 0 }}</h2>
-          {% endif %}
         </div>
         <div class="stat-card__icon red">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -960,6 +963,97 @@
         </div>
       </div>
     </div>
+
+    {% else %}
+    <!-- Employee Stats -->
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Leave Balance</p>
+          <h2 class="stat-card__value" style="color: var(--success);">{{ my_leave_data.available_balance if my_leave_data else '-' }}</h2>
+        </div>
+        <div class="stat-card__icon green">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Leaves Taken</p>
+          <h2 class="stat-card__value">{{ my_leave_data.days_taken if my_leave_data else 0 }}</h2>
+        </div>
+        <div class="stat-card__icon orange">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+            <polyline points="9 22 9 12 15 12 15 22"></polyline>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">My Pending Leaves</p>
+          <h2 class="stat-card__value">{{ my_leave_data.pending_count if my_leave_data else 0 }}</h2>
+        </div>
+        <div class="stat-card__icon red">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">On Leave Today</p>
+          <h2 class="stat-card__value">{{ leaves_today }}</h2>
+        </div>
+        <div class="stat-card__icon blue">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+            <circle cx="9" cy="7" r="4"></circle>
+          </svg>
+        </div>
+      </div>
+    </div>
+
+    {% if team_pending_approvals %}
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Team Approvals</p>
+          <h2 class="stat-card__value" style="color: var(--danger);">{{ team_pending_approvals|length }}</h2>
+        </div>
+        <div class="stat-card__icon red">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    {% endif %}
+
+    <div class="stat-card">
+      <div class="stat-card__header">
+        <div>
+          <p class="stat-card__label">Unread Notifications</p>
+          <h2 class="stat-card__value">{{ my_unread_notifs }}</h2>
+        </div>
+        <div class="stat-card__icon purple">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/>
+          </svg>
+        </div>
+      </div>
+    </div>
+    {% endif %}
   </div>
 
   <!-- Birthday & Anniversary Cards -->
@@ -1099,7 +1193,8 @@
   </div>
   {% endif %}
 
-  <!-- Department Cards -->
+  <!-- Department Cards (Admin only) -->
+  {% if session.get('is_admin') %}
   <div class="department-cards">
     <!-- HR Department Card -->
     <div class="dept-card">
@@ -1203,6 +1298,7 @@
       </div>
     </div>
   </div>
+  {% endif %}
 
   <!-- Two Column Section: Activity Feed + Sidebar -->
   <div class="dashboard-grid">
