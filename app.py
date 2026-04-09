@@ -416,7 +416,7 @@ def dashboard():
                 'type': 'leave',
                 'title': f"{l['name']} - {l['leave_type'].capitalize()} Leave",
                 'subtitle': f"Status: {l['status'].capitalize()}",
-                'time_ago': l['created_at'][:10] if l['created_at'] else '',
+                'time_ago': str(l['created_at'])[:10] if l['created_at'] else '',
                 'icon_color': 'var(--orange)'
             })
     except Exception as e:
@@ -438,7 +438,7 @@ def dashboard():
                 'type': 'meeting',
                 'title': f"{m['name']} - {(m['trip_type'] or 'Meeting').capitalize()} Meeting",
                 'subtitle': f"From: {m['from_date']}",
-                'time_ago': m['created_at'][:10] if m['created_at'] else '',
+                'time_ago': str(m['created_at'])[:10] if m['created_at'] else '',
                 'icon_color': 'var(--blue)'
             })
     except Exception as e:
@@ -509,7 +509,7 @@ def dashboard():
                     'type': 'leave',
                     'title': f"{l['leave_type'].capitalize()} Leave - {l['date']}",
                     'subtitle': f"Status: {l['status'].capitalize()} | {'Full Day' if l['day_portion'] == 'full_day' else 'Half Day'}",
-                    'time_ago': l['created_at'][:10] if l['created_at'] else '',
+                    'time_ago': str(l['created_at'])[:10] if l['created_at'] else '',
                     'icon_color': '#10B981' if l['status'] == 'approved' else '#F59E0B' if l['status'] == 'pending' else '#EF4444'
                 })
         except Exception as e:
@@ -530,7 +530,7 @@ def dashboard():
                     'type': 'meeting',
                     'title': f"{(m['trip_type'] or 'Meeting').capitalize()} Meeting",
                     'subtitle': f"Date: {m['from_date']}",
-                    'time_ago': m['created_at'][:10] if m['created_at'] else '',
+                    'time_ago': str(m['created_at'])[:10] if m['created_at'] else '',
                     'icon_color': '#4A7AB5'
                 })
         except Exception as e:
@@ -602,11 +602,11 @@ def dashboard():
         current_month = now.month
         current_year_val = now.year
         kra_row = conn.execute('''
-            SELECT kr.final_score
-            FROM kra_ratings kr
+            SELECT AVG(kr.manager_rating) as final_score
+            FROM kra_monthly_ratings kr
             JOIN kra_assignments ka ON kr.assignment_id = ka.id
             WHERE ka.employee_id = ? AND kr.month = ? AND kr.year = ?
-            AND kr.final_score IS NOT NULL
+            AND kr.manager_submitted = 1
         ''', (user['id'], current_month, current_year_val)).fetchone()
         if kra_row:
             my_kra_score = kra_row['final_score']
