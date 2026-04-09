@@ -5806,6 +5806,7 @@ def ensure_budget_tables():
                 budget_amount REAL DEFAULT 0,
                 actual_amount REAL DEFAULT 0,
                 notes TEXT,
+                project_id INTEGER,
                 is_locked INTEGER DEFAULT 0,
                 created_by INTEGER REFERENCES employees(id),
                 updated_by INTEGER REFERENCES employees(id),
@@ -5827,6 +5828,16 @@ def ensure_budget_tables():
             conn.execute("ALTER TABLE budget_categories ADD COLUMN is_recurring INTEGER DEFAULT 0")
             conn.commit()
             logging.info("Added is_recurring column to budget_categories")
+        except Exception:
+            try:
+                conn.rollback()
+            except:
+                pass
+        # Migration: add project_id column to budget_entries if missing
+        try:
+            conn.execute("ALTER TABLE budget_entries ADD COLUMN project_id INTEGER")
+            conn.commit()
+            logging.info("Added project_id column to budget_entries")
         except Exception:
             try:
                 conn.rollback()
@@ -6140,6 +6151,8 @@ def finance_edit_month(month, year):
             budget_val = request.form.get(f'budget_{cat["id"]}', '0')
             actual_val = request.form.get(f'actual_{cat["id"]}', '0')
             notes_val = request.form.get(f'notes_{cat["id"]}', '').strip()
+            project_val = request.form.get(f'project_{cat["id"]}', '')
+            project_id = int(project_val) if project_val and project_val.isdigit() else None
 
             try:
                 budget_val = float(budget_val) if budget_val else 0
@@ -6157,14 +6170,14 @@ def finance_edit_month(month, year):
 
             if existing:
                 conn.execute(
-                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (budget_val, actual_val, notes_val, user['id'], existing['id'])
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (budget_val, actual_val, notes_val, project_id, user['id'], existing['id'])
                 )
             else:
                 if budget_val > 0 or actual_val > 0 or notes_val:
                     conn.execute(
-                        "INSERT INTO budget_entries (category_id, fy_year, month, year, budget_amount, actual_amount, notes, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, user['id'], user['id'])
+                        "INSERT INTO budget_entries (category_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, project_id, user['id'], user['id'])
                     )
 
             # Track recurring categories with budget > 0
@@ -6224,6 +6237,15 @@ def finance_edit_month(month, year):
         "SELECT * FROM budget_entries WHERE fy_year = ? AND month = ? AND year = ?",
         (fy_year, month, year)
     ).fetchall()
+
+    # Load active projects for the dropdown
+    try:
+        projects = conn.execute(
+            "SELECT id, name FROM projects WHERE status = 'active' ORDER BY name"
+        ).fetchall()
+    except Exception:
+        projects = []
+
     conn.close()
 
     entry_map = {}
@@ -6235,7 +6257,8 @@ def finance_edit_month(month, year):
                            month=month, year=year, month_name=month_name,
                            expense_cats=expense_cats, dept_cats=dept_cats,
                            revenue_cats=revenue_cats, entry_map=entry_map,
-                           is_locked=is_locked, get_fy_months=get_fy_months)
+                           is_locked=is_locked, get_fy_months=get_fy_months,
+                           projects=projects)
 
 
 @app.route('/finance/budget/lock/<int:month>/<int:year>', methods=['POST'])
@@ -6446,6 +6469,129 @@ def finance_edit_department(cat_id):
     conn.close()
     flash(f'Department "{name}" updated!', 'success')
     return redirect(url_for('finance_settings', fy=fy))
+
+
+@app.route('/finance/budget/projects')
+@admin_required
+def finance_project_pl():
+    """Project-wise Profit & Loss view."""
+    user = get_user()
+    fy_year = request.args.get('fy', '2026-2027')
+    fy_months = get_fy_months(fy_year)
+    conn = get_db()
+
+    # Get all projects that have budget entries
+    try:
+        projects = conn.execute(
+            "SELECT id, name FROM projects WHERE status = 'active' ORDER BY name"
+        ).fetchall()
+    except Exception:
+        projects = []
+
+    # Get all budget entries with project_id set, joined with category info
+    try:
+        entries = conn.execute('''
+            SELECT be.project_id, be.month, be.year, bc.cat_type,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_entries be
+            JOIN budget_categories bc ON be.category_id = bc.id
+            WHERE be.fy_year = ? AND be.project_id IS NOT NULL AND bc.is_active = 1
+            GROUP BY be.project_id, be.month, be.year, bc.cat_type
+        ''', (fy_year,)).fetchall()
+    except Exception as e:
+        logging.error(f"finance_project_pl entries: {e}")
+        entries = []
+
+    # Also get untagged totals
+    try:
+        untagged = conn.execute('''
+            SELECT be.month, be.year, bc.cat_type,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_entries be
+            JOIN budget_categories bc ON be.category_id = bc.id
+            WHERE be.fy_year = ? AND be.project_id IS NULL AND bc.is_active = 1
+            GROUP BY be.month, be.year, bc.cat_type
+        ''', (fy_year,)).fetchall()
+    except Exception:
+        untagged = []
+
+    conn.close()
+
+    # Build project lookup: {project_id: {name, expense_budget, expense_actual, revenue_budget, revenue_actual, monthly: [{...}]}}
+    project_map = {p['id']: {'name': p['name'], 'id': p['id'],
+                              'expense_budget': 0, 'expense_actual': 0,
+                              'revenue_budget': 0, 'revenue_actual': 0,
+                              'monthly_expense': [0]*12, 'monthly_revenue': [0]*12}
+                   for p in projects}
+
+    month_index = {}
+    for i, fm in enumerate(fy_months):
+        month_index[(fm['month'], fm['year'])] = i
+
+    for e in entries:
+        pid = e['project_id']
+        if pid not in project_map:
+            continue
+        idx = month_index.get((e['month'], e['year']))
+        if idx is None:
+            continue
+        ct = e['cat_type']
+        b = float(e['total_budget'] or 0)
+        a = float(e['total_actual'] or 0)
+        if ct in ('expense', 'department'):
+            project_map[pid]['expense_budget'] += b
+            project_map[pid]['expense_actual'] += a
+            project_map[pid]['monthly_expense'][idx] += round(a, 2)
+        elif ct == 'revenue':
+            project_map[pid]['revenue_budget'] += b
+            project_map[pid]['revenue_actual'] += a
+            project_map[pid]['monthly_revenue'][idx] += round(a, 2)
+
+    # Untagged totals
+    untagged_data = {'name': 'Untagged (No Project)', 'id': None,
+                     'expense_budget': 0, 'expense_actual': 0,
+                     'revenue_budget': 0, 'revenue_actual': 0,
+                     'monthly_expense': [0]*12, 'monthly_revenue': [0]*12}
+    for e in untagged:
+        idx = month_index.get((e['month'], e['year']))
+        if idx is None:
+            continue
+        ct = e['cat_type']
+        b = float(e['total_budget'] or 0)
+        a = float(e['total_actual'] or 0)
+        if ct in ('expense', 'department'):
+            untagged_data['expense_budget'] += b
+            untagged_data['expense_actual'] += a
+            untagged_data['monthly_expense'][idx] += round(a, 2)
+        elif ct == 'revenue':
+            untagged_data['revenue_budget'] += b
+            untagged_data['revenue_actual'] += a
+            untagged_data['monthly_revenue'][idx] += round(a, 2)
+
+    # Build project list with computed P&L
+    project_list = []
+    for pid, pd in project_map.items():
+        pd['net_budget'] = round(pd['revenue_budget'] - pd['expense_budget'], 2)
+        pd['net_actual'] = round(pd['revenue_actual'] - pd['expense_actual'], 2)
+        pd['expense_budget'] = round(pd['expense_budget'], 2)
+        pd['expense_actual'] = round(pd['expense_actual'], 2)
+        pd['revenue_budget'] = round(pd['revenue_budget'], 2)
+        pd['revenue_actual'] = round(pd['revenue_actual'], 2)
+        project_list.append(pd)
+
+    # Add untagged
+    untagged_data['net_budget'] = round(untagged_data['revenue_budget'] - untagged_data['expense_budget'], 2)
+    untagged_data['net_actual'] = round(untagged_data['revenue_actual'] - untagged_data['expense_actual'], 2)
+
+    # Sort by actual revenue descending
+    project_list.sort(key=lambda x: x['revenue_actual'], reverse=True)
+
+    return render_template('finance_project_pl.html', user=user, fy_year=fy_year,
+                           fy_months=fy_months, project_list=project_list,
+                           untagged_data=untagged_data,
+                           month_labels=[fm['label'] for fm in fy_months])
 
 
 # Run on startup

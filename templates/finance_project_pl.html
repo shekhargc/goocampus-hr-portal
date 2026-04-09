@@ -1,0 +1,321 @@
+{% extends "base.html" %}
+{% block title %}Project P&L - FY {{ fy_year }}{% endblock %}
+
+{% block extra_css %}
+<style>
+    .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
+    .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .finance-header .fy-badge { background: var(--navy); color: white; padding: 0.3rem 0.8rem; border-radius: 6px; font-size: 0.8rem; font-weight: 600; }
+    .finance-nav { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .finance-nav a { padding: 0.45rem 1rem; border-radius: 8px; font-size: 0.8rem; font-weight: 600; text-decoration: none; transition: all 0.2s; }
+    .finance-nav a.active { background: var(--navy); color: white; }
+    .finance-nav a:not(.active) { background: var(--gray-100); color: var(--gray-600); }
+    .finance-nav a:not(.active):hover { background: var(--gray-200); }
+
+    .project-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; margin-bottom: 2rem; }
+
+    .project-card { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border-left: 4px solid var(--navy); transition: box-shadow 0.2s; }
+    .project-card:hover { box-shadow: 0 3px 10px rgba(0,0,0,0.1); }
+    .project-card.profitable { border-left-color: #10B981; }
+    .project-card.loss { border-left-color: #EF4444; }
+    .project-card.untagged { border-left-color: #9CA3AF; opacity: 0.85; }
+
+    .project-card__name { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin-bottom: 0.8rem; display: flex; align-items: center; justify-content: space-between; }
+    .project-card__pl { font-size: 0.7rem; font-weight: 700; padding: 0.15rem 0.5rem; border-radius: 8px; }
+    .project-card__pl.profit { background: #D1FAE5; color: #065F46; }
+    .project-card__pl.loss { background: #FEE2E2; color: #991B1B; }
+
+    .project-card__row { display: flex; justify-content: space-between; padding: 0.25rem 0; font-size: 0.78rem; }
+    .project-card__label { color: var(--gray-500); }
+    .project-card__value { font-weight: 600; color: var(--gray-700); }
+    .project-card__value.green { color: #10B981; }
+    .project-card__value.red { color: #EF4444; }
+
+    .project-card__divider { height: 1px; background: var(--gray-100); margin: 0.5rem 0; }
+
+    .project-card__bar { margin-top: 0.6rem; }
+    .project-card__bar-label { font-size: 0.65rem; color: var(--gray-400); margin-bottom: 0.2rem; display: flex; justify-content: space-between; }
+    .project-card__bar-track { height: 6px; background: var(--gray-100); border-radius: 3px; overflow: hidden; }
+    .project-card__bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease; }
+
+    /* Trend chart section */
+    .trend-section { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 2rem; }
+    .trend-section h3 { font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; }
+
+    /* Summary table */
+    .pl-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.75rem; }
+    .pl-table th { background: var(--gray-50); padding: 0.5rem 0.6rem; text-align: right; font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200); }
+    .pl-table th:first-child { text-align: left; }
+    .pl-table td { padding: 0.5rem 0.6rem; text-align: right; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
+    .pl-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); }
+    .pl-table .total-row td { font-weight: 700; border-top: 2px solid var(--gray-300); background: var(--gray-50); }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
+
+    .empty-state { text-align: center; padding: 3rem 1rem; color: var(--gray-400); font-size: 0.9rem; }
+    .empty-state svg { margin-bottom: 1rem; opacity: 0.4; }
+
+    @media (max-width: 768px) {
+        .project-grid { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+    <div class="finance-header">
+        <div style="display: flex; align-items: center; gap: 0.8rem;">
+            <h1>Project P&L</h1>
+            <span class="fy-badge">FY {{ fy_year }}</span>
+        </div>
+        <div class="finance-nav">
+            <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
+            <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/projects?fy={{ fy_year }}" class="active">Project P&L</a>
+            <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
+            <a href="/finance/budget/settings?fy={{ fy_year }}">Settings</a>
+        </div>
+    </div>
+
+    {% if not project_list and untagged_data.expense_actual == 0 and untagged_data.revenue_actual == 0 %}
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
+        <p>No project-tagged budget entries yet.</p>
+        <p style="font-size: 0.8rem;">Tag expenses and revenue to projects when editing monthly budgets, then come back here to see per-project profitability.</p>
+    </div>
+    {% else %}
+
+    <!-- Project Cards -->
+    <div class="project-grid">
+        {% for proj in project_list %}
+        {% set net = proj.revenue_actual - proj.expense_actual %}
+        {% set is_profitable = net >= 0 %}
+        <div class="project-card {{ 'profitable' if is_profitable else 'loss' }}">
+            <div class="project-card__name">
+                {{ proj.name }}
+                {% if proj.expense_actual > 0 or proj.revenue_actual > 0 %}
+                <span class="project-card__pl {{ 'profit' if is_profitable else 'loss' }}">
+                    {{ 'Profit' if is_profitable else 'Loss' }}: {{ "₹{:,.0f}".format(net|abs) }}
+                </span>
+                {% endif %}
+            </div>
+
+            <div class="project-card__row">
+                <span class="project-card__label">Revenue (Budget)</span>
+                <span class="project-card__value">{{ "₹{:,.0f}".format(proj.revenue_budget) }}</span>
+            </div>
+            <div class="project-card__row">
+                <span class="project-card__label">Revenue (Actual)</span>
+                <span class="project-card__value green">{{ "₹{:,.0f}".format(proj.revenue_actual) }}</span>
+            </div>
+
+            <div class="project-card__divider"></div>
+
+            <div class="project-card__row">
+                <span class="project-card__label">Expense (Budget)</span>
+                <span class="project-card__value">{{ "₹{:,.0f}".format(proj.expense_budget) }}</span>
+            </div>
+            <div class="project-card__row">
+                <span class="project-card__label">Expense (Actual)</span>
+                <span class="project-card__value red">{{ "₹{:,.0f}".format(proj.expense_actual) }}</span>
+            </div>
+
+            <div class="project-card__divider"></div>
+
+            <div class="project-card__row">
+                <span class="project-card__label">Net P&L (Budget)</span>
+                <span class="project-card__value {{ 'green' if proj.net_budget >= 0 else 'red' }}">{{ "₹{:,.0f}".format(proj.net_budget) }}</span>
+            </div>
+            <div class="project-card__row">
+                <span class="project-card__label">Net P&L (Actual)</span>
+                <span class="project-card__value {{ 'green' if net >= 0 else 'red' }}" style="font-size: 0.9rem;">{{ "₹{:,.0f}".format(net) }}</span>
+            </div>
+
+            {% if proj.revenue_budget > 0 %}
+            <div class="project-card__bar">
+                {% set rev_pct = ((proj.revenue_actual / proj.revenue_budget) * 100) if proj.revenue_budget > 0 else 0 %}
+                <div class="project-card__bar-label">
+                    <span>Revenue Achievement</span>
+                    <span>{{ "{:.0f}".format(rev_pct) }}%</span>
+                </div>
+                <div class="project-card__bar-track">
+                    <div class="project-card__bar-fill" style="width: {{ [rev_pct, 100]|min }}%; background: {{ '#10B981' if rev_pct >= 80 else '#F59E0B' if rev_pct >= 50 else '#EF4444' }};"></div>
+                </div>
+            </div>
+            {% endif %}
+        </div>
+        {% endfor %}
+
+        <!-- Untagged card -->
+        {% if untagged_data.expense_actual > 0 or untagged_data.revenue_actual > 0 or untagged_data.expense_budget > 0 %}
+        {% set un_net = untagged_data.revenue_actual - untagged_data.expense_actual %}
+        <div class="project-card untagged">
+            <div class="project-card__name">
+                Untagged (No Project)
+                {% if untagged_data.expense_actual > 0 or untagged_data.revenue_actual > 0 %}
+                <span class="project-card__pl {{ 'profit' if un_net >= 0 else 'loss' }}">
+                    {{ "₹{:,.0f}".format(un_net|abs) }}
+                </span>
+                {% endif %}
+            </div>
+            <div class="project-card__row">
+                <span class="project-card__label">Revenue (Actual)</span>
+                <span class="project-card__value green">{{ "₹{:,.0f}".format(untagged_data.revenue_actual) }}</span>
+            </div>
+            <div class="project-card__row">
+                <span class="project-card__label">Expense (Actual)</span>
+                <span class="project-card__value red">{{ "₹{:,.0f}".format(untagged_data.expense_actual) }}</span>
+            </div>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Summary Table -->
+    <div class="trend-section">
+        <h3>Project-wise P&L Summary</h3>
+        <div style="overflow-x: auto;">
+            <table class="pl-table">
+                <thead>
+                    <tr>
+                        <th>Project</th>
+                        <th>Revenue (Budget)</th>
+                        <th>Revenue (Actual)</th>
+                        <th>Expense (Budget)</th>
+                        <th>Expense (Actual)</th>
+                        <th>Net P&L (Budget)</th>
+                        <th>Net P&L (Actual)</th>
+                        <th>Margin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% set ns = namespace(t_rb=0, t_ra=0, t_eb=0, t_ea=0) %}
+                    {% for proj in project_list %}
+                    {% set net_b = proj.revenue_budget - proj.expense_budget %}
+                    {% set net_a = proj.revenue_actual - proj.expense_actual %}
+                    {% set margin = ((net_a / proj.revenue_actual) * 100) if proj.revenue_actual > 0 else 0 %}
+                    <tr>
+                        <td>{{ proj.name }}</td>
+                        <td>{{ "₹{:,.0f}".format(proj.revenue_budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(proj.revenue_actual) }}</td>
+                        <td>{{ "₹{:,.0f}".format(proj.expense_budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(proj.expense_actual) }}</td>
+                        <td class="{{ 'positive' if net_b >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_b) }}</td>
+                        <td class="{{ 'positive' if net_a >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(net_a) }}</td>
+                        <td class="{{ 'positive' if margin >= 0 else 'negative' }}">{{ "{:.1f}".format(margin) }}%</td>
+                    </tr>
+                    {% set ns.t_rb = ns.t_rb + proj.revenue_budget %}
+                    {% set ns.t_ra = ns.t_ra + proj.revenue_actual %}
+                    {% set ns.t_eb = ns.t_eb + proj.expense_budget %}
+                    {% set ns.t_ea = ns.t_ea + proj.expense_actual %}
+                    {% endfor %}
+
+                    {% if untagged_data.expense_budget > 0 or untagged_data.revenue_budget > 0 or untagged_data.expense_actual > 0 or untagged_data.revenue_actual > 0 %}
+                    {% set un_nb = untagged_data.revenue_budget - untagged_data.expense_budget %}
+                    {% set un_na = untagged_data.revenue_actual - untagged_data.expense_actual %}
+                    <tr style="color: var(--gray-400);">
+                        <td style="color: var(--gray-400); font-weight: 400; font-style: italic;">Untagged</td>
+                        <td>{{ "₹{:,.0f}".format(untagged_data.revenue_budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(untagged_data.revenue_actual) }}</td>
+                        <td>{{ "₹{:,.0f}".format(untagged_data.expense_budget) }}</td>
+                        <td>{{ "₹{:,.0f}".format(untagged_data.expense_actual) }}</td>
+                        <td class="{{ 'positive' if un_nb >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(un_nb) }}</td>
+                        <td class="{{ 'positive' if un_na >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(un_na) }}</td>
+                        <td>–</td>
+                    </tr>
+                    {% set ns.t_rb = ns.t_rb + untagged_data.revenue_budget %}
+                    {% set ns.t_ra = ns.t_ra + untagged_data.revenue_actual %}
+                    {% set ns.t_eb = ns.t_eb + untagged_data.expense_budget %}
+                    {% set ns.t_ea = ns.t_ea + untagged_data.expense_actual %}
+                    {% endif %}
+
+                    <tr class="total-row">
+                        <td>Grand Total</td>
+                        <td>{{ "₹{:,.0f}".format(ns.t_rb) }}</td>
+                        <td>{{ "₹{:,.0f}".format(ns.t_ra) }}</td>
+                        <td>{{ "₹{:,.0f}".format(ns.t_eb) }}</td>
+                        <td>{{ "₹{:,.0f}".format(ns.t_ea) }}</td>
+                        {% set gn_b = ns.t_rb - ns.t_eb %}
+                        {% set gn_a = ns.t_ra - ns.t_ea %}
+                        {% set gm = ((gn_a / ns.t_ra) * 100) if ns.t_ra > 0 else 0 %}
+                        <td class="{{ 'positive' if gn_b >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(gn_b) }}</td>
+                        <td class="{{ 'positive' if gn_a >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(gn_a) }}</td>
+                        <td class="{{ 'positive' if gm >= 0 else 'negative' }}">{{ "{:.1f}".format(gm) }}%</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <!-- Monthly Trend Chart -->
+    <div class="trend-section">
+        <h3>Monthly Revenue vs Expense by Project</h3>
+        <canvas id="projectTrend" height="280"></canvas>
+    </div>
+
+    {% endif %}
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+<script>
+{% if project_list %}
+const colors = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+const labels = {{ month_labels|tojson }};
+const datasets = [];
+{% for proj in project_list %}
+{% if proj.revenue_actual > 0 or proj.expense_actual > 0 %}
+datasets.push({
+    label: '{{ proj.name }} (Rev)',
+    data: {{ proj.monthly_revenue|tojson }},
+    borderColor: colors[{{ loop.index0 }} % colors.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    tension: 0.3,
+    pointRadius: 3
+});
+datasets.push({
+    label: '{{ proj.name }} (Exp)',
+    data: {{ proj.monthly_expense|tojson }},
+    borderColor: colors[{{ loop.index0 }} % colors.length],
+    backgroundColor: 'transparent',
+    borderWidth: 2,
+    borderDash: [5, 3],
+    tension: 0.3,
+    pointRadius: 2
+});
+{% endif %}
+{% endfor %}
+
+if (datasets.length > 0) {
+    new Chart(document.getElementById('projectTrend').getContext('2d'), {
+        type: 'line',
+        data: { labels, datasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+                legend: { position: 'bottom', labels: { boxWidth: 12, padding: 10, font: { size: 10 } } },
+                tooltip: {
+                    callbacks: {
+                        label: function(ctx) { return ctx.dataset.label + ': \u20B9' + ctx.parsed.y.toLocaleString('en-IN'); }
+                    }
+                }
+            },
+            scales: {
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        callback: function(v) { return '\u20B9' + (v >= 100000 ? (v/100000).toFixed(1) + 'L' : v.toLocaleString('en-IN')); },
+                        font: { size: 10 }
+                    },
+                    grid: { color: 'rgba(0,0,0,0.04)' }
+                },
+                x: { ticks: { font: { size: 10 } }, grid: { display: false } }
+            }
+        }
+    });
+}
+{% endif %}
+</script>
+{% endblock %}

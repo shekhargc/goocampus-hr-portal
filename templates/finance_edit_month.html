@@ -17,7 +17,7 @@
     .entry-section { background: white; border-radius: 12px; padding: 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.5rem; }
     .entry-section h3 { font-size: 0.95rem; font-weight: 700; color: var(--navy); margin: 0 0 1rem 0; display: flex; align-items: center; gap: 0.5rem; padding-bottom: 0.6rem; border-bottom: 2px solid var(--gray-100); }
 
-    .entry-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.5fr; gap: 0.6rem; padding: 0.5rem 0; border-bottom: 1px solid var(--gray-50); align-items: center; }
+    .entry-row { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr; gap: 0.5rem; padding: 0.5rem 0; border-bottom: 1px solid var(--gray-50); align-items: center; }
     .entry-row:last-child { border-bottom: none; }
     .entry-row__label { font-size: 0.8rem; font-weight: 600; color: var(--navy); }
     .entry-row__label small { display: block; font-weight: 400; font-size: 0.65rem; color: var(--gray-400); }
@@ -39,9 +39,19 @@
         font-size: 0.75rem;
         color: var(--gray-500);
     }
-    .entry-row input:disabled { background: var(--gray-100); color: var(--gray-400); cursor: not-allowed; }
+    .entry-row select {
+        width: 100%;
+        padding: 0.35rem 0.4rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 6px;
+        font-size: 0.72rem;
+        color: var(--gray-600);
+        background: var(--gray-50);
+    }
+    .entry-row select:focus { border-color: var(--navy); outline: none; background: white; }
+    .entry-row input:disabled, .entry-row select:disabled { background: var(--gray-100); color: var(--gray-400); cursor: not-allowed; }
 
-    .entry-header { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1.5fr; gap: 0.6rem; padding: 0.5rem 0; font-size: 0.7rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); margin-bottom: 0.3rem; }
+    .entry-header { display: grid; grid-template-columns: 1.5fr 1fr 1fr 1fr 1.2fr; gap: 0.5rem; padding: 0.5rem 0; font-size: 0.7rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); margin-bottom: 0.3rem; }
 
     .actions-bar { display: flex; gap: 0.8rem; align-items: center; flex-wrap: wrap; margin-top: 0.5rem; }
     .btn-save { padding: 0.6rem 2rem; background: var(--navy); color: white; border: none; border-radius: 8px; font-size: 0.85rem; font-weight: 700; cursor: pointer; }
@@ -98,6 +108,7 @@
                 <div>Category</div>
                 <div>Budget (₹)</div>
                 <div>Actual (₹)</div>
+                <div>Project</div>
                 <div>Notes</div>
             </div>
             {% for cat in expense_cats %}
@@ -110,6 +121,12 @@
                 </div>
                 <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <select name="project_{{ cat.id }}" {{ 'disabled' if is_locked }}>
+                    <option value="">— None —</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}" {{ 'selected' if e.get('project_id') and e.get('project_id') == p.id }}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
                 <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
             </div>
             {% endfor %}
@@ -125,6 +142,7 @@
                 <div>Department</div>
                 <div>Budget (₹)</div>
                 <div>Actual (₹)</div>
+                <div>Project</div>
                 <div>Notes</div>
             </div>
             {% for cat in dept_cats %}
@@ -133,6 +151,12 @@
                 <div class="entry-row__label">{{ cat.name|replace(' - Department Budget', '') }}<small>Department allocation</small></div>
                 <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <select name="project_{{ cat.id }}" {{ 'disabled' if is_locked }}>
+                    <option value="">— None —</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}" {{ 'selected' if e.get('project_id') and e.get('project_id') == p.id }}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
                 <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
             </div>
             {% endfor %}
@@ -148,6 +172,7 @@
                 <div>Revenue Stream</div>
                 <div>Projected (₹)</div>
                 <div>Actual (₹)</div>
+                <div>Project</div>
                 <div>Notes</div>
             </div>
             {% for cat in revenue_cats %}
@@ -159,6 +184,12 @@
                 </div>
                 <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                 <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                <select name="project_{{ cat.id }}" {{ 'disabled' if is_locked }}>
+                    <option value="">— None —</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}" {{ 'selected' if e.get('project_id') and e.get('project_id') == p.id }}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
                 <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
             </div>
             {% endfor %}
