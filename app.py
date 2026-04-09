@@ -528,16 +528,17 @@ def dashboard():
     # Work anniversaries this month
     anniversaries_this_month = []
     try:
+        current_year_str = str(now.year)
         anniversaries_this_month = conn.execute('''
             SELECT id, name, photo_url, joining_date, department,
-                   (strftime('%Y', 'now') - strftime('%Y', joining_date)) as years
+                   (? - strftime('%Y', joining_date)) as years
             FROM employees
             WHERE is_active = 1 AND emp_code != 'admin'
             AND joining_date IS NOT NULL AND joining_date != ''
             AND strftime('%m', joining_date) = ?
-            AND (strftime('%Y', 'now') - strftime('%Y', joining_date)) >= 1
+            AND (? - strftime('%Y', joining_date)) >= 1
             ORDER BY strftime('%d', joining_date)
-        ''', (month_str,)).fetchall()
+        ''', (current_year_str, month_str, current_year_str)).fetchall()
     except:
         pass
 
@@ -809,10 +810,10 @@ def apply_leave():
         reporting_mgr = conn2.execute('SELECT reporting_to FROM employees WHERE id = ?', (user['id'],)).fetchone()
         if reporting_mgr and reporting_mgr['reporting_to']:
             try:
-                create_notification(conn2, 'leave_request',
+                create_notification(conn2, reporting_mgr['reporting_to'],
                     f"Leave Request from {user['name']}",
                     f"{user['name']} has applied for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date})",
-                    target_user_id=reporting_mgr['reporting_to'], target_role='manager')
+                    'leave_request', '/employee/approvals')
                 conn2.commit()
             except Exception as e:
                 logging.error(f"Failed to create leave notification for manager: {e}")
@@ -822,10 +823,10 @@ def apply_leave():
         for adm in admins:
             if not reporting_mgr or adm['id'] != reporting_mgr.get('reporting_to'):
                 try:
-                    create_notification(conn2, 'leave_request',
+                    create_notification(conn2, adm['id'],
                         f"Leave Request from {user['name']}",
                         f"{user['name']} has applied for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date})",
-                        target_user_id=adm['id'], target_role='admin')
+                        'leave_request', '/admin/pending-approvals')
                     conn2.commit()
                 except Exception as e:
                     logging.error(f"Failed to create leave notification for admin: {e}")
@@ -959,10 +960,10 @@ def apply_late_leave():
         reporting_mgr = conn2.execute('SELECT reporting_to FROM employees WHERE id = ?', (user['id'],)).fetchone()
         if reporting_mgr and reporting_mgr['reporting_to']:
             try:
-                create_notification(conn2, 'leave_request',
-                    f"⚠️ Late Leave Request from {user['name']}",
+                create_notification(conn2, reporting_mgr['reporting_to'],
+                    f"Late Leave Request from {user['name']}",
                     f"{user['name']} has applied LATE for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date}). Late reason: {late_reason}",
-                    target_user_id=reporting_mgr['reporting_to'], target_role='manager')
+                    'leave_request', '/employee/approvals')
                 conn2.commit()
             except Exception as e:
                 logging.error(f"Failed to create late leave notification for manager: {e}")
@@ -972,10 +973,10 @@ def apply_late_leave():
         for adm in admins:
             if not reporting_mgr or adm['id'] != reporting_mgr.get('reporting_to'):
                 try:
-                    create_notification(conn2, 'leave_request',
-                        f"⚠️ Late Leave Request from {user['name']}",
+                    create_notification(conn2, adm['id'],
+                        f"Late Leave Request from {user['name']}",
                         f"{user['name']} has applied LATE for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date}). Late reason: {late_reason}",
-                        target_user_id=adm['id'], target_role='admin')
+                        'leave_request', '/admin/pending-approvals')
                     conn2.commit()
                 except Exception as e:
                     logging.error(f"Failed to create late leave notification for admin: {e}")
@@ -2472,34 +2473,13 @@ def api_employee_name():
 
 # ===== NOTIFICATION HELPERS =====
 
-def create_notification(conn, ntype, title, message, target_user_id=None, target_role='all', reference_id=None):
-    """Create a notification record.
-    target_user_id: specific user (for leave notifications)
-    target_role: 'all', 'admin', 'manager' for broader targeting
-    """
-    conn.execute('''
-        INSERT INTO notifications (type, title, message, target_user_id, target_role, reference_id, is_read, created_at)
-        VALUES (?, ?, ?, ?, ?, ?, 0, ?)
-    ''', (ntype, title, message, target_user_id, target_role, reference_id,
-          datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
-
-
 def get_unread_count(user_id, is_admin=False):
     """Get unread notification count for a user."""
     conn = get_db()
-    # Notifications targeted to this specific user OR to 'all' OR to their role
-    if is_admin:
-        count = conn.execute('''
-            SELECT COUNT(*) as cnt FROM notifications
-            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
-            AND (target_role IN ('all', 'admin'))
-        ''', (user_id,)).fetchone()
-    else:
-        count = conn.execute('''
-            SELECT COUNT(*) as cnt FROM notifications
-            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
-            AND (target_role = 'all')
-        ''', (user_id,)).fetchone()
+    count = conn.execute(
+        'SELECT COUNT(*) as cnt FROM notifications WHERE employee_id = ? AND is_read = 0',
+        (user_id,)
+    ).fetchone()
     conn.close()
     return count['cnt'] if count else 0
 
@@ -2520,32 +2500,11 @@ def get_notifications():
     """Get notifications for the current user."""
     user = get_user()
     conn = get_db()
-
-    if user['is_admin']:
-        notifications = conn.execute('''
-            SELECT * FROM notifications
-            WHERE (target_user_id = ? OR target_user_id IS NULL)
-            AND (target_role IN ('all', 'admin'))
-            ORDER BY created_at DESC LIMIT 30
-        ''', (user['id'],)).fetchall()
-    else:
-        # Check if user is a manager
-        mgr = is_manager(user['id'])
-        if mgr:
-            notifications = conn.execute('''
-                SELECT * FROM notifications
-                WHERE (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role IN ('all', 'manager'))
-                ORDER BY created_at DESC LIMIT 30
-            ''', (user['id'],)).fetchall()
-        else:
-            notifications = conn.execute('''
-                SELECT * FROM notifications
-                WHERE (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role = 'all')
-                ORDER BY created_at DESC LIMIT 30
-            ''', (user['id'],)).fetchall()
-
+    notifications = conn.execute('''
+        SELECT * FROM notifications
+        WHERE employee_id = ?
+        ORDER BY created_at DESC LIMIT 30
+    ''', (user['id'],)).fetchall()
     conn.close()
 
     result = []
@@ -2568,31 +2527,12 @@ def mark_notifications_read():
     """Mark all notifications as read for the current user."""
     user = get_user()
     conn = get_db()
-
-    if user['is_admin']:
-        conn.execute('''
-            UPDATE notifications SET is_read = 1
-            WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
-            AND (target_role IN ('all', 'admin'))
-        ''', (user['id'],))
-    else:
-        mgr = is_manager(user['id'])
-        if mgr:
-            conn.execute('''
-                UPDATE notifications SET is_read = 1
-                WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role IN ('all', 'manager'))
-            ''', (user['id'],))
-        else:
-            conn.execute('''
-                UPDATE notifications SET is_read = 1
-                WHERE is_read = 0 AND (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role = 'all')
-            ''', (user['id'],))
-
+    conn.execute(
+        'UPDATE notifications SET is_read = 1 WHERE is_read = 0 AND employee_id = ?',
+        (user['id'],)
+    )
     conn.commit()
     conn.close()
-
     return jsonify({'status': 'ok'})
 
 
@@ -2613,44 +2553,6 @@ def dismiss_welcome():
     """Dismiss the first-login welcome popup."""
     session.pop('show_welcome', None)
     return jsonify({'status': 'ok'})
-
-
-@app.route('/notifications')
-@login_required
-def notifications_page():
-    """Dedicated notifications page with all notifications."""
-    user = get_user()
-    conn = get_db()
-
-    if user['is_admin']:
-        notifications = conn.execute('''
-            SELECT * FROM notifications
-            WHERE (target_user_id = ? OR target_user_id IS NULL)
-            AND (target_role IN ('all', 'admin'))
-            ORDER BY created_at DESC LIMIT 100
-        ''', (user['id'],)).fetchall()
-    else:
-        mgr = is_manager(user['id'])
-        if mgr:
-            notifications = conn.execute('''
-                SELECT * FROM notifications
-                WHERE (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role IN ('all', 'manager'))
-                ORDER BY created_at DESC LIMIT 100
-            ''', (user['id'],)).fetchall()
-        else:
-            notifications = conn.execute('''
-                SELECT * FROM notifications
-                WHERE (target_user_id = ? OR target_user_id IS NULL)
-                AND (target_role = 'all')
-                ORDER BY created_at DESC LIMIT 100
-            ''', (user['id'],)).fetchall()
-
-    # Count unread
-    unread_count = sum(1 for n in notifications if n['is_read'] == 0)
-
-    conn.close()
-    return render_template('notifications.html', user=user, notifications=notifications, unread_count=unread_count)
 
 
 @app.route('/announcements')
@@ -2694,11 +2596,13 @@ def create_announcement():
     ''', (title, message, user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
     conn.commit()
 
-    # Create notification for all users
+    # Create notification for all active employees
     try:
-        create_notification(conn, 'announcement', title,
-                          f"New announcement by {user['name']}: {message[:100]}",
-                          target_role='all')
+        all_emps = conn.execute("SELECT id FROM employees WHERE is_active = 1 AND emp_code != 'admin'", ()).fetchall()
+        for emp in all_emps:
+            create_notification(conn, emp['id'], f"Announcement: {title}",
+                              f"New announcement by {user['name']}: {message[:100]}",
+                              'announcement', '/notifications')
         conn.commit()
     except Exception as e:
         logging.error(f"Failed to create announcement notification: {e}")
@@ -2788,10 +2692,12 @@ def daily_notifications():
 
         # Create in-app notification for everyone
         try:
-            create_notification(conn, 'birthday',
-                f"🎂 {person['name']}'s Birthday Tomorrow!",
-                f"Tomorrow is {person['name']}'s birthday! Join us in wishing them a wonderful day.",
-                target_role='all')
+            all_emps = conn.execute("SELECT id FROM employees WHERE is_active = 1 AND emp_code != 'admin'", ()).fetchall()
+            for emp in all_emps:
+                create_notification(conn, emp['id'],
+                    f"{person['name']}'s Birthday Tomorrow!",
+                    f"Tomorrow is {person['name']}'s birthday! Join us in wishing them a wonderful day.",
+                    'birthday')
             results['notifications_created'] += 1
         except Exception as e:
             results['errors'].append(f"Birthday notification for {person['name']}: {str(e)}")
@@ -2818,10 +2724,12 @@ def daily_notifications():
             join_year = int(person['joining_date'][:4])
             years = current_year - join_year
             yr_text = f"{years} year{'s' if years != 1 else ''}"
-            create_notification(conn, 'anniversary',
-                f"🌟 {person['name']}'s Work Anniversary!",
-                f"Tomorrow marks {person['name']}'s {yr_text} at GooCampus! Congratulations!",
-                target_role='all')
+            all_emps = conn.execute("SELECT id FROM employees WHERE is_active = 1 AND emp_code != 'admin'", ()).fetchall()
+            for emp in all_emps:
+                create_notification(conn, emp['id'],
+                    f"{person['name']}'s Work Anniversary!",
+                    f"Tomorrow marks {person['name']}'s {yr_text} at GooCampus! Congratulations!",
+                    'anniversary')
             results['notifications_created'] += 1
         except Exception as e:
             results['errors'].append(f"Anniversary notification for {person['name']}: {str(e)}")
@@ -2835,10 +2743,12 @@ def daily_notifications():
 
     for holiday in upcoming:
         try:
-            create_notification(conn, 'holiday',
-                f"🏖️ Holiday: {holiday['holiday_name']}",
-                f"Upcoming holiday on {holiday['holiday_date']} — {holiday['holiday_name']} ({holiday['holiday_type']})",
-                target_role='all')
+            all_emps = conn.execute("SELECT id FROM employees WHERE is_active = 1 AND emp_code != 'admin'", ()).fetchall()
+            for emp in all_emps:
+                create_notification(conn, emp['id'],
+                    f"Holiday: {holiday['holiday_name']}",
+                    f"Upcoming holiday on {holiday['holiday_date']} — {holiday['holiday_name']} ({holiday['holiday_type']})",
+                    'holiday')
             results['notifications_created'] += 1
         except Exception as e:
             results['errors'].append(f"Holiday notification: {str(e)}")
@@ -3961,14 +3871,10 @@ def apply_wfh():
         admins = conn.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1').fetchall()
         for admin in admins:
             if admin['id'] != user['id']:
-                conn.execute('''
-                    INSERT INTO notifications (type, title, message, target_user_id, reference_id)
-                    VALUES ('wfh_request', ?, ?, ?, NULL)
-                ''', (
+                create_notification(conn, admin['id'],
                     f"WFH Request from {user['name']}",
                     f"{user['name']} has requested WFH from {from_date} to {to_date}. Reason: {reason}",
-                    admin['id']
-                ))
+                    'leave_request', '/wfh/approvals')
         conn.commit()
         conn.close()
 
@@ -4072,10 +3978,9 @@ def approve_wfh(wfh_id):
     msg = f"Your WFH request ({wfh['from_date']} to {wfh['to_date']}) has been {status_text} by {user['name']}."
     if action == 'reject' and rejection_reason:
         msg += f" Reason: {rejection_reason}"
-    conn.execute('''
-        INSERT INTO notifications (type, title, message, target_user_id)
-        VALUES ('wfh_update', ?, ?, ?)
-    ''', (f"WFH Request {status_text.title()}", msg, wfh['employee_id']))
+    create_notification(conn, wfh['employee_id'],
+        f"WFH Request {status_text.title()}", msg,
+        'success' if action == 'approve' else 'danger', '/wfh/my-requests')
 
     conn.commit()
     conn.close()
