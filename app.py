@@ -519,11 +519,12 @@ def dashboard():
             SELECT id, name, photo_url, dob, department
             FROM employees
             WHERE is_active = 1 AND emp_code != 'admin'
+            AND dob IS NOT NULL AND dob != ''
             AND strftime('%m', dob) = ?
             ORDER BY strftime('%d', dob)
         ''', (month_str,)).fetchall()
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard birthdays query error: {e}")
 
     # Work anniversaries this month
     anniversaries_this_month = []
@@ -539,8 +540,8 @@ def dashboard():
             AND (? - strftime('%Y', joining_date)) >= 1
             ORDER BY strftime('%d', joining_date)
         ''', (current_year_str, month_str, current_year_str)).fetchall()
-    except:
-        pass
+    except Exception as e:
+        logging.error(f"Dashboard anniversaries query error: {e}")
 
     # Unread notification count for this employee
     my_unread_notifs = 0
