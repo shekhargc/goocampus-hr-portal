@@ -1060,11 +1060,12 @@
   {% if birthdays_this_month or anniversaries_this_month %}
   <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2.5rem;">
     {% if birthdays_this_month %}
-    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
-        <span style="font-size: 1.4rem;">🎂</span>
-        <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">Birthdays This Month</h3>
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #F59E0B, #D97706); border-radius: 12px 12px 0 0;">
+        <span style="font-size: 1.3rem;">🎂</span>
+        <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Birthdays This Month</h3>
       </div>
+      <div style="padding: 1rem 1.2rem;">
       <div style="display: flex; flex-direction: column; gap: 0.6rem;">
         {% for emp in birthdays_this_month[:5] %}
         <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.6rem; border-radius: 0.5rem; background: #FFFBEB; border: 1px solid #FDE68A;">
@@ -1083,15 +1084,17 @@
         <div style="text-align: center; font-size: 0.82rem; color: var(--gray-400);">+{{ birthdays_this_month|length - 5 }} more</div>
         {% endif %}
       </div>
+      </div>
     </div>
     {% endif %}
 
     {% if anniversaries_this_month %}
-    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 1.5rem; box-shadow: 0 2px 8px rgba(0,0,0,0.04);">
-      <div style="display: flex; align-items: center; gap: 0.6rem; margin-bottom: 1rem;">
-        <span style="font-size: 1.4rem;">🌟</span>
-        <h3 style="font-size: 1rem; font-weight: 700; color: var(--navy); margin: 0;">Work Anniversaries This Month</h3>
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #7C3AED, #6D28D9); border-radius: 12px 12px 0 0;">
+        <span style="font-size: 1.3rem;">🌟</span>
+        <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Work Anniversaries This Month</h3>
       </div>
+      <div style="padding: 1rem 1.2rem;">
       <div style="display: flex; flex-direction: column; gap: 0.6rem;">
         {% for emp in anniversaries_this_month[:5] %}
         <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.5rem 0.6rem; border-radius: 0.5rem; background: #F5F3FF; border: 1px solid #C4B5FD;">
@@ -1109,6 +1112,7 @@
         {% if anniversaries_this_month|length > 5 %}
         <div style="text-align: center; font-size: 0.82rem; color: var(--gray-400);">+{{ anniversaries_this_month|length - 5 }} more</div>
         {% endif %}
+      </div>
       </div>
     </div>
     {% endif %}
@@ -1345,10 +1349,12 @@
     <!-- Right: Sidebar Panels -->
     <div class="sidebar-panels">
       <!-- Who's On Leave Today -->
-      <div class="panel">
-        <div class="panel__header">
-          <h3 class="panel__title">Who's On Leave Today</h3>
+      <div class="panel" style="overflow: hidden; padding: 0;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #3B82F6, #2563EB); border-radius: 12px 12px 0 0;">
+          <span style="font-size: 1.1rem;">🏖️</span>
+          <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Who's On Leave Today</h3>
         </div>
+        <div style="padding: 1rem 1.2rem;">
         {% if on_leave_today %}
           <div class="employee-list">
             {% for employee in on_leave_today[:3] %}
@@ -1375,13 +1381,16 @@
         {% else %}
           <div class="empty-state">Everyone's in today</div>
         {% endif %}
+        </div>
       </div>
 
       <!-- Upcoming Holidays -->
-      <div class="panel">
-        <div class="panel__header">
-          <h3 class="panel__title">Upcoming Holidays</h3>
+      <div class="panel" style="overflow: hidden; padding: 0;">
+        <div style="display: flex; align-items: center; gap: 0.5rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #10B981, #059669); border-radius: 12px 12px 0 0;">
+          <span style="font-size: 1.1rem;">📅</span>
+          <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Upcoming Holidays</h3>
         </div>
+        <div style="padding: 1rem 1.2rem;">
         {% if upcoming_holidays %}
           <div class="holiday-item" style="display: flex; flex-direction: column; gap: 0.5rem;">
             {% for holiday in upcoming_holidays[:4] %}
@@ -1394,6 +1403,7 @@
         {% else %}
           <div class="empty-state">No upcoming holidays</div>
         {% endif %}
+        </div>
       </div>
 
       <!-- Announcements -->
