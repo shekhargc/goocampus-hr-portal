@@ -322,6 +322,13 @@
 
 {% block content %}
 <div class="proj-detail-container">
+    <!-- Back Button -->
+    <div style="margin-bottom: 16px;">
+        <a href="/projects" style="display: inline-flex; align-items: center; gap: 6px; color: var(--orange); text-decoration: none; font-weight: 600; font-size: 14px;">
+            &larr; Back to Projects
+        </a>
+    </div>
+
     <!-- Project Header -->
     <div class="proj-detail-header">
         <h1 class="proj-detail-title">{{ project.name }}</h1>
