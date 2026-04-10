@@ -291,15 +291,13 @@
         <table class="prod-table" id="products-table">
             <thead>
                 <tr class="group-row">
-                    <th colspan="4"></th>
+                    <th colspan="2"></th>
                     <th class="group-fc" colspan="3">Original Currency</th>
                     <th class="group-inr" colspan="3">Converted to INR (live)</th>
                     <th colspan="2"></th>
                 </tr>
                 <tr class="col-row">
                     <th>Name</th>
-                    <th>Project</th>
-                    <th>Type</th>
                     <th>Currency</th>
                     <th class="group-fc" style="text-align:right;">Cost</th>
                     <th class="group-fc" style="text-align:right;">Revenue</th>
@@ -319,19 +317,15 @@
                 <tr data-type="{{ p.type }}" data-status="{{ p.status }}" data-foreign="{{ '1' if is_fc else '0' }}">
                     <td>
                         <div class="prod-name">{{ p.name }}</div>
-                        {% if p.description %}<div class="prod-desc">{{ p.description }}</div>{% endif %}
-                    </td>
-                    <td>
-                        {% if p.project_id %}
-                        <a href="/projects/{{ p.project_id }}" class="prod-proj" style="text-decoration:none;">{{ p.project_name or 'Unnamed' }}</a>
-                        {% else %}
-                        <span style="color:var(--gray-400);font-size:0.78rem;">— None —</span>
-                        {% endif %}
-                    </td>
-                    <td>
-                        <span class="type-badge {% if p.type == 'service' %}type-service{% endif %}">
-                            {{ 'Service' if p.type == 'service' else 'Product' }}
-                        </span>
+                        <div class="prod-meta" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.15rem;display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
+                            {% if p.project_id %}
+                            <a href="/projects/{{ p.project_id }}" style="color:var(--blue-dark);text-decoration:none;font-weight:600;">{{ p.project_name or 'Unnamed' }}</a>
+                            {% else %}
+                            <span style="color:var(--gray-400);">— No project —</span>
+                            {% endif %}
+                            <span style="color:var(--gray-300);">·</span>
+                            <span class="type-badge {% if p.type == 'service' %}type-service{% endif %}" style="font-size:0.65rem;padding:0.1rem 0.4rem;">{{ 'Service' if p.type == 'service' else 'Product' }}</span>
+                        </div>
                     </td>
                     <td>
                         <span class="currency-badge {% if not is_fc %}currency-inr{% endif %}">{{ cur }}</span>
