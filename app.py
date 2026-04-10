@@ -3632,6 +3632,82 @@ def reports_annual():
                          monthly_alloc='Apr=3, Others=2')
 
 
+# ─── Forex / Currency Conversion ───
+# Cached FX rates (1 unit of currency → INR). Refreshed every 6 hours.
+SUPPORTED_CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'AED', 'RUB']
+_fx_cache = {'rates': None, 'fetched_at': 0, 'source': 'fallback', 'updated_iso': None}
+
+# Reasonable fallback rates in case the API is unreachable (as of early 2026)
+_fx_fallback = {
+    'INR': 1.0, 'USD': 83.50, 'EUR': 90.20, 'GBP': 106.40,
+    'AUD': 55.10, 'AED': 22.73, 'RUB': 0.91
+}
+
+def get_fx_rates_inr(force_refresh=False):
+    """Returns dict mapping currency code to INR per 1 unit. Cached 6 hours.
+    Falls back to hardcoded rates if network fails."""
+    import time as _time
+    now = _time.time()
+    if (not force_refresh) and _fx_cache['rates'] and (now - _fx_cache['fetched_at']) < 6 * 3600:
+        return _fx_cache['rates']
+    try:
+        import urllib.request as _ur
+        import json as _json
+        with _ur.urlopen('https://open.er-api.com/v6/latest/USD', timeout=6) as r:
+            data = _json.loads(r.read().decode())
+        usd_rates = data.get('rates', {}) or {}
+        inr_per_usd = usd_rates.get('INR')
+        if not inr_per_usd:
+            raise ValueError('No INR rate in response')
+        rates = {'INR': 1.0}
+        for code in SUPPORTED_CURRENCIES:
+            if code == 'INR':
+                continue
+            r_code = usd_rates.get(code)
+            if r_code and r_code > 0:
+                # 1 unit of <code> in INR = inr_per_usd / (USD→code rate)
+                rates[code] = round(float(inr_per_usd) / float(r_code), 4)
+            else:
+                rates[code] = _fx_fallback.get(code, 1.0)
+        _fx_cache['rates'] = rates
+        _fx_cache['fetched_at'] = now
+        _fx_cache['source'] = 'open.er-api.com'
+        _fx_cache['updated_iso'] = data.get('time_last_update_utc', '')
+        return rates
+    except Exception as e:
+        logging.warning(f"FX fetch failed, using fallback: {e}")
+        if _fx_cache['rates']:
+            return _fx_cache['rates']
+        _fx_cache['rates'] = dict(_fx_fallback)
+        _fx_cache['fetched_at'] = now
+        _fx_cache['source'] = 'fallback'
+        return _fx_cache['rates']
+
+def to_inr(amount, currency):
+    """Convert amount in given currency to INR using cached rates."""
+    try:
+        amt = float(amount or 0)
+    except (ValueError, TypeError):
+        amt = 0.0
+    cur = (currency or 'INR').upper()
+    if cur == 'INR':
+        return amt
+    rates = get_fx_rates_inr()
+    return amt * rates.get(cur, 1.0)
+
+
+@app.route('/api/forex-rates')
+def api_forex_rates():
+    """Public endpoint returning current FX→INR rates (JSON). Used by frontend for live conversion preview."""
+    rates = get_fx_rates_inr()
+    return jsonify({
+        'rates': rates,
+        'source': _fx_cache.get('source', 'fallback'),
+        'updated': _fx_cache.get('updated_iso', ''),
+        'currencies': SUPPORTED_CURRENCIES
+    })
+
+
 def ensure_crm_tables():
     """Create CRM tables if they don't exist (safe to run repeatedly)."""
     try:
@@ -3748,6 +3824,24 @@ def ensure_crm_tables():
         # Add sale_price column to products_services (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN sale_price NUMERIC(14,2) DEFAULT 0")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # Add cost_currency column (migration)
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN cost_currency TEXT DEFAULT 'INR'")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # Add sale_currency column (migration)
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN sale_currency TEXT DEFAULT 'INR'")
             conn.commit()
         except Exception:
             try:
@@ -4082,16 +4176,36 @@ def projects_list():
         # All employees can view projects, but only certain can manage
         pass
     conn = get_db()
-    projects = conn.execute('''
-        SELECT p.*, e.name as created_by_name,
-               (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count,
-               (SELECT COALESCE(SUM(ps.product_cost), 0) FROM products_services ps WHERE ps.project_id = p.id) as total_cost,
-               (SELECT COALESCE(SUM(ps.sale_price), 0) FROM products_services ps WHERE ps.project_id = p.id) as total_revenue
+    projects_raw = conn.execute('''
+        SELECT p.*, e.name as created_by_name
         FROM projects p
         LEFT JOIN employees e ON p.created_by = e.id
         ORDER BY p.status, p.name
     ''').fetchall()
+    products_raw = conn.execute('''
+        SELECT project_id, product_cost, sale_price, cost_currency, sale_currency
+        FROM products_services
+    ''').fetchall()
     conn.close()
+    # Aggregate in Python (multi-currency aware)
+    agg = {}
+    for r in products_raw:
+        pid = r['project_id']
+        if pid is None:
+            continue
+        a = agg.setdefault(pid, {'count': 0, 'cost': 0.0, 'rev': 0.0})
+        a['count'] += 1
+        a['cost'] += to_inr(r['product_cost'], r['cost_currency'] or 'INR')
+        a['rev'] += to_inr(r['sale_price'], r['sale_currency'] or 'INR')
+    projects = []
+    for p in projects_raw:
+        d = dict(p)
+        pid = d['id']
+        a = agg.get(pid, {'count': 0, 'cost': 0.0, 'rev': 0.0})
+        d['product_count'] = a['count']
+        d['total_cost'] = a['cost']
+        d['total_revenue'] = a['rev']
+        projects.append(d)
     return render_template('projects.html', user=user, projects=projects,
                          can_manage=has_module_access(user, 'projects') or user['is_admin'],
                          is_admin=bool(user['is_admin']))
@@ -4134,7 +4248,7 @@ def project_detail(project_id):
         conn.close()
         return redirect(url_for('projects_list'))
 
-    products = conn.execute('''
+    products_raw = conn.execute('''
         SELECT ps.*, e.name as created_by_name
         FROM products_services ps
         LEFT JOIN employees e ON ps.created_by = e.id
@@ -4143,8 +4257,20 @@ def project_detail(project_id):
     ''', (project_id,)).fetchall()
 
     conn.close()
+    # Attach live-converted INR fields to each product
+    products = []
+    for p in products_raw:
+        d = dict(p)
+        d['cost_currency'] = d.get('cost_currency') or 'INR'
+        d['sale_currency'] = d.get('sale_currency') or 'INR'
+        d['cost_inr'] = to_inr(d.get('product_cost'), d['cost_currency'])
+        d['revenue_inr'] = to_inr(d.get('sale_price'), d['sale_currency'])
+        d['margin_inr'] = d['revenue_inr'] - d['cost_inr']
+        products.append(d)
     return render_template('project_detail.html', user=user, project=project, products=products,
-                         can_manage=has_module_access(user, 'projects') or user['is_admin'])
+                         can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                         supported_currencies=SUPPORTED_CURRENCIES,
+                         fx_rates=get_fx_rates_inr())
 
 
 @app.route('/projects/<int:project_id>/edit', methods=['POST'])
@@ -4197,7 +4323,7 @@ def products_list():
     """Dedicated products listing across all projects."""
     user = get_user()
     conn = get_db()
-    products = conn.execute('''
+    products_raw = conn.execute('''
         SELECT ps.*,
                p.name as project_name,
                e.name as created_by_name
@@ -4210,9 +4336,28 @@ def products_list():
         "SELECT id, name FROM projects WHERE status = 'active' ORDER BY name"
     ).fetchall()
     conn.close()
+    # Attach live-converted INR fields to each product
+    products = []
+    total_cost = 0.0
+    total_rev = 0.0
+    for p in products_raw:
+        d = dict(p)
+        d['cost_currency'] = d.get('cost_currency') or 'INR'
+        d['sale_currency'] = d.get('sale_currency') or 'INR'
+        d['cost_inr'] = to_inr(d.get('product_cost'), d['cost_currency'])
+        d['revenue_inr'] = to_inr(d.get('sale_price'), d['sale_currency'])
+        d['margin_inr'] = d['revenue_inr'] - d['cost_inr']
+        total_cost += d['cost_inr']
+        total_rev += d['revenue_inr']
+        products.append(d)
     return render_template('products.html', user=user, products=products, projects=projects,
                            can_manage=has_module_access(user, 'projects') or user['is_admin'],
-                           is_admin=bool(user['is_admin']))
+                           is_admin=bool(user['is_admin']),
+                           supported_currencies=SUPPORTED_CURRENCIES,
+                           fx_rates=get_fx_rates_inr(),
+                           total_cost=total_cost,
+                           total_rev=total_rev,
+                           total_margin=total_rev - total_cost)
 
 
 @app.route('/products/add/<int:project_id>', methods=['GET', 'POST'])
@@ -4242,6 +4387,12 @@ def add_product(project_id):
             sale_price = float(request.form.get('sale_price') or 0)
         except ValueError:
             sale_price = 0
+        # Unified currency for the product (applies to both cost and revenue)
+        currency = (request.form.get('currency') or 'INR').upper()
+        if currency not in SUPPORTED_CURRENCIES:
+            currency = 'INR'
+        cost_currency = currency
+        sale_currency = currency
 
         if not name:
             flash('Name is required', 'error')
@@ -4250,9 +4401,11 @@ def add_product(project_id):
 
         conn.execute('''
             INSERT INTO products_services
-                (name, description, type, project_id, product_cost, sale_price, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        ''', (name, description, ps_type, project_id, product_cost, sale_price, user['id']))
+                (name, description, type, project_id, product_cost, sale_price,
+                 cost_currency, sale_currency, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, description, ps_type, project_id, product_cost, sale_price,
+              cost_currency, sale_currency, user['id']))
         conn.commit()
         conn.close()
         flash('Product/Service added', 'success')
@@ -4262,7 +4415,9 @@ def add_product(project_id):
         return redirect(url_for('project_detail', project_id=project_id))
 
     conn.close()
-    return render_template('add_product.html', user=user, project=project)
+    return render_template('add_product.html', user=user, project=project,
+                           supported_currencies=SUPPORTED_CURRENCIES,
+                           fx_rates=get_fx_rates_inr())
 
 
 @app.route('/products/<int:ps_id>/edit', methods=['POST'])
@@ -4292,6 +4447,12 @@ def edit_product(ps_id):
         sale_price = float(request.form.get('sale_price') or 0)
     except ValueError:
         sale_price = 0
+    # Unified currency for the product
+    currency = (request.form.get('currency') or 'INR').upper()
+    if currency not in SUPPORTED_CURRENCIES:
+        currency = 'INR'
+    cost_currency = currency
+    sale_currency = currency
     # Optional reassignment of project
     new_project_id = request.form.get('project_id')
     if new_project_id and new_project_id.isdigit():
@@ -4301,9 +4462,12 @@ def edit_product(ps_id):
 
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
-                        product_cost = ?, sale_price = ?, project_id = ?
+                        product_cost = ?, sale_price = ?,
+                        cost_currency = ?, sale_currency = ?,
+                        project_id = ?
                     WHERE id = ?''',
-                (name, description, ps_type, status, product_cost, sale_price, project_id_val, ps_id))
+                (name, description, ps_type, status, product_cost, sale_price,
+                 cost_currency, sale_currency, project_id_val, ps_id))
     conn.commit()
     conn.close()
     flash('Updated successfully', 'success')

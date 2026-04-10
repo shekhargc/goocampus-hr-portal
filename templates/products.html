@@ -5,7 +5,7 @@
 {% block extra_css %}
 <style>
     .prod-container {
-        max-width: 1400px;
+        max-width: 1600px;
         margin: 0 auto;
         padding: 2rem 2.5rem;
     }
@@ -29,6 +29,30 @@
         font-size: 0.9rem;
         color: var(--gray-500);
         margin-top: 0.25rem;
+    }
+
+    .fx-banner {
+        background: linear-gradient(90deg, rgba(74,122,181,0.08), rgba(245,130,32,0.08));
+        border: 1px solid rgba(74,122,181,0.2);
+        border-radius: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        font-size: 0.82rem;
+        color: var(--gray-700);
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+
+    .fx-rate-pill {
+        background: var(--white);
+        padding: 0.25rem 0.6rem;
+        border-radius: 0.3rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--navy);
+        border: 1px solid var(--gray-200);
     }
 
     .prod-summary {
@@ -90,13 +114,14 @@
         background: var(--white);
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        overflow: hidden;
+        overflow-x: auto;
         box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
 
     .prod-table {
         width: 100%;
         border-collapse: collapse;
+        min-width: 1400px;
     }
 
     .prod-table thead {
@@ -104,29 +129,43 @@
         border-bottom: 1px solid var(--gray-200);
     }
 
-    .prod-table th {
-        padding: 0.9rem 1rem;
-        text-align: left;
-        font-weight: 600;
-        font-size: 0.75rem;
-        color: var(--gray-600);
+    .prod-table thead tr.group-row th {
+        padding: 0.6rem 0.7rem;
+        font-size: 0.7rem;
+        color: var(--gray-500);
         text-transform: uppercase;
         letter-spacing: 0.5px;
+        font-weight: 700;
+        border-bottom: 1px solid var(--gray-200);
     }
 
+    .prod-table thead tr.col-row th {
+        padding: 0.55rem 0.7rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.72rem;
+        color: var(--gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+
+    .group-fc { background: rgba(74,122,181,0.07); border-left: 2px solid rgba(74,122,181,0.3); }
+    .group-inr { background: rgba(16,185,129,0.07); border-left: 2px solid rgba(16,185,129,0.3); }
+
     .prod-table td {
-        padding: 0.9rem 1rem;
+        padding: 0.8rem 0.7rem;
         border-bottom: 1px solid var(--gray-100);
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         color: var(--gray-700);
         vertical-align: top;
+        white-space: nowrap;
     }
 
     .prod-table tbody tr:hover { background: var(--gray-50); }
     .prod-table tbody tr:last-child td { border-bottom: none; }
 
-    .prod-name { font-weight: 600; color: var(--navy); }
-    .prod-desc { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.2rem; }
+    .prod-name { font-weight: 600; color: var(--navy); white-space: normal; }
+    .prod-desc { font-size: 0.72rem; color: var(--gray-500); margin-top: 0.2rem; white-space: normal; max-width: 220px; }
     .prod-proj { font-size: 0.78rem; color: var(--blue-dark); font-weight: 600; }
 
     .type-badge {
@@ -138,15 +177,24 @@
         background: rgba(245, 130, 32, 0.1);
         color: #D96E0E;
     }
-    .type-service {
-        background: rgba(74, 122, 181, 0.1);
-        color: var(--blue-dark);
+    .type-service { background: rgba(74, 122, 181, 0.1); color: var(--blue-dark); }
+
+    .currency-badge {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 0.3rem;
+        font-size: 0.7rem;
+        font-weight: 700;
+        background: var(--navy);
+        color: white;
     }
+    .currency-inr { background: var(--gray-400); }
 
     .money-cost { color: #b91c1c; font-weight: 600; text-align: right; }
     .money-rev { color: #059669; font-weight: 600; text-align: right; }
     .money-margin-pos { color: #059669; font-weight: 700; text-align: right; }
     .money-margin-neg { color: #b91c1c; font-weight: 700; text-align: right; }
+    .money-dash { color: var(--gray-300); text-align: right; }
 
     .status-active { color: #059669; font-weight: 600; font-size: 0.78rem; }
     .status-inactive { color: var(--gray-500); font-weight: 600; font-size: 0.78rem; }
@@ -172,13 +220,17 @@
         font-family: 'Inter', sans-serif;
     }
 
-    .empty-box {
-        text-align: center; padding: 3rem 2rem; color: var(--gray-400);
+    .empty-box { text-align: center; padding: 3rem 2rem; color: var(--gray-400); }
+
+    .live-preview {
+        font-size: 0.72rem;
+        color: var(--blue-dark);
+        margin-top: 0.25rem;
+        font-weight: 600;
     }
 
     @media (max-width: 768px) {
         .prod-container { padding: 1.5rem 1rem; }
-        .prod-table th, .prod-table td { padding: 0.6rem 0.5rem; font-size: 0.78rem; }
     }
 </style>
 {% endblock %}
@@ -198,26 +250,30 @@
         </div>
     </div>
 
-    {% set total_items = products|length %}
-    {% set total_cost = products|sum(attribute='product_cost') %}
-    {% set total_rev = products|sum(attribute='sale_price') %}
-    {% set total_margin = total_rev - total_cost %}
+    <!-- Live FX banner -->
+    <div class="fx-banner">
+        <strong style="color:var(--navy);">Live FX rates (per 1 unit → INR):</strong>
+        {% for c, r in fx_rates.items() if c != 'INR' %}
+        <span class="fx-rate-pill">1 {{ c }} = ₹{{ '{:,.2f}'.format(r) }}</span>
+        {% endfor %}
+        <span style="font-size:0.72rem;color:var(--gray-500);">Auto-refreshes every 6 hours</span>
+    </div>
 
     <div class="prod-summary">
         <div class="prod-stat">
             <div class="prod-stat-label">Total Items</div>
-            <div class="prod-stat-value">{{ total_items }}</div>
+            <div class="prod-stat-value">{{ products|length }}</div>
         </div>
         <div class="prod-stat">
-            <div class="prod-stat-label">Total Cost</div>
+            <div class="prod-stat-label">Total Cost (₹)</div>
             <div class="prod-stat-value" style="color:#b91c1c;">₹{{ '{:,.0f}'.format(total_cost) }}</div>
         </div>
         <div class="prod-stat">
-            <div class="prod-stat-label">Total Revenue</div>
+            <div class="prod-stat-label">Total Revenue (₹)</div>
             <div class="prod-stat-value" style="color:#059669;">₹{{ '{:,.0f}'.format(total_rev) }}</div>
         </div>
         <div class="prod-stat">
-            <div class="prod-stat-label">Gross Margin</div>
+            <div class="prod-stat-label">Gross Margin (₹)</div>
             <div class="prod-stat-value" style="color: {% if total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(total_margin) }}</div>
         </div>
     </div>
@@ -227,26 +283,40 @@
         <button class="prod-filter-btn" data-filter="product" onclick="filterProducts('product', this)">Products</button>
         <button class="prod-filter-btn" data-filter="service" onclick="filterProducts('service', this)">Services</button>
         <button class="prod-filter-btn" data-filter="active" onclick="filterProducts('active', this)">Active Only</button>
+        <button class="prod-filter-btn" data-filter="foreign" onclick="filterProducts('foreign', this)">Foreign Currency</button>
     </div>
 
     {% if products %}
     <div class="prod-table-wrap">
         <table class="prod-table" id="products-table">
             <thead>
-                <tr>
+                <tr class="group-row">
+                    <th colspan="4"></th>
+                    <th class="group-fc" colspan="3">Original Currency</th>
+                    <th class="group-inr" colspan="3">Converted to INR (live)</th>
+                    <th colspan="2"></th>
+                </tr>
+                <tr class="col-row">
                     <th>Name</th>
                     <th>Project</th>
                     <th>Type</th>
-                    <th style="text-align:right;">Cost</th>
-                    <th style="text-align:right;">Revenue</th>
-                    <th style="text-align:right;">Margin</th>
+                    <th>Currency</th>
+                    <th class="group-fc" style="text-align:right;">Cost</th>
+                    <th class="group-fc" style="text-align:right;">Revenue</th>
+                    <th class="group-fc" style="text-align:right;">Margin</th>
+                    <th class="group-inr" style="text-align:right;">Cost ₹</th>
+                    <th class="group-inr" style="text-align:right;">Revenue ₹</th>
+                    <th class="group-inr" style="text-align:right;">Margin ₹</th>
                     <th>Status</th>
                     {% if is_admin %}<th>Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
                 {% for p in products %}
-                <tr data-type="{{ p.type }}" data-status="{{ p.status }}">
+                {% set cur = p.cost_currency or 'INR' %}
+                {% set is_fc = cur != 'INR' %}
+                {% set orig_margin = (p.sale_price or 0) - (p.product_cost or 0) %}
+                <tr data-type="{{ p.type }}" data-status="{{ p.status }}" data-foreign="{{ '1' if is_fc else '0' }}">
                     <td>
                         <div class="prod-name">{{ p.name }}</div>
                         {% if p.description %}<div class="prod-desc">{{ p.description }}</div>{% endif %}
@@ -263,10 +333,23 @@
                             {{ 'Service' if p.type == 'service' else 'Product' }}
                         </span>
                     </td>
-                    <td class="money-cost">₹{{ '{:,.0f}'.format(p.product_cost or 0) }}</td>
-                    <td class="money-rev">₹{{ '{:,.0f}'.format(p.sale_price or 0) }}</td>
-                    {% set mg = (p.sale_price or 0) - (p.product_cost or 0) %}
-                    <td class="{% if mg >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %}">₹{{ '{:,.0f}'.format(mg) }}</td>
+                    <td>
+                        <span class="currency-badge {% if not is_fc %}currency-inr{% endif %}">{{ cur }}</span>
+                    </td>
+                    {# Original currency columns #}
+                    {% if is_fc %}
+                    <td class="money-cost group-fc">{{ cur }} {{ '{:,.2f}'.format(p.product_cost or 0) }}</td>
+                    <td class="money-rev group-fc">{{ cur }} {{ '{:,.2f}'.format(p.sale_price or 0) }}</td>
+                    <td class="{% if orig_margin >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %} group-fc">{{ cur }} {{ '{:,.2f}'.format(orig_margin) }}</td>
+                    {% else %}
+                    <td class="money-dash group-fc">—</td>
+                    <td class="money-dash group-fc">—</td>
+                    <td class="money-dash group-fc">—</td>
+                    {% endif %}
+                    {# INR converted columns #}
+                    <td class="money-cost group-inr">₹{{ '{:,.0f}'.format(p.cost_inr) }}</td>
+                    <td class="money-rev group-inr">₹{{ '{:,.0f}'.format(p.revenue_inr) }}</td>
+                    <td class="{% if p.margin_inr >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %} group-inr">₹{{ '{:,.0f}'.format(p.margin_inr) }}</td>
                     <td>
                         {% if p.status == 'active' %}
                         <span class="status-active">● Active</span>
@@ -286,10 +369,10 @@
                 </tr>
                 {% if is_admin %}
                 <tr id="edit-row-{{ p.id }}" style="display:none;background:var(--gray-50);">
-                    <td colspan="8" style="padding:1.25rem;">
+                    <td colspan="12" style="padding:1.25rem;">
                         <form method="POST" action="/products/{{ p.id }}/edit">
                             <input type="hidden" name="source" value="products" />
-                            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+                            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
                                 <div>
                                     <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Name</label>
                                     <input type="text" name="name" value="{{ p.name }}" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
@@ -311,12 +394,22 @@
                                     </select>
                                 </div>
                                 <div>
-                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Cost (₹)</label>
-                                    <input type="number" step="0.01" min="0" name="product_cost" value="{{ p.product_cost or 0 }}" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Currency</label>
+                                    <select name="currency" class="edit-currency-{{ p.id }}" onchange="updateEditPreview({{ p.id }})" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;font-weight:700;">
+                                        {% for c in supported_currencies %}
+                                        <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>
+                                        {% endfor %}
+                                    </select>
                                 </div>
                                 <div>
-                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Revenue (₹)</label>
-                                    <input type="number" step="0.01" min="0" name="sale_price" value="{{ p.sale_price or 0 }}" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Cost</label>
+                                    <input type="number" step="0.01" min="0" name="product_cost" class="edit-cost-{{ p.id }}" value="{{ p.product_cost or 0 }}" oninput="updateEditPreview({{ p.id }})" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                    <div class="live-preview edit-cost-inr-{{ p.id }}"></div>
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Revenue</label>
+                                    <input type="number" step="0.01" min="0" name="sale_price" class="edit-rev-{{ p.id }}" value="{{ p.sale_price or 0 }}" oninput="updateEditPreview({{ p.id }})" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                    <div class="live-preview edit-rev-inr-{{ p.id }}"></div>
                                 </div>
                                 <div>
                                     <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Status</label>
@@ -357,7 +450,7 @@
         <h2 style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:1rem;">Add New Product/Service</h2>
         <form method="POST" id="quick-add-form">
             <input type="hidden" name="source" value="products" />
-            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
                 <div>
                     <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Name *</label>
                     <input type="text" name="name" required placeholder="Product or service name" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
@@ -379,12 +472,22 @@
                     </select>
                 </div>
                 <div>
-                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Cost (₹)</label>
-                    <input type="number" step="0.01" min="0" name="product_cost" value="0" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Currency *</label>
+                    <select name="currency" id="add-currency" onchange="updateAddPreview()" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;font-weight:700;">
+                        {% for c in supported_currencies %}
+                        <option value="{{ c }}">{{ c }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
-                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Revenue (₹)</label>
-                    <input type="number" step="0.01" min="0" name="sale_price" value="0" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Cost</label>
+                    <input type="number" step="0.01" min="0" name="product_cost" id="add-cost" value="0" oninput="updateAddPreview()" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                    <div class="live-preview" id="add-cost-inr"></div>
+                </div>
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Revenue</label>
+                    <input type="number" step="0.01" min="0" name="sale_price" id="add-rev" value="0" oninput="updateAddPreview()" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                    <div class="live-preview" id="add-rev-inr"></div>
                 </div>
             </div>
             <div style="margin-bottom:0.75rem;">
@@ -398,33 +501,80 @@
 </div>
 
 <script>
+// Server-injected FX rates (1 unit → INR)
+const FX_RATES = {{ fx_rates|tojson }};
+
 function filterProducts(filter, btn) {
     document.querySelectorAll('.prod-filter-btn').forEach(b => b.classList.remove('active'));
     btn.classList.add('active');
     document.querySelectorAll('#products-table tbody tr[data-type]').forEach(row => {
-        const matchType = filter === 'all' || filter === 'active' || row.dataset.type === filter;
-        const matchStatus = filter !== 'active' || row.dataset.status === 'active';
-        row.style.display = (matchType && matchStatus) ? '' : 'none';
+        let show = true;
+        if (filter === 'product' || filter === 'service') show = row.dataset.type === filter;
+        else if (filter === 'active') show = row.dataset.status === 'active';
+        else if (filter === 'foreign') show = row.dataset.foreign === '1';
+        row.style.display = show ? '' : 'none';
     });
 }
+
 function toggleEdit(id) {
     const row = document.getElementById('edit-row-' + id);
     if (!row) return;
     row.style.display = (row.style.display === 'none' || !row.style.display) ? 'table-row' : 'none';
+    if (row.style.display === 'table-row') updateEditPreview(id);
 }
+
+function fmtINR(n) {
+    if (isNaN(n)) return '';
+    return '≈ ₹' + Math.round(n).toLocaleString('en-IN');
+}
+
+function updateAddPreview() {
+    const cur = document.getElementById('add-currency').value;
+    const rate = FX_RATES[cur] || 1;
+    const cost = parseFloat(document.getElementById('add-cost').value) || 0;
+    const rev = parseFloat(document.getElementById('add-rev').value) || 0;
+    if (cur === 'INR') {
+        document.getElementById('add-cost-inr').textContent = '';
+        document.getElementById('add-rev-inr').textContent = '';
+    } else {
+        document.getElementById('add-cost-inr').textContent = fmtINR(cost * rate);
+        document.getElementById('add-rev-inr').textContent = fmtINR(rev * rate);
+    }
+}
+
+function updateEditPreview(id) {
+    const curEl = document.querySelector('.edit-currency-' + id);
+    if (!curEl) return;
+    const cur = curEl.value;
+    const rate = FX_RATES[cur] || 1;
+    const cost = parseFloat(document.querySelector('.edit-cost-' + id).value) || 0;
+    const rev = parseFloat(document.querySelector('.edit-rev-' + id).value) || 0;
+    const costInrEl = document.querySelector('.edit-cost-inr-' + id);
+    const revInrEl = document.querySelector('.edit-rev-inr-' + id);
+    if (cur === 'INR') {
+        if (costInrEl) costInrEl.textContent = '';
+        if (revInrEl) revInrEl.textContent = '';
+    } else {
+        if (costInrEl) costInrEl.textContent = fmtINR(cost * rate);
+        if (revInrEl) revInrEl.textContent = fmtINR(rev * rate);
+    }
+}
+
 // Quick-add form: route to /products/add/<project_id>
 document.addEventListener('DOMContentLoaded', function() {
     const form = document.getElementById('quick-add-form');
-    if (!form) return;
-    form.addEventListener('submit', function(e) {
-        const sel = document.getElementById('add-project-select');
-        if (!sel.value) {
-            e.preventDefault();
-            alert('Please select a project');
-            return;
-        }
-        form.action = '/products/add/' + sel.value;
-    });
+    if (form) {
+        form.addEventListener('submit', function(e) {
+            const sel = document.getElementById('add-project-select');
+            if (!sel.value) {
+                e.preventDefault();
+                alert('Please select a project');
+                return;
+            }
+            form.action = '/products/add/' + sel.value;
+        });
+        updateAddPreview();
+    }
 });
 </script>
 {% endblock %}
