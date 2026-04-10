@@ -163,6 +163,21 @@
         font-size: 0.78rem;
     }
 
+    /* Tighten the non-money columns so the money groups can breathe */
+    .prod-table th.col-name, .prod-table td.col-name { width: auto; }
+    .prod-table th.col-currency, .prod-table td.col-currency {
+        width: 62px; min-width: 62px; max-width: 62px;
+        text-align: center; padding-left: 0.3rem; padding-right: 0.3rem;
+    }
+    .prod-table th.col-status, .prod-table td.col-status {
+        width: 80px; min-width: 80px; max-width: 80px;
+        padding-left: 0.4rem; padding-right: 0.4rem;
+    }
+    .prod-table th.col-actions, .prod-table td.col-actions {
+        width: 110px; min-width: 110px; max-width: 110px;
+        padding-left: 0.4rem; padding-right: 0.4rem;
+    }
+
     .prod-table td {
         padding: 0.8rem 0.7rem;
         border-bottom: 1px solid var(--gray-100);
@@ -308,16 +323,16 @@
                     <th colspan="2"></th>
                 </tr>
                 <tr class="col-row">
-                    <th>Name</th>
-                    <th>Currency</th>
+                    <th class="col-name">Name</th>
+                    <th class="col-currency">Currency</th>
                     <th class="group-fc" style="text-align:right;">Cost</th>
                     <th class="group-fc" style="text-align:right;">Revenue</th>
                     <th class="group-fc" style="text-align:right;">Margin</th>
                     <th class="group-inr" style="text-align:right;">Cost ₹</th>
                     <th class="group-inr" style="text-align:right;">Revenue ₹</th>
                     <th class="group-inr" style="text-align:right;">Margin ₹</th>
-                    <th>Status</th>
-                    {% if is_admin %}<th>Actions</th>{% endif %}
+                    <th class="col-status">Status</th>
+                    {% if is_admin %}<th class="col-actions">Actions</th>{% endif %}
                 </tr>
             </thead>
             <tbody>
@@ -326,7 +341,7 @@
                 {% set is_fc = cur != 'INR' %}
                 {% set orig_margin = (p.sale_price or 0) - (p.product_cost or 0) %}
                 <tr data-type="{{ p.type }}" data-status="{{ p.status }}" data-foreign="{{ '1' if is_fc else '0' }}">
-                    <td>
+                    <td class="col-name">
                         <div class="prod-name">{{ p.name }}</div>
                         <div class="prod-meta" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.15rem;display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
                             {% if p.project_id %}
@@ -338,7 +353,7 @@
                             <span class="type-badge {% if p.type == 'service' %}type-service{% endif %}" style="font-size:0.65rem;padding:0.1rem 0.4rem;">{{ 'Service' if p.type == 'service' else 'Product' }}</span>
                         </div>
                     </td>
-                    <td>
+                    <td class="col-currency">
                         <span class="currency-badge {% if not is_fc %}currency-inr{% endif %}">{{ cur }}</span>
                     </td>
                     {# Original currency columns #}
@@ -355,7 +370,7 @@
                     <td class="money-cost group-inr">₹{{ '{:,.0f}'.format(p.cost_inr) }}</td>
                     <td class="money-rev group-inr">₹{{ '{:,.0f}'.format(p.revenue_inr) }}</td>
                     <td class="{% if p.margin_inr >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %} group-inr">₹{{ '{:,.0f}'.format(p.margin_inr) }}</td>
-                    <td>
+                    <td class="col-status">
                         {% if p.status == 'active' %}
                         <span class="status-active">● Active</span>
                         {% else %}
@@ -363,7 +378,7 @@
                         {% endif %}
                     </td>
                     {% if is_admin %}
-                    <td>
+                    <td class="col-actions">
                         <a href="/products/{{ p.id }}/edit" class="btn-sm-edit" style="text-decoration:none;display:inline-block;">Edit</a>
                         <form method="POST" action="/products/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;?');">
                             <input type="hidden" name="source" value="products" />
