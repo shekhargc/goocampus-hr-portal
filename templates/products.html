@@ -1,0 +1,430 @@
+{% extends "base.html" %}
+
+{% block title %}Products & Services - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .prod-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .prod-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .prod-title {
+        font-size: 1.75rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+
+    .prod-subtitle {
+        font-size: 0.9rem;
+        color: var(--gray-500);
+        margin-top: 0.25rem;
+    }
+
+    .prod-summary {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+
+    .prod-stat {
+        background: var(--white);
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .prod-stat-label {
+        font-size: 0.72rem;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        font-weight: 600;
+    }
+
+    .prod-stat-value {
+        font-size: 1.4rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-top: 0.35rem;
+    }
+
+    .prod-filters {
+        display: flex;
+        gap: 0.75rem;
+        margin-bottom: 1.25rem;
+        flex-wrap: wrap;
+    }
+
+    .prod-filter-btn {
+        background: var(--white);
+        border: 1px solid var(--gray-300);
+        color: var(--gray-700);
+        padding: 0.5rem 1rem;
+        border-radius: 0.4rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .prod-filter-btn.active {
+        background: var(--orange);
+        color: white;
+        border-color: var(--orange);
+    }
+
+    .prod-table-wrap {
+        background: var(--white);
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+
+    .prod-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    .prod-table thead {
+        background: var(--gray-50);
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .prod-table th {
+        padding: 0.9rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.75rem;
+        color: var(--gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    .prod-table td {
+        padding: 0.9rem 1rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem;
+        color: var(--gray-700);
+        vertical-align: top;
+    }
+
+    .prod-table tbody tr:hover { background: var(--gray-50); }
+    .prod-table tbody tr:last-child td { border-bottom: none; }
+
+    .prod-name { font-weight: 600; color: var(--navy); }
+    .prod-desc { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.2rem; }
+    .prod-proj { font-size: 0.78rem; color: var(--blue-dark); font-weight: 600; }
+
+    .type-badge {
+        display: inline-block;
+        padding: 0.2rem 0.55rem;
+        border-radius: 0.3rem;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: rgba(245, 130, 32, 0.1);
+        color: #D96E0E;
+    }
+    .type-service {
+        background: rgba(74, 122, 181, 0.1);
+        color: var(--blue-dark);
+    }
+
+    .money-cost { color: #b91c1c; font-weight: 600; text-align: right; }
+    .money-rev { color: #059669; font-weight: 600; text-align: right; }
+    .money-margin-pos { color: #059669; font-weight: 700; text-align: right; }
+    .money-margin-neg { color: #b91c1c; font-weight: 700; text-align: right; }
+
+    .status-active { color: #059669; font-weight: 600; font-size: 0.78rem; }
+    .status-inactive { color: var(--gray-500); font-weight: 600; font-size: 0.78rem; }
+
+    .btn-orange {
+        background: var(--orange); color: white; border: none;
+        padding: 0.6rem 1.25rem; border-radius: 0.5rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer;
+        text-decoration: none; font-family: 'Inter', sans-serif;
+    }
+    .btn-orange:hover { background: var(--orange-dark); }
+
+    .btn-sm-edit {
+        background: var(--blue-light); color: var(--blue-dark); border: none;
+        padding: 0.35rem 0.7rem; border-radius: 0.3rem;
+        font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        font-family: 'Inter', sans-serif; margin-right: 0.3rem;
+    }
+    .btn-sm-delete {
+        background: rgba(239,68,68,0.1); color: #b91c1c; border: none;
+        padding: 0.35rem 0.7rem; border-radius: 0.3rem;
+        font-size: 0.72rem; font-weight: 600; cursor: pointer;
+        font-family: 'Inter', sans-serif;
+    }
+
+    .empty-box {
+        text-align: center; padding: 3rem 2rem; color: var(--gray-400);
+    }
+
+    @media (max-width: 768px) {
+        .prod-container { padding: 1.5rem 1rem; }
+        .prod-table th, .prod-table td { padding: 0.6rem 0.5rem; font-size: 0.78rem; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="prod-container">
+    <div class="prod-header">
+        <div>
+            <h1 class="prod-title">Products &amp; Services</h1>
+            <div class="prod-subtitle">All products and services across every project</div>
+        </div>
+        <div style="display:flex;gap:0.5rem;">
+            <a href="/projects" class="btn-orange" style="background:var(--white);color:var(--orange);border:1px solid var(--orange);">View Projects</a>
+            {% if can_manage and projects %}
+            <a href="#add-section" class="btn-orange">+ Add Product</a>
+            {% endif %}
+        </div>
+    </div>
+
+    {% set total_items = products|length %}
+    {% set total_cost = products|sum(attribute='product_cost') %}
+    {% set total_rev = products|sum(attribute='sale_price') %}
+    {% set total_margin = total_rev - total_cost %}
+
+    <div class="prod-summary">
+        <div class="prod-stat">
+            <div class="prod-stat-label">Total Items</div>
+            <div class="prod-stat-value">{{ total_items }}</div>
+        </div>
+        <div class="prod-stat">
+            <div class="prod-stat-label">Total Cost</div>
+            <div class="prod-stat-value" style="color:#b91c1c;">₹{{ '{:,.0f}'.format(total_cost) }}</div>
+        </div>
+        <div class="prod-stat">
+            <div class="prod-stat-label">Total Revenue</div>
+            <div class="prod-stat-value" style="color:#059669;">₹{{ '{:,.0f}'.format(total_rev) }}</div>
+        </div>
+        <div class="prod-stat">
+            <div class="prod-stat-label">Gross Margin</div>
+            <div class="prod-stat-value" style="color: {% if total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(total_margin) }}</div>
+        </div>
+    </div>
+
+    <div class="prod-filters">
+        <button class="prod-filter-btn active" data-filter="all" onclick="filterProducts('all', this)">All</button>
+        <button class="prod-filter-btn" data-filter="product" onclick="filterProducts('product', this)">Products</button>
+        <button class="prod-filter-btn" data-filter="service" onclick="filterProducts('service', this)">Services</button>
+        <button class="prod-filter-btn" data-filter="active" onclick="filterProducts('active', this)">Active Only</button>
+    </div>
+
+    {% if products %}
+    <div class="prod-table-wrap">
+        <table class="prod-table" id="products-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Project</th>
+                    <th>Type</th>
+                    <th style="text-align:right;">Cost</th>
+                    <th style="text-align:right;">Revenue</th>
+                    <th style="text-align:right;">Margin</th>
+                    <th>Status</th>
+                    {% if is_admin %}<th>Actions</th>{% endif %}
+                </tr>
+            </thead>
+            <tbody>
+                {% for p in products %}
+                <tr data-type="{{ p.type }}" data-status="{{ p.status }}">
+                    <td>
+                        <div class="prod-name">{{ p.name }}</div>
+                        {% if p.description %}<div class="prod-desc">{{ p.description }}</div>{% endif %}
+                    </td>
+                    <td>
+                        {% if p.project_id %}
+                        <a href="/projects/{{ p.project_id }}" class="prod-proj" style="text-decoration:none;">{{ p.project_name or 'Unnamed' }}</a>
+                        {% else %}
+                        <span style="color:var(--gray-400);font-size:0.78rem;">— None —</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="type-badge {% if p.type == 'service' %}type-service{% endif %}">
+                            {{ 'Service' if p.type == 'service' else 'Product' }}
+                        </span>
+                    </td>
+                    <td class="money-cost">₹{{ '{:,.0f}'.format(p.product_cost or 0) }}</td>
+                    <td class="money-rev">₹{{ '{:,.0f}'.format(p.sale_price or 0) }}</td>
+                    {% set mg = (p.sale_price or 0) - (p.product_cost or 0) %}
+                    <td class="{% if mg >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %}">₹{{ '{:,.0f}'.format(mg) }}</td>
+                    <td>
+                        {% if p.status == 'active' %}
+                        <span class="status-active">● Active</span>
+                        {% else %}
+                        <span class="status-inactive">● Inactive</span>
+                        {% endif %}
+                    </td>
+                    {% if is_admin %}
+                    <td>
+                        <button type="button" class="btn-sm-edit" onclick="toggleEdit({{ p.id }})">Edit</button>
+                        <form method="POST" action="/products/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;?');">
+                            <input type="hidden" name="source" value="products" />
+                            <button type="submit" class="btn-sm-delete">Delete</button>
+                        </form>
+                    </td>
+                    {% endif %}
+                </tr>
+                {% if is_admin %}
+                <tr id="edit-row-{{ p.id }}" style="display:none;background:var(--gray-50);">
+                    <td colspan="8" style="padding:1.25rem;">
+                        <form method="POST" action="/products/{{ p.id }}/edit">
+                            <input type="hidden" name="source" value="products" />
+                            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Name</label>
+                                    <input type="text" name="name" value="{{ p.name }}" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Project</label>
+                                    <select name="project_id" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;">
+                                        <option value="">— None —</option>
+                                        {% for pr in projects %}
+                                        <option value="{{ pr.id }}" {% if p.project_id == pr.id %}selected{% endif %}>{{ pr.name }}</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Type</label>
+                                    <select name="type" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;">
+                                        <option value="product" {% if p.type == 'product' %}selected{% endif %}>Product</option>
+                                        <option value="service" {% if p.type == 'service' %}selected{% endif %}>Service</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Cost (₹)</label>
+                                    <input type="number" step="0.01" min="0" name="product_cost" value="{{ p.product_cost or 0 }}" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Revenue (₹)</label>
+                                    <input type="number" step="0.01" min="0" name="sale_price" value="{{ p.sale_price or 0 }}" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;" />
+                                </div>
+                                <div>
+                                    <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Status</label>
+                                    <select name="status" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;">
+                                        <option value="active" {% if p.status == 'active' %}selected{% endif %}>Active</option>
+                                        <option value="inactive" {% if p.status != 'active' %}selected{% endif %}>Inactive</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div style="margin-bottom:0.75rem;">
+                                <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Description</label>
+                                <textarea name="description" rows="2" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.85rem;font-family:'Inter',sans-serif;">{{ p.description or '' }}</textarea>
+                            </div>
+                            <div style="display:flex;gap:0.5rem;">
+                                <button type="submit" class="btn-orange" style="padding:0.5rem 1.25rem;font-size:0.82rem;">Save Changes</button>
+                                <button type="button" onclick="toggleEdit({{ p.id }})" style="background:var(--white);color:var(--gray-600);border:1px solid var(--gray-300);padding:0.5rem 1.25rem;border-radius:0.5rem;font-size:0.82rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Cancel</button>
+                            </div>
+                        </form>
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="prod-table-wrap">
+        <div class="empty-box">
+            <div style="font-size:1.05rem;font-weight:600;color:var(--gray-500);margin-bottom:0.5rem;">No Products Yet</div>
+            <div style="font-size:0.88rem;margin-bottom:1.5rem;">Add a project first, then create products under it.</div>
+            <a href="/projects" class="btn-orange">Go to Projects</a>
+        </div>
+    </div>
+    {% endif %}
+
+    {% if can_manage and projects %}
+    <div id="add-section" style="margin-top:2rem;background:var(--white);border:1px solid var(--gray-200);border-radius:0.75rem;padding:1.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <h2 style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:1rem;">Add New Product/Service</h2>
+        <form method="POST" id="quick-add-form">
+            <input type="hidden" name="source" value="products" />
+            <div style="display:grid;grid-template-columns:2fr 1.5fr 1fr 1fr 1fr;gap:0.75rem;margin-bottom:0.75rem;">
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Name *</label>
+                    <input type="text" name="name" required placeholder="Product or service name" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                </div>
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Project *</label>
+                    <select id="add-project-select" required style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                        <option value="">— Select project —</option>
+                        {% for pr in projects %}
+                        <option value="{{ pr.id }}">{{ pr.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Type *</label>
+                    <select name="type" required style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                        <option value="product">Product</option>
+                        <option value="service">Service</option>
+                    </select>
+                </div>
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Cost (₹)</label>
+                    <input type="number" step="0.01" min="0" name="product_cost" value="0" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                </div>
+                <div>
+                    <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Revenue (₹)</label>
+                    <input type="number" step="0.01" min="0" name="sale_price" value="0" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;" />
+                </div>
+            </div>
+            <div style="margin-bottom:0.75rem;">
+                <label style="font-size:0.72rem;color:var(--gray-500);font-weight:600;">Description</label>
+                <textarea name="description" rows="2" placeholder="Optional description" style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;font-family:'Inter',sans-serif;"></textarea>
+            </div>
+            <button type="submit" class="btn-orange">+ Add Product/Service</button>
+        </form>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function filterProducts(filter, btn) {
+    document.querySelectorAll('.prod-filter-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    document.querySelectorAll('#products-table tbody tr[data-type]').forEach(row => {
+        const matchType = filter === 'all' || filter === 'active' || row.dataset.type === filter;
+        const matchStatus = filter !== 'active' || row.dataset.status === 'active';
+        row.style.display = (matchType && matchStatus) ? '' : 'none';
+    });
+}
+function toggleEdit(id) {
+    const row = document.getElementById('edit-row-' + id);
+    if (!row) return;
+    row.style.display = (row.style.display === 'none' || !row.style.display) ? 'table-row' : 'none';
+}
+// Quick-add form: route to /products/add/<project_id>
+document.addEventListener('DOMContentLoaded', function() {
+    const form = document.getElementById('quick-add-form');
+    if (!form) return;
+    form.addEventListener('submit', function(e) {
+        const sel = document.getElementById('add-project-select');
+        if (!sel.value) {
+            e.preventDefault();
+            alert('Please select a project');
+            return;
+        }
+        form.action = '/products/add/' + sel.value;
+    });
+});
+</script>
+{% endblock %}

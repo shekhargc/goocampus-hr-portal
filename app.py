@@ -3664,6 +3664,8 @@ def ensure_crm_tables():
                 type TEXT NOT NULL DEFAULT 'product',
                 project_id INTEGER REFERENCES projects(id),
                 status TEXT DEFAULT 'active',
+                product_cost NUMERIC(14,2) DEFAULT 0,
+                sale_price NUMERIC(14,2) DEFAULT 0,
                 created_by INTEGER REFERENCES employees(id),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
@@ -3734,6 +3736,24 @@ def ensure_crm_tables():
             conn.commit()
         except Exception:
             conn.rollback()
+        # Add product_cost column to products_services (migration)
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN product_cost NUMERIC(14,2) DEFAULT 0")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # Add sale_price column to products_services (migration)
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN sale_price NUMERIC(14,2) DEFAULT 0")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         conn.close()
         logging.info("CRM tables ensured.")
     except Exception as e:
@@ -4064,14 +4084,17 @@ def projects_list():
     conn = get_db()
     projects = conn.execute('''
         SELECT p.*, e.name as created_by_name,
-               (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count
+               (SELECT COUNT(*) FROM products_services ps WHERE ps.project_id = p.id) as product_count,
+               (SELECT COALESCE(SUM(ps.product_cost), 0) FROM products_services ps WHERE ps.project_id = p.id) as total_cost,
+               (SELECT COALESCE(SUM(ps.sale_price), 0) FROM products_services ps WHERE ps.project_id = p.id) as total_revenue
         FROM projects p
         LEFT JOIN employees e ON p.created_by = e.id
         ORDER BY p.status, p.name
     ''').fetchall()
     conn.close()
     return render_template('projects.html', user=user, projects=projects,
-                         can_manage=has_module_access(user, 'projects') or user['is_admin'])
+                         can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                         is_admin=bool(user['is_admin']))
 
 
 @app.route('/projects/add', methods=['GET', 'POST'])
@@ -4145,7 +4168,52 @@ def edit_project(project_id):
     return redirect(url_for('project_detail', project_id=project_id))
 
 
+@app.route('/projects/<int:project_id>/delete', methods=['POST'])
+@admin_required
+def delete_project(project_id):
+    """Admin-only hard delete of a project + its products."""
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM products_services WHERE project_id = ?', (project_id,))
+        conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
+        conn.commit()
+        flash('Project and its products deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not delete project: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('projects_list'))
+
+
 # ─── Products & Services Routes ───
+
+@app.route('/products')
+@login_required
+def products_list():
+    """Dedicated products listing across all projects."""
+    user = get_user()
+    conn = get_db()
+    products = conn.execute('''
+        SELECT ps.*,
+               p.name as project_name,
+               e.name as created_by_name
+        FROM products_services ps
+        LEFT JOIN projects p ON ps.project_id = p.id
+        LEFT JOIN employees e ON ps.created_by = e.id
+        ORDER BY ps.status, p.name, ps.type, ps.name
+    ''').fetchall()
+    projects = conn.execute(
+        "SELECT id, name FROM projects WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return render_template('products.html', user=user, products=products, projects=projects,
+                           can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                           is_admin=bool(user['is_admin']))
+
 
 @app.route('/products/add/<int:project_id>', methods=['GET', 'POST'])
 @login_required
@@ -4166,6 +4234,14 @@ def add_product(project_id):
         name = request.form.get('name', '').strip()
         description = request.form.get('description', '').strip()
         ps_type = request.form.get('type', 'product')
+        try:
+            product_cost = float(request.form.get('product_cost') or 0)
+        except ValueError:
+            product_cost = 0
+        try:
+            sale_price = float(request.form.get('sale_price') or 0)
+        except ValueError:
+            sale_price = 0
 
         if not name:
             flash('Name is required', 'error')
@@ -4173,12 +4249,16 @@ def add_product(project_id):
             return redirect(url_for('add_product', project_id=project_id))
 
         conn.execute('''
-            INSERT INTO products_services (name, description, type, project_id, created_by)
-            VALUES (?, ?, ?, ?, ?)
-        ''', (name, description, ps_type, project_id, user['id']))
+            INSERT INTO products_services
+                (name, description, type, project_id, product_cost, sale_price, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+        ''', (name, description, ps_type, project_id, product_cost, sale_price, user['id']))
         conn.commit()
         conn.close()
         flash('Product/Service added', 'success')
+        src = request.form.get('source', '')
+        if src == 'products':
+            return redirect(url_for('products_list'))
         return redirect(url_for('project_detail', project_id=project_id))
 
     conn.close()
@@ -4204,13 +4284,61 @@ def edit_product(ps_id):
     description = request.form.get('description', '').strip()
     ps_type = request.form.get('type', ps['type'])
     status = request.form.get('status', ps['status'])
+    try:
+        product_cost = float(request.form.get('product_cost') or 0)
+    except ValueError:
+        product_cost = 0
+    try:
+        sale_price = float(request.form.get('sale_price') or 0)
+    except ValueError:
+        sale_price = 0
+    # Optional reassignment of project
+    new_project_id = request.form.get('project_id')
+    if new_project_id and new_project_id.isdigit():
+        project_id_val = int(new_project_id)
+    else:
+        project_id_val = ps['project_id']
 
-    conn.execute('UPDATE products_services SET name = ?, description = ?, type = ?, status = ? WHERE id = ?',
-                (name, description, ps_type, status, ps_id))
+    conn.execute('''UPDATE products_services
+                    SET name = ?, description = ?, type = ?, status = ?,
+                        product_cost = ?, sale_price = ?, project_id = ?
+                    WHERE id = ?''',
+                (name, description, ps_type, status, product_cost, sale_price, project_id_val, ps_id))
     conn.commit()
     conn.close()
     flash('Updated successfully', 'success')
-    return redirect(url_for('project_detail', project_id=ps['project_id']))
+    src = request.form.get('source', '')
+    if src == 'products':
+        return redirect(url_for('products_list'))
+    return redirect(url_for('project_detail', project_id=project_id_val))
+
+
+@app.route('/products/<int:ps_id>/delete', methods=['POST'])
+@admin_required
+def delete_product(ps_id):
+    """Admin-only hard delete of a product/service."""
+    conn = get_db()
+    ps = conn.execute('SELECT * FROM products_services WHERE id = ?', (ps_id,)).fetchone()
+    if not ps:
+        conn.close()
+        flash('Product not found', 'error')
+        return redirect(url_for('products_list'))
+    try:
+        conn.execute('DELETE FROM products_services WHERE id = ?', (ps_id,))
+        conn.commit()
+        flash('Product deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not delete: {e}', 'error')
+    finally:
+        conn.close()
+    src = request.form.get('source', '')
+    if src == 'project':
+        return redirect(url_for('project_detail', project_id=ps['project_id']))
+    return redirect(url_for('products_list'))
 
 
 # ─── Sales News Routes ───

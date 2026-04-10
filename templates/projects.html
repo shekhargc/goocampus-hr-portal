@@ -189,25 +189,46 @@
     {% if projects %}
     <div class="proj-grid">
         {% for project in projects %}
-        <a href="/projects/{{ project.id }}" class="proj-card">
-            <div class="proj-card-header">
-                <div class="proj-card-name">{{ project.name }}</div>
-                <div class="proj-card-desc">{{ project.description or 'No description' }}</div>
-            </div>
+        <div class="proj-card" style="cursor:default;">
+            <a href="/projects/{{ project.id }}" style="text-decoration:none;color:inherit;">
+                <div class="proj-card-header">
+                    <div class="proj-card-name">{{ project.name }}</div>
+                    <div class="proj-card-desc">{{ project.description or 'No description' }}</div>
+                </div>
 
-            <div class="proj-card-meta">
-                {% if project.is_active == 1 %}
-                <span class="proj-badge-status proj-badge-active">Active</span>
-                {% else %}
-                <span class="proj-badge-status proj-badge-inactive">Inactive</span>
-                {% endif %}
-            </div>
+                <div class="proj-card-meta">
+                    {% if project.status == 'active' or project.is_active == 1 %}
+                    <span class="proj-badge-status proj-badge-active">Active</span>
+                    {% else %}
+                    <span class="proj-badge-status proj-badge-inactive">Inactive</span>
+                    {% endif %}
+                </div>
 
-            <div class="proj-card-footer">
-                <span class="proj-count">{{ project.product_count or 0 }} items</span>
-                <div class="proj-creator">by {{ project.created_by_name or 'Unknown' }}</div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.75rem;font-size:0.78rem;">
+                    <div style="background:rgba(239,68,68,0.08);padding:0.4rem 0.55rem;border-radius:0.3rem;">
+                        <div style="color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.3px;font-size:0.65rem;">Cost</div>
+                        <div style="color:#b91c1c;font-weight:700;">₹{{ '{:,.0f}'.format(project.total_cost or 0) }}</div>
+                    </div>
+                    <div style="background:rgba(16,185,129,0.08);padding:0.4rem 0.55rem;border-radius:0.3rem;">
+                        <div style="color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.3px;font-size:0.65rem;">Revenue</div>
+                        <div style="color:#059669;font-weight:700;">₹{{ '{:,.0f}'.format(project.total_revenue or 0) }}</div>
+                    </div>
+                </div>
+
+                <div class="proj-card-footer">
+                    <span class="proj-count">{{ project.product_count or 0 }} items</span>
+                    <div class="proj-creator">by {{ project.created_by_name or 'Unknown' }}</div>
+                </div>
+            </a>
+            {% if is_admin %}
+            <div style="display:flex;gap:0.5rem;margin-top:1rem;padding-top:1rem;border-top:1px solid var(--gray-100);">
+                <a href="/projects/{{ project.id }}" style="flex:1;text-align:center;background:var(--blue-light);color:var(--blue-dark);padding:0.45rem;border-radius:0.3rem;font-size:0.78rem;font-weight:600;text-decoration:none;">Edit</a>
+                <form method="POST" action="/projects/{{ project.id }}/delete" style="flex:1;" onsubmit="return confirm('Delete project &quot;{{ project.name }}&quot; and ALL its products? This cannot be undone.');">
+                    <button type="submit" style="width:100%;background:rgba(239,68,68,0.1);color:#b91c1c;border:none;padding:0.45rem;border-radius:0.3rem;font-size:0.78rem;font-weight:600;cursor:pointer;font-family:'Inter',sans-serif;">Delete</button>
+                </form>
             </div>
-        </a>
+            {% endif %}
+        </div>
         {% endfor %}
     </div>
     {% else %}
