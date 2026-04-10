@@ -4235,12 +4235,12 @@ def projects_list():
         d['total_revenue'] = a['rev']
         projects.append(d)
     return render_template('projects.html', user=user, projects=projects,
-                         can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                         can_manage=bool(user['is_admin']),
                          is_admin=bool(user['is_admin']))
 
 
 @app.route('/projects/add', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_project():
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
@@ -4318,13 +4318,13 @@ def project_detail(project_id):
     return render_template('project_detail.html', user=user, project=project, products=products,
                          streams=streams, unassigned=unassigned,
                          all_streams=all_streams,
-                         can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                         can_manage=bool(user['is_admin']),
                          supported_currencies=SUPPORTED_CURRENCIES,
                          fx_rates=get_fx_rates_inr())
 
 
 @app.route('/projects/<int:project_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_project(project_id):
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
@@ -4416,12 +4416,12 @@ def streams_list():
         d['total_margin'] = u['rev'] - u['cost']
         streams.append(d)
     return render_template('streams.html', user=user, streams=streams,
-                           can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                           can_manage=bool(user['is_admin']),
                            is_admin=bool(user['is_admin']))
 
 
 @app.route('/streams/add', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_revenue_stream():
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
@@ -4454,7 +4454,7 @@ def add_revenue_stream():
 
 
 @app.route('/streams/<int:stream_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_revenue_stream(stream_id):
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
@@ -4553,7 +4553,7 @@ def products_list():
         total_rev += d['revenue_inr']
         products.append(d)
     return render_template('products.html', user=user, products=products, projects=projects,
-                           can_manage=has_module_access(user, 'projects') or user['is_admin'],
+                           can_manage=bool(user['is_admin']),
                            is_admin=bool(user['is_admin']),
                            supported_currencies=SUPPORTED_CURRENCIES,
                            fx_rates=get_fx_rates_inr(),
@@ -4563,7 +4563,7 @@ def products_list():
 
 
 @app.route('/products/add/<int:project_id>', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def add_product(project_id):
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
@@ -4637,7 +4637,7 @@ def add_product(project_id):
 
 
 @app.route('/products/<int:ps_id>/edit', methods=['GET', 'POST'])
-@login_required
+@admin_required
 def edit_product(ps_id):
     user = get_user()
     if not has_module_access(user, 'projects') and not user['is_admin']:
