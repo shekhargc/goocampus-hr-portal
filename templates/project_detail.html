@@ -372,47 +372,14 @@
             </div>
         </div>
 
-        <!-- Edit Form (if can_manage) -->
         {% if can_manage %}
-        <div class="proj-detail-section" style="border-top: 1px solid var(--gray-200); padding-top: 2rem; margin-top: 2rem;">
-            <div class="proj-detail-edit-form">
-                <div class="proj-detail-form-title">Edit Project</div>
-                <form method="POST" action="/projects/{{ project.id }}/edit">
-                    <div class="proj-detail-form-group">
-                        <label class="proj-detail-label">Project Name</label>
-                        <input
-                            type="text"
-                            name="name"
-                            class="proj-detail-input"
-                            value="{{ project.name }}"
-                            required
-                            maxlength="100"
-                        />
-                    </div>
-
-                    <div class="proj-detail-form-group">
-                        <label class="proj-detail-label">Description</label>
-                        <textarea
-                            name="description"
-                            class="proj-detail-textarea"
-                            maxlength="500"
-                        >{{ project.description or '' }}</textarea>
-                    </div>
-
-                    <div class="proj-detail-form-group">
-                        <label class="proj-detail-label">Status</label>
-                        <select name="is_active" class="proj-detail-select">
-                            <option value="1" {% if project.is_active == 1 %}selected{% endif %}>Active</option>
-                            <option value="0" {% if project.is_active == 0 %}selected{% endif %}>Inactive</option>
-                        </select>
-                    </div>
-
-                    <div class="proj-detail-form-actions">
-                        <button type="submit" class="proj-detail-form-submit">Save Changes</button>
-                        <button type="reset" class="proj-detail-form-reset">Reset</button>
-                    </div>
-                </form>
-            </div>
+        <div class="proj-detail-section" style="border-top: 1px solid var(--gray-200); padding-top: 1.5rem; margin-top: 1.5rem; display: flex; gap: 0.6rem; flex-wrap: wrap;">
+            <a href="/projects/{{ project.id }}/edit" style="background: var(--orange); color: white; text-decoration: none; padding: 0.6rem 1.2rem; border-radius: 0.4rem; font-size: 0.85rem; font-weight: 600;">Edit Project</a>
+            {% if user.is_admin == 1 %}
+            <form method="POST" action="/projects/{{ project.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this project, its streams links, and all products under it?');">
+                <button type="submit" style="background: rgba(239,68,68,0.1); color: #b91c1c; border: none; padding: 0.6rem 1.2rem; border-radius: 0.4rem; font-size: 0.85rem; font-weight: 600; cursor: pointer;">Delete Project</button>
+            </form>
+            {% endif %}
         </div>
         {% endif %}
     </div>
@@ -421,29 +388,16 @@
     <div class="proj-detail-content">
         <div class="proj-detail-section">
             <div class="proj-products-header">
-                <div class="proj-detail-section-title">Revenue Streams</div>
+                <div class="proj-detail-section-title">Revenue Streams &amp; Products</div>
                 {% if can_manage %}
-                <button type="button" onclick="document.getElementById('add-stream-form').style.display='block';this.style.display='none';" class="proj-add-product-btn" style="background:var(--navy);">+ Add Revenue Stream</button>
+                <div style="display:flex;gap:0.5rem;">
+                    <a href="/streams" class="proj-add-product-btn" style="background:var(--navy);">Manage Streams</a>
+                    <a href="/products/add/{{ project.id }}" class="proj-add-product-btn">+ Add Product/Service</a>
+                </div>
                 {% endif %}
             </div>
 
-            {% if can_manage %}
-            <form id="add-stream-form" method="POST" action="/projects/{{ project.id }}/streams/add" style="display:none;background:var(--gray-50);padding:1rem;border-radius:0.4rem;margin-bottom:1rem;">
-                <div style="display:grid;grid-template-columns:1fr 2fr auto;gap:0.5rem;align-items:end;">
-                    <div>
-                        <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Stream Name *</label>
-                        <input type="text" name="name" required placeholder="e.g. Subscription, Licensing, Consulting" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
-                    </div>
-                    <div>
-                        <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Description</label>
-                        <input type="text" name="description" placeholder="Optional description" style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
-                    </div>
-                    <div>
-                        <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1rem;border-radius:0.3rem;font-size:0.82rem;font-weight:600;cursor:pointer;">Save Stream</button>
-                    </div>
-                </div>
-            </form>
-            {% endif %}
+            <div style="font-size:0.78rem;color:var(--gray-500);margin-bottom:1rem;">Revenue streams are global — create them once at <a href="/streams" style="color:var(--orange);text-decoration:none;font-weight:600;">Streams</a> and link them to products across any project.</div>
 
             {% if not streams and not unassigned %}
             <div class="proj-empty-products">
@@ -471,11 +425,7 @@
                     <div style="display:flex;gap:0.4rem;">
                         {% if can_manage %}
                         <a href="/products/add/{{ project.id }}?stream={{ stream.id }}" style="background:var(--orange);color:white;text-decoration:none;padding:0.4rem 0.7rem;border-radius:0.3rem;font-size:0.72rem;font-weight:600;">+ Product</a>
-                        {% endif %}
-                        {% if user.is_admin == 1 %}
-                        <form method="POST" action="/streams/{{ stream.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete stream {{ stream.name }}? Products will become unassigned.');">
-                            <button type="submit" style="background:rgba(239,68,68,0.1);color:#b91c1c;border:none;padding:0.4rem 0.7rem;border-radius:0.3rem;font-size:0.72rem;font-weight:600;cursor:pointer;">Delete</button>
-                        </form>
+                        <a href="/streams/{{ stream.id }}/edit" style="background:var(--blue-light);color:var(--blue-dark);text-decoration:none;padding:0.4rem 0.7rem;border-radius:0.3rem;font-size:0.72rem;font-weight:600;">Edit Stream</a>
                         {% endif %}
                     </div>
                 </div>

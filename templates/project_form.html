@@ -1,0 +1,35 @@
+{% extends "base.html" %}
+{% block title %}Edit Project - {{ project.name }}{% endblock %}
+{% block content %}
+<div style="max-width:640px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/projects/{{ project.id }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Project</a>
+    </div>
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Edit Project</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 2rem 0;">Update the project name, description, or status.</p>
+
+        <form method="POST" action="/projects/{{ project.id }}/edit">
+            <div style="margin-bottom:1.3rem;">
+                <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Project Name *</label>
+                <input type="text" name="name" required maxlength="100" value="{{ project.name }}" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+            <div style="margin-bottom:1.3rem;">
+                <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Description</label>
+                <textarea name="description" rows="4" maxlength="500" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ project.description or '' }}</textarea>
+            </div>
+            <div style="margin-bottom:1.5rem;">
+                <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Status</label>
+                <select name="status" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;">
+                    <option value="active" {% if project.status == 'active' %}selected{% endif %}>Active</option>
+                    <option value="inactive" {% if project.status != 'active' %}selected{% endif %}>Inactive</option>
+                </select>
+            </div>
+            <div style="display:flex;gap:0.8rem;">
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">Save Changes</button>
+                <a href="/projects/{{ project.id }}" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -252,12 +252,13 @@
             {% endfor %}
         </ul>
 
-        <form class="add-form" method="POST" action="/finance/budget/category/add">
-            <input type="hidden" name="cat_type" value="revenue">
-            <input type="hidden" name="fy" value="{{ fy_year }}">
-            <input type="text" name="name" placeholder="New revenue stream name..." required>
-            <button type="submit" style="background: #10B981;">+ Add Revenue</button>
-        </form>
+        <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.8rem; color: #065F46; line-height: 1.5;">
+            <strong>Revenue streams are now managed from the Sales module.</strong>
+            Create, edit, or link streams once and reuse them across projects, products, and finance tracking.
+            <div style="margin-top: 0.55rem;">
+                <a href="/streams" style="display:inline-block;background:#10B981;color:white;text-decoration:none;padding:0.45rem 0.9rem;border-radius:0.35rem;font-weight:600;font-size:0.78rem;">Manage Revenue Streams →</a>
+            </div>
+        </div>
     </div>
 
     <!-- Info box -->

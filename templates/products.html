@@ -359,7 +359,7 @@
                     </td>
                     {% if is_admin %}
                     <td>
-                        <button type="button" class="btn-sm-edit" onclick="toggleEdit({{ p.id }})">Edit</button>
+                        <a href="/products/{{ p.id }}/edit" class="btn-sm-edit" style="text-decoration:none;display:inline-block;">Edit</a>
                         <form method="POST" action="/products/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;?');">
                             <input type="hidden" name="source" value="products" />
                             <button type="submit" class="btn-sm-delete">Delete</button>
@@ -367,7 +367,7 @@
                     </td>
                     {% endif %}
                 </tr>
-                {% if is_admin %}
+                {% if false %}
                 <tr id="edit-row-{{ p.id }}" style="display:none;background:var(--gray-50);">
                     <td colspan="12" style="padding:1.25rem;">
                         <form method="POST" action="/products/{{ p.id }}/edit">

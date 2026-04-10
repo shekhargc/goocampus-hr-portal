@@ -57,7 +57,7 @@
             </td>
             {% if user.is_admin == 1 %}
             <td>
-                <button type="button" onclick="document.getElementById('prod-edit-{{ product.id }}').style.display='table-row';this.closest('tr').style.display='none';" style="background:var(--blue-light);color:var(--blue-dark);border:none;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;cursor:pointer;margin-right:0.3rem;">Edit</button>
+                <a href="/products/{{ product.id }}/edit" style="background:var(--blue-light);color:var(--blue-dark);text-decoration:none;display:inline-block;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;margin-right:0.3rem;">Edit</a>
                 <form method="POST" action="/products/{{ product.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete {{ product.name }}?');">
                     <input type="hidden" name="source" value="project" />
                     <button type="submit" style="background:rgba(239,68,68,0.1);color:#b91c1c;border:none;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;cursor:pointer;">Delete</button>
@@ -65,7 +65,7 @@
             </td>
             {% endif %}
         </tr>
-        {% if user.is_admin == 1 %}
+        {% if false %}
         <tr id="prod-edit-{{ product.id }}" style="display:none;background:var(--gray-50);">
             <td colspan="11" style="padding:1rem;">
                 <form method="POST" action="/products/{{ product.id }}/edit">
