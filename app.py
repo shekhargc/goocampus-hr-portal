@@ -3733,12 +3733,22 @@ def ensure_crm_tables():
                 created_by INTEGER REFERENCES employees(id),
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
+            '''CREATE TABLE IF NOT EXISTS revenue_streams (
+                id SERIAL PRIMARY KEY,
+                project_id INTEGER NOT NULL REFERENCES projects(id),
+                name TEXT NOT NULL,
+                description TEXT,
+                is_active INTEGER DEFAULT 1,
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
             '''CREATE TABLE IF NOT EXISTS products_services (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
                 description TEXT,
                 type TEXT NOT NULL DEFAULT 'product',
                 project_id INTEGER REFERENCES projects(id),
+                revenue_stream_id INTEGER REFERENCES revenue_streams(id),
                 status TEXT DEFAULT 'active',
                 product_cost NUMERIC(14,2) DEFAULT 0,
                 sale_price NUMERIC(14,2) DEFAULT 0,
@@ -3842,6 +3852,15 @@ def ensure_crm_tables():
         # Add sale_currency column (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN sale_currency TEXT DEFAULT 'INR'")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # Add revenue_stream_id column to products_services (migration)
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN revenue_stream_id INTEGER REFERENCES revenue_streams(id)")
             conn.commit()
         except Exception:
             try:
@@ -4248,6 +4267,11 @@ def project_detail(project_id):
         conn.close()
         return redirect(url_for('projects_list'))
 
+    streams_raw = conn.execute(
+        "SELECT * FROM revenue_streams WHERE project_id = ? ORDER BY is_active DESC, name",
+        (project_id,)
+    ).fetchall()
+
     products_raw = conn.execute('''
         SELECT ps.*, e.name as created_by_name
         FROM products_services ps
@@ -4267,7 +4291,20 @@ def project_detail(project_id):
         d['revenue_inr'] = to_inr(d.get('sale_price'), d['sale_currency'])
         d['margin_inr'] = d['revenue_inr'] - d['cost_inr']
         products.append(d)
+
+    # Group products by revenue stream id (None = unassigned)
+    streams = []
+    for s in streams_raw:
+        sd = dict(s)
+        sd['products'] = [p for p in products if p.get('revenue_stream_id') == sd['id']]
+        sd['total_cost'] = sum(p['cost_inr'] for p in sd['products'])
+        sd['total_revenue'] = sum(p['revenue_inr'] for p in sd['products'])
+        sd['total_margin'] = sd['total_revenue'] - sd['total_cost']
+        streams.append(sd)
+    unassigned = [p for p in products if not p.get('revenue_stream_id')]
+
     return render_template('project_detail.html', user=user, project=project, products=products,
+                         streams=streams, unassigned=unassigned,
                          can_manage=has_module_access(user, 'projects') or user['is_admin'],
                          supported_currencies=SUPPORTED_CURRENCIES,
                          fx_rates=get_fx_rates_inr())
@@ -4301,9 +4338,10 @@ def delete_project(project_id):
     conn = get_db()
     try:
         conn.execute('DELETE FROM products_services WHERE project_id = ?', (project_id,))
+        conn.execute('DELETE FROM revenue_streams WHERE project_id = ?', (project_id,))
         conn.execute('DELETE FROM projects WHERE id = ?', (project_id,))
         conn.commit()
-        flash('Project and its products deleted', 'success')
+        flash('Project, streams and products deleted', 'success')
     except Exception as e:
         try:
             conn.rollback()
@@ -4313,6 +4351,100 @@ def delete_project(project_id):
     finally:
         conn.close()
     return redirect(url_for('projects_list'))
+
+
+# ─── Revenue Stream Routes ───
+
+@app.route('/projects/<int:project_id>/streams/add', methods=['POST'])
+@login_required
+def add_revenue_stream(project_id):
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('project_detail', project_id=project_id))
+    name = request.form.get('name', '').strip()
+    description = request.form.get('description', '').strip()
+    if not name:
+        flash('Stream name is required', 'error')
+        return redirect(url_for('project_detail', project_id=project_id))
+    conn = get_db()
+    try:
+        conn.execute(
+            'INSERT INTO revenue_streams (project_id, name, description, created_by) VALUES (?, ?, ?, ?)',
+            (project_id, name, description, user['id'])
+        )
+        conn.commit()
+        flash('Revenue stream added', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not add stream: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('project_detail', project_id=project_id))
+
+
+@app.route('/streams/<int:stream_id>/edit', methods=['POST'])
+@login_required
+def edit_revenue_stream(stream_id):
+    user = get_user()
+    if not has_module_access(user, 'projects') and not user['is_admin']:
+        flash('Access denied', 'error')
+        return redirect(url_for('projects_list'))
+    conn = get_db()
+    stream = conn.execute('SELECT * FROM revenue_streams WHERE id = ?', (stream_id,)).fetchone()
+    if not stream:
+        conn.close()
+        flash('Stream not found', 'error')
+        return redirect(url_for('projects_list'))
+    name = request.form.get('name', '').strip() or stream['name']
+    description = request.form.get('description', '').strip()
+    is_active = 1 if request.form.get('is_active', '1') == '1' else 0
+    try:
+        conn.execute(
+            'UPDATE revenue_streams SET name = ?, description = ?, is_active = ? WHERE id = ?',
+            (name, description, is_active, stream_id)
+        )
+        conn.commit()
+        flash('Stream updated', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not update stream: {e}', 'error')
+    project_id = stream['project_id']
+    conn.close()
+    return redirect(url_for('project_detail', project_id=project_id))
+
+
+@app.route('/streams/<int:stream_id>/delete', methods=['POST'])
+@admin_required
+def delete_revenue_stream(stream_id):
+    """Admin-only: delete a revenue stream. Products under it become unassigned (stream_id set to NULL)."""
+    conn = get_db()
+    stream = conn.execute('SELECT * FROM revenue_streams WHERE id = ?', (stream_id,)).fetchone()
+    if not stream:
+        conn.close()
+        flash('Stream not found', 'error')
+        return redirect(url_for('projects_list'))
+    project_id = stream['project_id']
+    try:
+        conn.execute('UPDATE products_services SET revenue_stream_id = NULL WHERE revenue_stream_id = ?', (stream_id,))
+        conn.execute('DELETE FROM revenue_streams WHERE id = ?', (stream_id,))
+        conn.commit()
+        flash('Revenue stream deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not delete stream: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('project_detail', project_id=project_id))
 
 
 # ─── Products & Services Routes ───
@@ -4326,11 +4458,13 @@ def products_list():
     products_raw = conn.execute('''
         SELECT ps.*,
                p.name as project_name,
+               rs.name as stream_name,
                e.name as created_by_name
         FROM products_services ps
         LEFT JOIN projects p ON ps.project_id = p.id
+        LEFT JOIN revenue_streams rs ON ps.revenue_stream_id = rs.id
         LEFT JOIN employees e ON ps.created_by = e.id
-        ORDER BY ps.status, p.name, ps.type, ps.name
+        ORDER BY ps.status, p.name, rs.name, ps.type, ps.name
     ''').fetchall()
     projects = conn.execute(
         "SELECT id, name FROM projects WHERE status = 'active' ORDER BY name"
@@ -4393,6 +4527,16 @@ def add_product(project_id):
             currency = 'INR'
         cost_currency = currency
         sale_currency = currency
+        # Revenue stream (must belong to this project or be blank)
+        stream_raw = request.form.get('revenue_stream_id', '').strip()
+        revenue_stream_id = int(stream_raw) if stream_raw.isdigit() else None
+        if revenue_stream_id:
+            chk = conn.execute(
+                'SELECT id FROM revenue_streams WHERE id = ? AND project_id = ?',
+                (revenue_stream_id, project_id)
+            ).fetchone()
+            if not chk:
+                revenue_stream_id = None
 
         if not name:
             flash('Name is required', 'error')
@@ -4401,10 +4545,10 @@ def add_product(project_id):
 
         conn.execute('''
             INSERT INTO products_services
-                (name, description, type, project_id, product_cost, sale_price,
+                (name, description, type, project_id, revenue_stream_id, product_cost, sale_price,
                  cost_currency, sale_currency, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, description, ps_type, project_id, product_cost, sale_price,
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (name, description, ps_type, project_id, revenue_stream_id, product_cost, sale_price,
               cost_currency, sale_currency, user['id']))
         conn.commit()
         conn.close()
@@ -4414,8 +4558,13 @@ def add_product(project_id):
             return redirect(url_for('products_list'))
         return redirect(url_for('project_detail', project_id=project_id))
 
+    streams = conn.execute(
+        "SELECT id, name FROM revenue_streams WHERE project_id = ? AND is_active = 1 ORDER BY name",
+        (project_id,)
+    ).fetchall()
     conn.close()
     return render_template('add_product.html', user=user, project=project,
+                           streams=streams,
                            supported_currencies=SUPPORTED_CURRENCIES,
                            fx_rates=get_fx_rates_inr())
 
@@ -4460,14 +4609,25 @@ def edit_product(ps_id):
     else:
         project_id_val = ps['project_id']
 
+    # Optional revenue stream reassignment (must belong to project_id_val)
+    stream_raw = request.form.get('revenue_stream_id', '').strip()
+    revenue_stream_id = int(stream_raw) if stream_raw.isdigit() else None
+    if revenue_stream_id:
+        chk = conn.execute(
+            'SELECT id FROM revenue_streams WHERE id = ? AND project_id = ?',
+            (revenue_stream_id, project_id_val)
+        ).fetchone()
+        if not chk:
+            revenue_stream_id = None
+
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
                         product_cost = ?, sale_price = ?,
                         cost_currency = ?, sale_currency = ?,
-                        project_id = ?
+                        project_id = ?, revenue_stream_id = ?
                     WHERE id = ?''',
                 (name, description, ps_type, status, product_cost, sale_price,
-                 cost_currency, sale_currency, project_id_val, ps_id))
+                 cost_currency, sale_currency, project_id_val, revenue_stream_id, ps_id))
     conn.commit()
     conn.close()
     flash('Updated successfully', 'success')
@@ -6880,10 +7040,66 @@ def finance_project_pl():
     # Sort by actual revenue descending
     project_list.sort(key=lambda x: x['revenue_actual'], reverse=True)
 
+    # ── Sales-side rollup: Revenue Streams → Products for each project (live FX → INR) ──
+    sales_rollup = []
+    try:
+        conn2 = get_db()
+        all_streams = conn2.execute('SELECT * FROM revenue_streams ORDER BY project_id, name').fetchall()
+        all_products = conn2.execute(
+            'SELECT id, project_id, revenue_stream_id, name, type, product_cost, sale_price, cost_currency, sale_currency, status FROM products_services'
+        ).fetchall()
+        conn2.close()
+        # Convert each product to INR
+        prod_by_stream = {}
+        prod_unassigned_by_project = {}
+        for p in all_products:
+            d = dict(p)
+            d['cost_inr'] = to_inr(d.get('product_cost'), d.get('cost_currency') or 'INR')
+            d['revenue_inr'] = to_inr(d.get('sale_price'), d.get('sale_currency') or 'INR')
+            d['margin_inr'] = d['revenue_inr'] - d['cost_inr']
+            sid = d.get('revenue_stream_id')
+            if sid:
+                prod_by_stream.setdefault(sid, []).append(d)
+            else:
+                prod_unassigned_by_project.setdefault(d['project_id'], []).append(d)
+        # Build project → streams → products tree
+        project_name_lookup = {p['id']: p['name'] for p in projects}
+        stream_by_project = {}
+        for s in all_streams:
+            sd = dict(s)
+            items = prod_by_stream.get(sd['id'], [])
+            sd['products'] = items
+            sd['total_cost'] = sum(i['cost_inr'] for i in items)
+            sd['total_revenue'] = sum(i['revenue_inr'] for i in items)
+            sd['total_margin'] = sd['total_revenue'] - sd['total_cost']
+            stream_by_project.setdefault(sd['project_id'], []).append(sd)
+        for pid, pname in project_name_lookup.items():
+            streams_for_p = stream_by_project.get(pid, [])
+            unassigned_for_p = prod_unassigned_by_project.get(pid, [])
+            if not streams_for_p and not unassigned_for_p:
+                continue
+            total_cost = sum(s['total_cost'] for s in streams_for_p) + sum(i['cost_inr'] for i in unassigned_for_p)
+            total_rev = sum(s['total_revenue'] for s in streams_for_p) + sum(i['revenue_inr'] for i in unassigned_for_p)
+            sales_rollup.append({
+                'project_id': pid,
+                'project_name': pname,
+                'streams': streams_for_p,
+                'unassigned': unassigned_for_p,
+                'total_cost': total_cost,
+                'total_revenue': total_rev,
+                'total_margin': total_rev - total_cost,
+            })
+        sales_rollup.sort(key=lambda x: x['total_revenue'], reverse=True)
+    except Exception as e:
+        logging.error(f"finance_project_pl sales_rollup: {e}")
+        sales_rollup = []
+
     return render_template('finance_project_pl.html', user=user, fy_year=fy_year,
                            fy_months=fy_months, project_list=project_list,
                            untagged_data=untagged_data,
-                           month_labels=[fm['label'] for fm in fy_months])
+                           month_labels=[fm['label'] for fm in fy_months],
+                           sales_rollup=sales_rollup,
+                           fx_rates=get_fx_rates_inr())
 
 
 # Run on startup

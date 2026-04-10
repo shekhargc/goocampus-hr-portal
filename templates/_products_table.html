@@ -1,0 +1,129 @@
+{# Partial: renders a products table for a given `stream_products` list.
+   Requires in context: stream_products, fx_rates, supported_currencies, user, can_manage, project #}
+<table class="proj-products-table" style="min-width:1200px;">
+    <thead>
+        <tr>
+            <th rowspan="2" style="vertical-align:bottom;">Name</th>
+            <th rowspan="2" style="vertical-align:bottom;">Type</th>
+            <th rowspan="2" style="vertical-align:bottom;">Currency</th>
+            <th colspan="3" style="text-align:center;background:rgba(74,122,181,0.07);">Original Currency</th>
+            <th colspan="3" style="text-align:center;background:rgba(16,185,129,0.07);">Converted to INR (live)</th>
+            <th rowspan="2" style="vertical-align:bottom;">Status</th>
+            {% if user.is_admin == 1 %}<th rowspan="2" style="vertical-align:bottom;">Actions</th>{% endif %}
+        </tr>
+        <tr>
+            <th style="text-align:right;background:rgba(74,122,181,0.07);">Cost</th>
+            <th style="text-align:right;background:rgba(74,122,181,0.07);">Revenue</th>
+            <th style="text-align:right;background:rgba(74,122,181,0.07);">Margin</th>
+            <th style="text-align:right;background:rgba(16,185,129,0.07);">Cost ₹</th>
+            <th style="text-align:right;background:rgba(16,185,129,0.07);">Revenue ₹</th>
+            <th style="text-align:right;background:rgba(16,185,129,0.07);">Margin ₹</th>
+        </tr>
+    </thead>
+    <tbody>
+    {% for product in stream_products %}
+        {% set cur = product.cost_currency or 'INR' %}
+        {% set is_fc = cur != 'INR' %}
+        {% set orig_margin = (product.sale_price or 0) - (product.product_cost or 0) %}
+        <tr>
+            <td class="proj-product-name">
+                {{ product.name }}
+                {% if product.description %}<div style="font-size:0.75rem;color:var(--gray-500);font-weight:400;margin-top:0.2rem;">{{ product.description }}</div>{% endif %}
+            </td>
+            <td>
+                <span class="proj-product-type-badge">{{ 'Service' if product.type == 'service' else 'Product' }}</span>
+            </td>
+            <td>
+                <span style="display:inline-block;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.7rem;font-weight:700;background: {% if is_fc %}var(--navy){% else %}var(--gray-400){% endif %};color:white;">{{ cur }}</span>
+            </td>
+            {% if is_fc %}
+            <td style="text-align:right;color:#b91c1c;font-weight:600;background:rgba(74,122,181,0.04);">{{ cur }} {{ '{:,.2f}'.format(product.product_cost or 0) }}</td>
+            <td style="text-align:right;color:#059669;font-weight:600;background:rgba(74,122,181,0.04);">{{ cur }} {{ '{:,.2f}'.format(product.sale_price or 0) }}</td>
+            <td style="text-align:right;font-weight:700;color: {% if orig_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};background:rgba(74,122,181,0.04);">{{ cur }} {{ '{:,.2f}'.format(orig_margin) }}</td>
+            {% else %}
+            <td style="text-align:right;color:var(--gray-300);background:rgba(74,122,181,0.04);">—</td>
+            <td style="text-align:right;color:var(--gray-300);background:rgba(74,122,181,0.04);">—</td>
+            <td style="text-align:right;color:var(--gray-300);background:rgba(74,122,181,0.04);">—</td>
+            {% endif %}
+            <td style="text-align:right;color:#b91c1c;font-weight:600;background:rgba(16,185,129,0.04);">₹{{ '{:,.0f}'.format(product.cost_inr) }}</td>
+            <td style="text-align:right;color:#059669;font-weight:600;background:rgba(16,185,129,0.04);">₹{{ '{:,.0f}'.format(product.revenue_inr) }}</td>
+            <td style="text-align:right;font-weight:700;color: {% if product.margin_inr >= 0 %}#059669{% else %}#b91c1c{% endif %};background:rgba(16,185,129,0.04);">₹{{ '{:,.0f}'.format(product.margin_inr) }}</td>
+            <td>
+                {% if product.status == 'active' %}
+                <span class="proj-product-status-active">Active</span>
+                {% else %}
+                <span class="proj-product-status-inactive">Inactive</span>
+                {% endif %}
+            </td>
+            {% if user.is_admin == 1 %}
+            <td>
+                <button type="button" onclick="document.getElementById('prod-edit-{{ product.id }}').style.display='table-row';this.closest('tr').style.display='none';" style="background:var(--blue-light);color:var(--blue-dark);border:none;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;cursor:pointer;margin-right:0.3rem;">Edit</button>
+                <form method="POST" action="/products/{{ product.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete {{ product.name }}?');">
+                    <input type="hidden" name="source" value="project" />
+                    <button type="submit" style="background:rgba(239,68,68,0.1);color:#b91c1c;border:none;padding:0.35rem 0.7rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;cursor:pointer;">Delete</button>
+                </form>
+            </td>
+            {% endif %}
+        </tr>
+        {% if user.is_admin == 1 %}
+        <tr id="prod-edit-{{ product.id }}" style="display:none;background:var(--gray-50);">
+            <td colspan="11" style="padding:1rem;">
+                <form method="POST" action="/products/{{ product.id }}/edit">
+                    <div style="display:grid;grid-template-columns:2fr 1fr 1fr 1fr 1fr 1fr 1fr;gap:0.5rem;margin-bottom:0.6rem;align-items:end;">
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Name</label>
+                            <input type="text" name="name" value="{{ product.name }}" required style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Type</label>
+                            <select name="type" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;">
+                                <option value="product" {% if product.type == 'product' %}selected{% endif %}>Product</option>
+                                <option value="service" {% if product.type == 'service' %}selected{% endif %}>Service</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Stream</label>
+                            <select name="revenue_stream_id" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;">
+                                <option value="">— None —</option>
+                                {% for s in streams %}
+                                <option value="{{ s.id }}" {% if product.revenue_stream_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Currency</label>
+                            <select name="currency" class="pd-cur-{{ product.id }}" onchange="pdUpdate({{ product.id }})" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;font-weight:700;">
+                                {% for c in supported_currencies %}
+                                <option value="{{ c }}" {% if cur == c %}selected{% endif %}>{{ c }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Cost</label>
+                            <input type="number" step="0.01" min="0" name="product_cost" class="pd-cost-{{ product.id }}" value="{{ product.product_cost or 0 }}" oninput="pdUpdate({{ product.id }})" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
+                            <div class="pd-cost-inr-{{ product.id }}" style="font-size:0.7rem;color:var(--blue-dark);font-weight:600;margin-top:0.2rem;"></div>
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Revenue</label>
+                            <input type="number" step="0.01" min="0" name="sale_price" class="pd-rev-{{ product.id }}" value="{{ product.sale_price or 0 }}" oninput="pdUpdate({{ product.id }})" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
+                            <div class="pd-rev-inr-{{ product.id }}" style="font-size:0.7rem;color:var(--blue-dark);font-weight:600;margin-top:0.2rem;"></div>
+                        </div>
+                        <div>
+                            <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Status</label>
+                            <select name="status" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;">
+                                <option value="active" {% if product.status == 'active' %}selected{% endif %}>Active</option>
+                                <option value="inactive" {% if product.status != 'active' %}selected{% endif %}>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div style="margin-bottom:0.6rem;">
+                        <textarea name="description" rows="2" placeholder="Description" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;">{{ product.description or '' }}</textarea>
+                    </div>
+                    <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.5rem 1rem;border-radius:0.3rem;font-size:0.82rem;font-weight:600;cursor:pointer;">Save Changes</button>
+                </form>
+            </td>
+        </tr>
+        {% endif %}
+    {% endfor %}
+    </tbody>
+</table>
