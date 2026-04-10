@@ -121,7 +121,8 @@
     .prod-table {
         width: 100%;
         border-collapse: collapse;
-        min-width: 1400px;
+        table-layout: fixed;
+        min-width: 1080px;
     }
 
     .prod-table thead {
@@ -130,61 +131,63 @@
     }
 
     .prod-table thead tr.group-row th {
-        padding: 0.6rem 0.7rem;
-        font-size: 0.7rem;
+        padding: 0.5rem 0.5rem;
+        font-size: 0.65rem;
         color: var(--gray-500);
         text-transform: uppercase;
-        letter-spacing: 0.5px;
+        letter-spacing: 0.4px;
         font-weight: 700;
         border-bottom: 1px solid var(--gray-200);
+        text-align: center;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .prod-table thead tr.col-row th {
-        padding: 0.55rem 0.7rem;
+        padding: 0.5rem 0.5rem;
         text-align: left;
         font-weight: 600;
-        font-size: 0.72rem;
+        font-size: 0.68rem;
         color: var(--gray-600);
         text-transform: uppercase;
         letter-spacing: 0.3px;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
     .group-fc { background: rgba(74,122,181,0.07); border-left: 2px solid rgba(74,122,181,0.3); }
     .group-inr { background: rgba(16,185,129,0.07); border-left: 2px solid rgba(16,185,129,0.3); }
 
-    /* Keep FC and INR money columns equal width so the two groups mirror each other */
-    .prod-table td.group-fc, .prod-table td.group-inr,
-    .prod-table th.group-fc, .prod-table th.group-inr {
-        width: 95px;
-        min-width: 95px;
-        max-width: 95px;
-        padding-left: 0.45rem;
-        padding-right: 0.55rem;
-        font-size: 0.78rem;
+    /* Fixed column widths — total ≈ 1080px min-width */
+    .prod-table col.c-name      { width: auto; }
+    .prod-table col.c-currency  { width: 72px; }
+    .prod-table col.c-money     { width: 96px; }
+    .prod-table col.c-status    { width: 84px; }
+    .prod-table col.c-actions   { width: 118px; }
+
+    /* Money cells: smaller font, right-aligned, tight padding */
+    .prod-table td.group-fc, .prod-table td.group-inr {
+        padding: 0.7rem 0.5rem;
+        font-size: 0.76rem;
+        text-align: right;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
     }
 
-    /* Tighten the non-money columns so the money groups can breathe */
-    .prod-table th.col-name, .prod-table td.col-name { width: auto; }
-    .prod-table th.col-currency, .prod-table td.col-currency {
-        width: 62px; min-width: 62px; max-width: 62px;
-        text-align: center; padding-left: 0.3rem; padding-right: 0.3rem;
-    }
-    .prod-table th.col-status, .prod-table td.col-status {
-        width: 80px; min-width: 80px; max-width: 80px;
-        padding-left: 0.4rem; padding-right: 0.4rem;
-    }
-    .prod-table th.col-actions, .prod-table td.col-actions {
-        width: 110px; min-width: 110px; max-width: 110px;
-        padding-left: 0.4rem; padding-right: 0.4rem;
-    }
+    .prod-table td.col-currency { text-align: center; padding: 0.7rem 0.4rem; }
+    .prod-table td.col-status   { padding: 0.7rem 0.5rem; }
+    .prod-table td.col-actions  { padding: 0.7rem 0.5rem; white-space: nowrap; }
 
     .prod-table td {
-        padding: 0.8rem 0.7rem;
+        padding: 0.75rem 0.65rem;
         border-bottom: 1px solid var(--gray-100);
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         color: var(--gray-700);
         vertical-align: top;
-        white-space: nowrap;
+        overflow: hidden;
     }
 
     .prod-table tbody tr:hover { background: var(--gray-50); }
@@ -315,12 +318,24 @@
     {% if products %}
     <div class="prod-table-wrap">
         <table class="prod-table" id="products-table">
+            <colgroup>
+                <col class="c-name" />
+                <col class="c-currency" />
+                <col class="c-money" />
+                <col class="c-money" />
+                <col class="c-money" />
+                <col class="c-money" />
+                <col class="c-money" />
+                <col class="c-money" />
+                <col class="c-status" />
+                {% if is_admin %}<col class="c-actions" />{% endif %}
+            </colgroup>
             <thead>
                 <tr class="group-row">
                     <th colspan="2"></th>
-                    <th class="group-fc" colspan="3">Original Currency</th>
-                    <th class="group-inr" colspan="3">Converted to INR (live)</th>
-                    <th colspan="2"></th>
+                    <th class="group-fc" colspan="3">Original</th>
+                    <th class="group-inr" colspan="3">Converted to INR</th>
+                    <th {% if is_admin %}colspan="2"{% endif %}></th>
                 </tr>
                 <tr class="col-row">
                     <th class="col-name">Name</th>
