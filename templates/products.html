@@ -152,6 +152,17 @@
     .group-fc { background: rgba(74,122,181,0.07); border-left: 2px solid rgba(74,122,181,0.3); }
     .group-inr { background: rgba(16,185,129,0.07); border-left: 2px solid rgba(16,185,129,0.3); }
 
+    /* Keep FC and INR money columns equal width so the two groups mirror each other */
+    .prod-table td.group-fc, .prod-table td.group-inr,
+    .prod-table th.group-fc, .prod-table th.group-inr {
+        width: 95px;
+        min-width: 95px;
+        max-width: 95px;
+        padding-left: 0.45rem;
+        padding-right: 0.55rem;
+        font-size: 0.78rem;
+    }
+
     .prod-table td {
         padding: 0.8rem 0.7rem;
         border-bottom: 1px solid var(--gray-100);
@@ -332,9 +343,9 @@
                     </td>
                     {# Original currency columns #}
                     {% if is_fc %}
-                    <td class="money-cost group-fc">{{ cur }} {{ '{:,.2f}'.format(p.product_cost or 0) }}</td>
-                    <td class="money-rev group-fc">{{ cur }} {{ '{:,.2f}'.format(p.sale_price or 0) }}</td>
-                    <td class="{% if orig_margin >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %} group-fc">{{ cur }} {{ '{:,.2f}'.format(orig_margin) }}</td>
+                    <td class="money-cost group-fc">{{ cur }} {{ '{:,.0f}'.format(p.product_cost or 0) }}</td>
+                    <td class="money-rev group-fc">{{ cur }} {{ '{:,.0f}'.format(p.sale_price or 0) }}</td>
+                    <td class="{% if orig_margin >= 0 %}money-margin-pos{% else %}money-margin-neg{% endif %} group-fc">{{ cur }} {{ '{:,.0f}'.format(orig_margin) }}</td>
                     {% else %}
                     <td class="money-dash group-fc">—</td>
                     <td class="money-dash group-fc">—</td>
