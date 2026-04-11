@@ -4500,10 +4500,23 @@ def delete_revenue_stream(stream_id):
         flash('Stream not found', 'error')
         return redirect(url_for('streams_list'))
     try:
+        # Unlink products from this stream
         conn.execute('UPDATE products_services SET revenue_stream_id = NULL WHERE revenue_stream_id = ?', (stream_id,))
+        # Cascade delete linked finance budget_category (and its entries) so Finance Settings stays in sync
+        linked_cats = conn.execute(
+            "SELECT id FROM budget_categories WHERE stream_id = ? AND cat_type = 'revenue'",
+            (stream_id,)
+        ).fetchall()
+        for cat in linked_cats:
+            cat_id = cat['id']
+            try:
+                conn.execute('DELETE FROM budget_entries WHERE category_id = ?', (cat_id,))
+            except Exception:
+                pass
+            conn.execute('DELETE FROM budget_categories WHERE id = ?', (cat_id,))
         conn.execute('DELETE FROM revenue_streams WHERE id = ?', (stream_id,))
         conn.commit()
-        flash('Revenue stream deleted', 'success')
+        flash('Revenue stream deleted (and removed from Finance Settings)', 'success')
     except Exception as e:
         try:
             conn.rollback()
@@ -6900,8 +6913,8 @@ def sync_streams_to_budget_categories(conn):
     finance module's revenue list is driven by sales. Matches by stream_id.
     - New stream -> inserts a revenue budget_category with stream_id set
     - Renamed / (de)activated stream -> updates the linked category
-    - Deleted stream -> category is left in place but flagged inactive so
-      any historical budget_entries keep referencing a valid row
+    - Deleted stream -> the linked category (and its budget_entries) is
+      deleted so Finance Settings mirrors Sales exactly
     """
     try:
         streams = conn.execute('SELECT id, name, is_active FROM revenue_streams').fetchall()
@@ -6926,10 +6939,16 @@ def sync_streams_to_budget_categories(conn):
                     "VALUES (?, 'revenue', 0, ?, ?)",
                     (s['name'], int(s['is_active'] or 0), s['id'])
                 )
-        # Deactivate categories whose stream has been deleted
+        # Hard-delete categories whose stream has been deleted so Finance
+        # Settings reflects Sales exactly. Also purge their budget_entries
+        # (NOT NULL FK) so the delete doesn't fail.
         for sid, row in by_stream.items():
-            if sid not in active_stream_ids and int(row['is_active'] or 0) == 1:
-                conn.execute("UPDATE budget_categories SET is_active = 0 WHERE id = ?", (row['id'],))
+            if sid not in active_stream_ids:
+                try:
+                    conn.execute("DELETE FROM budget_entries WHERE category_id = ?", (row['id'],))
+                except Exception:
+                    pass
+                conn.execute("DELETE FROM budget_categories WHERE id = ?", (row['id'],))
         conn.commit()
     except Exception as e:
         logging.error(f"sync_streams_to_budget_categories: {e}")
