@@ -6567,7 +6567,7 @@ def finance_dashboard():
     fy_months = get_fy_months(fy_year)
     conn = get_db()
 
-    # Monthly totals for expense & department (still category-driven)
+    # Monthly totals for expense categories (department cats are derived now)
     try:
         monthly_agg = conn.execute('''
             SELECT be.month, be.year, bc.cat_type,
@@ -6576,7 +6576,7 @@ def finance_dashboard():
             FROM budget_entries be
             JOIN budget_categories bc ON be.category_id = bc.id
             WHERE be.fy_year = ? AND bc.is_active = 1
-              AND bc.cat_type IN ('expense', 'department')
+              AND bc.cat_type = 'expense'
             GROUP BY be.month, be.year, bc.cat_type
         ''', (fy_year,)).fetchall()
     except Exception as e:
@@ -6624,25 +6624,72 @@ def finance_dashboard():
             pass
         line_expense_agg = []
 
-    # Department totals
+    # Department totals — derived from linked expenses (salaries, subs, dept-tagged cats)
+    dept_bucket = {}
+    def _dept_key(name):
+        k = (name or '').strip() or '— Unassigned —'
+        if k not in dept_bucket:
+            dept_bucket[k] = {'name': k, 'total_budget': 0.0, 'total_actual': 0.0}
+        return dept_bucket[k]
     try:
-        dept_agg = conn.execute('''
-            SELECT bc.name, bc.department,
-                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
-                   COALESCE(SUM(be.actual_amount), 0) as total_actual
-            FROM budget_categories bc
-            LEFT JOIN budget_entries be ON bc.id = be.category_id AND be.fy_year = ?
-            WHERE bc.cat_type = 'department' AND bc.is_active = 1
-            GROUP BY bc.id, bc.name, bc.department
-            ORDER BY bc.sort_order
+        sal_rows = conn.execute('''
+            SELECT si.department,
+                   COALESCE(SUM(be.budget_amount), 0) as tb,
+                   COALESCE(SUM(be.actual_amount), 0) as ta
+            FROM salary_items si
+            LEFT JOIN budget_entries be
+              ON be.salary_id = si.id AND be.fy_year = ?
+            WHERE si.is_active = 1
+            GROUP BY si.department
         ''', (fy_year,)).fetchall()
+        for r in sal_rows:
+            b = _dept_key(r['department'])
+            b['total_budget'] += float(r['tb'] or 0)
+            b['total_actual'] += float(r['ta'] or 0)
     except Exception as e:
-        logging.error(f"finance_dashboard dept query: {e}")
-        try:
-            conn.rollback()
-        except:
-            pass
-        dept_agg = []
+        logging.error(f"finance_dashboard salary dept query: {e}")
+        try: conn.rollback()
+        except: pass
+    try:
+        sub_rows = conn.execute('''
+            SELECT si.primary_department,
+                   COALESCE(SUM(be.budget_amount), 0) as tb,
+                   COALESCE(SUM(be.actual_amount), 0) as ta
+            FROM subscription_items si
+            LEFT JOIN budget_entries be
+              ON be.subscription_id = si.id AND be.fy_year = ?
+            WHERE si.is_active = 1
+            GROUP BY si.primary_department
+        ''', (fy_year,)).fetchall()
+        for r in sub_rows:
+            b = _dept_key(r['primary_department'])
+            b['total_budget'] += float(r['tb'] or 0)
+            b['total_actual'] += float(r['ta'] or 0)
+    except Exception as e:
+        logging.error(f"finance_dashboard subscription dept query: {e}")
+        try: conn.rollback()
+        except: pass
+    try:
+        cat_rows = conn.execute('''
+            SELECT bc.department,
+                   COALESCE(SUM(be.budget_amount), 0) as tb,
+                   COALESCE(SUM(be.actual_amount), 0) as ta
+            FROM budget_categories bc
+            LEFT JOIN budget_entries be
+              ON be.category_id = bc.id AND be.fy_year = ?
+            WHERE bc.cat_type = 'expense' AND bc.is_active = 1
+              AND bc.department IS NOT NULL AND bc.department != ''
+            GROUP BY bc.department
+        ''', (fy_year,)).fetchall()
+        for r in cat_rows:
+            b = _dept_key(r['department'])
+            b['total_budget'] += float(r['tb'] or 0)
+            b['total_actual'] += float(r['ta'] or 0)
+    except Exception as e:
+        logging.error(f"finance_dashboard cat-dept query: {e}")
+        try: conn.rollback()
+        except: pass
+    dept_agg = sorted(dept_bucket.values(), key=lambda x: (-x['total_budget'], x['name']))
 
     # Locked months
     try:
@@ -6724,12 +6771,12 @@ def finance_dashboard():
         quarters[q]['revenue_budget'] += monthly_revenue_budget[i]
         quarters[q]['revenue_actual'] += monthly_revenue_actual[i]
 
-    # Department breakdown
+    # Department breakdown (derived from linked expenses)
     dept_data = []
     for dc in dept_agg:
         b = float(dc['total_budget'] or 0)
         a = float(dc['total_actual'] or 0)
-        dept_data.append({'name': dc['name'].replace(' - Department Budget', ''), 'budget': round(b, 2), 'actual': round(a, 2),
+        dept_data.append({'name': dc['name'], 'budget': round(b, 2), 'actual': round(a, 2),
                           'variance': round(b - a, 2), 'utilization': round((a / b * 100) if b > 0 else 0, 1)})
 
     locked_months = set((r['month'], r['year']) for r in locked_rows)
@@ -6884,8 +6931,10 @@ def finance_edit_month(month, year):
     if request.method == 'POST' and not is_locked:
         # Only expense & department categories are entered by category now;
         # revenue is entered at product level (see product loop below).
+        # Department cats are now display-only (computed from linked expenses),
+        # so we only save expense categories here.
         all_cats = conn.execute(
-            "SELECT * FROM budget_categories WHERE is_active = 1 AND cat_type IN ('expense', 'department') ORDER BY cat_type, sort_order"
+            "SELECT * FROM budget_categories WHERE is_active = 1 AND cat_type = 'expense' ORDER BY sort_order"
         ).fetchall()
 
         recurring_fills = []  # Track recurring categories that need auto-fill
@@ -7264,6 +7313,63 @@ def finance_edit_month(month, year):
             expense_project_rollup[key]['subscription'] += it['budget']
     expense_project_rollup_list = sorted(expense_project_rollup.values(), key=lambda x: x['project_name'])
 
+    # Department rollup — derived from salaries + subscriptions + dept-tagged expense categories
+    # (no more editable dept budgets). Seed from employee departments so every dept shows up.
+    department_rollup = {}
+    def _dept_bucket(name):
+        k = name or '— Unassigned —'
+        if k not in department_rollup:
+            department_rollup[k] = {
+                'department': k,
+                'salary_budget': 0.0, 'salary_actual': 0.0,
+                'subscription_budget': 0.0, 'subscription_actual': 0.0,
+                'category_budget': 0.0, 'category_actual': 0.0,
+                'salary_count': 0, 'subscription_count': 0, 'category_count': 0,
+            }
+        return department_rollup[k]
+
+    # Seed with active employee departments so zero-expense depts still render
+    try:
+        emp_depts = conn.execute(
+            "SELECT DISTINCT department FROM employees WHERE is_active = 1 AND department IS NOT NULL AND department != ''"
+        ).fetchall()
+        for d in emp_depts:
+            _dept_bucket(d['department'])
+    except Exception:
+        pass
+
+    for g in salary_groups:
+        b = _dept_bucket(g['department'])
+        b['salary_budget'] += g['total_budget']
+        b['salary_actual'] += g['total_actual']
+        b['salary_count'] += len(g['items'])
+    for g in subscription_groups:
+        b = _dept_bucket(g['department'])
+        b['subscription_budget'] += g['total_budget']
+        b['subscription_actual'] += g['total_actual']
+        b['subscription_count'] += len(g['items'])
+    # Dept-tagged expense categories for this month
+    for cat in expense_cats:
+        dept_name = cat['department'] if 'department' in cat.keys() else None
+        if not dept_name:
+            continue
+        e = entry_map.get(cat['id'], {})
+        cb = float(e.get('budget_amount') or 0)
+        ca = float(e.get('actual_amount') or 0)
+        b = _dept_bucket(dept_name)
+        b['category_budget'] += cb
+        b['category_actual'] += ca
+        b['category_count'] += 1
+
+    for v in department_rollup.values():
+        v['total_budget'] = v['salary_budget'] + v['subscription_budget'] + v['category_budget']
+        v['total_actual'] = v['salary_actual'] + v['subscription_actual'] + v['category_actual']
+
+    department_rollup_list = sorted(
+        department_rollup.values(),
+        key=lambda x: (-x['total_budget'], x['department'])
+    )
+
     # Group products by revenue stream for display
     revenue_groups = []
     group_index = {}
@@ -7316,6 +7422,7 @@ def finance_edit_month(month, year):
                            salary_groups=salary_groups,
                            subscription_groups=subscription_groups,
                            expense_project_rollup=expense_project_rollup_list,
+                           department_rollup=department_rollup_list,
                            entry_map=entry_map,
                            is_locked=is_locked, get_fy_months=get_fy_months,
                            projects=projects)
