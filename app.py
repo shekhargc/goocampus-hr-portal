@@ -6373,6 +6373,17 @@ def ensure_budget_tables():
                 conn.rollback()
             except:
                 pass
+        # Migration: add stream_id column to budget_categories so revenue
+        # categories can be linked to sales revenue_streams
+        try:
+            conn.execute("ALTER TABLE budget_categories ADD COLUMN stream_id INTEGER")
+            conn.commit()
+            logging.info("Added stream_id column to budget_categories")
+        except Exception:
+            try:
+                conn.rollback()
+            except:
+                pass
         conn.commit()
         conn.close()
         logging.info("Budget tables ensured.")
@@ -6884,20 +6895,68 @@ def finance_add_category():
     return redirect(url_for('finance_expenses', fy=fy))
 
 
+def sync_streams_to_budget_categories(conn):
+    """Mirror every sales revenue_stream into budget_categories so the
+    finance module's revenue list is driven by sales. Matches by stream_id.
+    - New stream -> inserts a revenue budget_category with stream_id set
+    - Renamed / (de)activated stream -> updates the linked category
+    - Deleted stream -> category is left in place but flagged inactive so
+      any historical budget_entries keep referencing a valid row
+    """
+    try:
+        streams = conn.execute('SELECT id, name, is_active FROM revenue_streams').fetchall()
+        linked = conn.execute(
+            "SELECT id, stream_id, name, is_active FROM budget_categories "
+            "WHERE cat_type = 'revenue' AND stream_id IS NOT NULL"
+        ).fetchall()
+        by_stream = {row['stream_id']: row for row in linked}
+        active_stream_ids = set()
+        for s in streams:
+            active_stream_ids.add(s['id'])
+            existing = by_stream.get(s['id'])
+            if existing:
+                if existing['name'] != s['name'] or int(existing['is_active'] or 0) != int(s['is_active'] or 0):
+                    conn.execute(
+                        "UPDATE budget_categories SET name = ?, is_active = ? WHERE id = ?",
+                        (s['name'], int(s['is_active'] or 0), existing['id'])
+                    )
+            else:
+                conn.execute(
+                    "INSERT INTO budget_categories (name, cat_type, sort_order, is_active, stream_id) "
+                    "VALUES (?, 'revenue', 0, ?, ?)",
+                    (s['name'], int(s['is_active'] or 0), s['id'])
+                )
+        # Deactivate categories whose stream has been deleted
+        for sid, row in by_stream.items():
+            if sid not in active_stream_ids and int(row['is_active'] or 0) == 1:
+                conn.execute("UPDATE budget_categories SET is_active = 0 WHERE id = ?", (row['id'],))
+        conn.commit()
+    except Exception as e:
+        logging.error(f"sync_streams_to_budget_categories: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+
+
 @app.route('/finance/budget/settings')
 @admin_required
 def finance_settings():
     user = get_user()
     fy_year = request.args.get('fy', '2026-2027')
     conn = get_db()
+    # Keep finance revenue list in sync with sales streams on every load
+    sync_streams_to_budget_categories(conn)
     expense_cats = conn.execute(
         "SELECT * FROM budget_categories WHERE cat_type = 'expense' ORDER BY sort_order"
     ).fetchall()
     dept_cats = conn.execute(
         "SELECT * FROM budget_categories WHERE cat_type = 'department' ORDER BY sort_order"
     ).fetchall()
+    # Only show revenue categories that came from sales streams
     revenue_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' ORDER BY sort_order"
+        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND stream_id IS NOT NULL "
+        "ORDER BY is_active DESC, name"
     ).fetchall()
     # Get unique departments for the dropdown
     departments = sorted(set(d['department'] for d in dept_cats if d['department']))
@@ -7263,6 +7322,13 @@ ensure_budget_tables()
 seed_kra_categories()
 seed_default_meeting_types()
 seed_budget_categories()
+# Backfill finance revenue categories from sales streams at boot
+try:
+    _sync_conn = get_db()
+    sync_streams_to_budget_categories(_sync_conn)
+    _sync_conn.close()
+except Exception as _sync_err:
+    logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
 
 if __name__ == '__main__':

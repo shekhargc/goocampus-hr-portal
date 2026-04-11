@@ -200,7 +200,7 @@
         </form>
     </div>
 
-    <!-- Revenue Categories -->
+    <!-- Revenue Streams (synced from Sales) -->
     <div class="settings-section">
         <h3>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
@@ -208,57 +208,35 @@
             <span class="count-badge" style="background: #10B981;">{{ revenue_cats|length }}</span>
         </h3>
 
+        <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 0.75rem 0.95rem; font-size: 0.78rem; color: #065F46; line-height: 1.5; margin-bottom: 1rem;">
+            <strong>Synced from Sales →</strong> This list mirrors revenue streams created in the Sales module. To add, rename, or deactivate a stream, head to the Sales Streams page — changes show up here automatically.
+            <div style="margin-top: 0.5rem;">
+                <a href="/streams" style="display:inline-block;background:#10B981;color:white;text-decoration:none;padding:0.4rem 0.85rem;border-radius:0.35rem;font-weight:600;font-size:0.74rem;">+ Add / Manage in Sales →</a>
+            </div>
+        </div>
+
+        {% if revenue_cats %}
         <ul class="cat-list">
             {% for cat in revenue_cats %}
             <li class="cat-item" id="rev-{{ cat.id }}">
-                <div class="cat-item__name">{{ cat.name }}</div>
+                <div class="cat-item__name">
+                    {{ cat.name }}
+                    <span style="display:inline-block;margin-left:0.4rem;padding:0.1rem 0.45rem;border-radius:0.25rem;background:rgba(16,185,129,0.12);color:#065F46;font-size:0.65rem;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;">Sales</span>
+                </div>
                 <div class="cat-item__badges">
-                    {% if cat.is_recurring %}<span class="badge-recurring">Recurring</span>{% endif %}
                     {% if cat.is_active %}<span class="badge-active">Active</span>{% else %}<span class="badge-inactive">Inactive</span>{% endif %}
                 </div>
                 <div class="cat-item__actions">
-                    <button class="btn-sm" onclick="toggleEdit('rev-{{ cat.id }}')">Edit</button>
-                    <form method="POST" action="/finance/budget/category/toggle/{{ cat.id }}" style="display:inline;">
-                        <input type="hidden" name="fy" value="{{ fy_year }}">
-                        <button type="submit" class="btn-sm {{ 'toggle-inactive' if cat.is_active else 'toggle-active' }}">{{ 'Deactivate' if cat.is_active else 'Activate' }}</button>
-                    </form>
-                </div>
-                <div class="edit-form" id="edit-rev-{{ cat.id }}">
-                    <form method="POST" action="/finance/budget/category/edit/{{ cat.id }}">
-                        <input type="hidden" name="fy" value="{{ fy_year }}">
-                        <div class="form-row">
-                            <label>Name</label>
-                            <input type="text" name="name" value="{{ cat.name }}" required>
-                        </div>
-                        <div class="form-row">
-                            <div class="checkbox-row">
-                                <input type="checkbox" name="is_recurring" id="rev-recurring-{{ cat.id }}" {{ 'checked' if cat.is_recurring }}>
-                                <label for="rev-recurring-{{ cat.id }}" style="min-width: auto;">Mark as recurring</label>
-                            </div>
-                        </div>
-                        <div class="form-row">
-                            <div class="checkbox-row">
-                                <input type="checkbox" name="is_active" id="rev-active-{{ cat.id }}" {{ 'checked' if cat.is_active }}>
-                                <label for="rev-active-{{ cat.id }}" style="min-width: auto;">Active</label>
-                            </div>
-                        </div>
-                        <div class="form-row" style="gap: 0.3rem;">
-                            <button type="submit" class="btn-save-sm">Save</button>
-                            <button type="button" class="btn-cancel-sm" onclick="toggleEdit('rev-{{ cat.id }}')">Cancel</button>
-                        </div>
-                    </form>
+                    <a href="/streams/{{ cat.stream_id }}/edit" class="btn-sm" style="text-decoration:none;display:inline-block;">Edit in Sales</a>
                 </div>
             </li>
             {% endfor %}
         </ul>
-
-        <div style="background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 10px; padding: 0.85rem 1rem; font-size: 0.8rem; color: #065F46; line-height: 1.5;">
-            <strong>Revenue streams are now managed from the Sales module.</strong>
-            Create, edit, or link streams once and reuse them across projects, products, and finance tracking.
-            <div style="margin-top: 0.55rem;">
-                <a href="/streams" style="display:inline-block;background:#10B981;color:white;text-decoration:none;padding:0.45rem 0.9rem;border-radius:0.35rem;font-weight:600;font-size:0.78rem;">Manage Revenue Streams →</a>
-            </div>
+        {% else %}
+        <div style="padding: 1.5rem 1rem; text-align: center; color: #6B7280; background: #F9FAFB; border-radius: 8px; font-size: 0.82rem;">
+            No revenue streams yet. <a href="/streams/add" style="color:#10B981;font-weight:600;text-decoration:none;">Create the first one in Sales →</a>
         </div>
+        {% endif %}
     </div>
 
     <!-- Info box -->
