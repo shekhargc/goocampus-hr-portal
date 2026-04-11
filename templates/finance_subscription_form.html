@@ -1,0 +1,92 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'New' }} Subscription{% endblock %}
+{% block content %}
+<div style="max-width:720px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/finance/subscriptions" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Subscriptions</a>
+    </div>
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Subscription' if mode == 'edit' else 'New Subscription' }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">Each subscription appears in the monthly budget entry under the Subscriptions section. Shared subs hit the primary department; other departments are noted for reference.</p>
+
+        <form method="POST" action="{% if mode == 'edit' %}/finance/subscriptions/{{ item.id }}/edit{% else %}/finance/subscriptions/add{% endif %}">
+            <div style="display:grid;grid-template-columns:1.5fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Name *</label>
+                    <input type="text" name="name" required maxlength="120" value="{{ item.name if item else '' }}" placeholder="e.g. Slack, Notion, GitHub" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor</label>
+                    <input type="text" name="vendor" maxlength="120" value="{{ item.vendor if item else '' }}" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 0.8fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Cost *</label>
+                    <input type="number" name="cost" required step="0.01" min="0" value="{{ item.cost if item else '' }}" placeholder="0" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Currency</label>
+                    <select name="currency" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        {% for cur in ['INR','USD','EUR','GBP','AED'] %}
+                        <option value="{{ cur }}" {% if item and item.currency == cur %}selected{% elif not item and cur == 'INR' %}selected{% endif %}>{{ cur }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Frequency *</label>
+                    <select name="frequency" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        {% set cur_freq = item.frequency if item else 'monthly' %}
+                        <option value="monthly"   {% if cur_freq == 'monthly' %}selected{% endif %}>Monthly</option>
+                        <option value="quarterly" {% if cur_freq == 'quarterly' %}selected{% endif %}>Quarterly</option>
+                        <option value="annual"    {% if cur_freq == 'annual' %}selected{% endif %}>Annual</option>
+                        <option value="one_time"  {% if cur_freq == 'one_time' %}selected{% endif %}>One-time</option>
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Primary Department</label>
+                    <input type="text" name="primary_department" maxlength="80" value="{{ item.primary_department if item else '' }}" placeholder="e.g. Sales" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Project</label>
+                    <select name="project_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— None —</option>
+                        {% for p in projects %}
+                        <option value="{{ p.id }}" {% if item and item.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Shared With (comma-separated departments, optional)</label>
+                <input type="text" name="shared_departments" maxlength="250" value="{{ item.shared_departments if item else '' }}" placeholder="e.g. Marketing, Ops, Tech" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <small style="display:block;margin-top:0.3rem;color:var(--gray-400);font-size:0.7rem;">These are informational tags — the full cost is charged to the primary department.</small>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" rows="2" maxlength="400" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.notes if item else '' }}</textarea>
+            </div>
+
+            {% if mode == 'edit' %}
+            <div style="margin-bottom:1.5rem;">
+                <label style="font-size:0.85rem;color:var(--gray-600);font-weight:600;display:flex;align-items:center;gap:0.5rem;">
+                    <input type="checkbox" name="is_active" value="1" {% if item.is_active == 1 %}checked{% endif %}>
+                    Active
+                </label>
+            </div>
+            {% endif %}
+
+            <div style="display:flex;gap:0.8rem;">
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Create Subscription' }}</button>
+                <a href="/finance/subscriptions" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

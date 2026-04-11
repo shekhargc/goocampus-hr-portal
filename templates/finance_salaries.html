@@ -1,0 +1,106 @@
+{% extends "base.html" %}
+{% block title %}Salaries — Finance{% endblock %}
+{% block extra_css %}
+<style>
+    .fin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem; }
+    .fin-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .fin-sub { font-size: 0.8rem; color: var(--gray-500); margin: 0.2rem 0 0 0; }
+    .fin-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .btn-primary { background: var(--orange); color: white; padding: 0.55rem 1.1rem; border-radius: 8px; border: none; font-weight: 600; font-size: 0.8rem; text-decoration: none; cursor: pointer; }
+    .btn-ghost { background: white; color: var(--gray-700); padding: 0.55rem 1.1rem; border-radius: 8px; border: 1px solid var(--gray-200); font-weight: 600; font-size: 0.8rem; text-decoration: none; cursor: pointer; }
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.7rem; font-weight: 600; border-radius: 6px; text-decoration: none; }
+    .btn-edit { background: #F0F9FF; color: #0369A1; border: 1px solid #BAE6FD; }
+    .btn-delete { background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; }
+    .summary-card { background: white; border-radius: 12px; padding: 1rem 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.2rem; display: flex; align-items: center; gap: 1.2rem; flex-wrap: wrap; }
+    .summary-num { font-size: 1.4rem; font-weight: 800; color: var(--navy); }
+    .summary-label { font-size: 0.7rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+    .table-card { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow-x: auto; }
+    table.sal-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    table.sal-table th { text-align: left; padding: 0.55rem 0.5rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); }
+    table.sal-table td { padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); vertical-align: middle; }
+    table.sal-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--navy); }
+    .pill { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 10px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .pill-active { background: #ECFDF5; color: #065F46; }
+    .pill-inactive { background: #F3F4F6; color: #6B7280; }
+    .empty { padding: 2rem; text-align: center; color: var(--gray-400); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="max-width: 1100px; margin: 0 auto; padding: 1.5rem;">
+    <div class="fin-header">
+        <div>
+            <h1>Salaries</h1>
+            <p class="fin-sub">Line-item salary list used in the monthly budget entry. Linked to departments and projects.</p>
+        </div>
+        <div class="fin-actions">
+            {% if unlinked_employees %}
+            <form method="POST" action="/finance/salaries/sync-employees" style="display: inline;">
+                <button type="submit" class="btn-ghost">⟲ Sync {{ unlinked_employees|length }} employee{{ 's' if unlinked_employees|length != 1 else '' }}</button>
+            </form>
+            {% endif %}
+            <a href="/finance/salaries/add" class="btn-primary">+ Add Salary</a>
+        </div>
+    </div>
+
+    <div class="summary-card">
+        <div>
+            <div class="summary-label">Active lines</div>
+            <div class="summary-num">{{ salaries|selectattr('is_active', 'equalto', 1)|list|length }}</div>
+        </div>
+        <div>
+            <div class="summary-label">Monthly total (active)</div>
+            <div class="summary-num">₹{{ "{:,.0f}".format(total_monthly) }}</div>
+        </div>
+        <div>
+            <div class="summary-label">Annual equivalent</div>
+            <div class="summary-num">₹{{ "{:,.0f}".format(total_monthly * 12) }}</div>
+        </div>
+    </div>
+
+    <div class="table-card">
+        {% if salaries %}
+        <table class="sal-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Department</th>
+                    <th>Project</th>
+                    <th>Currency</th>
+                    <th style="text-align:right;">Monthly Cost</th>
+                    <th>Status</th>
+                    <th style="width: 1%;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in salaries %}
+                <tr>
+                    <td>
+                        <strong style="color: var(--navy);">{{ s.name }}</strong>
+                        {% if s.employee_id %}<div style="font-size: 0.62rem; color: var(--gray-400);">Employee</div>{% else %}<div style="font-size: 0.62rem; color: var(--gray-400);">Manual</div>{% endif %}
+                    </td>
+                    <td>{{ s.department or '—' }}</td>
+                    <td>{{ s.project_name or '—' }}</td>
+                    <td>{{ s.currency }}</td>
+                    <td class="num">{{ "{:,.0f}".format(s.monthly_cost|float) }}</td>
+                    <td>
+                        {% if s.is_active == 1 %}<span class="pill pill-active">Active</span>
+                        {% else %}<span class="pill pill-inactive">Inactive</span>{% endif %}
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <a href="/finance/salaries/{{ s.id }}/edit" class="btn-sm btn-edit">Edit</a>
+                        <form method="POST" action="/finance/salaries/{{ s.id }}/delete" style="display: inline;" onsubmit="return confirm('Delete this salary line? Linked budget entries will also be removed.');">
+                            <button type="submit" class="btn-sm btn-delete" style="border: 1px solid #FECACA; cursor: pointer;">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            No salary lines yet. {% if unlinked_employees %}Click <strong>Sync employees</strong> to seed from your employee list, or{% endif %} <a href="/finance/salaries/add" style="color: var(--navy); font-weight: 600;">add one manually →</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

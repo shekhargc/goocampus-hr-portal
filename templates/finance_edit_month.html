@@ -90,11 +90,40 @@
     .rev-rollup__nums { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--gray-500); padding: 0.15rem 0; }
     .rev-rollup__nums strong { color: var(--navy); font-variant-numeric: tabular-nums; }
 
+    /* Expense line items (salaries & subscriptions) */
+    .exp-header { display: grid; grid-template-columns: 1.5fr 1fr 0.9fr 0.9fr 0.9fr 1.1fr; gap: 0.5rem; padding: 0.5rem 0; font-size: 0.68rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); margin-bottom: 0.3rem; }
+    .exp-dept-block { margin-bottom: 0.8rem; border: 1px solid var(--gray-100); border-radius: 8px; overflow: hidden; }
+    .exp-dept-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.5rem 0.7rem; background: #FEF2F2; border-bottom: 1px solid #FEE2E2; font-size: 0.75rem; flex-wrap: wrap; }
+    .exp-dept-head.sub { background: #FFF7ED; border-bottom-color: #FFEDD5; }
+    .exp-dept-name { font-weight: 700; color: #991B1B; }
+    .exp-dept-head.sub .exp-dept-name { color: #9A3412; }
+    .exp-dept-totals { color: #7F1D1D; font-size: 0.7rem; }
+    .exp-dept-head.sub .exp-dept-totals { color: #9A3412; }
+    .exp-dept-totals strong { color: inherit; }
+    .exp-row { display: grid; grid-template-columns: 1.5fr 1fr 0.9fr 0.9fr 0.9fr 1.1fr; gap: 0.5rem; padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--gray-50); align-items: center; }
+    .exp-row:last-child { border-bottom: none; }
+    .exp-cell { font-size: 0.78rem; color: var(--gray-700); }
+    .exp-name { font-weight: 600; color: var(--navy); }
+    .exp-name small { display: block; font-weight: 400; font-size: 0.62rem; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; }
+    .exp-project { font-size: 0.72rem; color: var(--gray-600); }
+    .exp-ref { font-size: 0.72rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+    .freq-pill { display: inline-block; background: #EFF6FF; color: #1D4ED8; font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 8px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin-left: 0.3rem; }
+    .exp-row input[type="number"], .exp-row input[type="text"] {
+        width: 100%; padding: 0.35rem 0.5rem; border: 1px solid var(--gray-200); border-radius: 6px;
+        font-size: 0.78rem; color: var(--gray-700); background: var(--gray-50);
+    }
+    .exp-row input[type="number"]:focus, .exp-row input[type="text"]:focus { border-color: var(--navy); outline: none; background: white; }
+    .exp-row input:disabled { background: var(--gray-100); color: var(--gray-400); cursor: not-allowed; }
+    .exp-rollup__card .exp-rollup__row { display: flex; justify-content: space-between; font-size: 0.7rem; color: var(--gray-500); padding: 0.1rem 0; }
+    .exp-rollup__card .exp-rollup__row strong { color: var(--navy); font-variant-numeric: tabular-nums; }
+
     @media (max-width: 768px) {
         .entry-row { grid-template-columns: 1fr; gap: 0.3rem; padding: 0.8rem 0; }
         .entry-header { display: none; }
         .rev-header { display: none; }
         .rev-row { grid-template-columns: 1fr 1fr; gap: 0.4rem; padding: 0.6rem; }
+        .exp-header { display: none; }
+        .exp-row { grid-template-columns: 1fr 1fr; gap: 0.4rem; padding: 0.6rem; }
     }
 </style>
 {% endblock %}
@@ -130,11 +159,130 @@
     {% endif %}
 
     <form method="POST">
+        <!-- Salaries (line-items) -->
+        <div class="entry-section">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                Salaries
+            </h3>
+            <div style="background: #FEF2F2; border: 1px solid #FECACA; color: #7F1D1D; padding: 0.6rem 0.8rem; border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.75rem;">
+                Line-items per person, grouped by department. Manage the master list in <a href="/finance/salaries" style="color: #991B1B; font-weight: 600;">Salaries</a>. Monthly cost is the reference — override Budget/Actual here for this month only.
+            </div>
+
+            <div class="exp-header">
+                <div>Name</div>
+                <div>Project</div>
+                <div>Monthly Ref.</div>
+                <div>Budget (₹)</div>
+                <div>Actual (₹)</div>
+                <div>Notes</div>
+            </div>
+
+            {% if salary_groups %}
+                {% for g in salary_groups %}
+                <div class="exp-dept-block">
+                    <div class="exp-dept-head">
+                        <span class="exp-dept-name">{{ g.department }}</span>
+                        <span class="exp-dept-totals">
+                            Budget <strong>₹{{ '{:,.0f}'.format(g.total_budget) }}</strong>
+                            &nbsp;·&nbsp; Actual <strong>₹{{ '{:,.0f}'.format(g.total_actual) }}</strong>
+                            &nbsp;·&nbsp; {{ g.items|length }} line{{ 's' if g.items|length != 1 else '' }}
+                        </span>
+                    </div>
+                    {% for it in g.items %}
+                    <div class="exp-row">
+                        <div class="exp-cell exp-name">
+                            {{ it.name }}<small>Salary</small>
+                        </div>
+                        <div class="exp-cell exp-project">{{ it.project_name }}</div>
+                        <div class="exp-cell exp-ref">{{ it.currency }} {{ '{:,.0f}'.format(it.monthly_cost) }}</div>
+                        <input class="exp-cell" type="number" name="sal_budget_{{ it.id }}" value="{{ it.budget or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="exp-cell" type="number" name="sal_actual_{{ it.id }}" value="{{ it.actual or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="exp-cell" type="text" name="sal_notes_{{ it.id }}" value="{{ it.notes }}" placeholder="Optional…" {{ 'disabled' if is_locked }}>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 1.2rem; text-align: center; color: var(--gray-400); font-size: 0.82rem;">
+                    No salary lines yet. <a href="/finance/salaries" style="color: var(--navy); font-weight: 600;">Add or sync from employees →</a>
+                </div>
+            {% endif %}
+        </div>
+
+        <!-- Subscriptions (line-items) -->
+        <div class="entry-section">
+            <h3>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#F97316" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
+                Subscriptions
+            </h3>
+            <div style="background: #FFF7ED; border: 1px solid #FED7AA; color: #9A3412; padding: 0.6rem 0.8rem; border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.75rem;">
+                SaaS & tools grouped by primary department. Manage in <a href="/finance/subscriptions" style="color: #C2410C; font-weight: 600;">Subscriptions</a>. Default budget is the monthly-equivalent of the subscription cost — adjust per month as needed.
+            </div>
+
+            <div class="exp-header">
+                <div>Name / Vendor</div>
+                <div>Project</div>
+                <div>Cost Ref.</div>
+                <div>Budget (₹)</div>
+                <div>Actual (₹)</div>
+                <div>Notes</div>
+            </div>
+
+            {% if subscription_groups %}
+                {% for g in subscription_groups %}
+                <div class="exp-dept-block">
+                    <div class="exp-dept-head sub">
+                        <span class="exp-dept-name">{{ g.department }}</span>
+                        <span class="exp-dept-totals">
+                            Budget <strong>₹{{ '{:,.0f}'.format(g.total_budget) }}</strong>
+                            &nbsp;·&nbsp; Actual <strong>₹{{ '{:,.0f}'.format(g.total_actual) }}</strong>
+                            &nbsp;·&nbsp; {{ g.items|length }} sub{{ 's' if g.items|length != 1 else '' }}
+                        </span>
+                    </div>
+                    {% for it in g.items %}
+                    <div class="exp-row">
+                        <div class="exp-cell exp-name">
+                            {{ it.name }}<span class="freq-pill">{{ it.frequency|replace('_',' ') }}</span>
+                            <small>{% if it.vendor %}{{ it.vendor }}{% else %}Subscription{% endif %}{% if it.shared_departments %} · shared: {{ it.shared_departments }}{% endif %}</small>
+                        </div>
+                        <div class="exp-cell exp-project">{{ it.project_name }}</div>
+                        <div class="exp-cell exp-ref">{{ it.currency }} {{ '{:,.0f}'.format(it.raw_cost) }}</div>
+                        <input class="exp-cell" type="number" name="sub_budget_{{ it.id }}" value="{{ it.budget or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="exp-cell" type="number" name="sub_actual_{{ it.id }}" value="{{ it.actual or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="exp-cell" type="text" name="sub_notes_{{ it.id }}" value="{{ it.notes }}" placeholder="Optional…" {{ 'disabled' if is_locked }}>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 1.2rem; text-align: center; color: var(--gray-400); font-size: 0.82rem;">
+                    No subscriptions yet. <a href="/finance/subscriptions" style="color: var(--navy); font-weight: 600;">Add one →</a>
+                </div>
+            {% endif %}
+
+            {% if expense_project_rollup %}
+            <div class="rev-rollup">
+                <div class="rev-rollup__title">Project-wise expense breakup — Salaries + Subscriptions ({{ month_name }} {{ year }})</div>
+                <div class="rev-rollup__grid">
+                    {% for pr in expense_project_rollup %}
+                    <div class="rev-rollup__card exp-rollup__card">
+                        <div class="rev-rollup__name">{{ pr.project_name }}</div>
+                        <div class="exp-rollup__row"><span>Salaries</span><strong>₹{{ '{:,.0f}'.format(pr.salary) }}</strong></div>
+                        <div class="exp-rollup__row"><span>Subscriptions</span><strong>₹{{ '{:,.0f}'.format(pr.subscription) }}</strong></div>
+                        <div class="exp-rollup__row" style="border-top: 1px dashed var(--gray-200); margin-top: 0.25rem; padding-top: 0.3rem;"><span>Total</span><strong>₹{{ '{:,.0f}'.format(pr.salary + pr.subscription) }}</strong></div>
+                    </div>
+                    {% endfor %}
+                </div>
+            </div>
+            {% endif %}
+        </div>
+
         <!-- Expense Categories -->
         <div class="entry-section">
             <h3>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                Expense Categories
+                Other Expense Categories
             </h3>
             <div class="entry-header">
                 <div>Category</div>

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+{% block title %}Subscriptions — Finance{% endblock %}
+{% block extra_css %}
+<style>
+    .fin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem; }
+    .fin-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .fin-sub { font-size: 0.8rem; color: var(--gray-500); margin: 0.2rem 0 0 0; }
+    .btn-primary { background: var(--orange); color: white; padding: 0.55rem 1.1rem; border-radius: 8px; border: none; font-weight: 600; font-size: 0.8rem; text-decoration: none; cursor: pointer; }
+    .btn-sm { padding: 0.3rem 0.6rem; font-size: 0.7rem; font-weight: 600; border-radius: 6px; text-decoration: none; }
+    .btn-edit { background: #F0F9FF; color: #0369A1; border: 1px solid #BAE6FD; }
+    .btn-delete { background: #FEF2F2; color: #B91C1C; border: 1px solid #FECACA; cursor: pointer; }
+    .summary-card { background: white; border-radius: 12px; padding: 1rem 1.2rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); margin-bottom: 1.2rem; display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; }
+    .summary-num { font-size: 1.4rem; font-weight: 800; color: var(--navy); }
+    .summary-label { font-size: 0.7rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; font-weight: 600; }
+    .table-card { background: white; border-radius: 12px; padding: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow-x: auto; }
+    table.sub-table { width: 100%; border-collapse: collapse; font-size: 0.78rem; }
+    table.sub-table th { text-align: left; padding: 0.55rem 0.5rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; font-size: 0.65rem; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); }
+    table.sub-table td { padding: 0.65rem 0.5rem; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); vertical-align: middle; }
+    table.sub-table td.num { text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; color: var(--navy); }
+    .pill { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 10px; font-size: 0.62rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; }
+    .pill-active { background: #ECFDF5; color: #065F46; }
+    .pill-inactive { background: #F3F4F6; color: #6B7280; }
+    .pill-freq { background: #EFF6FF; color: #1D4ED8; }
+    .tag-chip { display: inline-block; background: #F3F4F6; color: #4B5563; font-size: 0.6rem; padding: 0.1rem 0.4rem; border-radius: 6px; margin-right: 0.2rem; }
+    .empty { padding: 2rem; text-align: center; color: var(--gray-400); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+    <div class="fin-header">
+        <div>
+            <h1>Subscriptions</h1>
+            <p class="fin-sub">SaaS, tools and recurring expenses. Each subscription flows into the monthly budget entry under Subscriptions.</p>
+        </div>
+        <a href="/finance/subscriptions/add" class="btn-primary">+ Add Subscription</a>
+    </div>
+
+    <div class="summary-card">
+        <div>
+            <div class="summary-label">Active subscriptions</div>
+            <div class="summary-num">{{ subs|selectattr('is_active', 'equalto', 1)|list|length }}</div>
+        </div>
+        <div>
+            <div class="summary-label">Monthly-equivalent total</div>
+            <div class="summary-num">₹{{ "{:,.0f}".format(total_monthly) }}</div>
+        </div>
+        <div>
+            <div class="summary-label">Annual run-rate</div>
+            <div class="summary-num">₹{{ "{:,.0f}".format(total_monthly * 12) }}</div>
+        </div>
+    </div>
+
+    <div class="table-card">
+        {% if subs %}
+        <table class="sub-table">
+            <thead>
+                <tr>
+                    <th>Name / Vendor</th>
+                    <th>Primary Dept</th>
+                    <th>Shared With</th>
+                    <th>Project</th>
+                    <th>Frequency</th>
+                    <th style="text-align:right;">Cost</th>
+                    <th>Status</th>
+                    <th style="width: 1%;"></th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in subs %}
+                <tr>
+                    <td>
+                        <strong style="color: var(--navy);">{{ s.name }}</strong>
+                        {% if s.vendor %}<div style="font-size: 0.62rem; color: var(--gray-400);">{{ s.vendor }}</div>{% endif %}
+                    </td>
+                    <td>{{ s.primary_department or '—' }}</td>
+                    <td>
+                        {% if s.shared_departments %}
+                            {% for d in s.shared_departments.split(',') %}
+                                {% if d.strip() %}<span class="tag-chip">{{ d.strip() }}</span>{% endif %}
+                            {% endfor %}
+                        {% else %}—{% endif %}
+                    </td>
+                    <td>{{ s.project_name or '—' }}</td>
+                    <td><span class="pill pill-freq">{{ (s.frequency or 'monthly')|replace('_',' ') }}</span></td>
+                    <td class="num">{{ s.currency }} {{ "{:,.0f}".format(s.cost|float) }}</td>
+                    <td>
+                        {% if s.is_active == 1 %}<span class="pill pill-active">Active</span>
+                        {% else %}<span class="pill pill-inactive">Inactive</span>{% endif %}
+                    </td>
+                    <td style="white-space: nowrap;">
+                        <a href="/finance/subscriptions/{{ s.id }}/edit" class="btn-sm btn-edit">Edit</a>
+                        <form method="POST" action="/finance/subscriptions/{{ s.id }}/delete" style="display: inline;" onsubmit="return confirm('Delete this subscription? Linked budget entries will also be removed.');">
+                            <button type="submit" class="btn-sm btn-delete">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty">
+            No subscriptions yet. <a href="/finance/subscriptions/add" style="color: var(--navy); font-weight: 600;">Add your first one →</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

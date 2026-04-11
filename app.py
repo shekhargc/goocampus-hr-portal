@@ -6329,6 +6329,34 @@ def ensure_budget_tables():
     try:
         conn = get_db()
         tables_sql = [
+            '''CREATE TABLE IF NOT EXISTS salary_items (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER REFERENCES employees(id),
+                name TEXT NOT NULL,
+                department TEXT,
+                project_id INTEGER REFERENCES projects(id),
+                monthly_cost NUMERIC(14,2) DEFAULT 0,
+                currency TEXT DEFAULT 'INR',
+                is_active INTEGER DEFAULT 1,
+                notes TEXT,
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE TABLE IF NOT EXISTS subscription_items (
+                id SERIAL PRIMARY KEY,
+                name TEXT NOT NULL,
+                vendor TEXT,
+                cost NUMERIC(14,2) DEFAULT 0,
+                currency TEXT DEFAULT 'INR',
+                frequency TEXT DEFAULT 'monthly',
+                primary_department TEXT,
+                shared_departments TEXT,
+                project_id INTEGER REFERENCES projects(id),
+                is_active INTEGER DEFAULT 1,
+                notes TEXT,
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
             '''CREATE TABLE IF NOT EXISTS budget_categories (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -6419,6 +6447,18 @@ def ensure_budget_tables():
                 conn.rollback()
             except:
                 pass
+        # Migration: add salary_id / subscription_id to budget_entries so
+        # line-item expenses (salaries, subscriptions) can be tracked
+        for col in ('salary_id', 'subscription_id'):
+            try:
+                conn.execute(f"ALTER TABLE budget_entries ADD COLUMN {col} INTEGER")
+                conn.commit()
+                logging.info(f"Added {col} column to budget_entries")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         conn.commit()
         conn.close()
         logging.info("Budget tables ensured.")
@@ -6565,6 +6605,25 @@ def finance_dashboard():
             pass
         revenue_agg = []
 
+    # Monthly expense totals from salary + subscription line-items
+    try:
+        line_expense_agg = conn.execute('''
+            SELECT be.month, be.year,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_entries be
+            WHERE be.fy_year = ?
+              AND (be.salary_id IS NOT NULL OR be.subscription_id IS NOT NULL)
+            GROUP BY be.month, be.year
+        ''', (fy_year,)).fetchall()
+    except Exception as e:
+        logging.error(f"finance_dashboard line expense agg query: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        line_expense_agg = []
+
     # Department totals
     try:
         dept_agg = conn.execute('''
@@ -6625,6 +6684,14 @@ def finance_dashboard():
             monthly_data[key] = {'expense_budget': 0, 'expense_actual': 0, 'dept_budget': 0, 'dept_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}
         monthly_data[key]['revenue_budget'] += float(r['total_budget'] or 0)
         monthly_data[key]['revenue_actual'] += float(r['total_actual'] or 0)
+
+    # Merge salary + subscription line-item expense totals
+    for r in line_expense_agg:
+        key = (r['month'], r['year'])
+        if key not in monthly_data:
+            monthly_data[key] = {'expense_budget': 0, 'expense_actual': 0, 'dept_budget': 0, 'dept_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}
+        monthly_data[key]['expense_budget'] += float(r['total_budget'] or 0)
+        monthly_data[key]['expense_actual'] += float(r['total_actual'] or 0)
 
     # Build arrays
     total_expense_budget = 0; total_expense_actual = 0
@@ -6856,6 +6923,78 @@ def finance_edit_month(month, year):
                         (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, project_id, user['id'], user['id'])
                     )
 
+        # ── Salary line-item expenses ──
+        try:
+            active_salaries = conn.execute(
+                "SELECT id, department, project_id, monthly_cost FROM salary_items WHERE is_active = 1"
+            ).fetchall()
+        except Exception:
+            active_salaries = []
+        for sal in active_salaries:
+            sid = sal['id']
+            sbudget = request.form.get(f'sal_budget_{sid}', '0')
+            sactual = request.form.get(f'sal_actual_{sid}', '0')
+            snotes = request.form.get(f'sal_notes_{sid}', '').strip()
+            try:
+                sbudget = float(sbudget) if sbudget else 0
+            except ValueError:
+                sbudget = 0
+            try:
+                sactual = float(sactual) if sactual else 0
+            except ValueError:
+                sactual = 0
+            existing_s = conn.execute(
+                "SELECT id FROM budget_entries WHERE salary_id = ? AND fy_year = ? AND month = ? AND year = ?",
+                (sid, fy_year, month, year)
+            ).fetchone()
+            if existing_s:
+                conn.execute(
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (sbudget, sactual, snotes, sal['project_id'], user['id'], existing_s['id'])
+                )
+            else:
+                if sbudget > 0 or sactual > 0 or snotes:
+                    conn.execute(
+                        "INSERT INTO budget_entries (salary_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (sid, fy_year, month, year, sbudget, sactual, snotes, sal['project_id'], user['id'], user['id'])
+                    )
+
+        # ── Subscription line-item expenses ──
+        try:
+            active_subs = conn.execute(
+                "SELECT id, primary_department, project_id FROM subscription_items WHERE is_active = 1"
+            ).fetchall()
+        except Exception:
+            active_subs = []
+        for sub in active_subs:
+            sid = sub['id']
+            sbudget = request.form.get(f'sub_budget_{sid}', '0')
+            sactual = request.form.get(f'sub_actual_{sid}', '0')
+            snotes = request.form.get(f'sub_notes_{sid}', '').strip()
+            try:
+                sbudget = float(sbudget) if sbudget else 0
+            except ValueError:
+                sbudget = 0
+            try:
+                sactual = float(sactual) if sactual else 0
+            except ValueError:
+                sactual = 0
+            existing_sub = conn.execute(
+                "SELECT id FROM budget_entries WHERE subscription_id = ? AND fy_year = ? AND month = ? AND year = ?",
+                (sid, fy_year, month, year)
+            ).fetchone()
+            if existing_sub:
+                conn.execute(
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (sbudget, sactual, snotes, sub['project_id'], user['id'], existing_sub['id'])
+                )
+            else:
+                if sbudget > 0 or sactual > 0 or snotes:
+                    conn.execute(
+                        "INSERT INTO budget_entries (subscription_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (sid, fy_year, month, year, sbudget, sactual, snotes, sub['project_id'], user['id'], user['id'])
+                    )
+
         # ── Product-level revenue entries ──
         try:
             active_products = conn.execute(
@@ -6935,8 +7074,9 @@ def finance_edit_month(month, year):
         return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
 
     # GET: load existing data
+    # Hide legacy Salaries & Wages category — salaries are now line-item managed
     expense_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 ORDER BY sort_order"
+        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 AND LOWER(name) NOT IN ('salaries & wages', 'salaries and wages', 'salary') ORDER BY sort_order"
     ).fetchall()
     dept_cats = conn.execute(
         "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
@@ -6954,6 +7094,43 @@ def finance_edit_month(month, year):
         ).fetchall()
     except Exception:
         projects = []
+
+    # Load active salary items
+    try:
+        salary_items_raw = conn.execute('''
+            SELECT s.id, s.name, s.department, s.project_id, s.monthly_cost, s.currency,
+                   p.name AS project_name
+            FROM salary_items s
+            LEFT JOIN projects p ON s.project_id = p.id
+            WHERE s.is_active = 1
+            ORDER BY s.department NULLS LAST, s.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_edit_month salary query: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        salary_items_raw = []
+
+    # Load active subscription items
+    try:
+        subscription_items_raw = conn.execute('''
+            SELECT s.id, s.name, s.vendor, s.cost, s.currency, s.frequency,
+                   s.primary_department, s.shared_departments, s.project_id,
+                   p.name AS project_name
+            FROM subscription_items s
+            LEFT JOIN projects p ON s.project_id = p.id
+            WHERE s.is_active = 1
+            ORDER BY s.primary_department NULLS LAST, s.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_edit_month subscription query: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        subscription_items_raw = []
 
     # Load active products (revenue is entered at product level)
     try:
@@ -6983,13 +7160,109 @@ def finance_edit_month(month, year):
     entry_map = {}
     # Map product-based entries (revenue)
     product_entry_map = {}
+    # Map salary/subscription-based entries (line-item expenses)
+    salary_entry_map = {}
+    subscription_entry_map = {}
     for e in entries:
-        cid = e['category_id'] if 'category_id' in e.keys() else None
-        pid = e['product_id'] if 'product_id' in e.keys() else None
-        if pid:
+        keys = e.keys() if hasattr(e, 'keys') else []
+        cid = e['category_id'] if 'category_id' in keys else None
+        pid = e['product_id'] if 'product_id' in keys else None
+        sid = e['salary_id'] if 'salary_id' in keys else None
+        subid = e['subscription_id'] if 'subscription_id' in keys else None
+        if sid:
+            salary_entry_map[sid] = e
+        elif subid:
+            subscription_entry_map[subid] = e
+        elif pid:
             product_entry_map[pid] = e
         elif cid:
             entry_map[cid] = e
+
+    # Group salary items by department
+    salary_groups = []
+    sal_group_index = {}
+    for s in salary_items_raw:
+        dept_key = s['department'] or '— No department —'
+        if dept_key not in sal_group_index:
+            sal_group_index[dept_key] = {
+                'department': dept_key,
+                'items': [],
+                'total_budget': 0.0,
+                'total_actual': 0.0,
+            }
+            salary_groups.append(sal_group_index[dept_key])
+        e = salary_entry_map.get(s['id'])
+        sb = float(e['budget_amount'] or 0) if e else float(s['monthly_cost'] or 0)
+        sa = float(e['actual_amount'] or 0) if e else 0.0
+        sal_group_index[dept_key]['total_budget'] += sb
+        sal_group_index[dept_key]['total_actual'] += sa
+        sal_group_index[dept_key]['items'].append({
+            'id': s['id'],
+            'name': s['name'],
+            'project_name': s['project_name'] or '— No project —',
+            'monthly_cost': float(s['monthly_cost'] or 0),
+            'currency': s['currency'] or 'INR',
+            'budget': sb,
+            'actual': sa,
+            'notes': (e['notes'] if e else '') or '',
+            'has_entry': e is not None,
+        })
+
+    # Group subscription items by primary department
+    subscription_groups = []
+    sub_group_index = {}
+    for s in subscription_items_raw:
+        dept_key = s['primary_department'] or '— No department —'
+        if dept_key not in sub_group_index:
+            sub_group_index[dept_key] = {
+                'department': dept_key,
+                'items': [],
+                'total_budget': 0.0,
+                'total_actual': 0.0,
+            }
+            subscription_groups.append(sub_group_index[dept_key])
+        e = subscription_entry_map.get(s['id'])
+        # Default monthly-equivalent if no entry yet
+        freq = (s['frequency'] or 'monthly').lower()
+        raw_cost = float(s['cost'] or 0)
+        if freq == 'monthly':    default_cost = raw_cost
+        elif freq == 'quarterly': default_cost = raw_cost / 3.0
+        elif freq == 'annual':    default_cost = raw_cost / 12.0
+        else:                     default_cost = 0.0
+        sb = float(e['budget_amount'] or 0) if e else default_cost
+        sa = float(e['actual_amount'] or 0) if e else 0.0
+        sub_group_index[dept_key]['total_budget'] += sb
+        sub_group_index[dept_key]['total_actual'] += sa
+        sub_group_index[dept_key]['items'].append({
+            'id': s['id'],
+            'name': s['name'],
+            'vendor': s['vendor'] or '',
+            'frequency': freq,
+            'raw_cost': raw_cost,
+            'currency': s['currency'] or 'INR',
+            'shared_departments': s['shared_departments'] or '',
+            'project_name': s['project_name'] or '— No project —',
+            'budget': sb,
+            'actual': sa,
+            'notes': (e['notes'] if e else '') or '',
+            'has_entry': e is not None,
+        })
+
+    # Project-wise expense rollup from salaries + subscriptions for this month
+    expense_project_rollup = {}
+    for g in salary_groups:
+        for it in g['items']:
+            key = it['project_name']
+            if key not in expense_project_rollup:
+                expense_project_rollup[key] = {'project_name': key, 'salary': 0.0, 'subscription': 0.0}
+            expense_project_rollup[key]['salary'] += it['budget']
+    for g in subscription_groups:
+        for it in g['items']:
+            key = it['project_name']
+            if key not in expense_project_rollup:
+                expense_project_rollup[key] = {'project_name': key, 'salary': 0.0, 'subscription': 0.0}
+            expense_project_rollup[key]['subscription'] += it['budget']
+    expense_project_rollup_list = sorted(expense_project_rollup.values(), key=lambda x: x['project_name'])
 
     # Group products by revenue stream for display
     revenue_groups = []
@@ -7040,6 +7313,9 @@ def finance_edit_month(month, year):
                            expense_cats=expense_cats, dept_cats=dept_cats,
                            revenue_groups=revenue_groups,
                            project_rollup=project_rollup_list,
+                           salary_groups=salary_groups,
+                           subscription_groups=subscription_groups,
+                           expense_project_rollup=expense_project_rollup_list,
                            entry_map=entry_map,
                            is_locked=is_locked, get_fy_months=get_fy_months,
                            projects=projects)
@@ -7561,6 +7837,349 @@ def finance_products():
     return render_template('finance_products.html', user=user, products=products,
                            summary=summary, fy_year=fy_year,
                            fx_rates=get_fx_rates_inr())
+
+
+# ─── Salary master list ───
+
+@app.route('/finance/salaries')
+@admin_required
+def finance_salaries():
+    user = get_user()
+    conn = get_db()
+    try:
+        salaries = conn.execute('''
+            SELECT s.id, s.employee_id, s.name, s.department, s.project_id,
+                   s.monthly_cost, s.currency, s.is_active, s.notes,
+                   p.name AS project_name,
+                   e.name AS emp_name
+            FROM salary_items s
+            LEFT JOIN projects p  ON s.project_id = p.id
+            LEFT JOIN employees e ON s.employee_id = e.id
+            ORDER BY s.is_active DESC, s.department NULLS LAST, s.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_salaries: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        salaries = []
+    try:
+        projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    except Exception:
+        projects = []
+    try:
+        unlinked_employees = conn.execute('''
+            SELECT e.id, e.name, e.department
+            FROM employees e
+            WHERE (e.is_active IS NULL OR e.is_active = 1)
+              AND NOT EXISTS (SELECT 1 FROM salary_items s WHERE s.employee_id = e.id)
+            ORDER BY e.name
+        ''').fetchall()
+    except Exception:
+        unlinked_employees = []
+    conn.close()
+
+    total_monthly = sum(float(s['monthly_cost'] or 0) for s in salaries if int(s['is_active'] or 0) == 1)
+    return render_template('finance_salaries.html', user=user, salaries=salaries,
+                           projects=projects, unlinked_employees=unlinked_employees,
+                           total_monthly=total_monthly)
+
+
+@app.route('/finance/salaries/sync-employees', methods=['POST'])
+@admin_required
+def finance_salaries_sync():
+    """Create a salary_items row for every active employee that doesn't have one yet."""
+    user = get_user()
+    conn = get_db()
+    added = 0
+    try:
+        to_add = conn.execute('''
+            SELECT e.id, e.name, e.department
+            FROM employees e
+            WHERE (e.is_active IS NULL OR e.is_active = 1)
+              AND NOT EXISTS (SELECT 1 FROM salary_items s WHERE s.employee_id = e.id)
+        ''').fetchall()
+        for emp in to_add:
+            conn.execute(
+                "INSERT INTO salary_items (employee_id, name, department, monthly_cost, currency, is_active, created_by) "
+                "VALUES (?, ?, ?, 0, 'INR', 1, ?)",
+                (emp['id'], emp['name'], emp['department'] or '', user['id'])
+            )
+            added += 1
+        conn.commit()
+        flash(f'Synced {added} employee{"s" if added != 1 else ""} into the salary list.', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not sync employees: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('finance_salaries'))
+
+
+@app.route('/finance/salaries/add', methods=['GET', 'POST'])
+@admin_required
+def finance_salaries_add():
+    user = get_user()
+    conn = get_db()
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        department = request.form.get('department', '').strip()
+        project_val = request.form.get('project_id', '')
+        project_id = int(project_val) if project_val and project_val.isdigit() else None
+        try:
+            monthly_cost = float(request.form.get('monthly_cost', 0) or 0)
+        except ValueError:
+            monthly_cost = 0
+        currency = request.form.get('currency', 'INR') or 'INR'
+        notes = request.form.get('notes', '').strip()
+        if not name:
+            flash('Name is required', 'error')
+            conn.close()
+            return redirect(url_for('finance_salaries_add'))
+        try:
+            conn.execute(
+                "INSERT INTO salary_items (name, department, project_id, monthly_cost, currency, is_active, notes, created_by) "
+                "VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
+                (name, department, project_id, monthly_cost, currency, notes, user['id'])
+            )
+            conn.commit()
+            flash('Salary item added', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Could not add: {e}', 'error')
+        conn.close()
+        return redirect(url_for('finance_salaries'))
+    try:
+        projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    except Exception:
+        projects = []
+    conn.close()
+    return render_template('finance_salary_form.html', user=user, item=None, projects=projects, mode='add')
+
+
+@app.route('/finance/salaries/<int:item_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def finance_salaries_edit(item_id):
+    user = get_user()
+    conn = get_db()
+    item = conn.execute('SELECT * FROM salary_items WHERE id = ?', (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        flash('Not found', 'error')
+        return redirect(url_for('finance_salaries'))
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        department = request.form.get('department', '').strip()
+        project_val = request.form.get('project_id', '')
+        project_id = int(project_val) if project_val and project_val.isdigit() else None
+        try:
+            monthly_cost = float(request.form.get('monthly_cost', 0) or 0)
+        except ValueError:
+            monthly_cost = 0
+        currency = request.form.get('currency', 'INR') or 'INR'
+        notes = request.form.get('notes', '').strip()
+        is_active = 1 if request.form.get('is_active') else 0
+        try:
+            conn.execute(
+                "UPDATE salary_items SET name=?, department=?, project_id=?, monthly_cost=?, currency=?, notes=?, is_active=? WHERE id=?",
+                (name, department, project_id, monthly_cost, currency, notes, is_active, item_id)
+            )
+            conn.commit()
+            flash('Updated', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Could not update: {e}', 'error')
+        conn.close()
+        return redirect(url_for('finance_salaries'))
+    try:
+        projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    except Exception:
+        projects = []
+    conn.close()
+    return render_template('finance_salary_form.html', user=user, item=item, projects=projects, mode='edit')
+
+
+@app.route('/finance/salaries/<int:item_id>/delete', methods=['POST'])
+@admin_required
+def finance_salaries_delete(item_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM budget_entries WHERE salary_id = ?", (item_id,))
+        conn.execute('DELETE FROM salary_items WHERE id = ?', (item_id,))
+        conn.commit()
+        flash('Salary item deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not delete: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('finance_salaries'))
+
+
+# ─── Subscription master list ───
+
+@app.route('/finance/subscriptions')
+@admin_required
+def finance_subscriptions():
+    user = get_user()
+    conn = get_db()
+    try:
+        subs = conn.execute('''
+            SELECT s.id, s.name, s.vendor, s.cost, s.currency, s.frequency,
+                   s.primary_department, s.shared_departments, s.project_id,
+                   s.is_active, s.notes, p.name AS project_name
+            FROM subscription_items s
+            LEFT JOIN projects p ON s.project_id = p.id
+            ORDER BY s.is_active DESC, s.primary_department NULLS LAST, s.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_subscriptions: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        subs = []
+    conn.close()
+
+    # Convert to monthly-equivalent for summary
+    def monthly_equiv(cost, freq):
+        c = float(cost or 0)
+        f = (freq or 'monthly').lower()
+        if f == 'monthly':    return c
+        if f == 'quarterly':  return c / 3.0
+        if f == 'annual':     return c / 12.0
+        if f == 'one_time':   return 0.0
+        return c
+    total_monthly = sum(monthly_equiv(s['cost'], s['frequency']) for s in subs if int(s['is_active'] or 0) == 1)
+    return render_template('finance_subscriptions.html', user=user, subs=subs, total_monthly=total_monthly)
+
+
+@app.route('/finance/subscriptions/add', methods=['GET', 'POST'])
+@admin_required
+def finance_subscriptions_add():
+    user = get_user()
+    conn = get_db()
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        vendor = request.form.get('vendor', '').strip()
+        try:
+            cost = float(request.form.get('cost', 0) or 0)
+        except ValueError:
+            cost = 0
+        currency = request.form.get('currency', 'INR') or 'INR'
+        frequency = request.form.get('frequency', 'monthly') or 'monthly'
+        primary_department = request.form.get('primary_department', '').strip()
+        shared_departments = request.form.get('shared_departments', '').strip()
+        project_val = request.form.get('project_id', '')
+        project_id = int(project_val) if project_val and project_val.isdigit() else None
+        notes = request.form.get('notes', '').strip()
+        if not name:
+            flash('Name is required', 'error')
+            conn.close()
+            return redirect(url_for('finance_subscriptions_add'))
+        try:
+            conn.execute(
+                "INSERT INTO subscription_items (name, vendor, cost, currency, frequency, primary_department, shared_departments, project_id, is_active, notes, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)",
+                (name, vendor, cost, currency, frequency, primary_department, shared_departments, project_id, notes, user['id'])
+            )
+            conn.commit()
+            flash('Subscription added', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Could not add: {e}', 'error')
+        conn.close()
+        return redirect(url_for('finance_subscriptions'))
+    try:
+        projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    except Exception:
+        projects = []
+    conn.close()
+    return render_template('finance_subscription_form.html', user=user, item=None, projects=projects, mode='add')
+
+
+@app.route('/finance/subscriptions/<int:item_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def finance_subscriptions_edit(item_id):
+    user = get_user()
+    conn = get_db()
+    item = conn.execute('SELECT * FROM subscription_items WHERE id = ?', (item_id,)).fetchone()
+    if not item:
+        conn.close()
+        flash('Not found', 'error')
+        return redirect(url_for('finance_subscriptions'))
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        vendor = request.form.get('vendor', '').strip()
+        try:
+            cost = float(request.form.get('cost', 0) or 0)
+        except ValueError:
+            cost = 0
+        currency = request.form.get('currency', 'INR') or 'INR'
+        frequency = request.form.get('frequency', 'monthly') or 'monthly'
+        primary_department = request.form.get('primary_department', '').strip()
+        shared_departments = request.form.get('shared_departments', '').strip()
+        project_val = request.form.get('project_id', '')
+        project_id = int(project_val) if project_val and project_val.isdigit() else None
+        notes = request.form.get('notes', '').strip()
+        is_active = 1 if request.form.get('is_active') else 0
+        try:
+            conn.execute(
+                "UPDATE subscription_items SET name=?, vendor=?, cost=?, currency=?, frequency=?, primary_department=?, shared_departments=?, project_id=?, notes=?, is_active=? WHERE id=?",
+                (name, vendor, cost, currency, frequency, primary_department, shared_departments, project_id, notes, is_active, item_id)
+            )
+            conn.commit()
+            flash('Updated', 'success')
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            flash(f'Could not update: {e}', 'error')
+        conn.close()
+        return redirect(url_for('finance_subscriptions'))
+    try:
+        projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+    except Exception:
+        projects = []
+    conn.close()
+    return render_template('finance_subscription_form.html', user=user, item=item, projects=projects, mode='edit')
+
+
+@app.route('/finance/subscriptions/<int:item_id>/delete', methods=['POST'])
+@admin_required
+def finance_subscriptions_delete(item_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM budget_entries WHERE subscription_id = ?", (item_id,))
+        conn.execute('DELETE FROM subscription_items WHERE id = ?', (item_id,))
+        conn.commit()
+        flash('Subscription deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Could not delete: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('finance_subscriptions'))
 
 
 # Run on startup
