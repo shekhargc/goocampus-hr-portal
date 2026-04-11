@@ -6397,6 +6397,28 @@ def ensure_budget_tables():
                 conn.rollback()
             except:
                 pass
+        # Migration: add product_id column to budget_entries so revenue can
+        # be tracked at product/service level (with stream + project derived)
+        try:
+            conn.execute("ALTER TABLE budget_entries ADD COLUMN product_id INTEGER")
+            conn.commit()
+            logging.info("Added product_id column to budget_entries")
+        except Exception:
+            try:
+                conn.rollback()
+            except:
+                pass
+        # Migration: relax NOT NULL on category_id so product-based revenue
+        # entries can exist without a category
+        try:
+            conn.execute("ALTER TABLE budget_entries ALTER COLUMN category_id DROP NOT NULL")
+            conn.commit()
+            logging.info("Dropped NOT NULL on budget_entries.category_id")
+        except Exception:
+            try:
+                conn.rollback()
+            except:
+                pass
         conn.commit()
         conn.close()
         logging.info("Budget tables ensured.")
@@ -6505,7 +6527,7 @@ def finance_dashboard():
     fy_months = get_fy_months(fy_year)
     conn = get_db()
 
-    # Single aggregated query: monthly totals by cat_type
+    # Monthly totals for expense & department (still category-driven)
     try:
         monthly_agg = conn.execute('''
             SELECT be.month, be.year, bc.cat_type,
@@ -6514,6 +6536,7 @@ def finance_dashboard():
             FROM budget_entries be
             JOIN budget_categories bc ON be.category_id = bc.id
             WHERE be.fy_year = ? AND bc.is_active = 1
+              AND bc.cat_type IN ('expense', 'department')
             GROUP BY be.month, be.year, bc.cat_type
         ''', (fy_year,)).fetchall()
     except Exception as e:
@@ -6523,6 +6546,24 @@ def finance_dashboard():
         except:
             pass
         monthly_agg = []
+
+    # Monthly revenue totals from product-based entries
+    try:
+        revenue_agg = conn.execute('''
+            SELECT be.month, be.year,
+                   COALESCE(SUM(be.budget_amount), 0) as total_budget,
+                   COALESCE(SUM(be.actual_amount), 0) as total_actual
+            FROM budget_entries be
+            WHERE be.fy_year = ? AND be.product_id IS NOT NULL
+            GROUP BY be.month, be.year
+        ''', (fy_year,)).fetchall()
+    except Exception as e:
+        logging.error(f"finance_dashboard revenue agg query: {e}")
+        try:
+            conn.rollback()
+        except:
+            pass
+        revenue_agg = []
 
     # Department totals
     try:
@@ -6576,6 +6617,14 @@ def finance_dashboard():
         elif ct == 'revenue':
             monthly_data[key]['revenue_budget'] += float(r['total_budget'] or 0)
             monthly_data[key]['revenue_actual'] += float(r['total_actual'] or 0)
+
+    # Merge product-based revenue totals
+    for r in revenue_agg:
+        key = (r['month'], r['year'])
+        if key not in monthly_data:
+            monthly_data[key] = {'expense_budget': 0, 'expense_actual': 0, 'dept_budget': 0, 'dept_actual': 0, 'revenue_budget': 0, 'revenue_actual': 0}
+        monthly_data[key]['revenue_budget'] += float(r['total_budget'] or 0)
+        monthly_data[key]['revenue_actual'] += float(r['total_actual'] or 0)
 
     # Build arrays
     total_expense_budget = 0; total_expense_actual = 0
@@ -6665,18 +6714,89 @@ def finance_revenue():
     fy_months = get_fy_months(fy_year)
     conn = get_db()
 
-    revenue_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
-    ).fetchall()
-    entries = conn.execute("SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)).fetchall()
+    try:
+        products_raw = conn.execute('''
+            SELECT ps.id, ps.name, ps.type, ps.sale_price, ps.sale_currency,
+                   ps.project_id, ps.revenue_stream_id,
+                   p.name  AS project_name,
+                   rs.name AS stream_name
+            FROM products_services ps
+            LEFT JOIN projects p         ON ps.project_id = p.id
+            LEFT JOIN revenue_streams rs ON ps.revenue_stream_id = rs.id
+            WHERE ps.status = 'active'
+            ORDER BY rs.name NULLS LAST, p.name NULLS LAST, ps.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_revenue products query: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        products_raw = []
+
+    try:
+        entries = conn.execute(
+            "SELECT * FROM budget_entries WHERE fy_year = ? AND product_id IS NOT NULL",
+            (fy_year,)
+        ).fetchall()
+    except Exception:
+        entries = []
     conn.close()
 
     entry_map = {}
     for e in entries:
-        entry_map[(e['category_id'], e['month'], e['year'])] = e
+        entry_map[(e['product_id'], e['month'], e['year'])] = e
+
+    # Build per-product FY rows & group by stream
+    revenue_groups = {}
+    for p in products_raw:
+        stream_key = p['stream_name'] or '— Unassigned stream —'
+        if stream_key not in revenue_groups:
+            revenue_groups[stream_key] = {
+                'stream_name': stream_key,
+                'products': [],
+                'monthly_budget': [0.0] * len(fy_months),
+                'monthly_actual': [0.0] * len(fy_months),
+                'total_budget': 0.0,
+                'total_actual': 0.0,
+            }
+        grp = revenue_groups[stream_key]
+        product_monthly_budget = []
+        product_monthly_actual = []
+        p_total_b = 0.0
+        p_total_a = 0.0
+        for idx, fm in enumerate(fy_months):
+            e = entry_map.get((p['id'], fm['month'], fm['year']))
+            b = float(e['budget_amount'] or 0) if e else 0.0
+            a = float(e['actual_amount'] or 0) if e else 0.0
+            product_monthly_budget.append(b)
+            product_monthly_actual.append(a)
+            grp['monthly_budget'][idx] += b
+            grp['monthly_actual'][idx] += a
+            p_total_b += b
+            p_total_a += a
+        grp['total_budget'] += p_total_b
+        grp['total_actual'] += p_total_a
+        grp['products'].append({
+            'name': p['name'],
+            'project_name': p['project_name'] or '— No project —',
+            'type': p['type'],
+            'monthly_budget': product_monthly_budget,
+            'monthly_actual': product_monthly_actual,
+            'total_budget': p_total_b,
+            'total_actual': p_total_a,
+        })
+
+    revenue_groups_list = sorted(revenue_groups.values(), key=lambda g: g['stream_name'])
+
+    # FY totals
+    fy_total_budget = sum(g['total_budget'] for g in revenue_groups_list)
+    fy_total_actual = sum(g['total_actual'] for g in revenue_groups_list)
 
     return render_template('finance_revenue.html', user=user, fy_year=fy_year, fy_months=fy_months,
-                           revenue_cats=revenue_cats, entry_map=entry_map,
+                           revenue_groups=revenue_groups_list,
+                           fy_total_budget=fy_total_budget,
+                           fy_total_actual=fy_total_actual,
                            get_quarter_label=get_quarter_label)
 
 
@@ -6695,8 +6815,10 @@ def finance_edit_month(month, year):
     is_locked = lock_check is not None
 
     if request.method == 'POST' and not is_locked:
+        # Only expense & department categories are entered by category now;
+        # revenue is entered at product level (see product loop below).
         all_cats = conn.execute(
-            "SELECT * FROM budget_categories WHERE is_active = 1 ORDER BY cat_type, sort_order"
+            "SELECT * FROM budget_categories WHERE is_active = 1 AND cat_type IN ('expense', 'department') ORDER BY cat_type, sort_order"
         ).fetchall()
 
         recurring_fills = []  # Track recurring categories that need auto-fill
@@ -6732,6 +6854,42 @@ def finance_edit_month(month, year):
                     conn.execute(
                         "INSERT INTO budget_entries (category_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, project_id, user['id'], user['id'])
+                    )
+
+        # ── Product-level revenue entries ──
+        try:
+            active_products = conn.execute(
+                "SELECT id, project_id FROM products_services WHERE status = 'active'"
+            ).fetchall()
+        except Exception:
+            active_products = []
+        for prod in active_products:
+            pid = prod['id']
+            pbudget = request.form.get(f'prod_budget_{pid}', '0')
+            pactual = request.form.get(f'prod_actual_{pid}', '0')
+            pnotes = request.form.get(f'prod_notes_{pid}', '').strip()
+            try:
+                pbudget = float(pbudget) if pbudget else 0
+            except ValueError:
+                pbudget = 0
+            try:
+                pactual = float(pactual) if pactual else 0
+            except ValueError:
+                pactual = 0
+            existing_p = conn.execute(
+                "SELECT id FROM budget_entries WHERE product_id = ? AND fy_year = ? AND month = ? AND year = ?",
+                (pid, fy_year, month, year)
+            ).fetchone()
+            if existing_p:
+                conn.execute(
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (pbudget, pactual, pnotes, prod['project_id'], user['id'], existing_p['id'])
+                )
+            else:
+                if pbudget > 0 or pactual > 0 or pnotes:
+                    conn.execute(
+                        "INSERT INTO budget_entries (product_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (pid, fy_year, month, year, pbudget, pactual, pnotes, prod['project_id'], user['id'], user['id'])
                     )
 
             # Track recurring categories with budget > 0
@@ -6783,9 +6941,6 @@ def finance_edit_month(month, year):
     dept_cats = conn.execute(
         "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
     ).fetchall()
-    revenue_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'revenue' AND is_active = 1 ORDER BY sort_order"
-    ).fetchall()
 
     entries = conn.execute(
         "SELECT * FROM budget_entries WHERE fy_year = ? AND month = ? AND year = ?",
@@ -6800,17 +6955,92 @@ def finance_edit_month(month, year):
     except Exception:
         projects = []
 
+    # Load active products (revenue is entered at product level)
+    try:
+        products_raw = conn.execute('''
+            SELECT ps.id, ps.name, ps.type, ps.sale_price, ps.sale_currency,
+                   ps.product_cost, ps.cost_currency,
+                   ps.project_id, ps.revenue_stream_id,
+                   p.name  AS project_name,
+                   rs.name AS stream_name
+            FROM products_services ps
+            LEFT JOIN projects p         ON ps.project_id = p.id
+            LEFT JOIN revenue_streams rs ON ps.revenue_stream_id = rs.id
+            WHERE ps.status = 'active'
+            ORDER BY rs.name NULLS LAST, p.name NULLS LAST, ps.name
+        ''').fetchall()
+    except Exception as e:
+        logging.error(f"finance_edit_month products query: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        products_raw = []
+
     conn.close()
 
+    # Map category-based entries (expense/department)
     entry_map = {}
+    # Map product-based entries (revenue)
+    product_entry_map = {}
     for e in entries:
-        entry_map[e['category_id']] = e
+        cid = e['category_id'] if 'category_id' in e.keys() else None
+        pid = e['product_id'] if 'product_id' in e.keys() else None
+        if pid:
+            product_entry_map[pid] = e
+        elif cid:
+            entry_map[cid] = e
+
+    # Group products by revenue stream for display
+    revenue_groups = []
+    group_index = {}
+    for p in products_raw:
+        stream_key = p['stream_name'] or '— Unassigned stream —'
+        if stream_key not in group_index:
+            group_index[stream_key] = {
+                'stream_name': stream_key,
+                'stream_id': p['revenue_stream_id'],
+                'products': [],
+                'total_budget': 0.0,
+                'total_actual': 0.0,
+            }
+            revenue_groups.append(group_index[stream_key])
+        e = product_entry_map.get(p['id'])
+        pb = float(e['budget_amount'] or 0) if e else 0.0
+        pa = float(e['actual_amount'] or 0) if e else 0.0
+        group_index[stream_key]['total_budget'] += pb
+        group_index[stream_key]['total_actual'] += pa
+        group_index[stream_key]['products'].append({
+            'id': p['id'],
+            'name': p['name'],
+            'type': p['type'],
+            'project_name': p['project_name'] or '— No project —',
+            'project_id': p['project_id'],
+            'sale_price': float(p['sale_price'] or 0),
+            'sale_currency': p['sale_currency'] if 'sale_currency' in p.keys() else 'INR',
+            'budget': pb,
+            'actual': pa,
+            'notes': (e['notes'] if e else '') or '',
+        })
+
+    # Project-wise rollup for the month
+    project_rollup = {}
+    for g in revenue_groups:
+        for pr in g['products']:
+            key = pr['project_name']
+            if key not in project_rollup:
+                project_rollup[key] = {'project_name': key, 'budget': 0.0, 'actual': 0.0}
+            project_rollup[key]['budget'] += pr['budget']
+            project_rollup[key]['actual'] += pr['actual']
+    project_rollup_list = sorted(project_rollup.values(), key=lambda x: x['project_name'])
 
     month_name = calendar.month_name[month]
     return render_template('finance_edit_month.html', user=user, fy_year=fy_year,
                            month=month, year=year, month_name=month_name,
                            expense_cats=expense_cats, dept_cats=dept_cats,
-                           revenue_cats=revenue_cats, entry_map=entry_map,
+                           revenue_groups=revenue_groups,
+                           project_rollup=project_rollup_list,
+                           entry_map=entry_map,
                            is_locked=is_locked, get_fy_months=get_fy_months,
                            projects=projects)
 

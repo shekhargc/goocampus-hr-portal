@@ -60,9 +60,41 @@
     .btn-unlock { padding: 0.5rem 1rem; border: 2px solid #EF4444; background: white; color: #EF4444; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; }
     .btn-back { padding: 0.5rem 1rem; background: var(--gray-100); color: var(--gray-600); border: none; border-radius: 8px; font-size: 0.8rem; font-weight: 600; cursor: pointer; text-decoration: none; }
 
+    /* Revenue (product-based) layout */
+    .rev-header { display: grid; grid-template-columns: 1.5fr 1fr 0.9fr 0.9fr 0.9fr 1.1fr; gap: 0.5rem; padding: 0.5rem 0; font-size: 0.68rem; font-weight: 600; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid var(--gray-200); margin-bottom: 0.3rem; }
+    .rev-stream-block { margin-bottom: 0.8rem; border: 1px solid var(--gray-100); border-radius: 8px; overflow: hidden; }
+    .rev-stream-head { display: flex; align-items: center; justify-content: space-between; gap: 0.8rem; padding: 0.5rem 0.7rem; background: #F0FDF4; border-bottom: 1px solid #D1FAE5; font-size: 0.75rem; flex-wrap: wrap; }
+    .rev-stream-name { font-weight: 700; color: #065F46; }
+    .rev-stream-totals { color: #047857; font-size: 0.7rem; }
+    .rev-stream-totals strong { color: #065F46; }
+    .rev-row { display: grid; grid-template-columns: 1.5fr 1fr 0.9fr 0.9fr 0.9fr 1.1fr; gap: 0.5rem; padding: 0.45rem 0.7rem; border-bottom: 1px solid var(--gray-50); align-items: center; }
+    .rev-row:last-child { border-bottom: none; }
+    .rev-cell { font-size: 0.78rem; color: var(--gray-700); }
+    .rev-name { font-weight: 600; color: var(--navy); }
+    .rev-name small { display: block; font-weight: 400; font-size: 0.62rem; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.5px; }
+    .rev-project { font-size: 0.72rem; color: var(--gray-600); }
+    .rev-price { font-size: 0.72rem; color: var(--gray-500); font-variant-numeric: tabular-nums; }
+    .rev-row input[type="number"], .rev-row input[type="text"] {
+        width: 100%; padding: 0.35rem 0.5rem; border: 1px solid var(--gray-200); border-radius: 6px;
+        font-size: 0.78rem; color: var(--gray-700); background: var(--gray-50);
+    }
+    .rev-row input[type="number"]:focus, .rev-row input[type="text"]:focus { border-color: var(--navy); outline: none; background: white; }
+    .rev-row input:disabled { background: var(--gray-100); color: var(--gray-400); cursor: not-allowed; }
+
+    /* Project rollup */
+    .rev-rollup { margin-top: 1rem; padding: 0.9rem; background: #F8FAFC; border: 1px solid var(--gray-100); border-radius: 10px; }
+    .rev-rollup__title { font-size: 0.72rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 0.6rem; }
+    .rev-rollup__grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 0.5rem; }
+    .rev-rollup__card { background: white; border: 1px solid var(--gray-100); border-radius: 8px; padding: 0.6rem 0.7rem; }
+    .rev-rollup__name { font-size: 0.78rem; font-weight: 700; color: var(--navy); margin-bottom: 0.35rem; }
+    .rev-rollup__nums { display: flex; justify-content: space-between; font-size: 0.72rem; color: var(--gray-500); padding: 0.15rem 0; }
+    .rev-rollup__nums strong { color: var(--navy); font-variant-numeric: tabular-nums; }
+
     @media (max-width: 768px) {
         .entry-row { grid-template-columns: 1fr; gap: 0.3rem; padding: 0.8rem 0; }
         .entry-header { display: none; }
+        .rev-header { display: none; }
+        .rev-row { grid-template-columns: 1fr 1fr; gap: 0.4rem; padding: 0.6rem; }
     }
 </style>
 {% endblock %}
@@ -162,37 +194,77 @@
             {% endfor %}
         </div>
 
-        <!-- Revenue Categories -->
+        <!-- Revenue: Products & Services grouped by Stream -->
         <div class="entry-section">
             <h3>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                Revenue Streams
+                Revenue — Products & Services
             </h3>
-            <div class="entry-header">
-                <div>Revenue Stream</div>
+            <div style="background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; padding: 0.6rem 0.8rem; border-radius: 8px; margin-bottom: 0.8rem; font-size: 0.75rem;">
+                Enter expected and actual revenue per product/service. Products are grouped by <strong>Revenue Stream</strong>, and the <strong>Project</strong> is derived from the product — no need to pick it. Manage the list in <a href="/products" style="color: #047857; font-weight: 600;">Products & Services</a>.
+            </div>
+
+            <div class="rev-header">
+                <div>Product / Service</div>
+                <div>Project</div>
+                <div>Sale Price</div>
                 <div>Projected (₹)</div>
                 <div>Actual (₹)</div>
-                <div>Project</div>
                 <div>Notes</div>
             </div>
-            {% for cat in revenue_cats %}
-            {% set e = entry_map.get(cat.id, {}) %}
-            <div class="entry-row">
-                <div class="entry-row__label">
-                    {{ cat.name }}
-                    {% if cat.is_recurring %}<span style="background: #F59E0B; color: white; font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 8px; font-weight: 600; margin-left: 0.3rem; vertical-align: middle;">RECURRING</span>{% endif %}
-                </div>
-                <input type="number" name="budget_{{ cat.id }}" value="{{ e.get('budget_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
-                <input type="number" name="actual_{{ cat.id }}" value="{{ e.get('actual_amount', 0) or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
-                <select name="project_{{ cat.id }}" {{ 'disabled' if is_locked }}>
-                    <option value="">— None —</option>
-                    {% for p in projects %}
-                    <option value="{{ p.id }}" {{ 'selected' if e.get('project_id') and e.get('project_id') == p.id }}>{{ p.name }}</option>
+
+            {% if revenue_groups %}
+                {% for g in revenue_groups %}
+                <div class="rev-stream-block">
+                    <div class="rev-stream-head">
+                        <span class="rev-stream-name">{{ g.stream_name }}</span>
+                        <span class="rev-stream-totals">
+                            Projected <strong>₹{{ '{:,.0f}'.format(g.total_budget) }}</strong>
+                            &nbsp;·&nbsp; Actual <strong>₹{{ '{:,.0f}'.format(g.total_actual) }}</strong>
+                            &nbsp;·&nbsp; {{ g.products|length }} item{{ 's' if g.products|length != 1 else '' }}
+                        </span>
+                    </div>
+                    {% for pr in g.products %}
+                    <div class="rev-row">
+                        <div class="rev-cell rev-name">
+                            {{ pr.name }}
+                            <small>{{ pr.type|capitalize }}</small>
+                        </div>
+                        <div class="rev-cell rev-project">{{ pr.project_name }}</div>
+                        <div class="rev-cell rev-price">
+                            {{ pr.sale_currency }} {{ '{:,.0f}'.format(pr.sale_price) }}
+                        </div>
+                        <input class="rev-cell" type="number" name="prod_budget_{{ pr.id }}" value="{{ pr.budget or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="rev-cell" type="number" name="prod_actual_{{ pr.id }}" value="{{ pr.actual or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        <input class="rev-cell" type="text" name="prod_notes_{{ pr.id }}" value="{{ pr.notes }}" placeholder="Optional…" {{ 'disabled' if is_locked }}>
+                    </div>
                     {% endfor %}
-                </select>
-                <input type="text" name="notes_{{ cat.id }}" value="{{ e.get('notes', '') or '' }}" placeholder="Optional notes..." {{ 'disabled' if is_locked }}>
+                </div>
+                {% endfor %}
+            {% else %}
+                <div style="padding: 1.2rem; text-align: center; color: var(--gray-400); font-size: 0.82rem;">
+                    No active products yet. <a href="/products" style="color: var(--navy); font-weight: 600;">Add a product →</a>
+                </div>
+            {% endif %}
+
+            {% if project_rollup %}
+            <div class="rev-rollup">
+                <div class="rev-rollup__title">Project-wise breakup ({{ month_name }} {{ year }})</div>
+                <div class="rev-rollup__grid">
+                    {% for pr in project_rollup %}
+                    <div class="rev-rollup__card">
+                        <div class="rev-rollup__name">{{ pr.project_name }}</div>
+                        <div class="rev-rollup__nums">
+                            <span>Projected</span><strong>₹{{ '{:,.0f}'.format(pr.budget) }}</strong>
+                        </div>
+                        <div class="rev-rollup__nums">
+                            <span>Actual</span><strong>₹{{ '{:,.0f}'.format(pr.actual) }}</strong>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
             </div>
-            {% endfor %}
+            {% endif %}
         </div>
 
         <!-- Actions -->
