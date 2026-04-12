@@ -8078,24 +8078,38 @@ def finance_salaries_add():
         conn.close()
         return redirect(url_for('finance_salaries'))
     # GET: employees without a salary item yet
+    available_employees = []
+    query_error = False
     try:
-        available_employees = conn.execute('''
-            SELECT e.id, e.name, e.department
-            FROM employees e
-            WHERE (e.is_active IS NULL OR e.is_active = 1)
-              AND e.emp_code != 'admin'
-              AND NOT EXISTS (SELECT 1 FROM salary_items s WHERE s.employee_id = e.id)
-            ORDER BY e.name
-        ''').fetchall()
-    except Exception:
-        available_employees = []
+        # Get IDs of employees that already have a salary entry
+        existing_ids = set()
+        try:
+            rows = conn.execute("SELECT employee_id FROM salary_items WHERE employee_id IS NOT NULL").fetchall()
+            existing_ids = set(r['employee_id'] for r in rows)
+        except Exception as e2:
+            logging.error(f"salary_items employee_id query: {e2}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        all_emps = conn.execute(
+            "SELECT id, name, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
+        ).fetchall()
+        available_employees = [e for e in all_emps if e['id'] not in existing_ids]
+    except Exception as e:
+        logging.error(f"finance_salaries_add available employees: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        query_error = True
     try:
         projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     except Exception:
         projects = []
     conn.close()
     return render_template('finance_salary_form.html', user=user, item=None, projects=projects,
-                           available_employees=available_employees, mode='add')
+                           available_employees=available_employees, query_error=query_error, mode='add')
 
 
 @app.route('/finance/salaries/<int:item_id>/edit', methods=['GET', 'POST'])

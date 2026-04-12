@@ -27,6 +27,10 @@
                     <option value="{{ emp.id }}" data-dept="{{ emp.department or '' }}">{{ emp.name }}{% if emp.department %} ({{ emp.department }}){% endif %}</option>
                     {% endfor %}
                 </select>
+                {% elif query_error %}
+                <div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;padding:0.6rem 0.8rem;border-radius:8px;font-size:0.82rem;">
+                    Could not load the employee list. Please check the logs or try refreshing.
+                </div>
                 {% else %}
                 <div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;padding:0.6rem 0.8rem;border-radius:8px;font-size:0.82rem;">
                     All employees already have a salary entry. You can edit existing ones from the <a href="/finance/salaries" style="color:#991B1B;font-weight:600;">list</a>.
