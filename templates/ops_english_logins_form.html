@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>{% if record.id %}Edit English Login{% else %}Add English Login{% endif %}</h1>
+    <p class="subtitle">Manage IELTS and OET exam credentials</p>
+  </div>
+
+  <form method="POST" class="form-container">
+    {% if record.id %}
+    <input type="hidden" name="id" value="{{ record.id }}">
+    {% endif %}
+
+    <!-- Client Selection -->
+    <fieldset class="form-section">
+      <legend>Client Information</legend>
+      <div class="form-group">
+        <label for="client" class="form-label">Client</label>
+        <select name="client_id" id="client" class="form-control" required>
+          <option value="">— Select a client —</option>
+          {% for client in clients %}
+          <option
+            value="{{ client.id }}"
+            {% if pre_reg == client.id or (record and record.client_id == client.id) %}selected{% endif %}
+          >
+            {{ client.registration_number }} – {% if client.prefix %}{{ client.prefix }} {% endif %}{{ client.first_name }} {{ client.last_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <small class="form-hint">Select the client for these login credentials</small>
+      </div>
+    </fieldset>
+
+    <!-- IELTS Credentials -->
+    <fieldset class="form-section">
+      <legend>IELTS Credentials</legend>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ielts_login_id" class="form-label">Login ID</label>
+          <input
+            type="text"
+            name="ielts_login_id"
+            id="ielts_login_id"
+            class="form-control"
+            value="{{ record.ielts_login_id or '' }}"
+            placeholder="e.g., IELTS123456"
+          >
+        </div>
+        <div class="form-group">
+          <label for="ielts_password" class="form-label">Password</label>
+          <input
+            type="password"
+            name="ielts_password"
+            id="ielts_password"
+            class="form-control"
+            value="{{ record.ielts_password or '' }}"
+            placeholder="••••••"
+          >
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="ielts_hint_question" class="form-label">Security Question</label>
+          <input
+            type="text"
+            name="ielts_hint_question"
+            id="ielts_hint_question"
+            class="form-control"
+            value="{{ record.ielts_hint_question or '' }}"
+            placeholder="e.g., What is your favorite color?"
+          >
+        </div>
+        <div class="form-group">
+          <label for="ielts_security_answer" class="form-label">Security Answer</label>
+          <input
+            type="text"
+            name="ielts_security_answer"
+            id="ielts_security_answer"
+            class="form-control"
+            value="{{ record.ielts_security_answer or '' }}"
+            placeholder="e.g., Blue"
+          >
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- OET Credentials -->
+    <fieldset class="form-section">
+      <legend>OET Credentials</legend>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="oet_login_id" class="form-label">Login ID</label>
+          <input
+            type="text"
+            name="oet_login_id"
+            id="oet_login_id"
+            class="form-control"
+            value="{{ record.oet_login_id or '' }}"
+            placeholder="e.g., OET789012"
+          >
+        </div>
+        <div class="form-group">
+          <label for="oet_password" class="form-label">Password</label>
+          <input
+            type="password"
+            name="oet_password"
+            id="oet_password"
+            class="form-control"
+            value="{{ record.oet_password or '' }}"
+            placeholder="••••••"
+          >
+        </div>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label for="oet_hint_question" class="form-label">Security Question</label>
+          <input
+            type="text"
+            name="oet_hint_question"
+            id="oet_hint_question"
+            class="form-control"
+            value="{{ record.oet_hint_question or '' }}"
+            placeholder="e.g., What is your pet's name?"
+          >
+        </div>
+        <div class="form-group">
+          <label for="oet_security_answer" class="form-label">Security Answer</label>
+          <input
+            type="text"
+            name="oet_security_answer"
+            id="oet_security_answer"
+            class="form-control"
+            value="{{ record.oet_security_answer or '' }}"
+            placeholder="e.g., Max"
+          >
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Form Actions -->
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">
+        {% if record.id %}Update Login{% else %}Add Login{% endif %}
+      </button>
+      <a href="/operations/english-logins" class="btn btn-secondary btn-lg">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<style>
+  .page-container {
+    padding: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-header h1 {
+    color: var(--navy);
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .subtitle {
+    color: var(--gray-600);
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .form-container {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 2rem;
+  }
+
+  .form-section {
+    border: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+  }
+
+  .form-section legend {
+    color: var(--navy);
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 0 0 1rem 0;
+    border-bottom: 2px solid var(--orange);
+    margin-bottom: 1.5rem;
+    width: 100%;
+  }
+
+  .form-section:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-label {
+    display: block;
+    color: var(--navy);
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(var(--orange-rgb), 0.1);
+  }
+
+  .form-control[type="password"] {
+    font-family: 'Courier New', monospace;
+  }
+
+  .form-hint {
+    display: block;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+    margin-top: 0.4rem;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  .form-row .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--gray-200);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #e67e22;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(var(--orange-rgb), 0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--navy);
+    border: 1px solid var(--navy);
+  }
+
+  .btn-secondary:hover {
+    background: var(--navy);
+    color: white;
+  }
+
+  .btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  @media (max-width: 768px) {
+    .page-container {
+      padding: 1rem;
+    }
+
+    .form-container {
+      padding: 1.5rem;
+    }
+
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .form-actions .btn {
+      width: 100%;
+    }
+  }
+</style>
+{% endblock %}

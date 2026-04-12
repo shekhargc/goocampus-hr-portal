@@ -8420,6 +8420,81 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # ── Coaching / Training ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_coaching (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            course_type TEXT,
+            coaching_method TEXT,
+            coaching_status TEXT,
+            batch_month TEXT,
+            batch_year TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            english_training TEXT,
+            blueprint_stage TEXT,
+            attendance TEXT,
+            ielts_vendor TEXT,
+            oet_vendor TEXT,
+            other_vendor TEXT,
+            plab1_partner TEXT,
+            plab2_vendor TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── English Login Details ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_english_logins (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            ielts_login_id TEXT,
+            ielts_password TEXT,
+            ielts_hint_question TEXT,
+            ielts_security_answer TEXT,
+            oet_login_id TEXT,
+            oet_password TEXT,
+            oet_hint_question TEXT,
+            oet_security_answer TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Test Bookings ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_test_bookings (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            exam TEXT,
+            exam_type TEXT,
+            booking_date TEXT,
+            exam_date TEXT,
+            exam_status TEXT,
+            exam_result TEXT,
+            exam_result_date TEXT,
+            score TEXT,
+            test_center TEXT,
+            city_state TEXT,
+            country TEXT,
+            booked_by TEXT,
+            revaluation TEXT,
+            reval_applied_date TEXT,
+            reval_result TEXT,
+            reval_score TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Call Notes ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_call_notes (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            call_date TEXT,
+            call_note TEXT,
+            added_by TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -8438,6 +8513,16 @@ PLAN_TYPES = [
 JOINED_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage']
 ENGLISH_TRAINING_OPTIONS = ['IELTS', 'OET']
 LEAD_SOURCES = ['Social Media', 'Website', 'Referral', 'Walk-in', 'Event', 'Other']
+
+# ── Coaching / Training dropdowns ──
+COACHING_COURSE_TYPES = ['Full Course', 'Crash Course']
+COACHING_STATUSES = ['On Going', 'Completed']
+COACHING_METHODS = ['Online', 'Offline', 'Hybrid']
+
+# ── Test Booking dropdowns ──
+EXAM_NAMES = ['OET', 'IELTS', 'PLAB 1', 'PLAB 2', 'MRCP', 'MRCS', 'MRCEM']
+EXAM_STATUSES = ['Booked', 'Attended', 'Cancelled by Client', 'Cancelled by Authority', 'Rescheduled', 'Missed']
+EXAM_RESULTS = ['Passed', 'Failed']
 
 
 def _next_registration_number(conn):
@@ -8516,22 +8601,33 @@ def ops_plab_list():
 @app.route('/operations/plab/<int:client_id>')
 @admin_required
 def ops_plab_dashboard(client_id):
-    """Individual client dashboard with all details."""
+    """Individual client dashboard with all details and linked sections."""
     conn = get_db()
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
-    conn.close()
     if not client:
+        conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
+    reg = client['registration_number']
     # Compute payment info
     inst_amounts = [float(client[f'inst{i}_amount'] or 0) for i in range(1, 5)]
     total_paid = sum(inst_amounts)
     final_pkg = float(client['final_package'] or 0)
     balance = final_pkg - total_paid
     payment_pct = (total_paid / final_pkg * 100) if final_pkg > 0 else 0
+    # Linked sections
+    coaching = conn.execute("SELECT * FROM ops_coaching WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
+    english_logins = conn.execute("SELECT * FROM ops_english_logins WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
+    test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
+    call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
+    call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
+    conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
-                           plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES)
+                           plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES,
+                           coaching=coaching, english_logins=english_logins,
+                           test_bookings=test_bookings, call_notes=call_notes,
+                           call_notes_count=call_notes_count)
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -8841,6 +8937,519 @@ def _safe_float(val):
         return float(str(val).replace(',', '').replace('₹', '').replace('$', '').strip())
     except (ValueError, TypeError):
         return 0.0
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Coaching / Training
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/coaching')
+@admin_required
+def ops_coaching_list():
+    """List all coaching/training records, optionally filtered by client."""
+    conn = get_db()
+    reg = request.args.get('client', '')
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_coaching c
+                 LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if reg:
+            sql += ' AND c.registration_number = ?'
+            params.append(reg)
+        if status_filter:
+            sql += ' AND c.coaching_status = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.course_type ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY c.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_coaching_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_coaching_list.html', records=records, client_reg=reg,
+                           search=search, status_filter=status_filter,
+                           coaching_statuses=COACHING_STATUSES)
+
+
+@app.route('/operations/coaching/add', methods=['GET', 'POST'])
+@admin_required
+def ops_coaching_add():
+    """Add coaching/training record."""
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_coaching (
+            registration_number, course_type, coaching_method, coaching_status,
+            batch_month, batch_year, start_date, end_date, english_training,
+            blueprint_stage, attendance, ielts_vendor, oet_vendor, other_vendor,
+            plab1_partner, plab2_vendor, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('course_type'), f.get('coaching_method'),
+            f.get('coaching_status'), f.get('batch_month'), f.get('batch_year'),
+            f.get('start_date'), f.get('end_date'), f.get('english_training'),
+            f.get('blueprint_stage'), f.get('attendance'), f.get('ielts_vendor'),
+            f.get('oet_vendor'), f.get('other_vendor'), f.get('plab1_partner'),
+            f.get('plab2_vendor'), session.get('user_id', 0)
+        ))
+        conn.commit()
+        conn.close()
+        flash('Coaching record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_coaching_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_coaching_form.html', record=None, clients=clients,
+                           course_types=COACHING_COURSE_TYPES, coaching_statuses=COACHING_STATUSES,
+                           coaching_methods=COACHING_METHODS, pre_reg=pre_reg)
+
+
+@app.route('/operations/coaching/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_coaching_edit(record_id):
+    """Edit coaching/training record."""
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_coaching WHERE id = ?", (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_coaching_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_coaching SET
+            registration_number=?, course_type=?, coaching_method=?, coaching_status=?,
+            batch_month=?, batch_year=?, start_date=?, end_date=?, english_training=?,
+            blueprint_stage=?, attendance=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
+            plab1_partner=?, plab2_vendor=? WHERE id=?''', (
+            f.get('registration_number'), f.get('course_type'), f.get('coaching_method'),
+            f.get('coaching_status'), f.get('batch_month'), f.get('batch_year'),
+            f.get('start_date'), f.get('end_date'), f.get('english_training'),
+            f.get('blueprint_stage'), f.get('attendance'), f.get('ielts_vendor'),
+            f.get('oet_vendor'), f.get('other_vendor'), f.get('plab1_partner'),
+            f.get('plab2_vendor'), record_id
+        ))
+        conn.commit()
+        conn.close()
+        flash('Coaching record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_coaching_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_coaching_form.html', record=record, clients=clients,
+                           course_types=COACHING_COURSE_TYPES, coaching_statuses=COACHING_STATUSES,
+                           coaching_methods=COACHING_METHODS, pre_reg='')
+
+
+@app.route('/operations/coaching/<int:record_id>/delete', methods=['POST'])
+@admin_required
+def ops_coaching_delete(record_id):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_coaching WHERE id = ?", (record_id,))
+    conn.commit()
+    conn.close()
+    flash('Coaching record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_coaching_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – English Login Details
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/english-logins')
+@admin_required
+def ops_english_logins_list():
+    """List all English login details."""
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_english_logins e
+                 LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY e.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_english_logins_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_english_logins_list.html', records=records, search=search)
+
+
+@app.route('/operations/english-logins/add', methods=['GET', 'POST'])
+@admin_required
+def ops_english_logins_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_english_logins (
+            registration_number, ielts_login_id, ielts_password, ielts_hint_question,
+            ielts_security_answer, oet_login_id, oet_password, oet_hint_question,
+            oet_security_answer, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('ielts_login_id'), f.get('ielts_password'),
+            f.get('ielts_hint_question'), f.get('ielts_security_answer'),
+            f.get('oet_login_id'), f.get('oet_password'),
+            f.get('oet_hint_question'), f.get('oet_security_answer'),
+            session.get('user_id', 0)
+        ))
+        conn.commit()
+        conn.close()
+        flash('English login details added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_english_logins_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_english_logins_form.html', record=None, clients=clients, pre_reg=pre_reg)
+
+
+@app.route('/operations/english-logins/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_english_logins_edit(record_id):
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_english_logins WHERE id = ?", (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_english_logins_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_english_logins SET
+            registration_number=?, ielts_login_id=?, ielts_password=?, ielts_hint_question=?,
+            ielts_security_answer=?, oet_login_id=?, oet_password=?, oet_hint_question=?,
+            oet_security_answer=? WHERE id=?''', (
+            f.get('registration_number'), f.get('ielts_login_id'), f.get('ielts_password'),
+            f.get('ielts_hint_question'), f.get('ielts_security_answer'),
+            f.get('oet_login_id'), f.get('oet_password'),
+            f.get('oet_hint_question'), f.get('oet_security_answer'),
+            record_id
+        ))
+        conn.commit()
+        conn.close()
+        flash('English login details updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_english_logins_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_english_logins_form.html', record=record, clients=clients, pre_reg='')
+
+
+@app.route('/operations/english-logins/<int:record_id>/delete', methods=['POST'])
+@admin_required
+def ops_english_logins_delete(record_id):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_english_logins WHERE id = ?", (record_id,))
+    conn.commit()
+    conn.close()
+    flash('English login record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_english_logins_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Test Bookings
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/test-bookings')
+@admin_required
+def ops_test_bookings_list():
+    """List all test bookings."""
+    conn = get_db()
+    reg = request.args.get('client', '')
+    search = request.args.get('q', '')
+    exam_filter = request.args.get('exam', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT t.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_test_bookings t
+                 LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if reg:
+            sql += ' AND t.registration_number = ?'
+            params.append(reg)
+        if exam_filter:
+            sql += ' AND t.exam = ?'
+            params.append(exam_filter)
+        if status_filter:
+            sql += ' AND t.exam_status = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR t.test_center ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_test_bookings_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_test_bookings_list.html', records=records, client_reg=reg,
+                           search=search, exam_filter=exam_filter, status_filter=status_filter,
+                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES)
+
+
+@app.route('/operations/test-bookings/add', methods=['GET', 'POST'])
+@admin_required
+def ops_test_bookings_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_test_bookings (
+            registration_number, exam, exam_type, booking_date, exam_date,
+            exam_status, exam_result, exam_result_date, score, test_center,
+            city_state, country, booked_by, revaluation, reval_applied_date,
+            reval_result, reval_score, notes, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('exam'), f.get('exam_type'),
+            f.get('booking_date'), f.get('exam_date'), f.get('exam_status'),
+            f.get('exam_result'), f.get('exam_result_date'), f.get('score'),
+            f.get('test_center'), f.get('city_state'), f.get('country'),
+            f.get('booked_by'), f.get('revaluation'), f.get('reval_applied_date'),
+            f.get('reval_result'), f.get('reval_score'), f.get('notes'),
+            session.get('user_id', 0)
+        ))
+        conn.commit()
+        conn.close()
+        flash('Test booking added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_test_bookings_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_test_bookings_form.html', record=None, clients=clients,
+                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES,
+                           exam_results=EXAM_RESULTS, pre_reg=pre_reg)
+
+
+@app.route('/operations/test-bookings/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_test_bookings_edit(record_id):
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_test_bookings WHERE id = ?", (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_test_bookings_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_test_bookings SET
+            registration_number=?, exam=?, exam_type=?, booking_date=?, exam_date=?,
+            exam_status=?, exam_result=?, exam_result_date=?, score=?, test_center=?,
+            city_state=?, country=?, booked_by=?, revaluation=?, reval_applied_date=?,
+            reval_result=?, reval_score=?, notes=? WHERE id=?''', (
+            f.get('registration_number'), f.get('exam'), f.get('exam_type'),
+            f.get('booking_date'), f.get('exam_date'), f.get('exam_status'),
+            f.get('exam_result'), f.get('exam_result_date'), f.get('score'),
+            f.get('test_center'), f.get('city_state'), f.get('country'),
+            f.get('booked_by'), f.get('revaluation'), f.get('reval_applied_date'),
+            f.get('reval_result'), f.get('reval_score'), f.get('notes'),
+            record_id
+        ))
+        conn.commit()
+        conn.close()
+        flash('Test booking updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_test_bookings_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_test_bookings_form.html', record=record, clients=clients,
+                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES,
+                           exam_results=EXAM_RESULTS, pre_reg='')
+
+
+@app.route('/operations/test-bookings/<int:record_id>/delete', methods=['POST'])
+@admin_required
+def ops_test_bookings_delete(record_id):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_test_bookings WHERE id = ?", (record_id,))
+    conn.commit()
+    conn.close()
+    flash('Test booking deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_test_bookings_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Call Notes
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/call-notes')
+@admin_required
+def ops_call_notes_list():
+    """List call notes, optionally filtered by client."""
+    conn = get_db()
+    reg = request.args.get('client', '')
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT n.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_call_notes n
+                 LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if reg:
+            sql += ' AND n.registration_number = ?'
+            params.append(reg)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.call_note ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY n.call_date DESC NULLS LAST, n.created_at DESC'
+        if not reg:
+            sql += ' LIMIT 200'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_call_notes_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_call_notes_list.html', records=records, client_reg=reg, search=search)
+
+
+@app.route('/operations/call-notes/add', methods=['GET', 'POST'])
+@admin_required
+def ops_call_notes_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_call_notes (
+            registration_number, call_date, call_note, added_by, created_by
+        ) VALUES (?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('call_date'), f.get('call_note'),
+            f.get('added_by', ''), session.get('user_id', 0)
+        ))
+        conn.commit()
+        conn.close()
+        flash('Call note added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_call_notes_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_call_notes_form.html', record=None, clients=clients, pre_reg=pre_reg)
+
+
+@app.route('/operations/call-notes/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_call_notes_edit(record_id):
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_call_notes WHERE id = ?", (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_call_notes_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_call_notes SET
+            registration_number=?, call_date=?, call_note=?, added_by=? WHERE id=?''', (
+            f.get('registration_number'), f.get('call_date'), f.get('call_note'),
+            f.get('added_by', ''), record_id
+        ))
+        conn.commit()
+        conn.close()
+        flash('Call note updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_call_notes_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_call_notes_form.html', record=record, clients=clients, pre_reg='')
+
+
+@app.route('/operations/call-notes/<int:record_id>/delete', methods=['POST'])
+@admin_required
+def ops_call_notes_delete(record_id):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_call_notes WHERE id = ?", (record_id,))
+    conn.commit()
+    conn.close()
+    flash('Call note deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_call_notes_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Data Import (API endpoint for bulk import)
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/api-bulk-import', methods=['POST'])
+def ops_bulk_import():
+    """Temporary bulk import endpoint for Zoho migration. Token protected."""
+    import csv as csv_mod
+    import io as io_mod
+    token = request.headers.get('X-Import-Token', '')
+    if token != 'gc-zoho-migrate-2026':
+        return 'Unauthorized', 401
+    table = request.args.get('table', '')
+    try:
+        stream = io_mod.StringIO(request.get_data(as_text=True))
+        reader = csv_mod.DictReader(stream)
+        conn = get_db()
+        imported = 0
+        if table == 'coaching':
+            for row in reader:
+                conn.execute('''INSERT INTO ops_coaching (
+                    registration_number, course_type, coaching_method, coaching_status,
+                    batch_month, batch_year, start_date, end_date, english_training,
+                    blueprint_stage, attendance, ielts_vendor, oet_vendor, other_vendor,
+                    plab1_partner, plab2_vendor, created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    row.get('registration_number',''), row.get('course_type',''),
+                    row.get('coaching_method',''), row.get('coaching_status',''),
+                    row.get('batch_month',''), row.get('batch_year',''),
+                    row.get('start_date',''), row.get('end_date',''),
+                    row.get('english_training',''), row.get('blueprint_stage',''),
+                    row.get('attendance',''), row.get('ielts_vendor',''),
+                    row.get('oet_vendor',''), row.get('other_vendor',''),
+                    row.get('plab1_partner',''), row.get('plab2_vendor',''), 0
+                ))
+                imported += 1
+        elif table == 'english_logins':
+            for row in reader:
+                conn.execute('''INSERT INTO ops_english_logins (
+                    registration_number, ielts_login_id, ielts_password, ielts_hint_question,
+                    ielts_security_answer, oet_login_id, oet_password, oet_hint_question,
+                    oet_security_answer, created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?)''', (
+                    row.get('registration_number',''), row.get('ielts_login_id',''),
+                    row.get('ielts_password',''), row.get('ielts_hint_question',''),
+                    row.get('ielts_security_answer',''), row.get('oet_login_id',''),
+                    row.get('oet_password',''), row.get('oet_hint_question',''),
+                    row.get('oet_security_answer',''), 0
+                ))
+                imported += 1
+        elif table == 'test_bookings':
+            for row in reader:
+                conn.execute('''INSERT INTO ops_test_bookings (
+                    registration_number, exam, exam_type, booking_date, exam_date,
+                    exam_status, exam_result, exam_result_date, score, test_center,
+                    city_state, country, booked_by, revaluation, reval_applied_date,
+                    reval_result, reval_score, notes, created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    row.get('registration_number',''), row.get('exam',''),
+                    row.get('exam_type',''), row.get('booking_date',''),
+                    row.get('exam_date',''), row.get('exam_status',''),
+                    row.get('exam_result',''), row.get('exam_result_date',''),
+                    row.get('score',''), row.get('test_center',''),
+                    row.get('city_state',''), row.get('country',''),
+                    row.get('booked_by',''), row.get('revaluation',''),
+                    row.get('reval_applied_date',''), row.get('reval_result',''),
+                    row.get('reval_score',''), row.get('notes',''), 0
+                ))
+                imported += 1
+        elif table == 'call_notes':
+            for row in reader:
+                conn.execute('''INSERT INTO ops_call_notes (
+                    registration_number, call_date, call_note, added_by, created_by
+                ) VALUES (?,?,?,?,?)''', (
+                    row.get('registration_number',''), row.get('call_date',''),
+                    row.get('call_note',''), row.get('added_by',''), 0
+                ))
+                imported += 1
+        else:
+            conn.close()
+            return '{"error": "Unknown table"}', 400
+        conn.commit()
+        conn.close()
+        return f'{{"imported": {imported}, "table": "{table}"}}', 200
+    except Exception as e:
+        logging.error(f"ops_bulk_import ({table}): {e}")
+        return f'{{"error": "{str(e)}"}}', 500
 
 
 # Run on startup

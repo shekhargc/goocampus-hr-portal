@@ -1,0 +1,234 @@
+{% extends "base.html" %}
+
+{% block title %}Coaching & Training - Operations{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-5">
+  <!-- Page Header -->
+  <div class="d-flex justify-content-between align-items-center mb-5">
+    <div>
+      <h1 class="mb-0" style="color: var(--navy); font-weight: 700; font-size: 2rem;">Coaching & Training</h1>
+      <p class="text-muted mb-0" style="color: var(--gray-500);">Operations</p>
+    </div>
+    <div class="d-flex gap-3">
+      <a href="/operations/coaching/add" class="btn btn-lg" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600;">
+        + Add Training
+      </a>
+      <a href="/operations/plab" class="btn btn-lg" style="background-color: var(--gray-100); color: var(--navy); border: 1px solid var(--gray-200); border-radius: 6px; font-weight: 600;">
+        Back to Clients
+      </a>
+    </div>
+  </div>
+
+  <!-- Filter Section -->
+  <div class="row mb-4">
+    <div class="col-12">
+      <div class="card" style="border: none; border-radius: 8px; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
+        <div class="card-body p-4">
+          <form method="GET" class="row g-3">
+            <div class="col-md-6">
+              <label class="form-label" style="color: var(--navy); font-weight: 600; font-size: 0.9rem;">Search Records</label>
+              <input
+                type="text"
+                name="q"
+                class="form-control"
+                placeholder="Search by client name, registration number..."
+                value="{{ search or '' }}"
+                style="border: 1px solid var(--gray-200); border-radius: 6px; padding: 0.75rem; font-size: 0.95rem;"
+              >
+            </div>
+            <div class="col-md-4">
+              <label class="form-label" style="color: var(--navy); font-weight: 600; font-size: 0.9rem;">Status</label>
+              <select name="status" class="form-select" style="border: 1px solid var(--gray-200); border-radius: 6px; padding: 0.75rem; font-size: 0.95rem;">
+                <option value="">All Statuses</option>
+                {% for status in coaching_statuses %}
+                  <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
+                    {{ status }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="col-md-2 d-flex align-items-end">
+              <button type="submit" class="btn w-100" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600; padding: 0.75rem;">
+                Filter
+              </button>
+            </div>
+          </form>
+
+          {% if client_reg %}
+            <div class="mt-3 p-3" style="background-color: var(--gray-50); border-radius: 6px; border-left: 4px solid var(--orange);">
+              <span style="color: var(--gray-600);">Filtered for:</span>
+              <strong style="color: var(--navy);">{{ client_reg }}</strong>
+              <a href="/operations/coaching" class="ms-3" style="color: var(--orange); text-decoration: none; font-weight: 600; cursor: pointer;">
+                Clear Filter
+              </a>
+            </div>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="row g-4 mb-5">
+    <div class="col-md-4">
+      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, var(--navy) 0%, #1a3c5c 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div class="card-body p-4">
+          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Total Records</p>
+          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">{{ records|length }}</h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div class="card-body p-4">
+          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Active</p>
+          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">
+            {% set active_count = records|selectattr('coaching_status', 'equalto', 'On Going')|list|length %}
+            {{ active_count }}
+          </h2>
+        </div>
+      </div>
+    </div>
+    <div class="col-md-4">
+      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, var(--orange) 0%, #fd7e14 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
+        <div class="card-body p-4">
+          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Completed</p>
+          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">
+            {% set completed_count = records|selectattr('coaching_status', 'equalto', 'Completed')|list|length %}
+            {{ completed_count }}
+          </h2>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Records Table -->
+  <div class="card" style="border: none; border-radius: 8px; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;">
+    {% if records %}
+      <div class="table-responsive">
+        <table class="table table-hover mb-0">
+          <thead style="background-color: var(--gray-50); border-bottom: 2px solid var(--gray-200);">
+            <tr>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Client</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Reg #</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Course Type</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Status</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Batch</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Start Date</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">End Date</th>
+              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem; text-align: center;">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for record in records %}
+              <tr style="border-bottom: 1px solid var(--gray-100);">
+                <td style="padding: 1rem; color: var(--navy); font-weight: 600;">
+                  <a href="/operations/coaching?q={{ record.first_name }}" style="color: var(--orange); text-decoration: none;">
+                    {% if record.prefix %}{{ record.prefix }}.{% endif %} {{ record.first_name }} {{ record.last_name }}
+                  </a>
+                </td>
+                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
+                  {{ record.registration_number }}
+                </td>
+                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
+                  {{ record.course_type or '—' }}
+                </td>
+                <td style="padding: 1rem;">
+                  {% if record.coaching_status == 'On Going' %}
+                    <span class="badge" style="background-color: #28a745; color: white; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
+                      On Going
+                    </span>
+                  {% elif record.coaching_status == 'Completed' %}
+                    <span class="badge" style="background-color: var(--orange); color: white; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
+                      Completed
+                    </span>
+                  {% elif record.coaching_status == 'Pending' %}
+                    <span class="badge" style="background-color: #ffc107; color: #333; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
+                      Pending
+                    </span>
+                  {% else %}
+                    <span class="badge" style="background-color: var(--gray-200); color: var(--gray-700); padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
+                      {{ record.coaching_status or '—' }}
+                    </span>
+                  {% endif %}
+                </td>
+                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
+                  {% if record.batch_month and record.batch_year %}
+                    {{ record.batch_month }}/{{ record.batch_year }}
+                  {% else %}
+                    —
+                  {% endif %}
+                </td>
+                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
+                  {{ record.start_date or '—' }}
+                </td>
+                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
+                  {{ record.end_date or '—' }}
+                </td>
+                <td style="padding: 1rem; text-align: center;">
+                  <div class="btn-group" role="group">
+                    <a href="/operations/coaching/{{ record.id }}/edit" class="btn btn-sm" style="background-color: var(--orange); color: white; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; font-size: 0.85rem; text-decoration: none; font-weight: 600;">
+                      Edit
+                    </a>
+                    <form method="POST" action="/operations/coaching/{{ record.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this record?');">
+                      <button type="submit" class="btn btn-sm" style="background-color: #dc3545; color: white; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 600; margin-left: 0.25rem;">
+                        Delete
+                      </button>
+                    </form>
+                  </div>
+                </td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    {% else %}
+      <div class="card-body p-5 text-center">
+        <p style="color: var(--gray-500); font-size: 1.1rem; margin-bottom: 1.5rem;">No coaching records found.</p>
+        <a href="/operations/coaching/add" class="btn" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600; padding: 0.75rem 1.5rem;">
+          Create First Record
+        </a>
+      </div>
+    {% endif %}
+  </div>
+</div>
+
+<style>
+  .btn-group {
+    display: flex;
+    gap: 0.25rem;
+  }
+
+  .table-hover tbody tr:hover {
+    background-color: var(--gray-50);
+  }
+
+  @media (max-width: 768px) {
+    .table-responsive {
+      font-size: 0.85rem;
+    }
+
+    th, td {
+      padding: 0.75rem !important;
+    }
+
+    h1 {
+      font-size: 1.5rem !important;
+    }
+
+    .btn-lg {
+      font-size: 0.9rem !important;
+      padding: 0.5rem 1rem !important;
+    }
+
+    .card-body p.card-text {
+      font-size: 0.8rem !important;
+    }
+
+    .card-title {
+      font-size: 2rem !important;
+    }
+  }
+</style>
+{% endblock %}

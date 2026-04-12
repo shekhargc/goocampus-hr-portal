@@ -1,0 +1,448 @@
+{% extends "base.html" %}
+
+{% block title %}{% if record.id %}Edit{% else %}Add{% endif %} Test Booking - Operations{% endblock %}
+
+{% block content %}
+<div class="container-fluid py-4">
+  <!-- Page Header -->
+  <div class="mb-4">
+    <h1 class="mb-1" style="color: var(--navy);">
+      {% if record.id %}Edit Test Booking{% else %}Add Test Booking{% endif %}
+    </h1>
+    <p class="text-muted mb-0">Manage exam booking details and results</p>
+  </div>
+
+  <!-- Form Card -->
+  <div class="card" style="border: 1px solid var(--gray-200); max-width: 900px;">
+    <div class="card-body p-4">
+      <form method="POST" action="{% if record.id %}/operations/test-bookings/{{ record.id }}/edit{% else %}/operations/test-bookings/add{% endif %}">
+
+        <!-- Client Section -->
+        <div class="mb-4">
+          <h5 class="mb-3" style="color: var(--navy); font-weight: 600; border-bottom: 2px solid var(--orange); padding-bottom: 10px;">
+            <i class="bi bi-person-check"></i> Client
+          </h5>
+
+          <div class="mb-3">
+            <label for="client_id" class="form-label" style="color: var(--navy); font-weight: 600;">
+              Select Client <span style="color: #dc3545;">*</span>
+            </label>
+            <select
+              id="client_id"
+              name="client_id"
+              class="form-select"
+              required
+              style="border-color: var(--gray-200);"
+            >
+              <option value="">-- Choose a client --</option>
+              {% for client in clients %}
+              <option
+                value="{{ client.id }}"
+                {% if record.id and record.client_id == client.id %}selected{% endif %}
+              >
+                {{ client.registration_number }} – {{ client.first_name }} {{ client.last_name }}
+              </option>
+              {% endfor %}
+            </select>
+            <small class="text-muted d-block mt-1">
+              Format: Registration Number – Dr. Name
+            </small>
+          </div>
+        </div>
+
+        <!-- Exam Details Section -->
+        <div class="mb-4">
+          <h5 class="mb-3" style="color: var(--navy); font-weight: 600; border-bottom: 2px solid var(--orange); padding-bottom: 10px;">
+            <i class="bi bi-file-text"></i> Exam Details
+          </h5>
+
+          <div class="row">
+            <!-- Exam -->
+            <div class="col-md-6 mb-3">
+              <label for="exam" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Exam <span style="color: #dc3545;">*</span>
+              </label>
+              <select
+                id="exam"
+                name="exam"
+                class="form-select"
+                required
+                style="border-color: var(--gray-200);"
+              >
+                <option value="">-- Select Exam --</option>
+                {% for exam in exam_names %}
+                <option
+                  value="{{ exam }}"
+                  {% if record.exam == exam %}selected{% endif %}
+                >
+                  {{ exam }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Exam Type -->
+            <div class="col-md-6 mb-3">
+              <label for="exam_type" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Exam Type
+              </label>
+              <input
+                type="text"
+                id="exam_type"
+                name="exam_type"
+                class="form-control"
+                placeholder="e.g., Part 1, Part 2, Full"
+                value="{{ record.exam_type or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Booking Date -->
+            <div class="col-md-6 mb-3">
+              <label for="booking_date" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Booking Date <span style="color: #dc3545;">*</span>
+              </label>
+              <input
+                type="date"
+                id="booking_date"
+                name="booking_date"
+                class="form-control"
+                required
+                value="{{ record.booking_date or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+
+            <!-- Exam Date -->
+            <div class="col-md-6 mb-3">
+              <label for="exam_date" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Exam Date
+              </label>
+              <input
+                type="date"
+                id="exam_date"
+                name="exam_date"
+                class="form-control"
+                value="{{ record.exam_date or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Exam Status -->
+            <div class="col-md-6 mb-3">
+              <label for="exam_status" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Exam Status
+              </label>
+              <select
+                id="exam_status"
+                name="exam_status"
+                class="form-select"
+                style="border-color: var(--gray-200);"
+              >
+                <option value="">-- Select Status --</option>
+                {% for status in exam_statuses %}
+                <option
+                  value="{{ status }}"
+                  {% if record.exam_status == status %}selected{% endif %}
+                >
+                  {{ status }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+
+            <!-- Exam Result -->
+            <div class="col-md-6 mb-3">
+              <label for="exam_result" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Exam Result
+              </label>
+              <select
+                id="exam_result"
+                name="exam_result"
+                class="form-select"
+                style="border-color: var(--gray-200);"
+              >
+                <option value="">-- Select Result --</option>
+                {% for result in exam_results %}
+                <option
+                  value="{{ result }}"
+                  {% if record.exam_result == result %}selected{% endif %}
+                >
+                  {{ result }}
+                </option>
+                {% endfor %}
+              </select>
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Exam Result Date -->
+            <div class="col-md-6 mb-3">
+              <label for="exam_result_date" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Result Date
+              </label>
+              <input
+                type="date"
+                id="exam_result_date"
+                name="exam_result_date"
+                class="form-control"
+                value="{{ record.exam_result_date or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+
+            <!-- Score -->
+            <div class="col-md-6 mb-3">
+              <label for="score" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Score
+              </label>
+              <input
+                type="text"
+                id="score"
+                name="score"
+                class="form-control"
+                placeholder="e.g., 250/300"
+                value="{{ record.score or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Location Section -->
+        <div class="mb-4">
+          <h5 class="mb-3" style="color: var(--navy); font-weight: 600; border-bottom: 2px solid var(--orange); padding-bottom: 10px;">
+            <i class="bi bi-geo-alt"></i> Location
+          </h5>
+
+          <div class="row">
+            <!-- Test Center -->
+            <div class="col-md-6 mb-3">
+              <label for="test_center" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Test Center
+              </label>
+              <input
+                type="text"
+                id="test_center"
+                name="test_center"
+                class="form-control"
+                placeholder="e.g., Pearson VUE, Local Center"
+                value="{{ record.test_center or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+
+            <!-- City/State -->
+            <div class="col-md-6 mb-3">
+              <label for="city_state" class="form-label" style="color: var(--navy); font-weight: 600;">
+                City/State
+              </label>
+              <input
+                type="text"
+                id="city_state"
+                name="city_state"
+                class="form-control"
+                placeholder="e.g., London, UK"
+                value="{{ record.city_state or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Country -->
+            <div class="col-md-6 mb-3">
+              <label for="country" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Country
+              </label>
+              <input
+                type="text"
+                id="country"
+                name="country"
+                class="form-control"
+                placeholder="e.g., United Kingdom"
+                value="{{ record.country or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+
+            <!-- Booked By -->
+            <div class="col-md-6 mb-3">
+              <label for="booked_by" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Booked By
+              </label>
+              <input
+                type="text"
+                id="booked_by"
+                name="booked_by"
+                class="form-control"
+                placeholder="Name of person who booked"
+                value="{{ record.booked_by or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Revaluation Section -->
+        <div class="mb-4">
+          <h5 class="mb-3" style="color: var(--navy); font-weight: 600; border-bottom: 2px solid var(--orange); padding-bottom: 10px;">
+            <i class="bi bi-arrow-repeat"></i> Revaluation
+          </h5>
+
+          <div class="row">
+            <!-- Revaluation -->
+            <div class="col-md-6 mb-3">
+              <label for="revaluation" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Revaluation Applied
+              </label>
+              <select
+                id="revaluation"
+                name="revaluation"
+                class="form-select"
+                style="border-color: var(--gray-200);"
+              >
+                <option value="">-- Select --</option>
+                <option value="Yes" {% if record.revaluation == 'Yes' %}selected{% endif %}>Yes</option>
+                <option value="No" {% if record.revaluation == 'No' %}selected{% endif %}>No</option>
+              </select>
+            </div>
+
+            <!-- Revaluation Applied Date -->
+            <div class="col-md-6 mb-3">
+              <label for="reval_applied_date" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Reval Applied Date
+              </label>
+              <input
+                type="date"
+                id="reval_applied_date"
+                name="reval_applied_date"
+                class="form-control"
+                value="{{ record.reval_applied_date or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+
+          <div class="row">
+            <!-- Reval Result -->
+            <div class="col-md-6 mb-3">
+              <label for="reval_result" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Reval Result
+              </label>
+              <input
+                type="text"
+                id="reval_result"
+                name="reval_result"
+                class="form-control"
+                placeholder="e.g., Passed, Failed, Pending"
+                value="{{ record.reval_result or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+
+            <!-- Reval Score -->
+            <div class="col-md-6 mb-3">
+              <label for="reval_score" class="form-label" style="color: var(--navy); font-weight: 600;">
+                Reval Score
+              </label>
+              <input
+                type="text"
+                id="reval_score"
+                name="reval_score"
+                class="form-control"
+                placeholder="e.g., 260/300"
+                value="{{ record.reval_score or '' }}"
+                style="border-color: var(--gray-200);"
+              >
+            </div>
+          </div>
+        </div>
+
+        <!-- Notes Section -->
+        <div class="mb-4">
+          <h5 class="mb-3" style="color: var(--navy); font-weight: 600; border-bottom: 2px solid var(--orange); padding-bottom: 10px;">
+            <i class="bi bi-chat-left-text"></i> Notes
+          </h5>
+
+          <div>
+            <label for="notes" class="form-label" style="color: var(--navy); font-weight: 600;">
+              Additional Notes
+            </label>
+            <textarea
+              id="notes"
+              name="notes"
+              class="form-control"
+              rows="4"
+              placeholder="Add any additional information about this booking..."
+              style="border-color: var(--gray-200);"
+            >{{ record.notes or '' }}</textarea>
+            <small class="text-muted d-block mt-1">
+              Optional: Use this field for any special requirements, rescheduling reasons, or other relevant information.
+            </small>
+          </div>
+        </div>
+
+        <!-- Form Actions -->
+        <div class="d-flex gap-2 pt-3 border-top" style="border-top-color: var(--gray-200) !important;">
+          <button
+            type="submit"
+            class="btn"
+            style="background-color: var(--orange); color: white; border: none; font-weight: 600;"
+          >
+            <i class="bi bi-check-circle"></i>
+            {% if record.id %}Update Booking{% else %}Create Booking{% endif %}
+          </button>
+          <a
+            href="/operations/test-bookings"
+            class="btn btn-outline-secondary"
+            style="border-color: var(--gray-300);"
+          >
+            <i class="bi bi-x-circle"></i> Cancel
+          </a>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<style>
+  .form-label {
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control,
+  .form-select {
+    font-size: 0.95rem;
+    transition: border-color 0.2s ease;
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: var(--orange);
+    box-shadow: 0 0 0 0.2rem rgba(255, 102, 0, 0.15);
+  }
+
+  .btn {
+    font-weight: 500;
+    transition: all 0.2s ease;
+  }
+
+  .btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+
+  h5 {
+    font-size: 1.1rem;
+  }
+
+  .card {
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+</style>
+{% endblock %}

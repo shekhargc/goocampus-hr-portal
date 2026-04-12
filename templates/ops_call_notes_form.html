@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="page-container">
+  <div class="page-header">
+    <h1>{% if record.id %}Edit Call Note{% else %}Add Call Note{% endif %}</h1>
+    <p class="subtitle">Record and manage client communication notes</p>
+  </div>
+
+  <form method="POST" class="form-container">
+    {% if record.id %}
+    <input type="hidden" name="id" value="{{ record.id }}">
+    {% endif %}
+
+    <!-- Client Information -->
+    <fieldset class="form-section">
+      <legend>Call Information</legend>
+
+      <div class="form-group">
+        <label for="client" class="form-label">Client</label>
+        <select name="client_id" id="client" class="form-control" required>
+          <option value="">— Select a client —</option>
+          {% for client in clients %}
+          <option
+            value="{{ client.id }}"
+            {% if pre_reg == client.id or (record and record.client_id == client.id) %}selected{% endif %}
+          >
+            {{ client.registration_number }} – {% if client.prefix %}{{ client.prefix }} {% endif %}{{ client.first_name }} {{ client.last_name }}
+          </option>
+          {% endfor %}
+        </select>
+        <small class="form-hint">Select the client associated with this call</small>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label for="call_date" class="form-label">Call Date</label>
+          <input
+            type="date"
+            name="call_date"
+            id="call_date"
+            class="form-control"
+            value="{{ record.call_date.strftime('%Y-%m-%d') if record.call_date else today }}"
+            required
+          >
+          <small class="form-hint">Date of the call or conversation</small>
+        </div>
+
+        <div class="form-group">
+          <label for="added_by" class="form-label">Added By</label>
+          <input
+            type="text"
+            name="added_by"
+            id="added_by"
+            class="form-control"
+            value="{{ record.added_by or '' }}"
+            placeholder="Your name or identifier"
+          >
+          <small class="form-hint">Name or ID of the person recording this note</small>
+        </div>
+      </div>
+    </fieldset>
+
+    <!-- Call Note -->
+    <fieldset class="form-section">
+      <legend>Call Note</legend>
+      <div class="form-group">
+        <label for="call_note" class="form-label">Note Details</label>
+        <textarea
+          name="call_note"
+          id="call_note"
+          class="form-control form-textarea"
+          rows="6"
+          placeholder="Enter details about the call, topics discussed, action items, follow-up required, etc."
+          required
+        >{{ record.call_note or '' }}</textarea>
+        <small class="form-hint">Provide a comprehensive summary of the call and any important information</small>
+      </div>
+    </fieldset>
+
+    <!-- Form Actions -->
+    <div class="form-actions">
+      <button type="submit" class="btn btn-primary btn-lg">
+        {% if record.id %}Update Note{% else %}Add Note{% endif %}
+      </button>
+      <a href="/operations/call-notes" class="btn btn-secondary btn-lg">Cancel</a>
+    </div>
+  </form>
+</div>
+
+<style>
+  .page-container {
+    padding: 2rem;
+    max-width: 900px;
+    margin: 0 auto;
+  }
+
+  .page-header {
+    margin-bottom: 2rem;
+  }
+
+  .page-header h1 {
+    color: var(--navy);
+    font-size: 2rem;
+    font-weight: 700;
+    margin: 0 0 0.5rem 0;
+  }
+
+  .subtitle {
+    color: var(--gray-600);
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .form-container {
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-radius: 8px;
+    padding: 2rem;
+  }
+
+  .form-section {
+    border: none;
+    padding: 0;
+    margin: 0 0 2rem 0;
+  }
+
+  .form-section legend {
+    color: var(--navy);
+    font-size: 1.1rem;
+    font-weight: 600;
+    padding: 0 0 1rem 0;
+    border-bottom: 2px solid var(--orange);
+    margin-bottom: 1.5rem;
+    width: 100%;
+  }
+
+  .form-section:last-of-type {
+    margin-bottom: 0;
+  }
+
+  .form-group {
+    margin-bottom: 1.5rem;
+  }
+
+  .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-label {
+    display: block;
+    color: var(--navy);
+    font-weight: 600;
+    font-size: 0.95rem;
+    margin-bottom: 0.5rem;
+  }
+
+  .form-control {
+    width: 100%;
+    padding: 0.75rem 1rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.95rem;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    font-family: inherit;
+  }
+
+  .form-control:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(var(--orange-rgb), 0.1);
+  }
+
+  .form-textarea {
+    resize: vertical;
+    line-height: 1.6;
+    min-height: 150px;
+  }
+
+  .form-hint {
+    display: block;
+    color: var(--gray-500);
+    font-size: 0.85rem;
+    margin-top: 0.4rem;
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.5rem;
+  }
+
+  .form-row .form-group:last-child {
+    margin-bottom: 0;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 1rem;
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--gray-200);
+  }
+
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem 1rem;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    font-weight: 500;
+    text-decoration: none;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #e67e22;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(var(--orange-rgb), 0.3);
+  }
+
+  .btn-secondary {
+    background: transparent;
+    color: var(--navy);
+    border: 1px solid var(--navy);
+  }
+
+  .btn-secondary:hover {
+    background: var(--navy);
+    color: white;
+  }
+
+  .btn-lg {
+    padding: 0.75rem 1.5rem;
+    font-size: 1rem;
+    font-weight: 600;
+  }
+
+  @media (max-width: 768px) {
+    .page-container {
+      padding: 1rem;
+    }
+
+    .form-container {
+      padding: 1.5rem;
+    }
+
+    .form-row {
+      grid-template-columns: 1fr;
+      gap: 1rem;
+    }
+
+    .form-actions {
+      flex-direction: column;
+    }
+
+    .form-actions .btn {
+      width: 100%;
+    }
+  }
+</style>
+
+<script>
+  // Set today's date if no date is provided
+  document.addEventListener('DOMContentLoaded', function() {
+    const dateInput = document.getElementById('call_date');
+    if (!dateInput.value) {
+      const today = new Date().toISOString().split('T')[0];
+      dateInput.value = today;
+    }
+  });
+</script>
+{% endblock %}

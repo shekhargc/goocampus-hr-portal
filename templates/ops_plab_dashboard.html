@@ -470,6 +470,181 @@
   </div>
   {% endif %}
 
+  <!-- ═══════════ LINKED SECTIONS ═══════════ -->
+
+  <!-- Test Bookings Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Test Bookings ({{ test_bookings|length }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/test-bookings/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
+        {% if test_bookings|length > 0 %}
+        <a href="/operations/test-bookings?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if test_bookings %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Exam</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Exam Date</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Result</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Score</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Center</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for t in test_bookings %}
+          <tr style="border-bottom:1px solid var(--gray-200);">
+            <td style="padding:8px;font-weight:600;color:var(--navy);">{{ t.exam or '—' }}</td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ t.exam_date or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
+                {% if t.exam_status == 'Booked' %}background:#EFF6FF;color:#1E40AF;
+                {% elif t.exam_status == 'Attended' %}background:#ECFDF5;color:#065F46;
+                {% elif 'Cancel' in (t.exam_status or '') or t.exam_status == 'Missed' %}background:#FEF2F2;color:#991B1B;
+                {% else %}background:#F3F4F6;color:#374151;{% endif %}
+              ">{{ t.exam_status or '—' }}</span>
+            </td>
+            <td style="padding:8px;text-align:center;">
+              {% if t.exam_result %}
+              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
+                {% if t.exam_result == 'Passed' %}background:#ECFDF5;color:#065F46;
+                {% else %}background:#FEF2F2;color:#991B1B;{% endif %}
+              ">{{ t.exam_result }}</span>
+              {% else %}—{% endif %}
+            </td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ t.score or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-600);font-size:12px;">{{ t.test_center or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <a href="/operations/test-bookings/{{ t.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No test bookings yet</p>
+    {% endif %}
+  </div>
+
+  <!-- Coaching / Training Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Coaching & Training ({{ coaching|length }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/coaching/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
+        {% if coaching|length > 0 %}
+        <a href="/operations/coaching?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if coaching %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Course Type</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Method</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Batch</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Start</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">End</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in coaching %}
+          <tr style="border-bottom:1px solid var(--gray-200);">
+            <td style="padding:8px;font-weight:600;color:var(--navy);">{{ c.course_type or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
+                {% if c.coaching_status == 'On Going' %}background:#ECFDF5;color:#065F46;
+                {% elif c.coaching_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
+                {% else %}background:#F3F4F6;color:#374151;{% endif %}
+              ">{{ c.coaching_status or '—' }}</span>
+            </td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.coaching_method or '—' }}</td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.batch_month or '' }} {{ c.batch_year or '' }}</td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.start_date or '—' }}</td>
+            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.end_date or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <a href="/operations/coaching/{{ c.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No coaching records yet</p>
+    {% endif %}
+  </div>
+
+  <!-- English Login Details Section -->
+  {% if english_logins %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">English Login Details</h3>
+      <a href="/operations/english-logins/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
+    </div>
+    {% for el in english_logins %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;{% if not loop.last %}margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);{% endif %}">
+      <div>
+        <p style="margin:0 0 4px;font-weight:600;color:var(--navy);font-size:12px;">IELTS Login</p>
+        <p style="margin:0;color:var(--gray-600);">{{ el.ielts_login_id or '—' }}</p>
+      </div>
+      <div>
+        <p style="margin:0 0 4px;font-weight:600;color:var(--navy);font-size:12px;">OET Login</p>
+        <p style="margin:0;color:var(--gray-600);">{{ el.oet_login_id or '—' }}</p>
+      </div>
+      <div style="grid-column:span 2;text-align:right;">
+        <a href="/operations/english-logins/{{ el.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Call Notes Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ call_notes_count }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/call-notes/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
+        {% if call_notes_count > 0 %}
+        <a href="/operations/call-notes?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if call_notes %}
+    <div style="display:flex;flex-direction:column;gap:12px;">
+      {% for n in call_notes %}
+      <div style="background:var(--gray-50);border-radius:8px;padding:14px;border-left:3px solid var(--orange);">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+          <span style="font-size:12px;font-weight:600;color:var(--navy);">{{ n.call_date or 'No date' }}</span>
+          <span style="font-size:11px;color:var(--gray-500);">{{ n.added_by or '' }}</span>
+        </div>
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.5;white-space:pre-wrap;overflow:hidden;max-height:60px;" id="note-{{ n.id }}">{{ n.call_note or '—' }}</p>
+        {% if n.call_note and n.call_note|length > 200 %}
+        <a href="#" onclick="var el=document.getElementById('note-{{ n.id }}');el.style.maxHeight=el.style.maxHeight==='none'?'60px':'none';this.textContent=el.style.maxHeight==='none'?'Show less':'Show more';return false;" style="color:var(--orange);font-size:12px;text-decoration:none;font-weight:600;">Show more</a>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% if call_notes_count > 20 %}
+      <p style="margin:0;text-align:center;font-size:12px;color:var(--gray-500);">Showing 20 of {{ call_notes_count }} notes. <a href="/operations/call-notes?client={{ client.registration_number }}" style="color:var(--orange);text-decoration:none;font-weight:600;">View all →</a></p>
+      {% endif %}
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No call notes yet</p>
+    {% endif %}
+  </div>
+
   <!-- Footer Info -->
   <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1);font-size:12px;color:var(--gray-600);">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;">
