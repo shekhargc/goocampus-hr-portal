@@ -5,6 +5,7 @@ Supports both SQLite (local development) and PostgreSQL (production).
 import os
 import re
 import sqlite3
+import logging
 
 
 class CursorWrapper:
@@ -45,7 +46,17 @@ class DatabaseConnection:
             sql = self._convert_to_postgres(sql)
 
         cursor = self.conn.cursor()
-        cursor.execute(sql, params)
+        try:
+            cursor.execute(sql, params)
+        except Exception as e:
+            if self.is_postgres:
+                ps_count = sql.count('%s')
+                p_count = len(params) if params else 0
+                logging.error(f"DB execute error: {e}")
+                logging.error(f"  Placeholder count: {ps_count}, Param count: {p_count}")
+                logging.error(f"  SQL (first 200): {sql[:200]}")
+                logging.error(f"  Param types: {[type(p).__name__ for p in (params or [])]}")
+            raise
         self.last_cursor = CursorWrapper(cursor, self.is_postgres)
         return self.last_cursor
 
