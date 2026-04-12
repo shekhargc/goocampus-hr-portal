@@ -31,24 +31,35 @@
             <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
                 <h3 style="font-size:0.9rem;font-weight:600;color:var(--navy);margin:0 0 0.8rem 0;">Expected Column Names</h3>
                 <div style="font-size:0.8rem;color:var(--gray-600);line-height:1.6;">
-                    <p style="margin:0;">Your CSV should contain these columns (column names must match exactly):</p>
-                    <ul style="margin:0.5rem 0 0 0;padding-left:1.2rem;">
-                        <li>Candidate Name</li>
-                        <li>Registration Number</li>
-                        <li>Registration Date</li>
-                        <li>Plan Type</li>
-                        <li>Stage Joined</li>
-                        <li>Account Status</li>
-                        <li>Current Status</li>
-                        <li>Package</li>
-                        <li>Discount</li>
-                        <li>Final Package</li>
-                        <li>1st-4th Installment</li>
-                        <li>Email</li>
-                        <li>Mobile</li>
-                        <li>City</li>
-                        <li>State</li>
-                    </ul>
+                    <p style="margin:0;">Your CSV should contain these column headers (names must match exactly):</p>
+                    <div style="margin:0.5rem 0 0 0;display:grid;grid-template-columns:1fr 1fr;gap:0 1.5rem;">
+                      <div>
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Registration</p>
+                        <span>registration_number, registration_date, customer_id, prefix, first_name, last_name</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Contact</p>
+                        <span>mobile, whatsapp1, whatsapp2, email, dob, city, state</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Social</p>
+                        <span>instagram, facebook, linkedin</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Parents</p>
+                        <span>father_name, father_phone, mother_name, mother_phone, parents_email</span>
+                      </div>
+                      <div>
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Plan &amp; Status</p>
+                        <span>joined_stage, plan_type, english_training, account_status, current_stage, counsellor, counsellor_email, counsellor_number, lead_source, referral_type, operations_referral</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Package &amp; Payments</p>
+                        <span>package_amount, discount_allowed, additional_package_notes, final_package, inst1_amount, inst1_date, inst1_note, inst2_amount, inst2_date, inst2_note, inst3_amount, inst3_date, inst3_note, inst4_amount, inst4_date, inst4_note</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Onboarding &amp; Goodies</p>
+                        <span>welcome_mail, welcome_call_by, welcome_call_date, english_book, english_book_date, oxford_book, oxford_book_date, plab_brochure, ceo_letter, refund_policy, service_agreement, goodie_pen, goodie_diary, goodie_laptop_bag, goodie_stickers</span>
+
+                        <p style="margin:0.5rem 0 0.3rem;font-weight:600;color:var(--navy);">Other</p>
+                        <span>dropped_date, upgraded_to, additional_notes</span>
+                      </div>
+                    </div>
                 </div>
             </div>
 
