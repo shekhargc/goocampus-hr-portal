@@ -144,7 +144,7 @@
           {% if client.dob %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">DOB:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.dob.strftime('%d %b %Y') if client.dob else 'N/A' }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.dob if client.dob else 'N/A' }}</span>
           </div>
           {% endif %}
           {% if client.city or client.state %}
@@ -335,7 +335,7 @@
           {% if client.dropped_date %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Dropped Date:</span>
-            <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date.strftime('%d %b %Y') if client.dropped_date else 'N/A' }}</span>
+            <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date if client.dropped_date else 'N/A' }}</span>
           </div>
           {% endif %}
           {% if client.upgraded_to %}
@@ -415,7 +415,7 @@
                   {% if client.inst1_amount %}₹{{ '{:,.0f}'.format(client.inst1_amount) }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">
-                  {% if client.inst1_date %}{{ client.inst1_date.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                  {% if client.inst1_date %}{{ client.inst1_date }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client.inst1_note or '—' }}</td>
               </tr>
@@ -426,7 +426,7 @@
                   {% if client.inst2_amount %}₹{{ '{:,.0f}'.format(client.inst2_amount) }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">
-                  {% if client.inst2_date %}{{ client.inst2_date.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                  {% if client.inst2_date %}{{ client.inst2_date }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client.inst2_note or '—' }}</td>
               </tr>
@@ -437,7 +437,7 @@
                   {% if client.inst3_amount %}₹{{ '{:,.0f}'.format(client.inst3_amount) }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">
-                  {% if client.inst3_date %}{{ client.inst3_date.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                  {% if client.inst3_date %}{{ client.inst3_date }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client.inst3_note or '—' }}</td>
               </tr>
@@ -448,7 +448,7 @@
                   {% if client.inst4_amount %}₹{{ '{:,.0f}'.format(client.inst4_amount) }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">
-                  {% if client.inst4_date %}{{ client.inst4_date.strftime('%d %b %Y') }}{% else %}—{% endif %}
+                  {% if client.inst4_date %}{{ client.inst4_date }}{% else %}—{% endif %}
                 </td>
                 <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client.inst4_note or '—' }}</td>
               </tr>
@@ -476,13 +476,13 @@
       {% if client.registration_date %}
       <div>
         <p style="margin:0 0 4px 0;font-weight:600;color:var(--gray-700);">Registration Date</p>
-        <p style="margin:0;">{{ client.registration_date.strftime('%d %b %Y') }}</p>
+        <p style="margin:0;">{{ client.registration_date }}</p>
       </div>
       {% endif %}
       {% if client.created_at %}
       <div>
         <p style="margin:0 0 4px 0;font-weight:600;color:var(--gray-700);">Created At</p>
-        <p style="margin:0;">{{ client.created_at.strftime('%d %b %Y %H:%M') }}</p>
+        <p style="margin:0;">{{ client.created_at or '—' }}</p>
       </div>
       {% endif %}
       <div>

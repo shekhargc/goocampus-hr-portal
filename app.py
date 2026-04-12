@@ -8467,30 +8467,43 @@ def _next_registration_number(conn):
 def ops_plab_list():
     """PLAB clients list with search and filters."""
     conn = get_db()
-    search = request.args.get('q', '').strip()
-    status_filter = request.args.get('status', '')
-    stage_filter = request.args.get('stage', '')
+    try:
+        search = request.args.get('q', '').strip()
+        status_filter = request.args.get('status', '')
+        stage_filter = request.args.get('stage', '')
 
-    sql = "SELECT * FROM plab_clients WHERE 1=1"
-    params = []
-    if search:
-        sql += " AND (LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?) OR LOWER(registration_number) LIKE LOWER(?) OR LOWER(COALESCE(email,'')) LIKE LOWER(?) OR LOWER(COALESCE(mobile,'')) LIKE LOWER(?))"
-        like = f"%{search}%"
-        params += [like, like, like, like]
-    if status_filter:
-        sql += " AND account_status = ?"
-        params.append(status_filter)
-    if stage_filter:
-        sql += " AND current_stage = ?"
-        params.append(stage_filter)
-    sql += " ORDER BY id DESC"
-    clients = conn.execute(sql, tuple(params)).fetchall()
+        sql = "SELECT * FROM plab_clients WHERE 1=1"
+        params = []
+        if search:
+            sql += " AND (LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?) OR LOWER(registration_number) LIKE LOWER(?) OR LOWER(COALESCE(email,'')) LIKE LOWER(?) OR LOWER(COALESCE(mobile,'')) LIKE LOWER(?))"
+            like = f"%{search}%"
+            params += [like, like, like, like]
+        if status_filter:
+            sql += " AND account_status = ?"
+            params.append(status_filter)
+        if stage_filter:
+            sql += " AND current_stage = ?"
+            params.append(stage_filter)
+        sql += " ORDER BY id DESC"
+        clients = conn.execute(sql, tuple(params)).fetchall()
 
-    # Summary stats
-    total = len(clients)
-    active_count = sum(1 for c in clients if c['account_status'] == 'In Process')
-    total_package = sum(float(c['final_package'] or 0) for c in clients)
-    total_collected = sum(float(c['total_paid'] or 0) for c in clients)
+        # Summary stats
+        total = len(clients)
+        active_count = sum(1 for c in clients if c['account_status'] == 'In Process')
+        total_package = sum(float(c['final_package'] or 0) for c in clients)
+        total_collected = sum(float(c['total_paid'] or 0) for c in clients)
+    except Exception as e:
+        logging.error(f"ops_plab_list error: {e}")
+        conn.close()
+        flash(f'Error loading clients: {e}', 'error')
+        clients, search, status_filter, stage_filter = [], '', '', ''
+        total = active_count = 0
+        total_package = total_collected = 0.0
+        return render_template('ops_plab_list.html',
+                               clients=clients, search=search, status_filter=status_filter,
+                               stage_filter=stage_filter, total=total, active_count=active_count,
+                               total_package=total_package, total_collected=total_collected,
+                               account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES)
 
     conn.close()
     return render_template('ops_plab_list.html',

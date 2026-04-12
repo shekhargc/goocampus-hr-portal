@@ -452,13 +452,7 @@
               ₹{{ "{:,.2f}".format(balance) }}
             </span>
           </td>
-          <td>
-            {% if client.registration_date %}
-              {{ client.registration_date.strftime('%d %b %Y') }}
-            {% else %}
-              –
-            {% endif %}
-          </td>
+          <td>{{ client.registration_date or '–' }}</td>
         </tr>
         {% endfor %}
       </tbody>
