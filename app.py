@@ -8923,7 +8923,7 @@ def ops_plab_api_import():
                 int(row.get('goodie_laptop_bag', 0) or 0),
                 int(row.get('goodie_stickers', 0) or 0),
                 row.get('additional_notes', ''),
-                'import'
+                0
             ))
             imported += 1
         conn.commit()
