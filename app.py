@@ -8541,15 +8541,12 @@ def ops_plab_add():
     conn = get_db()
     if request.method == 'POST':
         try:
-            logging.info("ops_plab_add: getting reg number...")
             reg_num = _next_registration_number(conn)
-            logging.info(f"ops_plab_add: reg_num={reg_num}")
             f = request.form
             pkg = float(f.get('package_amount') or 0)
             disc = float(f.get('discount_allowed') or 0)
             final_pkg = pkg - disc
             inst_total = sum(float(f.get(f'inst{i}_amount') or 0) for i in range(1, 5))
-            logging.info(f"ops_plab_add: about to INSERT, pkg={pkg}, final={final_pkg}, inst_total={inst_total}")
 
             conn.execute('''INSERT INTO plab_clients (
                 registration_number, registration_date, customer_id,
