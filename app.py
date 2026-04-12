@@ -8724,7 +8724,7 @@ def ops_plab_delete(client_id):
 @app.route('/operations/plab/import', methods=['GET', 'POST'])
 @admin_required
 def ops_plab_import():
-    """Import PLAB clients from CSV (Zoho export)."""
+    """Import PLAB clients from CSV (combined Zoho export)."""
     if request.method == 'POST':
         import csv, io
         file = request.files.get('csv_file')
@@ -8737,24 +8737,14 @@ def ops_plab_import():
             conn = get_db()
             imported = 0
             skipped = 0
+            # Status normalization map (fix Zoho typos)
+            status_fix = {'Oh Hold': 'On Hold'}
             for row in reader:
-                # Map Zoho column names to our fields
-                cand_name = row.get('Candidate Name', row.get('Candidate_Name', '')).strip()
-                reg_num = row.get('Registration Number', row.get('Registration_Number', '')).strip()
-                if not cand_name and not reg_num:
+                reg_num = row.get('registration_number', '').strip()
+                first_name = row.get('first_name', '').strip()
+                if not first_name and not reg_num:
                     skipped += 1
                     continue
-                # Parse name: "Dr.FirstName LastName - GCUKIP/..." or "Dr. First Last"
-                name_part = cand_name.split(' - ')[0].strip() if ' - ' in cand_name else cand_name
-                prefix = 'Dr.'
-                if name_part.startswith('Dr.'):
-                    name_part = name_part[3:].strip()
-                elif name_part.startswith('Dr '):
-                    name_part = name_part[3:].strip()
-                parts = name_part.split(None, 1)
-                first_name = parts[0] if parts else name_part
-                last_name = parts[1] if len(parts) > 1 else ''
-
                 # Check duplicate by registration number
                 if reg_num:
                     exists = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
@@ -8762,50 +8752,73 @@ def ops_plab_import():
                         skipped += 1
                         continue
 
-                pkg = _safe_float(row.get('Package', row.get('Package_Amount', '0')))
-                disc = _safe_float(row.get('Discount Allowed', row.get('Discount', '0')))
-                final = _safe_float(row.get('Final Package', row.get('Finalized_Package', ''))) or (pkg - disc)
-                i1 = _safe_float(row.get('1st Installment', row.get('Installment_1', '0')))
-                i2 = _safe_float(row.get('2nd Installment', row.get('Installment_2', '0')))
-                i3 = _safe_float(row.get('3rd Installment', row.get('Installment_3', '0')))
-                i4 = _safe_float(row.get('4th Installment', row.get('Installment_4', '0')))
+                pkg = _safe_float(row.get('package_amount', '0'))
+                disc = _safe_float(row.get('discount_allowed', '0'))
+                final = _safe_float(row.get('final_package', '0')) or (pkg - disc)
+                i1 = _safe_float(row.get('inst1_amount', '0'))
+                i2 = _safe_float(row.get('inst2_amount', '0'))
+                i3 = _safe_float(row.get('inst3_amount', '0'))
+                i4 = _safe_float(row.get('inst4_amount', '0'))
                 total_paid = i1 + i2 + i3 + i4
+                raw_status = row.get('account_status', 'In Process').strip()
+                account_status = status_fix.get(raw_status, raw_status)
 
                 conn.execute('''INSERT INTO plab_clients (
                     registration_number, registration_date, customer_id,
                     prefix, first_name, last_name,
-                    mobile, email, city, state,
+                    mobile, whatsapp1, whatsapp2, email, dob, city, state,
+                    instagram, facebook, linkedin,
+                    father_name, father_phone, mother_name, mother_phone, parents_email,
                     joined_stage, plan_type, english_training,
                     account_status, current_stage,
-                    counsellor, lead_source,
-                    package_amount, discount_allowed, final_package, total_paid,
+                    counsellor, counsellor_email, counsellor_number,
+                    lead_source, referral_type, operations_referral,
+                    package_amount, discount_allowed, additional_package_notes,
+                    final_package, total_paid,
                     inst1_amount, inst1_date, inst1_note,
                     inst2_amount, inst2_date, inst2_note,
                     inst3_amount, inst3_date, inst3_note,
                     inst4_amount, inst4_date, inst4_note,
+                    dropped_date, upgraded_to,
+                    welcome_mail, welcome_call_by, welcome_call_date,
+                    english_book, english_book_date,
+                    oxford_book, oxford_book_date,
+                    plab_brochure, ceo_letter, refund_policy, service_agreement,
+                    goodie_pen, goodie_diary, goodie_laptop_bag, goodie_stickers,
                     additional_notes, created_by
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                     reg_num or _next_registration_number(conn),
-                    row.get('Registration Date', row.get('Registration_Date', '')),
-                    row.get('Customer ID', row.get('Customer_ID', '')),
-                    prefix, first_name, last_name,
-                    row.get('Mobile', row.get('Phone', '')),
-                    row.get('Email', ''),
-                    row.get('City', ''),
-                    row.get('State', ''),
-                    row.get('Stage Joined', row.get('Joined_Stage', '')),
-                    row.get('Plan Type', row.get('Plan_Type', '')),
-                    row.get('English Training', ''),
-                    row.get('Account Status', row.get('Account_Status', 'In Process')),
-                    row.get('Current Status', row.get('Current_Stage', row.get('Stage Joined', ''))),
-                    row.get('Counsellor', ''),
-                    row.get('Lead Source', row.get('Lead_Source', '')),
-                    pkg, disc, final, total_paid,
-                    i1, row.get('1st Instalment Date', ''), row.get('1st Installment Note', ''),
-                    i2, row.get('2nd Instalment Date', ''), row.get('2nd Installment Note', ''),
-                    i3, row.get('3rd Instalment Date', ''), row.get('3rd Installment Note', ''),
-                    i4, row.get('4th Instalment Date', ''), row.get('4th Installment Note', ''),
-                    row.get('Additional Notes', ''),
+                    row.get('registration_date', ''),
+                    row.get('customer_id', ''),
+                    row.get('prefix', 'Dr.'), first_name, row.get('last_name', ''),
+                    row.get('mobile', ''), row.get('whatsapp1', ''), row.get('whatsapp2', ''),
+                    row.get('email', ''), row.get('dob', ''), row.get('city', ''), row.get('state', ''),
+                    row.get('instagram', ''), row.get('facebook', ''), row.get('linkedin', ''),
+                    row.get('father_name', ''), row.get('father_phone', ''),
+                    row.get('mother_name', ''), row.get('mother_phone', ''), row.get('parents_email', ''),
+                    row.get('joined_stage', ''), row.get('plan_type', ''), row.get('english_training', ''),
+                    account_status, row.get('current_stage', ''),
+                    row.get('counsellor', ''), row.get('counsellor_email', ''), row.get('counsellor_number', ''),
+                    row.get('lead_source', ''), row.get('referral_type', ''), row.get('operations_referral', ''),
+                    pkg, disc, row.get('additional_package_notes', ''),
+                    final, total_paid,
+                    i1, row.get('inst1_date', ''), row.get('inst1_note', ''),
+                    i2, row.get('inst2_date', ''), row.get('inst2_note', ''),
+                    i3, row.get('inst3_date', ''), row.get('inst3_note', ''),
+                    i4, row.get('inst4_date', ''), row.get('inst4_note', ''),
+                    row.get('dropped_date', ''), row.get('upgraded_to', ''),
+                    row.get('welcome_mail', ''), row.get('welcome_call_by', ''), row.get('welcome_call_date', ''),
+                    row.get('english_book', ''), row.get('english_book_date', ''),
+                    row.get('oxford_book', ''), row.get('oxford_book_date', ''),
+                    int(row.get('plab_brochure', 0) or 0),
+                    int(row.get('ceo_letter', 0) or 0),
+                    int(row.get('refund_policy', 0) or 0),
+                    int(row.get('service_agreement', 0) or 0),
+                    int(row.get('goodie_pen', 0) or 0),
+                    int(row.get('goodie_diary', 0) or 0),
+                    int(row.get('goodie_laptop_bag', 0) or 0),
+                    int(row.get('goodie_stickers', 0) or 0),
+                    row.get('additional_notes', ''),
                     session['user_id']
                 ))
                 imported += 1
