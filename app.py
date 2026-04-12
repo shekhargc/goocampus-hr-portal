@@ -8077,32 +8077,39 @@ def finance_salaries_add():
             flash(f'Could not add: {e}', 'error')
         conn.close()
         return redirect(url_for('finance_salaries'))
-    # GET: employees without a salary item yet
+    # GET: employees without an active salary item yet
     available_employees = []
     query_error = False
     try:
-        # Get IDs of employees that already have a salary entry
+        all_emps = conn.execute(
+            "SELECT id, name, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
+        ).fetchall()
+        logging.info(f"finance_salaries_add: {len(all_emps)} active employees found")
+    except Exception as e:
+        logging.error(f"finance_salaries_add employees query: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        all_emps = []
+        query_error = True
+
+    if all_emps and not query_error:
         existing_ids = set()
         try:
-            rows = conn.execute("SELECT employee_id FROM salary_items WHERE employee_id IS NOT NULL").fetchall()
+            rows = conn.execute("SELECT employee_id FROM salary_items WHERE employee_id IS NOT NULL AND is_active = 1").fetchall()
             existing_ids = set(r['employee_id'] for r in rows)
+            logging.info(f"finance_salaries_add: {len(existing_ids)} employees already have active salary items")
         except Exception as e2:
             logging.error(f"salary_items employee_id query: {e2}")
             try:
                 conn.rollback()
             except Exception:
                 pass
-        all_emps = conn.execute(
-            "SELECT id, name, department FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
-        ).fetchall()
+            # If salary_items query fails, show all employees (don't block)
+            existing_ids = set()
         available_employees = [e for e in all_emps if e['id'] not in existing_ids]
-    except Exception as e:
-        logging.error(f"finance_salaries_add available employees: {e}")
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        query_error = True
+        logging.info(f"finance_salaries_add: {len(available_employees)} employees available to add")
     try:
         projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     except Exception:
