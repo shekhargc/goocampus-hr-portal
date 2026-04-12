@@ -1,0 +1,553 @@
+{% extends "base.html" %}
+
+{% block title %}PLAB Clients - Operations{% endblock %}
+
+{% block extra_css %}
+<style>
+  .plab-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .plab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .plab-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .plab-header-actions {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    padding: 0.55rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-primary:hover {
+    background: #0F1B33;
+  }
+
+  .btn-secondary {
+    padding: 0.55rem 1.2rem;
+    background: var(--gray-100);
+    color: var(--navy);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    background: var(--gray-200);
+    border-color: var(--gray-300);
+  }
+
+  .client-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--navy);
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 0.85rem;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-top: 0.3rem;
+  }
+
+  .filter-section {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: flex-end;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: white;
+    color: var(--gray-700);
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
+  }
+
+  .filter-button {
+    padding: 0.6rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    align-self: flex-end;
+  }
+
+  .filter-button:hover {
+    background: #0F1B33;
+  }
+
+  .table-wrapper {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+
+  .data-table thead {
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .data-table th {
+    padding: 0.7rem 1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .data-table td {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    border-top: 1px solid var(--gray-100);
+    color: var(--gray-700);
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--gray-50);
+  }
+
+  .row-link {
+    color: var(--navy);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .row-link:hover {
+    color: #F58220;
+  }
+
+  .badge-pill {
+    display: inline-block;
+    padding: 0.3rem 0.7rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-in-process {
+    background: #ECFDF5;
+    color: #10B981;
+  }
+
+  .badge-dropped {
+    background: #FEF2F2;
+    color: #EF4444;
+  }
+
+  .badge-on-hold {
+    background: #FEF3C7;
+    color: #F59E0B;
+  }
+
+  .badge-switched {
+    background: #F3F4F6;
+    color: #64748B;
+  }
+
+  .badge-completed {
+    background: #EFF6FF;
+    color: #3B82F6;
+  }
+
+  .text-red {
+    color: #EF4444;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--gray-600);
+  }
+
+  .empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  @media (max-width: 768px) {
+    .plab-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .plab-header-actions {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      width: 100%;
+      text-align: center;
+    }
+
+    .stat-card-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-form {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-button {
+      width: 100%;
+    }
+
+    .data-table {
+      font-size: 0.8rem;
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 0.5rem 0.7rem;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="plab-content">
+  <!-- Header -->
+  <div class="plab-header">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <h1>PLAB Pathway Clients</h1>
+      <span class="client-badge">
+        <span style="font-size: 1rem;">📋</span>
+        {{ total }} Clients
+      </span>
+    </div>
+    <div class="plab-header-actions">
+      <a href="/operations/plab/add" class="btn-primary">+ Add Client</a>
+      <a href="/operations/plab/import" class="btn-secondary">📥 Import CSV</a>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stat-card-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Clients</div>
+      <div class="stat-value">{{ total }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Clients</div>
+      <div class="stat-value">{{ active_count }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Package Value</div>
+      <div class="stat-value" id="total-package">₹{{ "{:,.2f}".format(total_package) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Collected</div>
+      <div class="stat-value" id="total-collected">₹{{ "{:,.2f}".format(total_collected) }}</div>
+    </div>
+  </div>
+
+  <!-- Filter Section -->
+  <div class="filter-section">
+    <form method="GET" class="filter-form">
+      <div class="form-group">
+        <label for="search">Search</label>
+        <input
+          type="text"
+          id="search"
+          name="search"
+          placeholder="Name, Reg#, Email, Phone..."
+          value="{{ search or '' }}"
+        />
+      </div>
+      <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status_filter">
+          <option value="">All Statuses</option>
+          {% for status in account_statuses %}
+          <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
+            {{ status }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="stage">Stage</label>
+        <select id="stage" name="stage_filter">
+          <option value="">All Stages</option>
+          {% for stage in plab_stages %}
+          <option value="{{ stage }}" {% if stage == stage_filter %}selected{% endif %}>
+            {{ stage }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="filter-button">🔍 Filter</button>
+    </form>
+  </div>
+
+  <!-- Table -->
+  {% if clients %}
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Reg#</th>
+          <th>Name</th>
+          <th>Stage</th>
+          <th>Status</th>
+          <th>Plan</th>
+          <th>Package (₹)</th>
+          <th>Paid (₹)</th>
+          <th>Balance (₹)</th>
+          <th>Reg Date</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for client in clients %}
+        <tr>
+          <td>
+            <a href="/operations/plab/{{ client.id }}" class="row-link">
+              {{ client.registration_number }}
+            </a>
+          </td>
+          <td>
+            <a href="/operations/plab/{{ client.id }}" class="row-link">
+              {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
+            </a>
+          </td>
+          <td>{{ client.current_stage or '–' }}</td>
+          <td>
+            {% set status = client.account_status %}
+            {% if status == 'In Process' %}
+              <span class="badge-pill badge-in-process">{{ status }}</span>
+            {% elif status == 'Dropped' %}
+              <span class="badge-pill badge-dropped">{{ status }}</span>
+            {% elif status == 'On Hold' %}
+              <span class="badge-pill badge-on-hold">{{ status }}</span>
+            {% elif status == 'Switched Program' %}
+              <span class="badge-pill badge-switched">{{ status }}</span>
+            {% elif status == 'Completed' %}
+              <span class="badge-pill badge-completed">{{ status }}</span>
+            {% else %}
+              <span class="badge-pill" style="background: #F3F4F6; color: #64748B;">{{ status }}</span>
+            {% endif %}
+          </td>
+          <td>{{ client.plan_type or '–' }}</td>
+          <td style="text-align: right;">
+            <span id="pkg-{{ client.id }}">₹{{ "{:,.2f}".format(client.final_package or 0) }}</span>
+          </td>
+          <td style="text-align: right;">
+            <span id="paid-{{ client.id }}">₹{{ "{:,.2f}".format(client.total_paid or 0) }}</span>
+          </td>
+          <td style="text-align: right;">
+            {% set balance = (client.final_package or 0) - (client.total_paid or 0) %}
+            <span class="{% if balance > 0 %}text-red{% endif %}" id="balance-{{ client.id }}">
+              ₹{{ "{:,.2f}".format(balance) }}
+            </span>
+          </td>
+          <td>
+            {% if client.registration_date %}
+              {{ client.registration_date.strftime('%d %b %Y') }}
+            {% else %}
+              –
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <p>No PLAB clients found</p>
+    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
+      {% if search or status_filter or stage_filter %}
+      Try adjusting your search or filter criteria
+      {% else %}
+      Create your first client to get started
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- JavaScript for Indian number formatting -->
+<script>
+  function formatIndianCurrency(amount) {
+    if (!amount || amount === 0) return '₹0';
+
+    // Convert to string and remove decimals for formatting
+    let numStr = Math.abs(amount).toFixed(2);
+    let parts = numStr.split('.');
+    let intPart = parts[0];
+    let decPart = parts[1];
+
+    // Add commas in Indian format: XX,XX,XXX
+    let lastThree = intPart.substring(intPart.length - 3);
+    let remaining = intPart.substring(0, intPart.length - 3);
+
+    if (remaining !== '') {
+      intPart = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+    } else {
+      intPart = lastThree;
+    }
+
+    return '₹' + intPart + '.' + decPart;
+  }
+
+  // Format all currency values on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    // Format summary stat cards
+    const totalPkgElem = document.getElementById('total-package');
+    const totalCollElem = document.getElementById('total-collected');
+
+    if (totalPkgElem && totalPkgElem.textContent) {
+      const totalPkgValue = parseFloat(
+        totalPkgElem.textContent.replace(/₹/g, '').replace(/,/g, '')
+      );
+      if (!isNaN(totalPkgValue)) {
+        totalPkgElem.textContent = formatIndianCurrency(totalPkgValue);
+      }
+    }
+
+    if (totalCollElem && totalCollElem.textContent) {
+      const totalCollValue = parseFloat(
+        totalCollElem.textContent.replace(/₹/g, '').replace(/,/g, '')
+      );
+      if (!isNaN(totalCollValue)) {
+        totalCollElem.textContent = formatIndianCurrency(totalCollValue);
+      }
+    }
+
+    // Format table currency values
+    document.querySelectorAll('[id^="pkg-"]').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+
+    document.querySelectorAll('[id^="paid-"]').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+
+    document.querySelectorAll('[id^="balance-"]').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+  });
+</script>
+{% endblock %}

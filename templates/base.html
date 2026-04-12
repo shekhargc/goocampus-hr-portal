@@ -966,6 +966,26 @@
                         </div>
                     </li>
 
+                    <!-- Operations Dropdown (Admin Only) -->
+                    <li class="nav-dropdown" id="ops-dropdown-admin">
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('ops-dropdown-admin', event)">
+                            Operations
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                            <div class="nav-dropdown-menu-inner">
+                                <a href="/operations/plab">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                                    PLAB Pathway
+                                </a>
+                                <a href="/operations/plab/import" style="border-top: 1px solid var(--gray-100);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                    Import from CSV
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+
                     <!-- Company Dropdown -->
                     <li class="nav-dropdown" id="company-dropdown-admin">
                         <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-admin', event)">

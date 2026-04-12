@@ -1,0 +1,121 @@
+{% extends "base.html" %}
+
+{% block title %}Import Clients{% endblock %}
+
+{% block content %}
+<div style="max-width:640px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/plab" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to PLAB Clients</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Import PLAB Clients from CSV</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            Upload a CSV exported from Zoho Creator. The importer will map columns automatically and skip duplicates (by registration number).
+        </p>
+
+        <!-- File Upload Form -->
+        <form method="POST" action="/operations/plab/import" enctype="multipart/form-data" style="margin-bottom:2rem;">
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">CSV File *</label>
+                <div style="position:relative;border:2px dashed var(--gray-300);border-radius:8px;padding:1.5rem;text-align:center;background:var(--gray-50);cursor:pointer;transition:all 0.2s;" id="uploadZone">
+                    <input type="file" name="csv_file" id="csvFile" accept=".csv" required style="display:none;" />
+                    <div style="font-size:0.9rem;color:var(--gray-600);">
+                        <div style="margin-bottom:0.5rem;">📁 Click to select or drag and drop your CSV file</div>
+                        <div style="font-size:0.8rem;color:var(--gray-500);">Accepts .csv files only</div>
+                    </div>
+                </div>
+                <div id="fileName" style="margin-top:0.5rem;font-size:0.85rem;color:var(--gray-600);font-weight:500;display:none;"></div>
+            </div>
+
+            <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+                <h3 style="font-size:0.9rem;font-weight:600;color:var(--navy);margin:0 0 0.8rem 0;">Expected Column Names</h3>
+                <div style="font-size:0.8rem;color:var(--gray-600);line-height:1.6;">
+                    <p style="margin:0;">Your CSV should contain these columns (column names must match exactly):</p>
+                    <ul style="margin:0.5rem 0 0 0;padding-left:1.2rem;">
+                        <li>Candidate Name</li>
+                        <li>Registration Number</li>
+                        <li>Registration Date</li>
+                        <li>Plan Type</li>
+                        <li>Stage Joined</li>
+                        <li>Account Status</li>
+                        <li>Current Status</li>
+                        <li>Package</li>
+                        <li>Discount</li>
+                        <li>Final Package</li>
+                        <li>1st-4th Installment</li>
+                        <li>Email</li>
+                        <li>Mobile</li>
+                        <li>City</li>
+                        <li>State</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- Tips Section -->
+            <div style="background:#F0FDFB;border:1px solid #CCFBF1;border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+                <h3 style="font-size:0.9rem;font-weight:600;color:#065F46;margin:0 0 0.8rem 0;">Import Tips</h3>
+                <ul style="font-size:0.8rem;color:#047857;margin:0;padding-left:1.2rem;line-height:1.7;">
+                    <li><strong>Duplicate Detection:</strong> Clients are identified by Registration Number. Existing clients with matching registration numbers will be skipped.</li>
+                    <li><strong>Name Parsing:</strong> Names in the format "Dr. FirstName LastName - GCUKIP/..." are automatically parsed correctly.</li>
+                    <li><strong>Currency Symbols:</strong> Currency values can include ₹ symbols and commas (e.g., "₹50,000"). These will be cleaned automatically.</li>
+                </ul>
+            </div>
+
+            <div style="display:flex;gap:0.8rem;">
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;transition:background 0.2s;">Import</button>
+                <a href="/operations/plab" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;transition:all 0.2s;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const uploadZone = document.getElementById('uploadZone');
+    const csvFile = document.getElementById('csvFile');
+    const fileName = document.getElementById('fileName');
+
+    // Click to select file
+    uploadZone.addEventListener('click', function() {
+        csvFile.click();
+    });
+
+    // File selection handler
+    csvFile.addEventListener('change', function() {
+        if (this.files && this.files[0]) {
+            fileName.textContent = 'Selected: ' + this.files[0].name;
+            fileName.style.display = 'block';
+            uploadZone.style.borderColor = 'var(--orange)';
+            uploadZone.style.background = '#FFF5F0';
+        }
+    });
+
+    // Drag and drop handlers
+    uploadZone.addEventListener('dragover', function(e) {
+        e.preventDefault();
+        uploadZone.style.borderColor = 'var(--orange)';
+        uploadZone.style.background = '#FFF5F0';
+    });
+
+    uploadZone.addEventListener('dragleave', function() {
+        uploadZone.style.borderColor = 'var(--gray-300)';
+        uploadZone.style.background = 'var(--gray-50)';
+    });
+
+    uploadZone.addEventListener('drop', function(e) {
+        e.preventDefault();
+        uploadZone.style.borderColor = 'var(--gray-300)';
+        uploadZone.style.background = 'var(--gray-50)';
+
+        if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+            csvFile.files = e.dataTransfer.files;
+            fileName.textContent = 'Selected: ' + e.dataTransfer.files[0].name;
+            fileName.style.display = 'block';
+            uploadZone.style.borderColor = 'var(--orange)';
+            uploadZone.style.background = '#FFF5F0';
+        }
+    });
+});
+</script>
+{% endblock %}

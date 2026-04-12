@@ -1,0 +1,496 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit Client' if mode == 'edit' else 'Add Client' }}{% endblock %}
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        {% if mode == 'edit' %}
+        <a href="/operations/plab/{{ item.id }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Client</a>
+        {% else %}
+        <a href="/operations/plab" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to PLAB Clients</a>
+        {% endif %}
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Client' if mode == 'edit' else 'Add Client' }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if mode == 'edit' %}
+            Update client information, payment details, and training status.
+            {% else %}
+            Add a new PLAB client with personal, plan, and onboarding details.
+            {% endif %}
+        </p>
+
+        <form method="POST" action="{% if mode == 'edit' %}/operations/plab/{{ item.id }}/edit{% else %}/operations/plab/add{% endif %}">
+
+            <!-- ===== REGISTRATION DETAILS ===== -->
+            {% if mode == 'edit' %}
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
+                    <input type="text" value="{{ item.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Date</label>
+                    <input type="date" name="registration_date" value="{{ item.registration_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Customer ID</label>
+                <input type="text" name="customer_id" value="{{ item.customer_id or '' }}" placeholder="Auto-generated or manual ID" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+            {% else %}
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Customer ID</label>
+                <input type="text" name="customer_id" placeholder="Auto-generated or manual ID" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Date</label>
+                <input type="date" name="registration_date" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+            {% endif %}
+
+            <!-- ===== PERSONAL DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Details</h3>
+            <div style="display:grid;grid-template-columns:0.7fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Prefix</label>
+                    <select name="prefix" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for opt in ['Dr.', 'Mr.', 'Ms.', 'Mrs.'] %}
+                        <option value="{{ opt }}" {% if item and item.prefix == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">First Name *</label>
+                    <input type="text" name="first_name" required value="{{ item.first_name or '' }}" placeholder="First name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Last Name</label>
+                    <input type="text" name="last_name" value="{{ item.last_name or '' }}" placeholder="Last name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile</label>
+                    <input type="tel" name="mobile" value="{{ item.mobile or '' }}" placeholder="+44 1234 567890" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">WhatsApp 1</label>
+                    <input type="tel" name="whatsapp_1" value="{{ item.whatsapp_1 or '' }}" placeholder="WhatsApp number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">WhatsApp 2</label>
+                    <input type="tel" name="whatsapp_2" value="{{ item.whatsapp_2 or '' }}" placeholder="Alternative WhatsApp" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Email</label>
+                    <input type="email" name="email" value="{{ item.email or '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">DOB</label>
+                    <input type="date" name="dob" value="{{ item.dob or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City</label>
+                    <input type="text" name="city" value="{{ item.city or '' }}" placeholder="City" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State</label>
+                <input type="text" name="state" value="{{ item.state or '' }}" placeholder="State/Province" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instagram</label>
+                    <input type="text" name="instagram" value="{{ item.instagram or '' }}" placeholder="@handle" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Facebook</label>
+                    <input type="text" name="facebook" value="{{ item.facebook or '' }}" placeholder="Profile URL" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">LinkedIn</label>
+                <input type="text" name="linkedin" value="{{ item.linkedin or '' }}" placeholder="linkedin.com/in/..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== PARENTS DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Parents Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Name</label>
+                    <input type="text" name="father_name" value="{{ item.father_name or '' }}" placeholder="Father's name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Phone</label>
+                    <input type="tel" name="father_phone" value="{{ item.father_phone or '' }}" placeholder="Phone number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mother Name</label>
+                    <input type="text" name="mother_name" value="{{ item.mother_name or '' }}" placeholder="Mother's name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mother Phone</label>
+                    <input type="tel" name="mother_phone" value="{{ item.mother_phone or '' }}" placeholder="Phone number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Parents Email</label>
+                <input type="email" name="parents_email" value="{{ item.parents_email or '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== PLAN & TRAINING ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan & Training</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Joined Stage</label>
+                    <select name="joined_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for stage in joined_stages %}
+                        <option value="{{ stage }}" {% if item and item.joined_stage == stage %}selected{% endif %}>{{ stage }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Plan Type</label>
+                    <select name="plan_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for plan in plan_types %}
+                        <option value="{{ plan }}" {% if item and item.plan_type == plan %}selected{% endif %}>{{ plan }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training</label>
+                <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">— Select —</option>
+                    {% for opt in english_options %}
+                    <option value="{{ opt }}" {% if item and item.english_training == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- ===== CLIENT STATUS (Edit only) ===== -->
+            {% if mode == 'edit' %}
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client Status</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
+                    <select name="account_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for status in account_statuses %}
+                        <option value="{{ status }}" {% if item and item.account_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Current Stage</label>
+                    <select name="current_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for stage in plab_stages %}
+                        <option value="{{ stage }}" {% if item and item.current_stage == stage %}selected{% endif %}>{{ stage }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Dropped/Switched Date</label>
+                    <input type="date" name="dropped_switched_date" value="{{ item.dropped_switched_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Upgraded To</label>
+                    <input type="text" name="upgraded_to" value="{{ item.upgraded_to or '' }}" placeholder="Plan or stage upgraded to" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ===== COUNSELLOR & LEAD ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor & Lead</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
+                    <input type="text" name="counsellor" value="{{ item.counsellor or '' }}" placeholder="Counsellor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor Email</label>
+                    <input type="email" name="counsellor_email" value="{{ item.counsellor_email or '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor Number</label>
+                <input type="tel" name="counsellor_number" value="{{ item.counsellor_number or '' }}" placeholder="Phone number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source</label>
+                    <select name="lead_source" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for source in lead_sources %}
+                        <option value="{{ source }}" {% if item and item.lead_source == source %}selected{% endif %}>{{ source }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referral Type</label>
+                    <input type="text" name="referral_type" value="{{ item.referral_type or '' }}" placeholder="Type of referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Operations Referral</label>
+                <input type="text" name="operations_referral" value="{{ item.operations_referral or '' }}" placeholder="Internal reference" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== PACKAGE & INSTALLMENTS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package & Installments</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package Amount</label>
+                    <input type="number" name="package_amount" id="packageAmount" value="{{ item.package_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Discount Allowed</label>
+                    <input type="number" name="discount_allowed" id="discountAllowed" value="{{ item.discount_allowed or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Package Notes</label>
+                <textarea name="additional_package_notes" rows="2" maxlength="500" placeholder="Optional notes about package" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.additional_package_notes or '' }}</textarea>
+            </div>
+
+            <div style="margin-bottom:1.1rem;padding:0.8rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200);">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Final Package (Read-only)</label>
+                <div style="font-size:1.1rem;font-weight:700;color:var(--navy);">
+                    <span id="finalPackageDisplay">0.00</span>
+                </div>
+                <input type="hidden" name="final_package" id="finalPackageField" value="{{ item.final_package or '' }}" />
+            </div>
+
+            <!-- Installment 1 -->
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Installment 1</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount</label>
+                        <input type="number" name="installment1_amount" value="{{ item.installment1_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date</label>
+                        <input type="date" name="installment1_date" value="{{ item.installment1_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note</label>
+                    <textarea name="installment1_note" rows="1" maxlength="250" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.installment1_note or '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Installment 2 -->
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Installment 2</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount</label>
+                        <input type="number" name="installment2_amount" value="{{ item.installment2_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date</label>
+                        <input type="date" name="installment2_date" value="{{ item.installment2_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note</label>
+                    <textarea name="installment2_note" rows="1" maxlength="250" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.installment2_note or '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Installment 3 -->
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Installment 3</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount</label>
+                        <input type="number" name="installment3_amount" value="{{ item.installment3_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date</label>
+                        <input type="date" name="installment3_date" value="{{ item.installment3_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note</label>
+                    <textarea name="installment3_note" rows="1" maxlength="250" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.installment3_note or '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- Installment 4 -->
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Installment 4</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:0.8rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount</label>
+                        <input type="number" name="installment4_amount" value="{{ item.installment4_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date</label>
+                        <input type="date" name="installment4_date" value="{{ item.installment4_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note</label>
+                    <textarea name="installment4_note" rows="1" maxlength="250" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.installment4_note or '' }}</textarea>
+                </div>
+            </div>
+
+            <!-- ===== ONBOARDING (Edit only) ===== -->
+            {% if mode == 'edit' %}
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Onboarding</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Welcome Mail</label>
+                    <input type="text" name="welcome_mail" value="{{ item.welcome_mail or '' }}" placeholder="Name/person" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Welcome Call By</label>
+                    <input type="text" name="welcome_call_by" value="{{ item.welcome_call_by or '' }}" placeholder="Name/person" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Welcome Call Date</label>
+                <input type="date" name="welcome_call_date" value="{{ item.welcome_call_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Book</label>
+                    <input type="text" name="english_book" value="{{ item.english_book or '' }}" placeholder="Book title/reference" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Book Date</label>
+                    <input type="date" name="english_book_date" value="{{ item.english_book_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Oxford Book</label>
+                    <input type="text" name="oxford_book" value="{{ item.oxford_book or '' }}" placeholder="Book title/reference" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Oxford Book Date</label>
+                    <input type="date" name="oxford_book_date" value="{{ item.oxford_book_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Onboarding Checklist</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="plab_brochure" value="1" {% if item and item.plab_brochure == 1 %}checked{% endif %}>
+                        PLAB Brochure
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="ceo_letter" value="1" {% if item and item.ceo_letter == 1 %}checked{% endif %}>
+                        CEO Letter
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="refund_policy" value="1" {% if item and item.refund_policy == 1 %}checked{% endif %}>
+                        Refund Policy
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="service_agreement" value="1" {% if item and item.service_agreement == 1 %}checked{% endif %}>
+                        Service Agreement
+                    </label>
+                </div>
+            </div>
+
+            <div style="padding:1rem;background:var(--gray-50);border-radius:8px;margin-bottom:1.1rem;border:1px solid var(--gray-200);">
+                <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Goodies</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="goodies_pen" value="1" {% if item and item.goodies_pen == 1 %}checked{% endif %}>
+                        Pen
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="goodies_diary" value="1" {% if item and item.goodies_diary == 1 %}checked{% endif %}>
+                        Diary
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="goodies_laptop_bag" value="1" {% if item and item.goodies_laptop_bag == 1 %}checked{% endif %}>
+                        Laptop Bag
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.5rem;">
+                        <input type="checkbox" name="goodies_stickers" value="1" {% if item and item.goodies_stickers == 1 %}checked{% endif %}>
+                        Stickers
+                    </label>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- ===== NOTES ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <div style="margin-bottom:1.5rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes</label>
+                <textarea name="additional_notes" rows="3" maxlength="1000" placeholder="Any additional information or notes about this client" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.additional_notes or '' }}</textarea>
+            </div>
+
+            <!-- ===== SUBMIT & CANCEL ===== -->
+            <div style="display:flex;gap:0.8rem;">
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;">
+                    {{ 'Save Changes' if mode == 'edit' else 'Add Client' }}
+                </button>
+                <a href="{% if mode == 'edit' %}/operations/plab/{{ item.id }}{% else %}/operations/plab{% endif %}" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const packageAmountInput = document.getElementById('packageAmount');
+    const discountAllowedInput = document.getElementById('discountAllowed');
+    const finalPackageDisplay = document.getElementById('finalPackageDisplay');
+    const finalPackageField = document.getElementById('finalPackageField');
+
+    function updateFinalPackage() {
+        const packageAmount = parseFloat(packageAmountInput.value) || 0;
+        const discountAllowed = parseFloat(discountAllowedInput.value) || 0;
+        const finalPackage = Math.max(0, packageAmount - discountAllowed);
+        finalPackageDisplay.textContent = finalPackage.toFixed(2);
+        finalPackageField.value = finalPackage.toFixed(2);
+    }
+
+    packageAmountInput.addEventListener('change', updateFinalPackage);
+    packageAmountInput.addEventListener('input', updateFinalPackage);
+    discountAllowedInput.addEventListener('change', updateFinalPackage);
+    discountAllowedInput.addEventListener('input', updateFinalPackage);
+
+    // Initialize on page load
+    updateFinalPackage();
+});
+</script>
+{% endblock %}

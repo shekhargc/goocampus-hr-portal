@@ -8337,11 +8337,491 @@ def finance_subscriptions_delete(item_id):
     return redirect(url_for('finance_subscriptions'))
 
 
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – PLAB Pathway Client Management
+# ─────────────────────────────────────────────────────────
+
+def ensure_ops_tables():
+    """Create Operations / PLAB client tables."""
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS plab_clients (
+            id SERIAL PRIMARY KEY,
+            customer_id TEXT,
+            registration_number TEXT UNIQUE,
+            registration_date TEXT,
+            prefix TEXT DEFAULT 'Dr.',
+            first_name TEXT NOT NULL,
+            last_name TEXT,
+            mobile TEXT,
+            whatsapp1 TEXT,
+            whatsapp2 TEXT,
+            email TEXT,
+            dob TEXT,
+            city TEXT,
+            state TEXT,
+            instagram TEXT,
+            facebook TEXT,
+            linkedin TEXT,
+            photo_path TEXT,
+            father_name TEXT,
+            father_phone TEXT,
+            mother_name TEXT,
+            mother_phone TEXT,
+            parents_email TEXT,
+            joined_stage TEXT,
+            plan_type TEXT,
+            english_training TEXT,
+            account_status TEXT DEFAULT 'In Process',
+            current_stage TEXT,
+            dropped_date TEXT,
+            upgraded_to TEXT,
+            counsellor TEXT,
+            counsellor_email TEXT,
+            counsellor_number TEXT,
+            lead_source TEXT,
+            referral_type TEXT,
+            operations_referral TEXT,
+            package_amount NUMERIC(14,2) DEFAULT 0,
+            discount_allowed NUMERIC(14,2) DEFAULT 0,
+            additional_package_notes TEXT,
+            final_package NUMERIC(14,2) DEFAULT 0,
+            inst1_amount NUMERIC(14,2) DEFAULT 0,
+            inst1_date TEXT,
+            inst1_note TEXT,
+            inst2_amount NUMERIC(14,2) DEFAULT 0,
+            inst2_date TEXT,
+            inst2_note TEXT,
+            inst3_amount NUMERIC(14,2) DEFAULT 0,
+            inst3_date TEXT,
+            inst3_note TEXT,
+            inst4_amount NUMERIC(14,2) DEFAULT 0,
+            inst4_date TEXT,
+            inst4_note TEXT,
+            total_paid NUMERIC(14,2) DEFAULT 0,
+            welcome_mail TEXT,
+            welcome_call_by TEXT,
+            welcome_call_date TEXT,
+            english_book TEXT,
+            english_book_date TEXT,
+            oxford_book TEXT,
+            oxford_book_date TEXT,
+            plab_brochure INTEGER DEFAULT 0,
+            ceo_letter INTEGER DEFAULT 0,
+            refund_policy INTEGER DEFAULT 0,
+            service_agreement INTEGER DEFAULT 0,
+            goodie_pen INTEGER DEFAULT 0,
+            goodie_diary INTEGER DEFAULT 0,
+            goodie_laptop_bag INTEGER DEFAULT 0,
+            goodie_stickers INTEGER DEFAULT 0,
+            contract_path TEXT,
+            additional_notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_ops_tables: {e}")
+
+
+# ── Stages & statuses for dropdowns ──
+PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage', 'Job Hunt Stage', 'Completed']
+ACCOUNT_STATUSES = ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
+PLAN_TYPES = [
+    'Full Spon', 'Integrated Consulting',
+    '2022 UK - Full Sponsorship', '2022 UK - IC',
+    '2023 UK - PGCP', '2024 UK - PGCP', '2025 UK - PGCP',
+    '2023 UK - PGCP - Dual', '2024 UK - PGCP - Dual', '2025 UK - PGCP - Dual',
+]
+JOINED_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage']
+ENGLISH_TRAINING_OPTIONS = ['IELTS', 'OET']
+LEAD_SOURCES = ['Social Media', 'Website', 'Referral', 'Walk-in', 'Event', 'Other']
+
+
+def _next_registration_number(conn):
+    """Generate next GCUKIP/YY-YY/NNN registration number."""
+    now = datetime.now()
+    if now.month >= 4:
+        y1, y2 = now.year % 100, (now.year + 1) % 100
+    else:
+        y1, y2 = (now.year - 1) % 100, now.year % 100
+    prefix = f"GCUKIP/{y1:02d}-{y2:02d}/"
+    row = conn.execute(
+        "SELECT registration_number FROM plab_clients WHERE registration_number LIKE ? ORDER BY registration_number DESC LIMIT 1",
+        (prefix + '%',)
+    ).fetchone()
+    if row:
+        try:
+            last_num = int(row['registration_number'].split('/')[-1])
+        except (ValueError, IndexError):
+            last_num = 0
+    else:
+        last_num = 0
+    return f"{prefix}{last_num + 1:03d}"
+
+
+@app.route('/operations/plab')
+@admin_required
+def ops_plab_list():
+    """PLAB clients list with search and filters."""
+    conn = get_db()
+    search = request.args.get('q', '').strip()
+    status_filter = request.args.get('status', '')
+    stage_filter = request.args.get('stage', '')
+
+    sql = "SELECT * FROM plab_clients WHERE 1=1"
+    params = []
+    if search:
+        sql += " AND (LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?) OR LOWER(registration_number) LIKE LOWER(?) OR LOWER(COALESCE(email,'')) LIKE LOWER(?) OR LOWER(COALESCE(mobile,'')) LIKE LOWER(?))"
+        like = f"%{search}%"
+        params += [like, like, like, like]
+    if status_filter:
+        sql += " AND account_status = ?"
+        params.append(status_filter)
+    if stage_filter:
+        sql += " AND current_stage = ?"
+        params.append(stage_filter)
+    sql += " ORDER BY id DESC"
+    clients = conn.execute(sql, tuple(params)).fetchall()
+
+    # Summary stats
+    total = len(clients)
+    active_count = sum(1 for c in clients if c['account_status'] == 'In Process')
+    total_package = sum(float(c['final_package'] or 0) for c in clients)
+    total_collected = sum(float(c['total_paid'] or 0) for c in clients)
+
+    conn.close()
+    return render_template('ops_plab_list.html',
+                           clients=clients, search=search, status_filter=status_filter,
+                           stage_filter=stage_filter, total=total, active_count=active_count,
+                           total_package=total_package, total_collected=total_collected,
+                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES)
+
+
+@app.route('/operations/plab/<int:client_id>')
+@admin_required
+def ops_plab_dashboard(client_id):
+    """Individual client dashboard with all details."""
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    conn.close()
+    if not client:
+        flash('Client not found', 'error')
+        return redirect(url_for('ops_plab_list'))
+    # Compute payment info
+    inst_amounts = [float(client[f'inst{i}_amount'] or 0) for i in range(1, 5)]
+    total_paid = sum(inst_amounts)
+    final_pkg = float(client['final_package'] or 0)
+    balance = final_pkg - total_paid
+    payment_pct = (total_paid / final_pkg * 100) if final_pkg > 0 else 0
+    return render_template('ops_plab_dashboard.html', client=client,
+                           total_paid=total_paid, balance=balance, payment_pct=payment_pct,
+                           plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES)
+
+
+@app.route('/operations/plab/add', methods=['GET', 'POST'])
+@admin_required
+def ops_plab_add():
+    """Add new PLAB client."""
+    conn = get_db()
+    if request.method == 'POST':
+        try:
+            reg_num = _next_registration_number(conn)
+            f = request.form
+            pkg = float(f.get('package_amount') or 0)
+            disc = float(f.get('discount_allowed') or 0)
+            final_pkg = pkg - disc
+            inst_total = sum(float(f.get(f'inst{i}_amount') or 0) for i in range(1, 5))
+
+            conn.execute('''INSERT INTO plab_clients (
+                registration_number, registration_date, customer_id,
+                prefix, first_name, last_name,
+                mobile, whatsapp1, whatsapp2, email, dob, city, state,
+                instagram, facebook, linkedin,
+                father_name, father_phone, mother_name, mother_phone, parents_email,
+                joined_stage, plan_type, english_training,
+                account_status, current_stage,
+                counsellor, counsellor_email, counsellor_number,
+                lead_source, referral_type, operations_referral,
+                package_amount, discount_allowed, additional_package_notes,
+                final_package, total_paid,
+                inst1_amount, inst1_date, inst1_note,
+                inst2_amount, inst2_date, inst2_note,
+                inst3_amount, inst3_date, inst3_note,
+                inst4_amount, inst4_date, inst4_note,
+                additional_notes, created_by
+            ) VALUES (
+                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+            )''', (
+                reg_num, f.get('registration_date') or datetime.now().strftime('%Y-%m-%d'),
+                f.get('customer_id') or '',
+                f.get('prefix', 'Dr.'), f.get('first_name'), f.get('last_name', ''),
+                f.get('mobile', ''), f.get('whatsapp1', ''), f.get('whatsapp2', ''),
+                f.get('email', ''), f.get('dob', ''), f.get('city', ''), f.get('state', ''),
+                f.get('instagram', ''), f.get('facebook', ''), f.get('linkedin', ''),
+                f.get('father_name', ''), f.get('father_phone', ''),
+                f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
+                f.get('joined_stage', ''), f.get('plan_type', ''), f.get('english_training', ''),
+                f.get('account_status', 'In Process'), f.get('joined_stage', ''),
+                f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
+                f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
+                pkg, disc, f.get('additional_package_notes', ''),
+                final_pkg, inst_total,
+                float(f.get('inst1_amount') or 0), f.get('inst1_date', ''), f.get('inst1_note', ''),
+                float(f.get('inst2_amount') or 0), f.get('inst2_date', ''), f.get('inst2_note', ''),
+                float(f.get('inst3_amount') or 0), f.get('inst3_date', ''), f.get('inst3_note', ''),
+                float(f.get('inst4_amount') or 0), f.get('inst4_date', ''), f.get('inst4_note', ''),
+                f.get('additional_notes', ''), session['user_id']
+            ))
+            conn.commit()
+            flash(f'Client {reg_num} added successfully', 'success')
+            conn.close()
+            return redirect(url_for('ops_plab_list'))
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"ops_plab_add: {e}")
+            flash(f'Error adding client: {e}', 'error')
+
+    conn.close()
+    return render_template('ops_plab_form.html', mode='add', item=None,
+                           plan_types=PLAN_TYPES, joined_stages=JOINED_STAGES,
+                           english_options=ENGLISH_TRAINING_OPTIONS,
+                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES,
+                           lead_sources=LEAD_SOURCES)
+
+
+@app.route('/operations/plab/<int:client_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_plab_edit(client_id):
+    """Edit PLAB client."""
+    conn = get_db()
+    if request.method == 'POST':
+        try:
+            f = request.form
+            pkg = float(f.get('package_amount') or 0)
+            disc = float(f.get('discount_allowed') or 0)
+            final_pkg = pkg - disc
+            inst_total = sum(float(f.get(f'inst{i}_amount') or 0) for i in range(1, 5))
+
+            conn.execute('''UPDATE plab_clients SET
+                registration_date=?, customer_id=?,
+                prefix=?, first_name=?, last_name=?,
+                mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
+                instagram=?, facebook=?, linkedin=?,
+                father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
+                joined_stage=?, plan_type=?, english_training=?,
+                account_status=?, current_stage=?,
+                dropped_date=?, upgraded_to=?,
+                counsellor=?, counsellor_email=?, counsellor_number=?,
+                lead_source=?, referral_type=?, operations_referral=?,
+                package_amount=?, discount_allowed=?, additional_package_notes=?,
+                final_package=?, total_paid=?,
+                inst1_amount=?, inst1_date=?, inst1_note=?,
+                inst2_amount=?, inst2_date=?, inst2_note=?,
+                inst3_amount=?, inst3_date=?, inst3_note=?,
+                inst4_amount=?, inst4_date=?, inst4_note=?,
+                welcome_mail=?, welcome_call_by=?, welcome_call_date=?,
+                english_book=?, english_book_date=?,
+                oxford_book=?, oxford_book_date=?,
+                plab_brochure=?, ceo_letter=?, refund_policy=?, service_agreement=?,
+                goodie_pen=?, goodie_diary=?, goodie_laptop_bag=?, goodie_stickers=?,
+                additional_notes=?, updated_at=CURRENT_TIMESTAMP
+                WHERE id=?
+            ''', (
+                f.get('registration_date', ''), f.get('customer_id', ''),
+                f.get('prefix', 'Dr.'), f.get('first_name'), f.get('last_name', ''),
+                f.get('mobile', ''), f.get('whatsapp1', ''), f.get('whatsapp2', ''),
+                f.get('email', ''), f.get('dob', ''), f.get('city', ''), f.get('state', ''),
+                f.get('instagram', ''), f.get('facebook', ''), f.get('linkedin', ''),
+                f.get('father_name', ''), f.get('father_phone', ''),
+                f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
+                f.get('joined_stage', ''), f.get('plan_type', ''), f.get('english_training', ''),
+                f.get('account_status', 'In Process'), f.get('current_stage', ''),
+                f.get('dropped_date', ''), f.get('upgraded_to', ''),
+                f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
+                f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
+                pkg, disc, f.get('additional_package_notes', ''),
+                final_pkg, inst_total,
+                float(f.get('inst1_amount') or 0), f.get('inst1_date', ''), f.get('inst1_note', ''),
+                float(f.get('inst2_amount') or 0), f.get('inst2_date', ''), f.get('inst2_note', ''),
+                float(f.get('inst3_amount') or 0), f.get('inst3_date', ''), f.get('inst3_note', ''),
+                float(f.get('inst4_amount') or 0), f.get('inst4_date', ''), f.get('inst4_note', ''),
+                f.get('welcome_mail', ''), f.get('welcome_call_by', ''), f.get('welcome_call_date', ''),
+                f.get('english_book', ''), f.get('english_book_date', ''),
+                f.get('oxford_book', ''), f.get('oxford_book_date', ''),
+                1 if f.get('plab_brochure') else 0,
+                1 if f.get('ceo_letter') else 0,
+                1 if f.get('refund_policy') else 0,
+                1 if f.get('service_agreement') else 0,
+                1 if f.get('goodie_pen') else 0,
+                1 if f.get('goodie_diary') else 0,
+                1 if f.get('goodie_laptop_bag') else 0,
+                1 if f.get('goodie_stickers') else 0,
+                f.get('additional_notes', ''),
+                client_id
+            ))
+            conn.commit()
+            flash('Client updated', 'success')
+            conn.close()
+            return redirect(url_for('ops_plab_dashboard', client_id=client_id))
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"ops_plab_edit: {e}")
+            flash(f'Error: {e}', 'error')
+
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    conn.close()
+    if not client:
+        flash('Client not found', 'error')
+        return redirect(url_for('ops_plab_list'))
+    return render_template('ops_plab_form.html', mode='edit', item=client,
+                           plan_types=PLAN_TYPES, joined_stages=JOINED_STAGES,
+                           english_options=ENGLISH_TRAINING_OPTIONS,
+                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES,
+                           lead_sources=LEAD_SOURCES)
+
+
+@app.route('/operations/plab/<int:client_id>/delete', methods=['POST'])
+@admin_required
+def ops_plab_delete(client_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM plab_clients WHERE id = ?", (client_id,))
+        conn.commit()
+        flash('Client deleted', 'success')
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash(f'Error: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('ops_plab_list'))
+
+
+@app.route('/operations/plab/import', methods=['GET', 'POST'])
+@admin_required
+def ops_plab_import():
+    """Import PLAB clients from CSV (Zoho export)."""
+    if request.method == 'POST':
+        import csv, io
+        file = request.files.get('csv_file')
+        if not file or not file.filename.endswith('.csv'):
+            flash('Please upload a CSV file', 'error')
+            return redirect(request.url)
+        try:
+            stream = io.StringIO(file.stream.read().decode('utf-8-sig'))
+            reader = csv.DictReader(stream)
+            conn = get_db()
+            imported = 0
+            skipped = 0
+            for row in reader:
+                # Map Zoho column names to our fields
+                cand_name = row.get('Candidate Name', row.get('Candidate_Name', '')).strip()
+                reg_num = row.get('Registration Number', row.get('Registration_Number', '')).strip()
+                if not cand_name and not reg_num:
+                    skipped += 1
+                    continue
+                # Parse name: "Dr.FirstName LastName - GCUKIP/..." or "Dr. First Last"
+                name_part = cand_name.split(' - ')[0].strip() if ' - ' in cand_name else cand_name
+                prefix = 'Dr.'
+                if name_part.startswith('Dr.'):
+                    name_part = name_part[3:].strip()
+                elif name_part.startswith('Dr '):
+                    name_part = name_part[3:].strip()
+                parts = name_part.split(None, 1)
+                first_name = parts[0] if parts else name_part
+                last_name = parts[1] if len(parts) > 1 else ''
+
+                # Check duplicate by registration number
+                if reg_num:
+                    exists = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+                    if exists:
+                        skipped += 1
+                        continue
+
+                pkg = _safe_float(row.get('Package', row.get('Package_Amount', '0')))
+                disc = _safe_float(row.get('Discount Allowed', row.get('Discount', '0')))
+                final = _safe_float(row.get('Final Package', row.get('Finalized_Package', ''))) or (pkg - disc)
+                i1 = _safe_float(row.get('1st Installment', row.get('Installment_1', '0')))
+                i2 = _safe_float(row.get('2nd Installment', row.get('Installment_2', '0')))
+                i3 = _safe_float(row.get('3rd Installment', row.get('Installment_3', '0')))
+                i4 = _safe_float(row.get('4th Installment', row.get('Installment_4', '0')))
+                total_paid = i1 + i2 + i3 + i4
+
+                conn.execute('''INSERT INTO plab_clients (
+                    registration_number, registration_date, customer_id,
+                    prefix, first_name, last_name,
+                    mobile, email, city, state,
+                    joined_stage, plan_type, english_training,
+                    account_status, current_stage,
+                    counsellor, lead_source,
+                    package_amount, discount_allowed, final_package, total_paid,
+                    inst1_amount, inst1_date, inst1_note,
+                    inst2_amount, inst2_date, inst2_note,
+                    inst3_amount, inst3_date, inst3_note,
+                    inst4_amount, inst4_date, inst4_note,
+                    additional_notes, created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    reg_num or _next_registration_number(conn),
+                    row.get('Registration Date', row.get('Registration_Date', '')),
+                    row.get('Customer ID', row.get('Customer_ID', '')),
+                    prefix, first_name, last_name,
+                    row.get('Mobile', row.get('Phone', '')),
+                    row.get('Email', ''),
+                    row.get('City', ''),
+                    row.get('State', ''),
+                    row.get('Stage Joined', row.get('Joined_Stage', '')),
+                    row.get('Plan Type', row.get('Plan_Type', '')),
+                    row.get('English Training', ''),
+                    row.get('Account Status', row.get('Account_Status', 'In Process')),
+                    row.get('Current Status', row.get('Current_Stage', row.get('Stage Joined', ''))),
+                    row.get('Counsellor', ''),
+                    row.get('Lead Source', row.get('Lead_Source', '')),
+                    pkg, disc, final, total_paid,
+                    i1, row.get('1st Instalment Date', ''), row.get('1st Installment Note', ''),
+                    i2, row.get('2nd Instalment Date', ''), row.get('2nd Installment Note', ''),
+                    i3, row.get('3rd Instalment Date', ''), row.get('3rd Installment Note', ''),
+                    i4, row.get('4th Instalment Date', ''), row.get('4th Installment Note', ''),
+                    row.get('Additional Notes', ''),
+                    session['user_id']
+                ))
+                imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Imported {imported} clients, skipped {skipped} (duplicates/empty)', 'success')
+            return redirect(url_for('ops_plab_list'))
+        except Exception as e:
+            logging.error(f"ops_plab_import: {e}")
+            flash(f'Import error: {e}', 'error')
+    return render_template('ops_plab_import.html')
+
+
+def _safe_float(val):
+    """Parse a float from a string, stripping currency symbols and commas."""
+    if not val:
+        return 0.0
+    try:
+        return float(str(val).replace(',', '').replace('₹', '').replace('$', '').strip())
+    except (ValueError, TypeError):
+        return 0.0
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
 ensure_notification_tables()
 ensure_budget_tables()
+ensure_ops_tables()
 seed_kra_categories()
 seed_default_meeting_types()
 seed_budget_categories()
