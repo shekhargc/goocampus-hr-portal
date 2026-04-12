@@ -1,35 +1,54 @@
 {% extends "base.html" %}
-{% block title %}{{ 'Edit' if mode == 'edit' else 'New' }} Salary{% endblock %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Salary{% endblock %}
 {% block content %}
 <div style="max-width:640px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">
         <a href="/finance/salaries" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Salaries</a>
     </div>
     <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
-        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Salary' if mode == 'edit' else 'New Salary' }}</h1>
-        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">Each salary line appears in the monthly budget entry under the Salaries section.</p>
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Salary' if mode == 'edit' else 'Add Employee Salary' }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if mode == 'edit' %}
+            Update cost, project, or status for this salary entry.
+            {% else %}
+            Pick an employee — their name and department are pulled from the employee database automatically.
+            {% endif %}
+        </p>
 
         <form method="POST" action="{% if mode == 'edit' %}/finance/salaries/{{ item.id }}/edit{% else %}/finance/salaries/add{% endif %}">
+            {% if mode == 'add' %}
+            <!-- Employee dropdown -->
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Name *</label>
-                <input type="text" name="name" required maxlength="120" value="{{ item.name if item else '' }}" placeholder="e.g. Ramesh Kumar / Contract Consultant" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Department</label>
-                    <input type="text" name="department" maxlength="80" value="{{ item.department if item else '' }}" placeholder="e.g. Sales" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Employee *</label>
+                {% if available_employees %}
+                <select name="employee_id" id="employeeSelect" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">— Select an employee —</option>
+                    {% for emp in available_employees %}
+                    <option value="{{ emp.id }}" data-dept="{{ emp.department or '' }}">{{ emp.name }}{% if emp.department %} ({{ emp.department }}){% endif %}</option>
+                    {% endfor %}
+                </select>
+                {% else %}
+                <div style="background:#FEF2F2;border:1px solid #FECACA;color:#991B1B;padding:0.6rem 0.8rem;border-radius:8px;font-size:0.82rem;">
+                    All employees already have a salary entry. You can edit existing ones from the <a href="/finance/salaries" style="color:#991B1B;font-weight:600;">list</a>.
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Project</label>
-                    <select name="project_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— None —</option>
-                        {% for p in projects %}
-                        <option value="{{ p.id }}" {% if item and item.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                {% endif %}
             </div>
+            <!-- Department shown as read-only feedback -->
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Department</label>
+                <input type="text" id="deptDisplay" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" placeholder="Auto-filled from employee" />
+            </div>
+            {% else %}
+            <!-- Edit mode: name + department read-only -->
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Employee</label>
+                <input type="text" value="{{ item.name }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--navy);font-weight:600;" />
+            </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Department</label>
+                <input type="text" value="{{ item.department or '—' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+            </div>
+            {% endif %}
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
@@ -47,6 +66,16 @@
             </div>
 
             <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Project</label>
+                <select name="project_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">— None —</option>
+                    {% for p in projects %}
+                    <option value="{{ p.id }}" {% if item and item.project_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
                 <textarea name="notes" rows="2" maxlength="400" placeholder="Optional" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.notes if item else '' }}</textarea>
             </div>
@@ -61,10 +90,29 @@
             {% endif %}
 
             <div style="display:flex;gap:0.8rem;">
-                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Create Salary' }}</button>
+                {% if mode == 'add' and available_employees %}
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;">Add Salary</button>
+                {% elif mode == 'edit' %}
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;cursor:pointer;">Save Changes</button>
+                {% endif %}
                 <a href="/finance/salaries" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.7rem 1.4rem;border-radius:8px;font-size:0.88rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
             </div>
         </form>
     </div>
 </div>
+
+{% if mode == 'add' %}
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const sel = document.getElementById('employeeSelect');
+    const deptField = document.getElementById('deptDisplay');
+    if (sel && deptField) {
+        sel.addEventListener('change', function() {
+            const opt = sel.options[sel.selectedIndex];
+            deptField.value = opt.dataset.dept || '';
+        });
+    }
+});
+</script>
+{% endif %}
 {% endblock %}

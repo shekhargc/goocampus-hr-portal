@@ -8033,8 +8033,20 @@ def finance_salaries_add():
     user = get_user()
     conn = get_db()
     if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        department = request.form.get('department', '').strip()
+        # Employee-linked salary: get name + department from the selected employee
+        emp_val = request.form.get('employee_id', '')
+        employee_id = int(emp_val) if emp_val and emp_val.isdigit() else None
+        if not employee_id:
+            flash('Please select an employee.', 'error')
+            conn.close()
+            return redirect(url_for('finance_salaries_add'))
+        emp = conn.execute("SELECT name, department FROM employees WHERE id = ?", (employee_id,)).fetchone()
+        if not emp:
+            flash('Employee not found.', 'error')
+            conn.close()
+            return redirect(url_for('finance_salaries_add'))
+        name = emp['name']
+        department = emp['department'] or ''
         project_val = request.form.get('project_id', '')
         project_id = int(project_val) if project_val and project_val.isdigit() else None
         try:
@@ -8043,18 +8055,20 @@ def finance_salaries_add():
             monthly_cost = 0
         currency = request.form.get('currency', 'INR') or 'INR'
         notes = request.form.get('notes', '').strip()
-        if not name:
-            flash('Name is required', 'error')
+        # Check duplicate
+        existing = conn.execute("SELECT id FROM salary_items WHERE employee_id = ?", (employee_id,)).fetchone()
+        if existing:
+            flash(f'{name} already has a salary entry.', 'error')
             conn.close()
             return redirect(url_for('finance_salaries_add'))
         try:
             conn.execute(
-                "INSERT INTO salary_items (name, department, project_id, monthly_cost, currency, is_active, notes, created_by) "
-                "VALUES (?, ?, ?, ?, ?, 1, ?, ?)",
-                (name, department, project_id, monthly_cost, currency, notes, user['id'])
+                "INSERT INTO salary_items (employee_id, name, department, project_id, monthly_cost, currency, is_active, notes, created_by) "
+                "VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)",
+                (employee_id, name, department, project_id, monthly_cost, currency, notes, user['id'])
             )
             conn.commit()
-            flash('Salary item added', 'success')
+            flash(f'Salary for {name} added.', 'success')
         except Exception as e:
             try:
                 conn.rollback()
@@ -8063,12 +8077,25 @@ def finance_salaries_add():
             flash(f'Could not add: {e}', 'error')
         conn.close()
         return redirect(url_for('finance_salaries'))
+    # GET: employees without a salary item yet
+    try:
+        available_employees = conn.execute('''
+            SELECT e.id, e.name, e.department
+            FROM employees e
+            WHERE (e.is_active IS NULL OR e.is_active = 1)
+              AND e.emp_code != 'admin'
+              AND NOT EXISTS (SELECT 1 FROM salary_items s WHERE s.employee_id = e.id)
+            ORDER BY e.name
+        ''').fetchall()
+    except Exception:
+        available_employees = []
     try:
         projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     except Exception:
         projects = []
     conn.close()
-    return render_template('finance_salary_form.html', user=user, item=None, projects=projects, mode='add')
+    return render_template('finance_salary_form.html', user=user, item=None, projects=projects,
+                           available_employees=available_employees, mode='add')
 
 
 @app.route('/finance/salaries/<int:item_id>/edit', methods=['GET', 'POST'])
