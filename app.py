@@ -9680,8 +9680,8 @@ def ops_payments_api_fix():
             try:
                 raw_conn = conn.conn
                 cur = raw_conn.cursor()
-                cur.execute('SELECT COUNT(*) FROM ops_payments')
-                before = cur.fetchone()[0]
+                cur.execute('SELECT COUNT(*) AS cnt FROM ops_payments')
+                before = cur.fetchone()['cnt']
                 # Two-step dedup: find IDs to keep, delete the rest
                 cur.execute('''
                     CREATE TEMP TABLE keep_ids AS
@@ -9697,8 +9697,8 @@ def ops_payments_api_fix():
                 ''')
                 cur.execute('DROP TABLE IF EXISTS keep_ids')
                 raw_conn.commit()
-                cur.execute('SELECT COUNT(*) FROM ops_payments')
-                after = cur.fetchone()[0]
+                cur.execute('SELECT COUNT(*) AS cnt FROM ops_payments')
+                after = cur.fetchone()['cnt']
                 cur.close()
                 conn.close()
                 return jsonify({'before': before, 'after': after, 'removed': before - after})
