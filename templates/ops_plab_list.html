@@ -118,7 +118,7 @@
 
   .filter-form {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    grid-template-columns: 1.2fr 1fr 1fr auto;
     gap: 1rem;
     align-items: flex-end;
   }
@@ -165,6 +165,8 @@
     cursor: pointer;
     transition: background 0.2s;
     align-self: flex-end;
+    height: 38px;
+    white-space: nowrap;
   }
 
   .filter-button:hover {
@@ -355,6 +357,7 @@
 
     .filter-button {
       width: 100%;
+      height: auto;
     }
 
     .data-table {
