@@ -9659,31 +9659,6 @@ def ops_payments_delete(record_id):
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
 
 
-@app.route('/operations/payments/api-fix-regs', methods=['POST'])
-def ops_payments_fix_regs():
-    """Temporary: fix misassigned payment reg numbers from Zoho CSV errors."""
-    token = request.args.get('token', '')
-    if token != 'GC2026REGFIX':
-        return jsonify({'error': 'Unauthorized'}), 401
-    try:
-        fixes = request.get_json()  # list of {old_reg, new_reg, payment_date, amount}
-        conn = get_db()
-        raw_conn = conn.conn
-        cur = raw_conn.cursor()
-        results = []
-        for fix in fixes:
-            cur.execute("""UPDATE ops_payments SET registration_number = %s
-                WHERE registration_number = %s AND payment_date = %s AND total_amount_paid = %s""",
-                (fix['new_reg'], fix['old_reg'], fix['payment_date'], float(fix['amount'])))
-            results.append({'fix': fix, 'rows_updated': cur.rowcount})
-        raw_conn.commit()
-        cur.close()
-        conn.close()
-        return jsonify({'success': True, 'results': results})
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
