@@ -9648,6 +9648,90 @@ def ops_payments_delete(record_id):
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
 
 
+@app.route('/operations/payments/api-fix', methods=['POST'])
+def ops_payments_api_fix():
+    """Temporary endpoint to deduplicate payments and check missing reg numbers."""
+    token = request.args.get('token', '')
+    if token != 'GC2026PAYFIX':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        action = request.args.get('action', '')
+        conn = get_db()
+
+        if action == 'check_regs':
+            # Check which reg numbers exist in plab_clients
+            regs = request.get_json()  # list of reg numbers
+            results = {}
+            for reg in regs:
+                row = conn.execute('SELECT registration_number FROM plab_clients WHERE registration_number = ?', (reg,)).fetchone()
+                results[reg] = bool(row)
+                # Also check similar patterns
+                if not row:
+                    similar = conn.execute(
+                        "SELECT registration_number FROM plab_clients WHERE registration_number LIKE ?",
+                        (f'%{reg.split("/")[-1]}%',)
+                    ).fetchall()
+                    results[reg + '_similar'] = [r['registration_number'] for r in similar][:10]
+            conn.close()
+            return jsonify(results)
+
+        elif action == 'dedup':
+            # Remove duplicate payment records, keeping the one with lowest id
+            raw_conn = conn.conn
+            cur = raw_conn.cursor()
+            # Count before
+            cur.execute('SELECT COUNT(*) FROM ops_payments')
+            before = cur.fetchone()[0]
+            # Delete duplicates
+            cur.execute('''
+                DELETE FROM ops_payments
+                WHERE id NOT IN (
+                    SELECT MIN(id)
+                    FROM ops_payments
+                    GROUP BY registration_number, payment_date, amount_paid, gst_paid,
+                             total_amount_paid, instalment, payment_method, total_package, notes
+                )
+            ''')
+            raw_conn.commit()
+            # Count after
+            cur.execute('SELECT COUNT(*) FROM ops_payments')
+            after = cur.fetchone()[0]
+            cur.close()
+            conn.close()
+            return jsonify({'before': before, 'after': after, 'removed': before - after})
+
+        elif action == 'insert_payment':
+            # Insert a single payment record bypassing FK constraint temporarily
+            data = request.get_json()
+            reg = data.get('registration_number')
+            # First check if client exists, if not try to find similar
+            row = conn.execute('SELECT registration_number FROM plab_clients WHERE registration_number = ?', (reg,)).fetchone()
+            if not row:
+                conn.close()
+                return jsonify({'error': f'Client {reg} not found in plab_clients'}), 404
+
+            raw_conn = conn.conn
+            cur = raw_conn.cursor()
+            cur.execute('''INSERT INTO ops_payments
+                (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                 instalment, payment_method, total_package, notes, created_by)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                (reg, data.get('payment_date'), float(data.get('amount_paid', 0)),
+                 float(data.get('gst_paid', 0)), float(data.get('total_amount_paid', 0)),
+                 data.get('instalment'), data.get('payment_method'),
+                 float(data.get('total_package', 0)), data.get('notes', ''), 1))
+            raw_conn.commit()
+            cur.close()
+            conn.close()
+            return jsonify({'success': True})
+
+        else:
+            conn.close()
+            return jsonify({'error': 'Unknown action. Use ?action=dedup, check_regs, or insert_payment'}), 400
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
