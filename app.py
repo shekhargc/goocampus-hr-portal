@@ -7268,6 +7268,14 @@ def finance_edit_month(month, year):
             pass
         products_raw = []
 
+    # Seed department rollup with active employee departments
+    try:
+        emp_depts_raw = conn.execute(
+            "SELECT DISTINCT department FROM employees WHERE is_active = 1 AND department IS NOT NULL AND department != ''"
+        ).fetchall()
+    except Exception:
+        emp_depts_raw = []
+
     conn.close()
 
     # Map category-based entries (expense/department)
@@ -7394,14 +7402,8 @@ def finance_edit_month(month, year):
         return department_rollup[k]
 
     # Seed with active employee departments so zero-expense depts still render
-    try:
-        emp_depts = conn.execute(
-            "SELECT DISTINCT department FROM employees WHERE is_active = 1 AND department IS NOT NULL AND department != ''"
-        ).fetchall()
-        for d in emp_depts:
-            _dept_bucket(d['department'])
-    except Exception:
-        pass
+    for d in emp_depts_raw:
+        _dept_bucket(d['department'])
 
     for g in salary_groups:
         b = _dept_bucket(g['department'])
