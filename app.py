@@ -9665,7 +9665,7 @@ def ops_payments_api_import():
         errors = []
 
         # Get raw psycopg2 connection for savepoint support
-        raw_conn = conn.connection if hasattr(conn, 'connection') else conn
+        raw_conn = conn.conn
         cur = raw_conn.cursor()
 
         for idx, record in enumerate(data):
