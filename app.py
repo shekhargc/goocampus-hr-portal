@@ -8638,11 +8638,20 @@ def ops_plab_dashboard(client_id):
         return redirect(url_for('ops_plab_list'))
     reg = client['registration_number']
     # Compute payment info from actual payments table
-    payments_total = conn.execute("SELECT COALESCE(SUM(total_amount_paid), 0) as total, COALESCE(SUM(gst_paid), 0) as gst FROM ops_payments WHERE registration_number = ?", (reg,)).fetchone()
-    total_paid = float(payments_total['total'] or 0)
-    final_pkg = float(client['final_package'] or 0)
-    balance = final_pkg - total_paid
-    payment_pct = (total_paid / final_pkg * 100) if final_pkg > 0 else 0
+    payments_total = conn.execute("""SELECT
+        COALESCE(SUM(amount_paid), 0) as amount_paid,
+        COALESCE(SUM(gst_paid), 0) as gst_paid,
+        COALESCE(SUM(total_amount_paid), 0) as total_paid
+        FROM ops_payments WHERE registration_number = ?""", (reg,)).fetchone()
+    amount_paid = float(payments_total['amount_paid'] or 0)
+    gst_paid = float(payments_total['gst_paid'] or 0)
+    total_paid = float(payments_total['total_paid'] or 0)
+    # Package and discount from registration page
+    pkg = float(client['package_amount'] or 0)
+    discount = float(client['discount_allowed'] or 0)
+    final_pkg = pkg - discount
+    balance = final_pkg - amount_paid
+    payment_pct = (amount_paid / final_pkg * 100) if final_pkg > 0 else 0
     # Linked sections
     coaching = conn.execute("SELECT * FROM ops_coaching WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     english_logins = conn.execute("SELECT * FROM ops_english_logins WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
@@ -8652,7 +8661,9 @@ def ops_plab_dashboard(client_id):
     payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
+                           amount_paid=amount_paid, gst_paid=gst_paid,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
+                           final_pkg=final_pkg, discount=discount,
                            plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES,
                            coaching=coaching, english_logins=english_logins,
                            test_bookings=test_bookings, call_notes=call_notes,

@@ -68,17 +68,25 @@
         Package Value
       </p>
       <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">
-        ₹<span id="pkg-value">{{ '{:,.0f}'.format(client.final_package or 0) }}</span>
+        ₹<span id="pkg-value">{{ '{:,.0f}'.format(final_pkg or 0) }}</span>
       </p>
+      {% if discount > 0 %}
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
+        ₹{{ '{:,.0f}'.format(client.package_amount or 0) }} - ₹{{ '{:,.0f}'.format(discount) }} discount
+      </p>
+      {% endif %}
     </div>
 
-    <!-- Total Paid -->
+    <!-- Amount Paid (excl GST) -->
     <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
       <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">
-        Total Paid
+        Amount Paid
       </p>
       <p style="margin:0;font-size:20px;font-weight:700;color:#059669;">
-        ₹<span id="paid-value">{{ '{:,.0f}'.format(total_paid or 0) }}</span>
+        ₹<span id="paid-value">{{ '{:,.0f}'.format(amount_paid or 0) }}</span>
+      </p>
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
+        + ₹{{ '{:,.0f}'.format(gst_paid or 0) }} GST = ₹{{ '{:,.0f}'.format(total_paid or 0) }} total
       </p>
     </div>
 
@@ -90,6 +98,11 @@
       <p style="margin:0;font-size:20px;font-weight:700;{% if balance > 0 %}color:#DC2626;{% else %}color:#059669;{% endif %}">
         ₹<span id="balance-value">{{ '{:,.0f}'.format(balance or 0) }}</span>
       </p>
+      {% if discount > 0 %}
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
+        Discount: ₹{{ '{:,.0f}'.format(discount) }}
+      </p>
+      {% endif %}
     </div>
   </div>
 
@@ -102,7 +115,7 @@
       <div style="background:var(--orange);height:100%;width:{{ payment_pct|default(0) }}%;border-radius:999px;transition:width 0.3s ease;"></div>
     </div>
     <p style="margin:0;font-size:14px;font-weight:600;color:var(--navy);">
-      ₹<span id="paid-label">{{ '{:,.0f}'.format(total_paid or 0) }}</span> paid of ₹<span id="pkg-label">{{ '{:,.0f}'.format(client.final_package or 0) }}</span> ({{ '{:.1f}'.format(payment_pct or 0) }}%)
+      ₹<span id="paid-label">{{ '{:,.0f}'.format(amount_paid or 0) }}</span> paid of ₹<span id="pkg-label">{{ '{:,.0f}'.format(final_pkg or 0) }}</span> ({{ '{:.1f}'.format(payment_pct or 0) }}%)
     </p>
   </div>
 
@@ -728,9 +741,9 @@ function formatIndianNumber(num) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  var paidValue = parseFloat('{{ total_paid or 0 }}');
-  var pkgValue = parseFloat('{{ client.final_package or 0 }}');
-  var balanceValue = paidValue > pkgValue ? 0 : (pkgValue - paidValue);
+  var paidValue = parseFloat('{{ amount_paid or 0 }}');
+  var pkgValue = parseFloat('{{ final_pkg or 0 }}');
+  var balanceValue = parseFloat('{{ balance or 0 }}');
 
   var elements = ['paid-value', 'paid-label', 'pkg-value', 'pkg-label', 'balance-value'];
   elements.forEach(function(id) {
