@@ -6458,7 +6458,15 @@ def ensure_budget_tables():
             )'''
         ]
         for sql in tables_sql:
-            conn.execute(sql)
+            try:
+                conn.execute(sql)
+                conn.commit()
+            except Exception as _tbl_err:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"ensure_budget_tables create failed: {_tbl_err}")
         # Migration: add is_recurring column if missing
         try:
             conn.execute("ALTER TABLE budget_categories ADD COLUMN is_recurring INTEGER DEFAULT 0")
