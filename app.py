@@ -9711,6 +9711,22 @@ def ops_payments_api_import():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/operations/payments/api-clear', methods=['POST'])
+def ops_payments_api_clear():
+    """Temporary endpoint to clear all payment records before reimport."""
+    token = request.args.get('token', '')
+    if token != 'GC2026PAYIMPORT':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        conn = get_db()
+        conn.execute('DELETE FROM ops_payments')
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'All payment records deleted'})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_kra_tables()
