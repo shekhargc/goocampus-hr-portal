@@ -8596,15 +8596,39 @@ def ops_plab_list():
             sql += " AND current_stage = ?"
             params.append(stage_filter)
         sql += " ORDER BY id DESC"
-        clients = conn.execute(sql, tuple(params)).fetchall()
+        clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
-        # Summary stats - use actual payment data for collected amount
+        # Get actual payment totals per client from ops_payments
+        payment_totals = {}
+        pay_rows = conn.execute("""SELECT registration_number,
+            COALESCE(SUM(amount_paid), 0) as paid,
+            COALESCE(SUM(gst_paid), 0) as gst
+            FROM ops_payments GROUP BY registration_number""").fetchall()
+        for pr in pay_rows:
+            payment_totals[pr['registration_number']] = {
+                'paid': float(pr['paid'] or 0),
+                'gst': float(pr['gst'] or 0)
+            }
+
+        # Attach computed paid/balance to each client
+        clients = []
+        for c in clients_raw:
+            cd = dict(c)
+            reg = cd['registration_number']
+            pt = payment_totals.get(reg, {'paid': 0, 'gst': 0})
+            pkg = float(cd.get('package_amount') or 0)
+            disc = float(cd.get('discount_allowed') or 0)
+            cd['computed_package'] = pkg - disc
+            cd['computed_paid'] = pt['paid']
+            cd['computed_gst'] = pt['gst']
+            cd['computed_balance'] = cd['computed_package'] - pt['paid']
+            clients.append(cd)
+
+        # Summary stats
         total = len(clients)
         active_count = sum(1 for c in clients if c['account_status'] == 'In Process')
-        total_package = sum(float(c['final_package'] or 0) for c in clients)
-        # Get total collected from ops_payments table for accurate figures
-        collected_row = conn.execute("SELECT COALESCE(SUM(total_amount_paid), 0) as total FROM ops_payments").fetchone()
-        total_collected = float(collected_row['total'] or 0)
+        total_package = sum(float(c['computed_package'] or 0) for c in clients)
+        total_collected = sum(float(c['computed_paid'] or 0) for c in clients)
     except Exception as e:
         logging.error(f"ops_plab_list error: {e}")
         conn.close()

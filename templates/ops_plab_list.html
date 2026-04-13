@@ -542,15 +542,14 @@
           </td>
           <td>{{ client.plan_type or '–' }}</td>
           <td style="text-align: right;">
-            <span id="pkg-{{ client.id }}">₹{{ "{:,.2f}".format(client.final_package or 0) }}</span>
+            <span id="pkg-{{ client.id }}">₹{{ "{:,.2f}".format(client.computed_package or 0) }}</span>
           </td>
           <td style="text-align: right;">
-            <span id="paid-{{ client.id }}">₹{{ "{:,.2f}".format(client.total_paid or 0) }}</span>
+            <span id="paid-{{ client.id }}">₹{{ "{:,.2f}".format(client.computed_paid or 0) }}</span>
           </td>
           <td style="text-align: right;">
-            {% set balance = (client.final_package or 0) - (client.total_paid or 0) %}
-            <span class="{% if balance > 0 %}text-red{% endif %}" id="balance-{{ client.id }}">
-              ₹{{ "{:,.2f}".format(balance) }}
+            <span class="{% if client.computed_balance > 0 %}text-red{% endif %}" id="balance-{{ client.id }}">
+              ₹{{ "{:,.2f}".format(client.computed_balance or 0) }}
             </span>
           </td>
           <td>{{ client.registration_date or '–' }}</td>
