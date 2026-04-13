@@ -9668,13 +9668,16 @@ def ops_payments_fix_regs():
     try:
         fixes = request.get_json()  # list of {old_reg, new_reg, payment_date, amount}
         conn = get_db()
+        raw_conn = conn.conn
+        cur = raw_conn.cursor()
         results = []
         for fix in fixes:
-            r = conn.execute("""UPDATE ops_payments SET registration_number = ?
-                WHERE registration_number = ? AND payment_date = ? AND total_amount_paid = ?""",
-                (fix['new_reg'], fix['old_reg'], fix['payment_date'], float(fix['amount']))).rowcount
-            results.append({'fix': fix, 'rows_updated': r})
-        conn.commit()
+            cur.execute("""UPDATE ops_payments SET registration_number = %s
+                WHERE registration_number = %s AND payment_date = %s AND total_amount_paid = %s""",
+                (fix['new_reg'], fix['old_reg'], fix['payment_date'], float(fix['amount'])))
+            results.append({'fix': fix, 'rows_updated': cur.rowcount})
+        raw_conn.commit()
+        cur.close()
         conn.close()
         return jsonify({'success': True, 'results': results})
     except Exception as e:
