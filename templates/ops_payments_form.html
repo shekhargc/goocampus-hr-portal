@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+
+{% block title %}{% if record %}Edit Payment{% else %}Add Payment{% endif %} - Operations{% endblock %}
+
+{% block content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/payments" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">← Back to All Payments</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit Payment{% else %}Add Payment{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}
+            Update the payment details.
+            {% else %}
+            Add a new payment record for a client.
+            {% endif %}
+        </p>
+
+        <form method="POST">
+
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <select name="registration_number" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">— Choose a client —</option>
+                    {% for client in clients %}
+                    <option value="{{ client.registration_number }}" {% if (pre_reg and pre_reg == client.registration_number) or (record and record.registration_number == client.registration_number) %}selected{% endif %}>
+                        {{ client.registration_number }} – {% if client.prefix %}{{ client.prefix }}{% endif %} {{ client.first_name }} {{ client.last_name }}
+                    </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <!-- ===== PAYMENT DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Payment Details</h3>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Date *</label>
+                    <input type="date" name="payment_date" value="{{ record.payment_date or '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instalment</label>
+                    <select name="instalment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for inst in instalment_options %}
+                        <option value="{{ inst }}" {% if record and record.instalment == inst %}selected{% endif %}>{{ inst }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Amount Paid (₹) *</label>
+                    <input type="number" name="amount_paid" step="0.01" value="{{ record.amount_paid or '0' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GST Paid (₹)</label>
+                    <input type="number" name="gst_paid" step="0.01" value="{{ record.gst_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Total Amount (₹)</label>
+                    <input type="number" id="total_amount_paid" readonly name="total_amount_paid_readonly" step="0.01" value="{{ record.total_amount_paid or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Method</label>
+                    <select name="payment_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for method in payment_methods %}
+                        <option value="{{ method }}" {% if record and record.payment_method == method %}selected{% endif %}>{{ method }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Total Package (₹)</label>
+                <input type="number" name="total_package" step="0.01" value="{{ record.total_package or '0' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== NOTES ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" rows="4" placeholder="Add any notes about this payment..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;font-family:inherit;box-sizing:border-box;">{{ record.notes or '' }}</textarea>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Payment{% else %}Add Payment{% endif %}
+                </button>
+                <a href="/operations/payments" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+  // Auto-calculate total_amount_paid = amount_paid + gst_paid
+  (function() {
+    const amountPaidInput = document.querySelector('input[name="amount_paid"]');
+    const gstPaidInput = document.querySelector('input[name="gst_paid"]');
+    const totalAmountInput = document.getElementById('total_amount_paid');
+
+    function updateTotal() {
+      const amount = parseFloat(amountPaidInput.value) || 0;
+      const gst = parseFloat(gstPaidInput.value) || 0;
+      totalAmountInput.value = (amount + gst).toFixed(2);
+    }
+
+    amountPaidInput.addEventListener('input', updateTotal);
+    gstPaidInput.addEventListener('input', updateTotal);
+
+    // Initialize on page load
+    updateTotal();
+  })();
+</script>
+{% endblock %}

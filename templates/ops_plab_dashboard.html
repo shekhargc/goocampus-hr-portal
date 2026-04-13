@@ -533,6 +533,53 @@
     {% endif %}
   </div>
 
+  <!-- Payments Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ payments|length }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/payments/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
+        {% if payments|length > 0 %}
+        <a href="/operations/payments?reg={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if payments %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Instalment</th>
+            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">Amount (₹)</th>
+            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">GST (₹)</th>
+            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">Total (₹)</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Method</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for p in payments %}
+          <tr style="border-bottom:1px solid var(--gray-200);">
+            <td style="padding:8px;color:var(--gray-700);">{{ p.payment_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ p.instalment or '—' }}</td>
+            <td style="padding:8px;text-align:right;color:var(--gray-700);">₹{{ "{:,.2f}".format(p.amount_paid or 0) }}</td>
+            <td style="padding:8px;text-align:right;color:var(--gray-700);">₹{{ "{:,.2f}".format(p.gst_paid or 0) }}</td>
+            <td style="padding:8px;text-align:right;color:var(--gray-700);font-weight:600;">₹{{ "{:,.2f}".format(p.total_amount_paid or 0) }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ p.payment_method or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <a href="/operations/payments/{{ p.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No payments yet</p>
+    {% endif %}
+  </div>
+
   <!-- Coaching / Training Section -->
   <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">

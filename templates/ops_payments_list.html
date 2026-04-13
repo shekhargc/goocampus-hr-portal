@@ -1,0 +1,721 @@
+{% extends "base.html" %}
+
+{% block title %}All Payments - Operations{% endblock %}
+
+{% block extra_css %}
+<style>
+  .payments-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .payments-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .payments-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .payments-header-actions {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    padding: 0.55rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-primary:hover {
+    background: #0F1B33;
+  }
+
+  .stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 0.85rem;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-top: 0.3rem;
+  }
+
+  .filter-section {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-form {
+    display: flex;
+    gap: 1rem;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .filter-form .form-group {
+    flex: 1;
+    min-width: 150px;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: white;
+    color: var(--gray-700);
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
+  }
+
+  .filter-button {
+    padding: 0.6rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    white-space: nowrap;
+  }
+
+  .filter-button:hover {
+    background: #0F1B33;
+  }
+
+  .reset-button {
+    padding: 0.6rem 1.2rem;
+    background: white;
+    color: var(--gray-600);
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s;
+  }
+
+  .reset-button:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+    color: var(--gray-700);
+  }
+
+  .table-wrapper {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+
+  .data-table thead {
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .data-table th {
+    padding: 0.7rem 1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .data-table td {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    border-top: 1px solid var(--gray-100);
+    color: var(--gray-700);
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--gray-50);
+  }
+
+  .row-link {
+    color: var(--navy);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .row-link:hover {
+    color: #F58220;
+  }
+
+  .row-actions {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .row-actions a {
+    padding: 0.3rem 0.6rem;
+    background: var(--gray-50);
+    color: var(--navy);
+    border-radius: 4px;
+    text-decoration: none;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: background 0.2s;
+  }
+
+  .row-actions a:hover {
+    background: var(--orange);
+    color: white;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--gray-600);
+  }
+
+  .empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  .pagination {
+    display: flex;
+    justify-content: center;
+    gap: 0.5rem;
+    margin-top: 1.5rem;
+    padding: 1rem;
+  }
+
+  .pagination a,
+  .pagination span {
+    padding: 0.5rem 0.8rem;
+    border-radius: 4px;
+    border: 1px solid var(--gray-200);
+    font-size: 0.85rem;
+    text-decoration: none;
+    color: var(--navy);
+  }
+
+  .pagination a:hover {
+    background: var(--gray-50);
+  }
+
+  .pagination .active {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+
+  .pagination .disabled {
+    color: var(--gray-300);
+    cursor: not-allowed;
+  }
+
+  .autocomplete-wrap {
+    position: relative;
+  }
+
+  .suggestions-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .suggestions-dropdown.visible {
+    display: block;
+  }
+
+  .suggestion-item {
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  .suggestion-item:hover,
+  .suggestion-item.highlighted {
+    background: var(--gray-50);
+  }
+
+  .suggestion-name {
+    color: var(--gray-700);
+    font-weight: 500;
+  }
+
+  .suggestion-reg {
+    color: var(--gray-500);
+    font-size: 0.75rem;
+  }
+
+  @media (max-width: 768px) {
+    .payments-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .payments-header-actions {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .btn-primary {
+      width: 100%;
+      text-align: center;
+    }
+
+    .stat-card-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-form {
+      flex-direction: column;
+    }
+
+    .filter-form .form-group {
+      width: 100%;
+    }
+
+    .filter-button {
+      width: 100%;
+    }
+
+    .data-table {
+      font-size: 0.8rem;
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 0.5rem 0.7rem;
+    }
+
+    .row-actions {
+      flex-direction: column;
+    }
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="payments-content">
+  <!-- Header -->
+  <div class="payments-header">
+    <h1>All Payments</h1>
+    <div class="payments-header-actions">
+      <a href="/operations/payments/add" class="btn-primary">+ Add Payment</a>
+    </div>
+  </div>
+
+  <!-- Stats Cards -->
+  <div class="stat-card-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Payments</div>
+      <div class="stat-value">{{ stats.total }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total Amount Collected</div>
+      <div class="stat-value" id="total-collected">₹{{ "{:,.2f}".format(stats.total_collected or 0) }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Total GST Collected</div>
+      <div class="stat-value" id="total-gst">₹{{ "{:,.2f}".format(stats.total_gst or 0) }}</div>
+    </div>
+  </div>
+
+  <!-- Filter Section -->
+  <div class="filter-section">
+    <form method="GET" class="filter-form">
+      <div class="form-group autocomplete-wrap">
+        <label for="client_name">Client Name</label>
+        <input
+          type="text"
+          id="client_name"
+          name="client_name"
+          placeholder="Search client..."
+          value="{{ client_name or '' }}"
+          autocomplete="off"
+        />
+        <div id="client-suggestions" class="suggestions-dropdown"></div>
+      </div>
+      <div class="form-group">
+        <label for="reg">Registration #</label>
+        <input
+          type="text"
+          id="reg"
+          name="reg"
+          placeholder="Reg #..."
+          value="{{ reg or '' }}"
+        />
+      </div>
+      <div class="form-group">
+        <label for="payment_method">Payment Method</label>
+        <select id="payment_method" name="payment_method">
+          <option value="">All Methods</option>
+          {% for method in payment_methods %}
+          <option value="{{ method }}" {% if method == payment_method %}selected{% endif %}>{{ method }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="instalment">Instalment</label>
+        <select id="instalment" name="instalment">
+          <option value="">All Instalments</option>
+          {% for inst in instalment_options %}
+          <option value="{{ inst }}" {% if inst == instalment %}selected{% endif %}>{{ inst }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div style="display: flex; gap: 0.5rem;">
+        <button type="submit" class="filter-button">🔍 Filter</button>
+        {% if has_filters %}
+          <a href="/operations/payments" class="reset-button">Reset</a>
+        {% endif %}
+      </div>
+    </form>
+  </div>
+
+  <!-- Table -->
+  {% if records %}
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Date</th>
+          <th>Reg #</th>
+          <th>Client Name</th>
+          <th>Instalment</th>
+          <th style="text-align: right;">Amount (₹)</th>
+          <th style="text-align: right;">GST (₹)</th>
+          <th style="text-align: right;">Total (₹)</th>
+          <th>Method</th>
+          <th>Notes</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+        <tr>
+          <td>{{ record.payment_date or '–' }}</td>
+          <td>{{ record.registration_number or '–' }}</td>
+          <td>
+            {% if record.first_name or record.last_name %}
+              {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            {% else %}
+              –
+            {% endif %}
+          </td>
+          <td>{{ record.instalment or '–' }}</td>
+          <td style="text-align: right;">
+            <span class="amount-paid">₹{{ "{:,.2f}".format(record.amount_paid or 0) }}</span>
+          </td>
+          <td style="text-align: right;">
+            <span class="amount-gst">₹{{ "{:,.2f}".format(record.gst_paid or 0) }}</span>
+          </td>
+          <td style="text-align: right;">
+            <span class="amount-total">₹{{ "{:,.2f}".format(record.total_amount_paid or 0) }}</span>
+          </td>
+          <td>{{ record.payment_method or '–' }}</td>
+          <td>{{ (record.notes or '')[:50] }}{% if record.notes and record.notes|length > 50 %}...{% endif %}</td>
+          <td>
+            <div class="row-actions">
+              <a href="/operations/payments/{{ record.id }}/edit">Edit</a>
+              <form method="POST" action="/operations/payments/{{ record.id }}/delete" style="display:inline; margin:0;">
+                <button type="submit" style="padding:0.3rem 0.6rem;background:var(--gray-50);color:var(--navy);border:none;border-radius:4px;font-size:0.75rem;font-weight:600;cursor:pointer;transition:background 0.2s;" onclick="return confirm('Delete this payment?')">Delete</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+  <!-- Pagination -->
+  {% if total_pages > 1 %}
+  <div class="pagination">
+    {% if page > 1 %}
+      <a href="/operations/payments?page=1{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">First</a>
+      <a href="/operations/payments?page={{ page - 1 }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Previous</a>
+    {% else %}
+      <span class="disabled">First</span>
+      <span class="disabled">Previous</span>
+    {% endif %}
+
+    <span style="align-self: center; padding: 0;">Page {{ page }} of {{ total_pages }}</span>
+
+    {% if page < total_pages %}
+      <a href="/operations/payments?page={{ page + 1 }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Next</a>
+      <a href="/operations/payments?page={{ total_pages }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Last</a>
+    {% else %}
+      <span class="disabled">Next</span>
+      <span class="disabled">Last</span>
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">💳</div>
+    <p>No payments found</p>
+    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
+      {% if has_filters %}
+      Try adjusting your filters
+      {% else %}
+      Start adding payment records
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
+</div>
+
+<!-- JavaScript for Indian number formatting and autocomplete -->
+<script>
+  function formatIndianCurrency(amount) {
+    if (!amount || amount === 0) return '₹0';
+
+    // Convert to string and remove decimals for formatting
+    let numStr = Math.abs(amount).toFixed(2);
+    let parts = numStr.split('.');
+    let intPart = parts[0];
+    let decPart = parts[1];
+
+    // Add commas in Indian format: XX,XX,XXX
+    let lastThree = intPart.substring(intPart.length - 3);
+    let remaining = intPart.substring(0, intPart.length - 3);
+
+    if (remaining !== '') {
+      intPart = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
+    } else {
+      intPart = lastThree;
+    }
+
+    return '₹' + intPart + '.' + decPart;
+  }
+
+  // Format all currency values on page load
+  document.addEventListener('DOMContentLoaded', function() {
+    // Format summary stat cards
+    const totalCollElem = document.getElementById('total-collected');
+    const totalGstElem = document.getElementById('total-gst');
+
+    if (totalCollElem && totalCollElem.textContent) {
+      const totalCollValue = parseFloat(
+        totalCollElem.textContent.replace(/₹/g, '').replace(/,/g, '')
+      );
+      if (!isNaN(totalCollValue)) {
+        totalCollElem.textContent = formatIndianCurrency(totalCollValue);
+      }
+    }
+
+    if (totalGstElem && totalGstElem.textContent) {
+      const totalGstValue = parseFloat(
+        totalGstElem.textContent.replace(/₹/g, '').replace(/,/g, '')
+      );
+      if (!isNaN(totalGstValue)) {
+        totalGstElem.textContent = formatIndianCurrency(totalGstValue);
+      }
+    }
+
+    // Format table currency values
+    document.querySelectorAll('.amount-paid').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+
+    document.querySelectorAll('.amount-gst').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+
+    document.querySelectorAll('.amount-total').forEach(elem => {
+      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
+      if (!isNaN(value)) {
+        elem.textContent = formatIndianCurrency(value);
+      }
+    });
+  });
+
+  // Client name autocomplete on search field
+  (function() {
+    const input = document.getElementById('client_name');
+    const dropdown = document.getElementById('client-suggestions');
+    let debounceTimer = null;
+    let highlightIdx = -1;
+    let items = [];
+
+    input.addEventListener('input', function() {
+      clearTimeout(debounceTimer);
+      const q = this.value.trim();
+      if (q.length < 2) { hide(); return; }
+      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    input.addEventListener('keydown', function(e) {
+      if (!dropdown.classList.contains('visible')) return;
+      if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
+        updateHighlight();
+      } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        highlightIdx = Math.max(highlightIdx - 1, 0);
+        updateHighlight();
+      } else if (e.key === 'Enter' && highlightIdx >= 0) {
+        e.preventDefault();
+        selectItem(items[highlightIdx]);
+      } else if (e.key === 'Escape') {
+        hide();
+      }
+    });
+
+    document.addEventListener('click', function(e) {
+      if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    function fetchSuggestions(q) {
+      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+          items = data;
+          highlightIdx = -1;
+          if (data.length === 0) { hide(); return; }
+          dropdown.innerHTML = data.map((d, i) =>
+            '<div class="suggestion-item" data-idx="' + i + '">' +
+              '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+              '<span class="suggestion-reg">' + esc(d.reg) + '</span>' +
+            '</div>'
+          ).join('');
+          dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+            el.addEventListener('mousedown', function(e) {
+              e.preventDefault();
+              selectItem(items[parseInt(this.dataset.idx)]);
+            });
+          });
+          dropdown.classList.add('visible');
+        })
+        .catch(() => hide());
+    }
+
+    function selectItem(item) {
+      input.value = item.name;
+      hide();
+    }
+
+    function hide() {
+      dropdown.classList.remove('visible');
+      dropdown.innerHTML = '';
+      highlightIdx = -1;
+      items = [];
+    }
+
+    function updateHighlight() {
+      dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => {
+        el.classList.toggle('highlighted', i === highlightIdx);
+      });
+    }
+
+    function esc(s) {
+      const d = document.createElement('div');
+      d.textContent = s;
+      return d.innerHTML;
+    }
+  })();
+</script>
+{% endblock %}

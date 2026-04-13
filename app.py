@@ -8495,6 +8495,22 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Payments ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_payments (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            payment_date TEXT,
+            amount_paid NUMERIC(14,2) DEFAULT 0,
+            gst_paid NUMERIC(14,2) DEFAULT 0,
+            total_amount_paid NUMERIC(14,2) DEFAULT 0,
+            instalment TEXT,
+            payment_method TEXT,
+            total_package NUMERIC(14,2) DEFAULT 0,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -8523,6 +8539,10 @@ COACHING_METHODS = ['Online', 'Offline', 'Hybrid']
 EXAM_NAMES = ['OET', 'IELTS', 'PLAB 1', 'PLAB 2', 'MRCP', 'MRCS', 'MRCEM']
 EXAM_STATUSES = ['Booked', 'Attended', 'Cancelled by Client', 'Cancelled by Authority', 'Rescheduled', 'Missed']
 EXAM_RESULTS = ['Passed', 'Failed']
+
+# ── Payment dropdowns ──
+PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque']
+INSTALMENT_OPTIONS = ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment']
 
 
 def _next_registration_number(conn):
@@ -8609,9 +8629,9 @@ def ops_plab_dashboard(client_id):
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
     reg = client['registration_number']
-    # Compute payment info
-    inst_amounts = [float(client[f'inst{i}_amount'] or 0) for i in range(1, 5)]
-    total_paid = sum(inst_amounts)
+    # Compute payment info from actual payments table
+    payments_total = conn.execute("SELECT COALESCE(SUM(total_amount_paid), 0) as total, COALESCE(SUM(gst_paid), 0) as gst FROM ops_payments WHERE registration_number = ?", (reg,)).fetchone()
+    total_paid = float(payments_total['total'] or 0)
     final_pkg = float(client['final_package'] or 0)
     balance = final_pkg - total_paid
     payment_pct = (total_paid / final_pkg * 100) if final_pkg > 0 else 0
@@ -8621,13 +8641,14 @@ def ops_plab_dashboard(client_id):
     test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
     call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
+    payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
                            plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES,
                            coaching=coaching, english_logins=english_logins,
                            test_bookings=test_bookings, call_notes=call_notes,
-                           call_notes_count=call_notes_count)
+                           call_notes_count=call_notes_count, payments=payments)
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -9439,6 +9460,244 @@ def ops_call_notes_delete(record_id):
     flash('Call note deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_call_notes_list'))
 
+
+# ═════════════════════════════════════════════════════════════════════════════
+# PAYMENTS
+# ═════════════════════════════════════════════════════════════════════════════
+
+@app.route('/operations/payments')
+@admin_required
+def ops_payments_list():
+    """List all payments with filters: registration number, client name, payment method, instalment."""
+    conn = get_db()
+    # Filter parameters
+    reg = request.args.get('reg', '').strip()
+    client_name = request.args.get('client_name', '').strip()
+    payment_method = request.args.get('payment_method', '').strip()
+    instalment = request.args.get('instalment', '').strip()
+
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+
+    per_page = 50
+    offset = (page - 1) * per_page
+
+    try:
+        # Build base query
+        sql_base = '''SELECT p.*, c.first_name, c.last_name, c.prefix
+                      FROM ops_payments p
+                      LEFT JOIN plab_clients c ON p.registration_number = c.registration_number
+                      WHERE 1=1'''
+        params = []
+        if reg:
+            sql_base += ' AND p.registration_number ILIKE ?'
+            params.append(f'%{reg}%')
+        if client_name:
+            sql_base += ' AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR (c.first_name || \' \' || c.last_name) ILIKE ?)'
+            params.extend([f'%{client_name}%'] * 3)
+        if payment_method:
+            sql_base += ' AND p.payment_method = ?'
+            params.append(payment_method)
+        if instalment:
+            sql_base += ' AND p.instalment = ?'
+            params.append(instalment)
+
+        # Get total count
+        count_sql = f'SELECT COUNT(*) as total FROM (SELECT 1 {sql_base[sql_base.find("FROM"):]})'
+        total_count = conn.execute(count_sql, params).fetchone()['total']
+        total_pages = (total_count + per_page - 1) // per_page
+
+        # Ensure page is within valid range
+        if page > total_pages and total_pages > 0:
+            page = total_pages
+            offset = (page - 1) * per_page
+
+        # Get paginated records
+        sql = sql_base + ' ORDER BY p.payment_date DESC NULLS LAST, p.created_at DESC LIMIT ? OFFSET ?'
+        sql_params = params + [per_page, offset]
+        records = conn.execute(sql, sql_params).fetchall()
+
+        # Stats
+        stats_base = sql_base.replace('SELECT p.*, c.first_name, c.last_name, c.prefix', 'SELECT COUNT(*) as total, COALESCE(SUM(p.total_amount_paid), 0) as total_collected, COALESCE(SUM(p.gst_paid), 0) as total_gst')
+        stats = conn.execute(stats_base, params).fetchone()
+
+    except Exception as e:
+        logging.error(f"ops_payments_list: {e}")
+        records = []
+        total_count = 0
+        total_pages = 0
+        stats = {'total': 0, 'total_collected': 0, 'total_gst': 0}
+
+    conn.close()
+
+    # Check if any filter is active
+    has_filters = bool(reg or client_name or payment_method or instalment)
+
+    return render_template('ops_payments_list.html',
+        records=records, reg=reg, client_name=client_name,
+        payment_method=payment_method, instalment=instalment,
+        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS,
+        has_filters=has_filters, stats=stats,
+        page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
+
+
+@app.route('/operations/payments/add', methods=['GET', 'POST'])
+@admin_required
+def ops_payments_add():
+    conn = get_db()
+    if request.method == 'POST':
+        registration_number = request.form.get('registration_number')
+        payment_date = request.form.get('payment_date')
+        amount_paid = request.form.get('amount_paid', '0')
+        gst_paid = request.form.get('gst_paid', '0')
+        instalment = request.form.get('instalment')
+        payment_method = request.form.get('payment_method')
+        total_package = request.form.get('total_package', '0')
+        notes = request.form.get('notes', '')
+
+        try:
+            amount_paid = float(amount_paid or 0)
+            gst_paid = float(gst_paid or 0)
+            total_amount_paid = amount_paid + gst_paid
+            total_package = float(total_package or 0)
+
+            conn.execute('''INSERT INTO ops_payments
+                (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                 instalment, payment_method, total_package, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                 instalment, payment_method, total_package, notes, session.get('user_id')))
+            conn.commit()
+            flash('Payment added successfully', 'success')
+            next_url = request.args.get('next')
+            if next_url:
+                return redirect(next_url)
+            return redirect(url_for('ops_payments_list'))
+        except Exception as e:
+            logging.error(f"ops_payments_add: {e}")
+            flash('Error adding payment', 'error')
+
+    # Get all clients for dropdown
+    clients = conn.execute('SELECT id, registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name').fetchall()
+    pre_reg = request.args.get('reg', '')
+    conn.close()
+
+    return render_template('ops_payments_form.html',
+        clients=clients, record=None, pre_reg=pre_reg,
+        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS)
+
+
+@app.route('/operations/payments/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_payments_edit(record_id):
+    conn = get_db()
+    record = conn.execute('SELECT * FROM ops_payments WHERE id = ?', (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Payment record not found', 'error')
+        return redirect(url_for('ops_payments_list'))
+
+    if request.method == 'POST':
+        registration_number = request.form.get('registration_number')
+        payment_date = request.form.get('payment_date')
+        amount_paid = request.form.get('amount_paid', '0')
+        gst_paid = request.form.get('gst_paid', '0')
+        instalment = request.form.get('instalment')
+        payment_method = request.form.get('payment_method')
+        total_package = request.form.get('total_package', '0')
+        notes = request.form.get('notes', '')
+
+        try:
+            amount_paid = float(amount_paid or 0)
+            gst_paid = float(gst_paid or 0)
+            total_amount_paid = amount_paid + gst_paid
+            total_package = float(total_package or 0)
+
+            conn.execute('''UPDATE ops_payments SET
+                registration_number = ?, payment_date = ?, amount_paid = ?, gst_paid = ?,
+                total_amount_paid = ?, instalment = ?, payment_method = ?, total_package = ?,
+                notes = ?
+                WHERE id = ?''',
+                (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                 instalment, payment_method, total_package, notes, record_id))
+            conn.commit()
+            flash('Payment updated successfully', 'success')
+            return redirect(url_for('ops_payments_list'))
+        except Exception as e:
+            logging.error(f"ops_payments_edit: {e}")
+            flash('Error updating payment', 'error')
+
+    # Get all clients for dropdown
+    clients = conn.execute('SELECT id, registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name').fetchall()
+    conn.close()
+
+    return render_template('ops_payments_form.html',
+        clients=clients, record=record, pre_reg=None,
+        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS)
+
+
+@app.route('/operations/payments/<int:record_id>/delete', methods=['POST'])
+@admin_required
+def ops_payments_delete(record_id):
+    conn = get_db()
+    conn.execute('DELETE FROM ops_payments WHERE id = ?', (record_id,))
+    conn.commit()
+    conn.close()
+    flash('Payment deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_payments_list'))
+
+
+@app.route('/operations/payments/api-import', methods=['POST'])
+@admin_required
+def ops_payments_api_import():
+    """Temporary endpoint to bulk import payment records from JSON array."""
+    try:
+        data = request.get_json()
+        if not isinstance(data, list):
+            return jsonify({'error': 'Expected JSON array'}), 400
+
+        conn = get_db()
+        inserted = 0
+        errors = []
+
+        for idx, record in enumerate(data):
+            try:
+                registration_number = record.get('registration_number')
+                payment_date = record.get('payment_date')
+                amount_paid = float(record.get('amount_paid') or 0)
+                gst_paid = float(record.get('gst_paid') or 0)
+                total_amount_paid = float(record.get('total_amount_paid') or 0)
+                instalment = record.get('instalment')
+                payment_method = record.get('payment_method')
+                total_package = float(record.get('total_package') or 0)
+                notes = record.get('notes', '')
+
+                if not registration_number:
+                    errors.append(f'Row {idx + 1}: Missing registration_number')
+                    continue
+
+                conn.execute('''INSERT INTO ops_payments
+                    (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                     instalment, payment_method, total_package, notes, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                     instalment, payment_method, total_package, notes, session.get('user_id')))
+                inserted += 1
+            except Exception as e:
+                errors.append(f'Row {idx + 1}: {str(e)}')
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'inserted': inserted,
+            'errors': errors
+        })
+    except Exception as e:
+        logging.error(f"ops_payments_api_import: {e}")
+        return jsonify({'error': str(e)}), 500
 
 
 # Run on startup
