@@ -772,6 +772,9 @@
                 {% if session.get('is_admin') %}
                     <li><a href="/dashboard">Main Dashboard</a></li>
                     <li><a href="/admin/manage-employees">Employees</a></li>
+                    {% if session.get('emp_code') == 'admin' %}
+                    <li><a href="/admin/reset-passwords">Reset Passwords</a></li>
+                    {% endif %}
 
                     <!-- HR Dropdown (Admin) -->
                     <li class="nav-dropdown" id="hr-dropdown-admin">
@@ -1317,6 +1320,9 @@
                     {% if session.get('is_admin') %}
                     <li><a href="/dashboard">Dashboard</a></li>
                     <li><a href="/admin/manage-employees">Employees</a></li>
+                    {% if session.get('emp_code') == 'admin' %}
+                    <li><a href="/admin/reset-passwords">Reset Passwords</a></li>
+                    {% endif %}
                     <li><a href="/admin/org-chart">Org Chart</a></li>
                     <li><a href="/admin/holidays">Holidays</a></li>
                     <li><a href="/admin/calendar">Calendar</a></li>

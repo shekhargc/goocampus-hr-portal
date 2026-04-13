@@ -249,6 +249,7 @@ def login():
         if user and user['password'] == hash_password(password):
             session['user_id'] = user['id']
             session['is_admin'] = user['is_admin']
+            session['emp_code'] = user['emp_code']
             # Check if password is still the default (first name lowercase)
             default_pw = user['name'].split()[0].lower()
             if password == default_pw:
@@ -2155,6 +2156,48 @@ def delete_employee(emp_id):
 
     flash(f'Employee {employee["name"]} and all their records deleted', 'success')
     return redirect(url_for('manage_employees'))
+
+
+@app.route('/admin/reset-passwords', methods=['GET', 'POST'])
+@admin_required
+def admin_reset_passwords():
+    """Admin-only password reset for any user. Restricted to emp_code='admin'."""
+    user = get_user()
+    # Extra check: only the admin account, not management
+    if user['emp_code'] != 'admin':
+        flash('Only the admin account can reset passwords', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+
+    if request.method == 'POST':
+        emp_id = request.form.get('emp_id', type=int)
+        new_password = request.form.get('new_password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+
+        if not emp_id or not new_password:
+            flash('Please select an employee and enter a new password', 'error')
+        elif len(new_password) < 4:
+            flash('Password must be at least 4 characters', 'error')
+        elif new_password != confirm_password:
+            flash('Passwords do not match', 'error')
+        else:
+            emp = conn.execute('SELECT id, name, emp_code FROM employees WHERE id = ?', (emp_id,)).fetchone()
+            if not emp:
+                flash('Employee not found', 'error')
+            else:
+                conn.execute('UPDATE employees SET password = ? WHERE id = ?',
+                             (hash_password(new_password), emp_id))
+                conn.commit()
+                flash(f'Password reset successfully for {emp["name"]} ({emp["emp_code"]})', 'success')
+
+    employees = conn.execute(
+        "SELECT id, name, emp_code, department, is_active FROM employees WHERE emp_code != 'admin' ORDER BY is_active DESC, department, name"
+    ).fetchall()
+    conn.close()
+
+    return render_template('admin_reset_passwords.html', user=user, employees=employees)
+
 
 @app.route('/admin/delete-leave/<int:leave_id>', methods=['POST'])
 @admin_required
