@@ -9664,6 +9664,10 @@ def ops_payments_api_import():
         inserted = 0
         errors = []
 
+        # Get raw psycopg2 connection for savepoint support
+        raw_conn = conn.connection if hasattr(conn, 'connection') else conn
+        cur = raw_conn.cursor()
+
         for idx, record in enumerate(data):
             try:
                 registration_number = record.get('registration_number')
@@ -9680,17 +9684,21 @@ def ops_payments_api_import():
                     errors.append(f'Row {idx + 1}: Missing registration_number')
                     continue
 
-                conn.execute('''INSERT INTO ops_payments
+                cur.execute('SAVEPOINT sp')
+                cur.execute('''INSERT INTO ops_payments
                     (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
                      instalment, payment_method, total_package, notes, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
                     (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
                      instalment, payment_method, total_package, notes, 1))
+                cur.execute('RELEASE SAVEPOINT sp')
                 inserted += 1
             except Exception as e:
+                cur.execute('ROLLBACK TO SAVEPOINT sp')
                 errors.append(f'Row {idx + 1}: {str(e)}')
 
-        conn.commit()
+        raw_conn.commit()
+        cur.close()
         conn.close()
 
         return jsonify({
