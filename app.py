@@ -9354,6 +9354,34 @@ def ops_call_notes_list():
         page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
 
 
+@app.route('/operations/api/client-search')
+@admin_required
+def ops_client_search_api():
+    """Return matching client names for autocomplete (JSON)."""
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db()
+    try:
+        rows = conn.execute('''
+            SELECT registration_number, prefix, first_name, last_name
+            FROM plab_clients
+            WHERE first_name ILIKE ? OR last_name ILIKE ?
+               OR (first_name || ' ' || last_name) ILIKE ?
+            ORDER BY first_name, last_name
+            LIMIT 15
+        ''', (f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
+        results = []
+        for r in rows:
+            name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"
+            results.append({'name': name.strip(), 'reg': r['registration_number']})
+    except Exception as e:
+        logging.error(f"ops_client_search_api: {e}")
+        results = []
+    conn.close()
+    return jsonify(results)
+
+
 @app.route('/operations/call-notes/add', methods=['GET', 'POST'])
 @admin_required
 def ops_call_notes_add():
