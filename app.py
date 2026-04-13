@@ -9792,13 +9792,6 @@ except Exception as _sync_err:
     logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
 
-@app.errorhandler(500)
-def handle_500(e):
-    import traceback
-    tb = traceback.format_exc()
-    logging.error(f"500 error: {e}\n{tb}")
-    return f"<h2>Server Error</h2><pre style='white-space:pre-wrap;'>{tb}</pre>", 500
-
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)
