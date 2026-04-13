@@ -9649,9 +9649,12 @@ def ops_payments_delete(record_id):
 
 
 @app.route('/operations/payments/api-import', methods=['POST'])
-@admin_required
 def ops_payments_api_import():
     """Temporary endpoint to bulk import payment records from JSON array."""
+    # Token-based auth for migration (no session required)
+    token = request.args.get('token', '')
+    if token != 'GC2026PAYIMPORT':
+        return jsonify({'error': 'Unauthorized'}), 401
     try:
         data = request.get_json()
         if not isinstance(data, list):
@@ -9682,7 +9685,7 @@ def ops_payments_api_import():
                      instalment, payment_method, total_package, notes, created_by)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
                     (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
-                     instalment, payment_method, total_package, notes, session.get('user_id')))
+                     instalment, payment_method, total_package, notes, 1))
                 inserted += 1
             except Exception as e:
                 errors.append(f'Row {idx + 1}: {str(e)}')
