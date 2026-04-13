@@ -7000,8 +7000,33 @@ def finance_expenses():
             }
             entry_map[(sub_cat_id, m, y)] = merged
 
+    # Per-month totals across all expense categories (budget / actual / variance)
+    monthly_totals = []
+    annual_budget_total = 0.0
+    annual_actual_total = 0.0
+    for fm in fy_months:
+        m_budget = 0.0
+        m_actual = 0.0
+        for cat in expense_cats:
+            e = entry_map.get((cat['id'], fm['month'], fm['year']))
+            if e:
+                m_budget += float(e.get('budget_amount') or 0)
+                m_actual += float(e.get('actual_amount') or 0)
+        monthly_totals.append({
+            'budget': m_budget,
+            'actual': m_actual,
+            'variance': m_budget - m_actual,
+        })
+        annual_budget_total += m_budget
+        annual_actual_total += m_actual
+    annual_variance_total = annual_budget_total - annual_actual_total
+
     return render_template('finance_expenses.html', user=user, fy_year=fy_year, fy_months=fy_months,
                            expense_cats=expense_cats, dept_cats=dept_cats, entry_map=entry_map,
+                           monthly_totals=monthly_totals,
+                           annual_budget_total=annual_budget_total,
+                           annual_actual_total=annual_actual_total,
+                           annual_variance_total=annual_variance_total,
                            get_quarter_label=get_quarter_label)
 
 

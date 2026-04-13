@@ -149,11 +149,25 @@
                     {% set ns.grand_actual = ns.grand_actual + ns2.cat_actual %}
                     {% endfor %}
                     <tr class="subtotal-row">
-                        <td>Total Expenses (Category)</td>
-                        {% for fm in fy_months %}
-                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>–</td>
+                        <td>Total Budget</td>
+                        {% for mt in monthly_totals %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(mt.budget) if mt.budget > 0 else '–' }}</td>
                         {% endfor %}
-                        <td class="total-col">B: {{ "₹{:,.0f}".format(ns.grand_budget) }} / A: {{ "₹{:,.0f}".format(ns.grand_actual) }}</td>
+                        <td class="total-col">{{ "₹{:,.0f}".format(annual_budget_total) }}</td>
+                    </tr>
+                    <tr class="subtotal-row">
+                        <td>Total Actual</td>
+                        {% for mt in monthly_totals %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(mt.actual) if mt.actual > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">{{ "₹{:,.0f}".format(annual_actual_total) }}</td>
+                    </tr>
+                    <tr class="subtotal-row">
+                        <td>Total Variance</td>
+                        {% for mt in monthly_totals %}
+                        <td class="{{ 'positive' if mt.variance >= 0 else 'negative' }}"{% if loop.index in [3,6,9,12] %} style="background: rgba(59,130,246,0.04);"{% endif %}>{{ "₹{:,.0f}".format(mt.variance) if (mt.budget > 0 or mt.actual > 0) else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col {{ 'positive' if annual_variance_total >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(annual_variance_total) }}</td>
                     </tr>
                 </tbody>
             </table>
