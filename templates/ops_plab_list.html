@@ -172,9 +172,8 @@
     font-weight: 600;
     cursor: pointer;
     transition: background 0.2s;
-    align-self: flex-end;
-    height: 38px;
     white-space: nowrap;
+    width: 100%;
   }
 
   .filter-button:hover {
@@ -460,7 +459,10 @@
           {% endfor %}
         </select>
       </div>
-      <button type="submit" class="filter-button">🔍 Filter</button>
+      <div class="form-group" style="flex: none;">
+        <label style="visibility: hidden;">Filter</label>
+        <button type="submit" class="filter-button">🔍 Filter</button>
+      </div>
     </form>
   </div>
 
