@@ -180,6 +180,28 @@
     background: #0F1B33;
   }
 
+  .reset-button {
+    padding: 0.6rem 1.2rem;
+    background: white;
+    color: var(--gray-600);
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: none;
+    white-space: nowrap;
+    display: inline-flex;
+    align-items: center;
+    transition: all 0.2s;
+  }
+
+  .reset-button:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+    color: var(--gray-700);
+  }
+
   .table-wrapper {
     background: white;
     border-radius: 8px;
@@ -431,7 +453,7 @@
           type="text"
           id="search"
           name="search"
-          placeholder="Name, Reg#, Email, Phone..."
+          placeholder="Search name..."
           value="{{ search or '' }}"
           autocomplete="off"
         />
@@ -460,8 +482,13 @@
         </select>
       </div>
       <div class="form-group" style="flex: none;">
-        <label style="visibility: hidden;">Filter</label>
-        <button type="submit" class="filter-button">🔍 Filter</button>
+        <label style="visibility: hidden;">Actions</label>
+        <div style="display: flex; gap: 0.5rem;">
+          <button type="submit" class="filter-button">🔍 Filter</button>
+          {% if search or status_filter or stage_filter %}
+            <a href="/operations/plab" class="reset-button">Reset</a>
+          {% endif %}
+        </div>
       </div>
     </form>
   </div>
