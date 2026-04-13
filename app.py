@@ -8410,7 +8410,8 @@ def migrate_subscriptions_api():
         return jsonify({'error': 'unauthorized'}), 401
 
     conn = get_db()
-    # Clear existing subscription items first
+    # Clear existing subscription items first (budget_entries has FK)
+    conn.execute("DELETE FROM budget_entries WHERE subscription_id IS NOT NULL")
     conn.execute("DELETE FROM subscription_items")
     conn.commit()
 
