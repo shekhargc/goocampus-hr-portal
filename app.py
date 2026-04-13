@@ -9682,14 +9682,20 @@ def ops_payments_api_fix():
             # Count before
             cur.execute('SELECT COUNT(*) FROM ops_payments')
             before = cur.fetchone()[0]
-            # Delete duplicates
+            # Delete duplicates using CTE with row_number
             cur.execute('''
                 DELETE FROM ops_payments
-                WHERE id NOT IN (
-                    SELECT MIN(id)
-                    FROM ops_payments
-                    GROUP BY registration_number, payment_date, amount_paid, gst_paid,
-                             total_amount_paid, instalment, payment_method, total_package, notes
+                WHERE id IN (
+                    SELECT id FROM (
+                        SELECT id, ROW_NUMBER() OVER (
+                            PARTITION BY registration_number, payment_date, amount_paid, gst_paid,
+                                         total_amount_paid, instalment, payment_method, total_package,
+                                         COALESCE(notes, '')
+                            ORDER BY id
+                        ) AS rn
+                        FROM ops_payments
+                    ) dupes
+                    WHERE rn > 1
                 )
             ''')
             raw_conn.commit()
