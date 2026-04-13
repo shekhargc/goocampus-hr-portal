@@ -9656,6 +9656,13 @@ def ops_payments_api_import():
     if token != 'GC2026PAYIMPORT':
         return jsonify({'error': 'Unauthorized'}), 401
     try:
+        # If clear=1 param is passed, delete all records first
+        if request.args.get('clear') == '1':
+            cconn = get_db()
+            cconn.execute('DELETE FROM ops_payments')
+            cconn.commit()
+            cconn.close()
+
         data = request.get_json()
         if not isinstance(data, list):
             return jsonify({'error': 'Expected JSON array'}), 400
