@@ -7308,7 +7308,7 @@ def finance_edit_month(month, year):
         if dept_key not in sal_group_index:
             sal_group_index[dept_key] = {
                 'department': dept_key,
-                'items': [],
+                'line_items': [],
                 'total_budget': 0.0,
                 'total_actual': 0.0,
             }
@@ -7318,7 +7318,7 @@ def finance_edit_month(month, year):
         sa = float(e['actual_amount'] or 0) if e else 0.0
         sal_group_index[dept_key]['total_budget'] += sb
         sal_group_index[dept_key]['total_actual'] += sa
-        sal_group_index[dept_key]['items'].append({
+        sal_group_index[dept_key]['line_items'].append({
             'id': s['id'],
             'name': s['name'],
             'project_name': s['project_name'] or '— No project —',
@@ -7338,7 +7338,7 @@ def finance_edit_month(month, year):
         if dept_key not in sub_group_index:
             sub_group_index[dept_key] = {
                 'department': dept_key,
-                'items': [],
+                'line_items': [],
                 'total_budget': 0.0,
                 'total_actual': 0.0,
             }
@@ -7355,7 +7355,7 @@ def finance_edit_month(month, year):
         sa = float(e['actual_amount'] or 0) if e else 0.0
         sub_group_index[dept_key]['total_budget'] += sb
         sub_group_index[dept_key]['total_actual'] += sa
-        sub_group_index[dept_key]['items'].append({
+        sub_group_index[dept_key]['line_items'].append({
             'id': s['id'],
             'name': s['name'],
             'vendor': s['vendor'] or '',
@@ -7373,13 +7373,13 @@ def finance_edit_month(month, year):
     # Project-wise expense rollup from salaries + subscriptions for this month
     expense_project_rollup = {}
     for g in salary_groups:
-        for it in g['items']:
+        for it in g['line_items']:
             key = it['project_name']
             if key not in expense_project_rollup:
                 expense_project_rollup[key] = {'project_name': key, 'salary': 0.0, 'subscription': 0.0}
             expense_project_rollup[key]['salary'] += it['budget']
     for g in subscription_groups:
-        for it in g['items']:
+        for it in g['line_items']:
             key = it['project_name']
             if key not in expense_project_rollup:
                 expense_project_rollup[key] = {'project_name': key, 'salary': 0.0, 'subscription': 0.0}
@@ -7409,12 +7409,12 @@ def finance_edit_month(month, year):
         b = _dept_bucket(g['department'])
         b['salary_budget'] += g['total_budget']
         b['salary_actual'] += g['total_actual']
-        b['salary_count'] += len(g['items'])
+        b['salary_count'] += len(g['line_items'])
     for g in subscription_groups:
         b = _dept_bucket(g['department'])
         b['subscription_budget'] += g['total_budget']
         b['subscription_actual'] += g['total_actual']
-        b['subscription_count'] += len(g['items'])
+        b['subscription_count'] += len(g['line_items'])
     # Dept-tagged expense categories for this month
     for cat in expense_cats:
         dept_name = cat['department'] if 'department' in cat.keys() else None

@@ -186,10 +186,10 @@
                         <span class="exp-dept-totals">
                             Budget <strong>₹{{ '{:,.0f}'.format(g.total_budget) }}</strong>
                             &nbsp;·&nbsp; Actual <strong>₹{{ '{:,.0f}'.format(g.total_actual) }}</strong>
-                            &nbsp;·&nbsp; {{ g.items|length }} line{{ 's' if g.items|length != 1 else '' }}
+                            &nbsp;·&nbsp; {{ g.line_items|length }} line{{ 's' if g.line_items|length != 1 else '' }}
                         </span>
                     </div>
-                    {% for it in g.items %}
+                    {% for it in g.line_items %}
                     <div class="exp-row">
                         <div class="exp-cell exp-name">
                             {{ it.name }}<small>Salary</small>
@@ -237,10 +237,10 @@
                         <span class="exp-dept-totals">
                             Budget <strong>₹{{ '{:,.0f}'.format(g.total_budget) }}</strong>
                             &nbsp;·&nbsp; Actual <strong>₹{{ '{:,.0f}'.format(g.total_actual) }}</strong>
-                            &nbsp;·&nbsp; {{ g.items|length }} sub{{ 's' if g.items|length != 1 else '' }}
+                            &nbsp;·&nbsp; {{ g.line_items|length }} sub{{ 's' if g.line_items|length != 1 else '' }}
                         </span>
                     </div>
-                    {% for it in g.items %}
+                    {% for it in g.line_items %}
                     <div class="exp-row">
                         <div class="exp-cell exp-name">
                             {{ it.name }}<span class="freq-pill">{{ it.frequency|replace('_',' ') }}</span>
