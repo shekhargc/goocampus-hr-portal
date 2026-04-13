@@ -620,14 +620,14 @@ def dashboard():
 
     # Approvals I need to action (for managers) - their team members' pending leaves
     team_pending_approvals = []
-    if not user['is_admin']:
+    if user['emp_code'] != 'admin':
         try:
             team_pending_approvals = conn.execute('''
                 SELECT lr.id, lr.leave_date, lr.leave_type, lr.day_portion, lr.reason, lr.status,
                        e.name, e.emp_code, e.photo_url
                 FROM leave_records lr
                 JOIN employees e ON lr.employee_id = e.id
-                WHERE e.reporting_manager_id = ? AND lr.status = 'pending'
+                WHERE e.reporting_to = ? AND lr.status = 'pending'
                 ORDER BY lr.leave_date ASC
             ''', (user['id'],)).fetchall()
         except Exception as e:
@@ -636,6 +636,28 @@ def dashboard():
                 conn.rollback()
             except:
                 pass
+        # If management, also include pending from other management members
+        if user['emp_code'] in MANAGEMENT_CODES:
+            try:
+                mgmt_pending = conn.execute('''
+                    SELECT lr.id, lr.leave_date, lr.leave_type, lr.day_portion, lr.reason, lr.status,
+                           e.name, e.emp_code, e.photo_url
+                    FROM leave_records lr
+                    JOIN employees e ON lr.employee_id = e.id
+                    WHERE lr.status = 'pending' AND e.emp_code IN (?, ?, ?)
+                    AND e.id != ?
+                    ORDER BY lr.leave_date ASC
+                ''', (*MANAGEMENT_CODES, user['id'])).fetchall()
+                existing_ids = {l['id'] for l in team_pending_approvals}
+                for leave in mgmt_pending:
+                    if leave['id'] not in existing_ids:
+                        team_pending_approvals.append(leave)
+            except Exception as e:
+                logging.error(f"Dashboard mgmt_pending_approvals query error: {e}")
+                try:
+                    conn.rollback()
+                except:
+                    pass
 
     conn.close()
 
@@ -865,7 +887,7 @@ def apply_leave():
                 create_notification(conn2, reporting_mgr['reporting_to'],
                     f"Leave Request from {user['name']}",
                     f"{user['name']} has applied for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date})",
-                    'leave_request', '/employee/approvals')
+                    'leave_request', '/approvals')
                 conn2.commit()
             except Exception as e:
                 logging.error(f"Failed to create leave notification for manager: {e}")
@@ -1015,7 +1037,7 @@ def apply_late_leave():
                 create_notification(conn2, reporting_mgr['reporting_to'],
                     f"Late Leave Request from {user['name']}",
                     f"{user['name']} has applied LATE for {total_days:.1f} day(s) of {leave_type} leave ({from_date} to {to_date}). Late reason: {late_reason}",
-                    'leave_request', '/employee/approvals')
+                    'leave_request', '/approvals')
                 conn2.commit()
             except Exception as e:
                 logging.error(f"Failed to create late leave notification for manager: {e}")
