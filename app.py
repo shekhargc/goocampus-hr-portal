@@ -8553,9 +8553,9 @@ def ops_plab_list():
     """PLAB clients list with search and filters."""
     conn = get_db()
     try:
-        search = request.args.get('q', '').strip()
-        status_filter = request.args.get('status', '')
-        stage_filter = request.args.get('stage', '')
+        search = (request.args.get('search', '') or request.args.get('q', '')).strip()
+        status_filter = request.args.get('status_filter', '') or request.args.get('status', '')
+        stage_filter = request.args.get('stage_filter', '') or request.args.get('stage', '')
 
         sql = "SELECT * FROM plab_clients WHERE 1=1"
         params = []
