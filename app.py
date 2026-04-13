@@ -9659,6 +9659,29 @@ def ops_payments_delete(record_id):
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
 
 
+@app.route('/operations/payments/api-check-reg')
+def ops_payments_check_reg():
+    """Temporary diagnostic: check if a reg number exists in plab_clients."""
+    token = request.args.get('token', '')
+    if token != 'GC2026PAYIMPORT2':
+        return jsonify({'error': 'Unauthorized'}), 401
+    q = request.args.get('q', '').strip()
+    conn = get_db()
+    # Exact match
+    exact = conn.execute("SELECT id, registration_number, first_name, last_name FROM plab_clients WHERE registration_number = ?", (q,)).fetchone()
+    # LIKE match
+    like_rows = conn.execute("SELECT id, registration_number, first_name, last_name FROM plab_clients WHERE registration_number LIKE ?", (f'%{q.split("/")[-1]}%',)).fetchall()
+    # Also check with surrounding reg numbers
+    nearby = conn.execute("SELECT id, registration_number, first_name, last_name FROM plab_clients WHERE registration_number LIKE ? ORDER BY registration_number", ('%2021/09%',)).fetchall()
+    conn.close()
+    return jsonify({
+        'query': q,
+        'exact_match': dict(exact) if exact else None,
+        'like_matches': [dict(r) for r in like_rows][:10],
+        'nearby_2021_09x': [dict(r) for r in nearby]
+    })
+
+
 @app.route('/operations/payments/api-import', methods=['POST'])
 def ops_payments_api_import():
     """Temporary endpoint to bulk import payment records."""
