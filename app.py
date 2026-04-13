@@ -6532,6 +6532,26 @@ def ensure_budget_tables():
                     conn.rollback()
                 except Exception:
                     pass
+        # Backfill: heal salary_items rows whose name/department got wiped by
+        # the pre-fix edit handler (readonly fields without `name` attribute
+        # sent empty strings). Pull canonical name/dept from the employee row.
+        try:
+            conn.execute('''
+                UPDATE salary_items s
+                SET name = e.name,
+                    department = COALESCE(e.department, '')
+                FROM employees e
+                WHERE s.employee_id = e.id
+                  AND (s.name IS NULL OR s.name = '' OR s.department IS NULL OR s.department = '')
+            ''')
+            conn.commit()
+            logging.info("Backfilled salary_items name/department from employees table")
+        except Exception as _bf_err:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"salary_items backfill failed: {_bf_err}")
         conn.commit()
         conn.close()
         logging.info("Budget tables ensured.")
@@ -8205,8 +8225,19 @@ def finance_salaries_edit(item_id):
         flash('Not found', 'error')
         return redirect(url_for('finance_salaries'))
     if request.method == 'POST':
-        name = request.form.get('name', '').strip()
-        department = request.form.get('department', '').strip()
+        # Name and department are NOT editable here — they're sourced from the
+        # linked employee record. Preserve existing values, and if an employee
+        # is linked, refresh from the employees table so stale entries self-heal.
+        name = item['name']
+        department = item['department'] or ''
+        if item['employee_id']:
+            try:
+                _emp = conn.execute("SELECT name, department FROM employees WHERE id = ?", (item['employee_id'],)).fetchone()
+                if _emp:
+                    name = _emp['name']
+                    department = _emp['department'] or ''
+            except Exception:
+                pass
         project_val = request.form.get('project_id', '')
         project_id = int(project_val) if project_val and project_val.isdigit() else None
         try:
