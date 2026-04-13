@@ -77,16 +77,16 @@
       {% endif %}
     </div>
 
-    <!-- Amount Paid (excl GST) -->
+    <!-- Total Paid (excl GST) -->
     <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
       <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">
-        Amount Paid
+        Total Paid
       </p>
       <p style="margin:0;font-size:20px;font-weight:700;color:#059669;">
         ₹<span id="paid-value">{{ '{:,.0f}'.format(amount_paid or 0) }}</span>
       </p>
       <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
-        + ₹{{ '{:,.0f}'.format(gst_paid or 0) }} GST = ₹{{ '{:,.0f}'.format(total_paid or 0) }} total
+        GST: ₹{{ '{:,.0f}'.format(gst_paid or 0) }}
       </p>
     </div>
 
