@@ -374,6 +374,69 @@
     text-decoration: underline;
   }
 
+  .pagination-info {
+    background: var(--gray-50);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 0.9rem 1.2rem;
+    margin-bottom: 2rem;
+    font-size: 0.9rem;
+    color: var(--gray-700);
+  }
+
+  .pagination-info p {
+    margin: 0;
+  }
+
+  .pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 2rem;
+    flex-wrap: wrap;
+  }
+
+  .pagination-btn {
+    padding: 0.5rem 0.8rem;
+    border: 1px solid var(--gray-300);
+    border-radius: 4px;
+    background: white;
+    color: var(--navy);
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    min-height: 36px;
+  }
+
+  .pagination-btn:hover {
+    background: var(--gray-100);
+    border-color: var(--gray-400);
+  }
+
+  .pagination-btn.active {
+    background: var(--navy);
+    color: white;
+    border-color: var(--navy);
+  }
+
+  .pagination-btn.disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    pointer-events: none;
+  }
+
+  .pagination-dots {
+    color: var(--gray-500);
+    padding: 0 0.25rem;
+  }
+
   @media (max-width: 768px) {
     .ops-content {
       padding: 1rem;
@@ -471,15 +534,15 @@
     </div>
   </form>
 
-  {% if not client_reg and records|length > 200 %}
-  <div class="notes-info">
-    <p>Showing most recent 200 notes</p>
+  {% if total_count > 0 %}
+  <div class="pagination-info">
+    <p>Showing page {{ page }} of {{ total_pages }} ({{ total_count }} total notes)</p>
   </div>
   {% endif %}
 
   {% if records %}
     <div class="notes-container">
-      {% for record in records[:200] %}
+      {% for record in records %}
         <div class="note-card" data-note-id="{{ record.id }}">
           <div class="note-top">
             <div class="note-client-info">
@@ -510,6 +573,51 @@
         </div>
       {% endfor %}
     </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination-controls">
+      {% if page > 1 %}
+        <a href="?page=1{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">« First</a>
+        <a href="?page={{ page - 1 }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">‹ Previous</a>
+      {% else %}
+        <span class="pagination-btn disabled">« First</span>
+        <span class="pagination-btn disabled">‹ Previous</span>
+      {% endif %}
+
+      {% set start_page = [page - 2, 1]|max %}
+      {% set end_page = [page + 2, total_pages]|min %}
+
+      {% if start_page > 1 %}
+        <a href="?page=1{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">1</a>
+        {% if start_page > 2 %}
+          <span class="pagination-dots">…</span>
+        {% endif %}
+      {% endif %}
+
+      {% for p in range(start_page, end_page + 1) %}
+        {% if p == page %}
+          <span class="pagination-btn active">{{ p }}</span>
+        {% else %}
+          <a href="?page={{ p }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">{{ p }}</a>
+        {% endif %}
+      {% endfor %}
+
+      {% if end_page < total_pages %}
+        {% if end_page < total_pages - 1 %}
+          <span class="pagination-dots">…</span>
+        {% endif %}
+        <a href="?page={{ total_pages }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">{{ total_pages }}</a>
+      {% endif %}
+
+      {% if page < total_pages %}
+        <a href="?page={{ page + 1 }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">Next ›</a>
+        <a href="?page={{ total_pages }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">Last »</a>
+      {% else %}
+        <span class="pagination-btn disabled">Next ›</span>
+        <span class="pagination-btn disabled">Last »</span>
+      {% endif %}
+    </div>
+    {% endif %}
   {% else %}
     <div class="empty-state">
       <div class="empty-state-icon">📝</div>

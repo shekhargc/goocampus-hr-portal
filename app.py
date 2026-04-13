@@ -9282,27 +9282,48 @@ def ops_call_notes_list():
     conn = get_db()
     reg = request.args.get('client', '')
     search = request.args.get('q', '')
+    page = request.args.get('page', 1, type=int)
+    if page < 1:
+        page = 1
+
+    per_page = 50
+    offset = (page - 1) * per_page
+
     try:
-        sql = '''SELECT n.*, p.first_name, p.last_name, p.prefix
-                 FROM ops_call_notes n
-                 LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
-                 WHERE 1=1'''
+        # Build base query
+        sql_base = '''SELECT n.*, p.first_name, p.last_name, p.prefix
+                      FROM ops_call_notes n
+                      LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
+                      WHERE 1=1'''
         params = []
         if reg:
-            sql += ' AND n.registration_number = ?'
+            sql_base += ' AND n.registration_number = ?'
             params.append(reg)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.call_note ILIKE ?)'
+            sql_base += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.call_note ILIKE ?)'
             params.extend([f'%{search}%'] * 3)
-        sql += ' ORDER BY n.call_date DESC NULLS LAST, n.created_at DESC'
-        if not reg:
-            sql += ' LIMIT 200'
-        records = conn.execute(sql, params).fetchall()
+
+        # Get total count
+        count_sql = f'SELECT COUNT(*) as total FROM (SELECT 1 {sql_base[sql_base.find("FROM"):]})'
+        total_count = conn.execute(count_sql, params).fetchone()['total']
+        total_pages = (total_count + per_page - 1) // per_page
+
+        # Ensure page is within valid range
+        if page > total_pages and total_pages > 0:
+            page = total_pages
+            offset = (page - 1) * per_page
+
+        # Get paginated records
+        sql = sql_base + ' ORDER BY n.call_date DESC NULLS LAST, n.created_at DESC LIMIT ? OFFSET ?'
+        sql_params = params + [per_page, offset]
+        records = conn.execute(sql, sql_params).fetchall()
     except Exception as e:
         logging.error(f"ops_call_notes_list: {e}")
         records = []
+        total_count = 0
+        total_pages = 0
     conn.close()
-    return render_template('ops_call_notes_list.html', records=records, client_reg=reg, search=search)
+    return render_template('ops_call_notes_list.html', records=records, client_reg=reg, search=search, page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
 
 
 @app.route('/operations/call-notes/add', methods=['GET', 'POST'])
