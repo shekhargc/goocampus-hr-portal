@@ -696,6 +696,8 @@
     function selectItem(item) {
       input.value = item.name;
       hide();
+      // Auto-submit the filter form
+      input.closest('form').submit();
     }
 
     function hide() {

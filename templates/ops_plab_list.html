@@ -707,8 +707,13 @@
     }
 
     function selectItem(item) {
-      input.value = item.name;
-      hide();
+      // Navigate directly to client profile
+      if (item.id) {
+        window.location.href = '/operations/plab/' + item.id;
+      } else {
+        input.value = item.name;
+        hide();
+      }
     }
 
     function hide() {

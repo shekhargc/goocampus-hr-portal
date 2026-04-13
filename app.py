@@ -8580,9 +8580,15 @@ def ops_plab_list():
         sql = "SELECT * FROM plab_clients WHERE 1=1"
         params = []
         if search:
-            sql += " AND (LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?) OR LOWER(registration_number) LIKE LOWER(?) OR LOWER(COALESCE(email,'')) LIKE LOWER(?) OR LOWER(COALESCE(mobile,'')) LIKE LOWER(?))"
+            sql += """ AND (
+                LOWER(first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?)
+                OR LOWER(COALESCE(prefix,'') || ' ' || first_name || ' ' || COALESCE(last_name,'')) LIKE LOWER(?)
+                OR LOWER(registration_number) LIKE LOWER(?)
+                OR LOWER(COALESCE(email,'')) LIKE LOWER(?)
+                OR LOWER(COALESCE(mobile,'')) LIKE LOWER(?)
+            )"""
             like = f"%{search}%"
-            params += [like, like, like, like]
+            params += [like, like, like, like, like]
         if status_filter:
             sql += " AND account_status = ?"
             params.append(status_filter)
@@ -8592,11 +8598,13 @@ def ops_plab_list():
         sql += " ORDER BY id DESC"
         clients = conn.execute(sql, tuple(params)).fetchall()
 
-        # Summary stats
+        # Summary stats - use actual payment data for collected amount
         total = len(clients)
         active_count = sum(1 for c in clients if c['account_status'] == 'In Process')
         total_package = sum(float(c['final_package'] or 0) for c in clients)
-        total_collected = sum(float(c['total_paid'] or 0) for c in clients)
+        # Get total collected from ops_payments table for accurate figures
+        collected_row = conn.execute("SELECT COALESCE(SUM(total_amount_paid), 0) as total FROM ops_payments").fetchone()
+        total_collected = float(collected_row['total'] or 0)
     except Exception as e:
         logging.error(f"ops_plab_list error: {e}")
         conn.close()
@@ -9385,17 +9393,18 @@ def ops_client_search_api():
     conn = get_db()
     try:
         rows = conn.execute('''
-            SELECT registration_number, prefix, first_name, last_name
+            SELECT id, registration_number, prefix, first_name, last_name
             FROM plab_clients
             WHERE first_name ILIKE ? OR last_name ILIKE ?
                OR (first_name || ' ' || last_name) ILIKE ?
+               OR registration_number ILIKE ?
             ORDER BY first_name, last_name
             LIMIT 15
-        ''', (f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
+        ''', (f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
         results = []
         for r in rows:
             name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"
-            results.append({'name': name.strip(), 'reg': r['registration_number']})
+            results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number']})
     except Exception as e:
         logging.error(f"ops_client_search_api: {e}")
         results = []
@@ -9494,8 +9503,10 @@ def ops_payments_list():
             sql_base += ' AND p.registration_number ILIKE ?'
             params.append(f'%{reg}%')
         if client_name:
-            sql_base += ' AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR (c.first_name || \' \' || c.last_name) ILIKE ?)'
-            params.extend([f'%{client_name}%'] * 3)
+            sql_base += """ AND (c.first_name ILIKE ? OR c.last_name ILIKE ?
+                OR (c.first_name || ' ' || COALESCE(c.last_name,'')) ILIKE ?
+                OR (COALESCE(c.prefix,'') || ' ' || c.first_name || ' ' || COALESCE(c.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{client_name}%'] * 4)
         if payment_method:
             sql_base += ' AND p.payment_method = ?'
             params.append(payment_method)
@@ -9646,6 +9657,62 @@ def ops_payments_delete(record_id):
     conn.close()
     flash('Payment deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
+
+
+@app.route('/operations/payments/api-import', methods=['POST'])
+def ops_payments_api_import():
+    """Temporary endpoint to bulk import payment records."""
+    token = request.args.get('token', '')
+    if token != 'GC2026PAYIMPORT2':
+        return jsonify({'error': 'Unauthorized'}), 401
+    try:
+        if request.args.get('clear') == '1':
+            cconn = get_db()
+            cconn.execute('DELETE FROM ops_payments')
+            cconn.commit()
+            cconn.close()
+
+        data = request.get_json()
+        if not isinstance(data, list):
+            return jsonify({'error': 'Expected JSON array'}), 400
+
+        conn = get_db()
+        raw_conn = conn.conn
+        cur = raw_conn.cursor()
+        inserted = 0
+        errors = []
+
+        for idx, record in enumerate(data):
+            try:
+                reg = record.get('registration_number')
+                if not reg:
+                    errors.append(f'Row {idx+1}: Missing reg')
+                    continue
+                cur.execute('SAVEPOINT sp')
+                cur.execute('''INSERT INTO ops_payments
+                    (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                     instalment, payment_method, total_package, notes, created_by)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)''',
+                    (reg, record.get('payment_date'),
+                     float(record.get('amount_paid') or 0),
+                     float(record.get('gst_paid') or 0),
+                     float(record.get('total_amount_paid') or 0),
+                     record.get('instalment'),
+                     record.get('payment_method'),
+                     float(record.get('total_package') or 0),
+                     record.get('notes', ''), 1))
+                cur.execute('RELEASE SAVEPOINT sp')
+                inserted += 1
+            except Exception as e:
+                cur.execute('ROLLBACK TO SAVEPOINT sp')
+                errors.append(f'Row {idx+1}: {str(e)[:80]}')
+
+        raw_conn.commit()
+        cur.close()
+        conn.close()
+        return jsonify({'success': True, 'inserted': inserted, 'errors': errors})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
 
 
 # Run on startup
