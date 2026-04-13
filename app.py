@@ -8411,6 +8411,23 @@ def migrate_subscriptions_api():
 
     try:
         conn = get_db()
+        # Ensure the table exists
+        conn.execute('''CREATE TABLE IF NOT EXISTS subscription_items (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            vendor TEXT,
+            cost NUMERIC(14,2) DEFAULT 0,
+            currency TEXT DEFAULT 'INR',
+            frequency TEXT DEFAULT 'monthly',
+            primary_department TEXT,
+            shared_departments TEXT,
+            project_id INTEGER,
+            is_active INTEGER DEFAULT 1,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
         # Clear existing subscription items first (budget_entries has FK)
         try:
             conn.execute("DELETE FROM budget_entries WHERE subscription_id IS NOT NULL")
