@@ -2,233 +2,500 @@
 
 {% block title %}Coaching & Training - Operations{% endblock %}
 
+{% block extra_css %}
+<style>
+  .plab-content {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 1.5rem;
+  }
+
+  .plab-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+  }
+
+  .plab-header h1 {
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .plab-header-actions {
+    display: flex;
+    gap: 0.8rem;
+    flex-wrap: wrap;
+  }
+
+  .btn-primary {
+    padding: 0.55rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-primary:hover {
+    background: #0F1B33;
+  }
+
+  .btn-secondary {
+    padding: 0.55rem 1.2rem;
+    background: var(--gray-100);
+    color: var(--navy);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    text-decoration: none;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  .btn-secondary:hover {
+    background: var(--gray-200);
+    border-color: var(--gray-300);
+  }
+
+  .client-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: var(--navy);
+    color: white;
+    padding: 0.3rem 0.8rem;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 600;
+  }
+
+  .stat-card-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .stat-card {
+    background: white;
+    border-radius: 0.85rem;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  }
+
+  .stat-label {
+    font-size: 0.75rem;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-transform: uppercase;
+  }
+
+  .stat-value {
+    font-size: 1.6rem;
+    font-weight: 700;
+    color: var(--navy);
+    margin-top: 0.3rem;
+  }
+
+  .filter-section {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    padding: 1.2rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-form {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: flex-end;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--gray-600);
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+  }
+
+  .form-group input,
+  .form-group select {
+    padding: 0.6rem 0.8rem;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-family: inherit;
+    background: white;
+    color: var(--gray-700);
+  }
+
+  .form-group input:focus,
+  .form-group select:focus {
+    outline: none;
+    border-color: var(--navy);
+    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
+  }
+
+  .filter-button {
+    padding: 0.6rem 1.2rem;
+    background: var(--navy);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+    align-self: flex-end;
+  }
+
+  .filter-button:hover {
+    background: #0F1B33;
+  }
+
+  .filter-banner {
+    background: #EFF6FF;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 1.5rem;
+    font-size: 0.85rem;
+    color: var(--gray-700);
+  }
+
+  .table-wrapper {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+  }
+
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    background: white;
+  }
+
+  .data-table thead {
+    background: var(--gray-50);
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .data-table th {
+    padding: 0.7rem 1rem;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--gray-500);
+    font-weight: 600;
+    text-align: left;
+  }
+
+  .data-table td {
+    padding: 0.7rem 1rem;
+    font-size: 0.85rem;
+    border-top: 1px solid var(--gray-100);
+    color: var(--gray-700);
+  }
+
+  .data-table tbody tr:hover {
+    background: var(--gray-50);
+  }
+
+  .row-link {
+    color: var(--navy);
+    text-decoration: none;
+    font-weight: 600;
+    transition: color 0.2s;
+  }
+
+  .row-link:hover {
+    color: #F58220;
+  }
+
+  .badge-pill {
+    display: inline-block;
+    padding: 0.3rem 0.7rem;
+    border-radius: 12px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    white-space: nowrap;
+  }
+
+  .badge-on-going {
+    background: #ECFDF5;
+    color: #10B981;
+  }
+
+  .badge-completed {
+    background: #EFF6FF;
+    color: #3B82F6;
+  }
+
+  .badge-pending {
+    background: #FEF3C7;
+    color: #F59E0B;
+  }
+
+  .badge-cancelled {
+    background: #FEF2F2;
+    color: #EF4444;
+  }
+
+  .action-links {
+    display: flex;
+    gap: 0.5rem;
+  }
+
+  .action-links a {
+    color: var(--navy);
+    text-decoration: none;
+    font-size: 0.8rem;
+    font-weight: 600;
+    padding: 0.3rem 0.6rem;
+    border-radius: 4px;
+    transition: all 0.2s;
+  }
+
+  .action-links a:hover {
+    background: var(--gray-100);
+  }
+
+  .action-links a.delete:hover {
+    color: #EF4444;
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 3rem 2rem;
+    color: var(--gray-600);
+  }
+
+  .empty-state-icon {
+    font-size: 2.5rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  .empty-state p {
+    font-size: 1rem;
+    margin: 0;
+  }
+
+  @media (max-width: 768px) {
+    .plab-header {
+      flex-direction: column;
+      align-items: flex-start;
+    }
+
+    .plab-header-actions {
+      width: 100%;
+      flex-direction: column;
+    }
+
+    .btn-primary,
+    .btn-secondary {
+      width: 100%;
+      text-align: center;
+    }
+
+    .stat-card-grid {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-form {
+      grid-template-columns: 1fr;
+    }
+
+    .filter-button {
+      width: 100%;
+    }
+
+    .data-table {
+      font-size: 0.8rem;
+    }
+
+    .data-table th,
+    .data-table td {
+      padding: 0.5rem 0.7rem;
+    }
+
+    .action-links {
+      flex-direction: column;
+    }
+  }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid py-5">
-  <!-- Page Header -->
-  <div class="d-flex justify-content-between align-items-center mb-5">
-    <div>
-      <h1 class="mb-0" style="color: var(--navy); font-weight: 700; font-size: 2rem;">Coaching & Training</h1>
-      <p class="text-muted mb-0" style="color: var(--gray-500);">Operations</p>
+<div class="plab-content">
+  <!-- Header -->
+  <div class="plab-header">
+    <div style="display: flex; align-items: center; gap: 1rem;">
+      <h1>Coaching & Training</h1>
+      <span class="client-badge">
+        <span style="font-size: 1rem;">📚</span>
+        {{ records|length }} Records
+      </span>
     </div>
-    <div class="d-flex gap-3">
-      <a href="/operations/coaching/add" class="btn btn-lg" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600;">
-        + Add Training
-      </a>
-      <a href="/operations/plab" class="btn btn-lg" style="background-color: var(--gray-100); color: var(--navy); border: 1px solid var(--gray-200); border-radius: 6px; font-weight: 600;">
-        Back to Clients
-      </a>
-    </div>
-  </div>
-
-  <!-- Filter Section -->
-  <div class="row mb-4">
-    <div class="col-12">
-      <div class="card" style="border: none; border-radius: 8px; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05);">
-        <div class="card-body p-4">
-          <form method="GET" class="row g-3">
-            <div class="col-md-6">
-              <label class="form-label" style="color: var(--navy); font-weight: 600; font-size: 0.9rem;">Search Records</label>
-              <input
-                type="text"
-                name="q"
-                class="form-control"
-                placeholder="Search by client name, registration number..."
-                value="{{ search or '' }}"
-                style="border: 1px solid var(--gray-200); border-radius: 6px; padding: 0.75rem; font-size: 0.95rem;"
-              >
-            </div>
-            <div class="col-md-4">
-              <label class="form-label" style="color: var(--navy); font-weight: 600; font-size: 0.9rem;">Status</label>
-              <select name="status" class="form-select" style="border: 1px solid var(--gray-200); border-radius: 6px; padding: 0.75rem; font-size: 0.95rem;">
-                <option value="">All Statuses</option>
-                {% for status in coaching_statuses %}
-                  <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
-                    {{ status }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-            <div class="col-md-2 d-flex align-items-end">
-              <button type="submit" class="btn w-100" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600; padding: 0.75rem;">
-                Filter
-              </button>
-            </div>
-          </form>
-
-          {% if client_reg %}
-            <div class="mt-3 p-3" style="background-color: var(--gray-50); border-radius: 6px; border-left: 4px solid var(--orange);">
-              <span style="color: var(--gray-600);">Filtered for:</span>
-              <strong style="color: var(--navy);">{{ client_reg }}</strong>
-              <a href="/operations/coaching" class="ms-3" style="color: var(--orange); text-decoration: none; font-weight: 600; cursor: pointer;">
-                Clear Filter
-              </a>
-            </div>
-          {% endif %}
-        </div>
-      </div>
+    <div class="plab-header-actions">
+      <a href="/operations/coaching/add" class="btn-primary">+ Add Training</a>
+      <a href="/operations/clients" class="btn-secondary">← Back to Clients</a>
     </div>
   </div>
 
   <!-- Stats Cards -->
-  <div class="row g-4 mb-5">
-    <div class="col-md-4">
-      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, var(--navy) 0%, #1a3c5c 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <div class="card-body p-4">
-          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Total Records</p>
-          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">{{ records|length }}</h2>
-        </div>
+  <div class="stat-card-grid">
+    <div class="stat-card">
+      <div class="stat-label">Total Records</div>
+      <div class="stat-value">{{ records|length }}</div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-label">Active Training</div>
+      <div class="stat-value">
+        {% set active = records|selectattr('coaching_status', 'equalto', 'On Going')|list %}
+        {{ active|length }}
       </div>
     </div>
-    <div class="col-md-4">
-      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, #28a745 0%, #20c997 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <div class="card-body p-4">
-          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Active</p>
-          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">
-            {% set active_count = records|selectattr('coaching_status', 'equalto', 'On Going')|list|length %}
-            {{ active_count }}
-          </h2>
-        </div>
-      </div>
-    </div>
-    <div class="col-md-4">
-      <div class="card" style="border: none; border-radius: 8px; background: linear-gradient(135deg, var(--orange) 0%, #fd7e14 100%); color: white; box-shadow: 0 2px 8px rgba(0,0,0,0.1);">
-        <div class="card-body p-4">
-          <p class="card-text mb-2" style="opacity: 0.9; font-size: 0.9rem;">Completed</p>
-          <h2 class="card-title mb-0" style="font-size: 2.5rem; font-weight: 700;">
-            {% set completed_count = records|selectattr('coaching_status', 'equalto', 'Completed')|list|length %}
-            {{ completed_count }}
-          </h2>
-        </div>
+    <div class="stat-card">
+      <div class="stat-label">Completed</div>
+      <div class="stat-value">
+        {% set completed = records|selectattr('coaching_status', 'equalto', 'Completed')|list %}
+        {{ completed|length }}
       </div>
     </div>
   </div>
 
-  <!-- Records Table -->
-  <div class="card" style="border: none; border-radius: 8px; background-color: white; box-shadow: 0 1px 3px rgba(0,0,0,0.05); overflow: hidden;">
-    {% if records %}
-      <div class="table-responsive">
-        <table class="table table-hover mb-0">
-          <thead style="background-color: var(--gray-50); border-bottom: 2px solid var(--gray-200);">
-            <tr>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Client</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Reg #</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Course Type</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Status</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Batch</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">Start Date</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem;">End Date</th>
-              <th style="color: var(--navy); font-weight: 700; padding: 1rem; font-size: 0.9rem; text-align: center;">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {% for record in records %}
-              <tr style="border-bottom: 1px solid var(--gray-100);">
-                <td style="padding: 1rem; color: var(--navy); font-weight: 600;">
-                  <a href="/operations/coaching?q={{ record.first_name }}" style="color: var(--orange); text-decoration: none;">
-                    {% if record.prefix %}{{ record.prefix }}.{% endif %} {{ record.first_name }} {{ record.last_name }}
-                  </a>
-                </td>
-                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
-                  {{ record.registration_number }}
-                </td>
-                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
-                  {{ record.course_type or '—' }}
-                </td>
-                <td style="padding: 1rem;">
-                  {% if record.coaching_status == 'On Going' %}
-                    <span class="badge" style="background-color: #28a745; color: white; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                      On Going
-                    </span>
-                  {% elif record.coaching_status == 'Completed' %}
-                    <span class="badge" style="background-color: var(--orange); color: white; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                      Completed
-                    </span>
-                  {% elif record.coaching_status == 'Pending' %}
-                    <span class="badge" style="background-color: #ffc107; color: #333; padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                      Pending
-                    </span>
-                  {% else %}
-                    <span class="badge" style="background-color: var(--gray-200); color: var(--gray-700); padding: 0.4rem 0.8rem; border-radius: 4px; font-size: 0.8rem; font-weight: 600;">
-                      {{ record.coaching_status or '—' }}
-                    </span>
-                  {% endif %}
-                </td>
-                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
-                  {% if record.batch_month and record.batch_year %}
-                    {{ record.batch_month }}/{{ record.batch_year }}
-                  {% else %}
-                    —
-                  {% endif %}
-                </td>
-                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
-                  {{ record.start_date or '—' }}
-                </td>
-                <td style="padding: 1rem; color: var(--gray-700); font-size: 0.9rem;">
-                  {{ record.end_date or '—' }}
-                </td>
-                <td style="padding: 1rem; text-align: center;">
-                  <div class="btn-group" role="group">
-                    <a href="/operations/coaching/{{ record.id }}/edit" class="btn btn-sm" style="background-color: var(--orange); color: white; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; font-size: 0.85rem; text-decoration: none; font-weight: 600;">
-                      Edit
-                    </a>
-                    <form method="POST" action="/operations/coaching/{{ record.id }}/delete" style="display: inline;" onsubmit="return confirm('Are you sure you want to delete this record?');">
-                      <button type="submit" class="btn btn-sm" style="background-color: #dc3545; color: white; border: none; border-radius: 4px; padding: 0.4rem 0.8rem; font-size: 0.85rem; font-weight: 600; margin-left: 0.25rem;">
-                        Delete
-                      </button>
-                    </form>
-                  </div>
-                </td>
-              </tr>
-            {% endfor %}
-          </tbody>
-        </table>
-      </div>
-    {% else %}
-      <div class="card-body p-5 text-center">
-        <p style="color: var(--gray-500); font-size: 1.1rem; margin-bottom: 1.5rem;">No coaching records found.</p>
-        <a href="/operations/coaching/add" class="btn" style="background-color: var(--orange); color: white; border: none; border-radius: 6px; font-weight: 600; padding: 0.75rem 1.5rem;">
-          Create First Record
-        </a>
-      </div>
-    {% endif %}
+  <!-- Client Filter Banner -->
+  {% if client_reg %}
+  <div class="filter-banner">
+    Viewing records for: <strong>{{ client_reg }}</strong>
   </div>
+  {% endif %}
+
+  <!-- Filter Section -->
+  <div class="filter-section">
+    <form method="GET" class="filter-form">
+      <div class="form-group">
+        <label for="search">Search</label>
+        <input
+          type="text"
+          id="search"
+          name="q"
+          placeholder="Client name, reg#..."
+          value="{{ search or '' }}"
+        />
+      </div>
+      <div class="form-group">
+        <label for="status">Status</label>
+        <select id="status" name="status">
+          <option value="">All Statuses</option>
+          {% for status in coaching_statuses %}
+          <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
+            {{ status }}
+          </option>
+          {% endfor %}
+        </select>
+      </div>
+      <button type="submit" class="filter-button">🔍 Filter</button>
+    </form>
+  </div>
+
+  <!-- Table -->
+  {% if records %}
+  <div class="table-wrapper">
+    <table class="data-table">
+      <thead>
+        <tr>
+          <th>Client Name</th>
+          <th>Reg#</th>
+          <th>Course Type</th>
+          <th>Method</th>
+          <th>Status</th>
+          <th>Batch</th>
+          <th>Start Date</th>
+          <th>End Date</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for record in records %}
+        <tr>
+          <td>
+            <a href="/operations/clients/{{ record.id }}" class="row-link">
+              {{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}
+            </a>
+          </td>
+          <td>
+            <a href="/operations/coaching/{{ record.id }}" class="row-link">
+              {{ record.registration_number }}
+            </a>
+          </td>
+          <td>{{ record.course_type or '–' }}</td>
+          <td>{{ record.coaching_method or '–' }}</td>
+          <td>
+            {% set status = record.coaching_status %}
+            {% if status == 'On Going' %}
+              <span class="badge-pill badge-on-going">{{ status }}</span>
+            {% elif status == 'Completed' %}
+              <span class="badge-pill badge-completed">{{ status }}</span>
+            {% elif status == 'Pending' %}
+              <span class="badge-pill badge-pending">{{ status }}</span>
+            {% elif status == 'Cancelled' %}
+              <span class="badge-pill badge-cancelled">{{ status }}</span>
+            {% else %}
+              <span class="badge-pill" style="background: #F3F4F6; color: #64748B;">{{ status }}</span>
+            {% endif %}
+          </td>
+          <td>
+            {% if record.batch_month and record.batch_year %}
+              {{ record.batch_month }}/{{ record.batch_year }}
+            {% else %}
+              –
+            {% endif %}
+          </td>
+          <td>{{ record.start_date or '–' }}</td>
+          <td>{{ record.end_date or '–' }}</td>
+          <td>
+            <div class="action-links">
+              <a href="/operations/coaching/{{ record.id }}/edit">Edit</a>
+              <a href="/operations/coaching/{{ record.id }}/delete" class="delete" onclick="return confirm('Are you sure?');">Delete</a>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <p>No coaching records found</p>
+    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
+      {% if search or status_filter %}
+      Try adjusting your search or filter criteria
+      {% else %}
+      Add your first training record to get started
+      {% endif %}
+    </p>
+  </div>
+  {% endif %}
 </div>
-
-<style>
-  .btn-group {
-    display: flex;
-    gap: 0.25rem;
-  }
-
-  .table-hover tbody tr:hover {
-    background-color: var(--gray-50);
-  }
-
-  @media (max-width: 768px) {
-    .table-responsive {
-      font-size: 0.85rem;
-    }
-
-    th, td {
-      padding: 0.75rem !important;
-    }
-
-    h1 {
-      font-size: 1.5rem !important;
-    }
-
-    .btn-lg {
-      font-size: 0.9rem !important;
-      padding: 0.5rem 1rem !important;
-    }
-
-    .card-body p.card-text {
-      font-size: 0.8rem !important;
-    }
-
-    .card-title {
-      font-size: 2rem !important;
-    }
-  }
-</style>
 {% endblock %}
