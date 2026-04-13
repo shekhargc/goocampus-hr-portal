@@ -49,7 +49,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Primary Department</label>
-                    <input type="text" name="primary_department" maxlength="80" value="{{ item.primary_department if item else '' }}" placeholder="e.g. Sales" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="primary_department" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for dept in departments %}
+                        <option value="{{ dept }}" {% if item and item.primary_department == dept %}selected{% endif %}>{{ dept }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Project</label>
@@ -63,8 +68,21 @@
             </div>
 
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Shared With (comma-separated departments, optional)</label>
-                <input type="text" name="shared_departments" maxlength="250" value="{{ item.shared_departments if item else '' }}" placeholder="e.g. Marketing, Ops, Tech" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Shared With (select departments that also use this subscription)</label>
+                {% set current_shared = (item.shared_departments or '') if item else '' %}
+                {% set shared_list = current_shared.split(',') | map('trim') | list if current_shared else [] %}
+                <div id="shared-dept-container" style="border:1px solid var(--gray-300);border-radius:8px;padding:0.5rem 0.6rem;max-height:180px;overflow-y:auto;background:white;">
+                    {% if departments %}
+                    {% for dept in departments %}
+                    <label style="display:flex;align-items:center;gap:0.5rem;padding:0.35rem 0.3rem;font-size:0.85rem;color:var(--gray-700);cursor:pointer;border-radius:4px;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='transparent'">
+                        <input type="checkbox" name="shared_departments" value="{{ dept }}" {% if dept in shared_list %}checked{% endif %} style="accent-color:var(--orange);width:16px;height:16px;flex-shrink:0;">
+                        {{ dept }}
+                    </label>
+                    {% endfor %}
+                    {% else %}
+                    <p style="margin:0.3rem 0;font-size:0.8rem;color:var(--gray-400);">No departments configured. Add them in Finance &rarr; Settings.</p>
+                    {% endif %}
+                </div>
                 <small style="display:block;margin-top:0.3rem;color:var(--gray-400);font-size:0.7rem;">These are informational tags — the full cost is charged to the primary department.</small>
             </div>
 

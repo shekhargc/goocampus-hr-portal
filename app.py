@@ -8302,7 +8302,8 @@ def finance_subscriptions_add():
         currency = request.form.get('currency', 'INR') or 'INR'
         frequency = request.form.get('frequency', 'monthly') or 'monthly'
         primary_department = request.form.get('primary_department', '').strip()
-        shared_departments = request.form.get('shared_departments', '').strip()
+        shared_list = request.form.getlist('shared_departments')
+        shared_departments = ', '.join(d.strip() for d in shared_list if d.strip())
         project_val = request.form.get('project_id', '')
         project_id = int(project_val) if project_val and project_val.isdigit() else None
         notes = request.form.get('notes', '').strip()
@@ -8330,8 +8331,13 @@ def finance_subscriptions_add():
         projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     except Exception:
         projects = []
+    try:
+        dept_cats = conn.execute("SELECT department FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order, department").fetchall()
+        departments = sorted(set(d['department'] for d in dept_cats if d['department']))
+    except Exception:
+        departments = []
     conn.close()
-    return render_template('finance_subscription_form.html', user=user, item=None, projects=projects, mode='add')
+    return render_template('finance_subscription_form.html', user=user, item=None, projects=projects, departments=departments, mode='add')
 
 
 @app.route('/finance/subscriptions/<int:item_id>/edit', methods=['GET', 'POST'])
@@ -8354,7 +8360,9 @@ def finance_subscriptions_edit(item_id):
         currency = request.form.get('currency', 'INR') or 'INR'
         frequency = request.form.get('frequency', 'monthly') or 'monthly'
         primary_department = request.form.get('primary_department', '').strip()
-        shared_departments = request.form.get('shared_departments', '').strip()
+        # Multi-select shared departments: join selected values with comma
+        shared_list = request.form.getlist('shared_departments')
+        shared_departments = ', '.join(d.strip() for d in shared_list if d.strip())
         project_val = request.form.get('project_id', '')
         project_id = int(project_val) if project_val and project_val.isdigit() else None
         notes = request.form.get('notes', '').strip()
@@ -8378,8 +8386,13 @@ def finance_subscriptions_edit(item_id):
         projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     except Exception:
         projects = []
+    try:
+        dept_cats = conn.execute("SELECT department FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order, department").fetchall()
+        departments = sorted(set(d['department'] for d in dept_cats if d['department']))
+    except Exception:
+        departments = []
     conn.close()
-    return render_template('finance_subscription_form.html', user=user, item=item, projects=projects, mode='edit')
+    return render_template('finance_subscription_form.html', user=user, item=item, projects=projects, departments=departments, mode='edit')
 
 
 @app.route('/finance/subscriptions/<int:item_id>/delete', methods=['POST'])
