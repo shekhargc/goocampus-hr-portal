@@ -6902,11 +6902,103 @@ def finance_expenses():
         "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
     ).fetchall()
     entries = conn.execute("SELECT * FROM budget_entries WHERE fy_year = ?", (fy_year,)).fetchall()
+
+    # Line-item rollup: salary_items and subscription_items feed their
+    # respective category rows on the expense sheet. The master list's
+    # monthly_cost is the default budget for every month; any per-month
+    # budget_entries with salary_id / subscription_id override it, and
+    # their actual_amount rolls up as the category actual.
+    try:
+        salary_items = conn.execute(
+            "SELECT id, monthly_cost FROM salary_items WHERE is_active = 1"
+        ).fetchall()
+    except Exception:
+        salary_items = []
+    try:
+        sub_items = conn.execute(
+            "SELECT id, cost, frequency FROM subscription_items WHERE is_active = 1"
+        ).fetchall()
+    except Exception:
+        sub_items = []
     conn.close()
 
+    # Category entries keyed by (category_id, month, year)
     entry_map = {}
+    # Line-item entries keyed by (salary_id/subscription_id, month, year)
+    sal_entry_map = {}
+    sub_entry_map = {}
     for e in entries:
-        entry_map[(e['category_id'], e['month'], e['year'])] = e
+        keys = e.keys() if hasattr(e, 'keys') else []
+        sid = e['salary_id'] if 'salary_id' in keys else None
+        subid = e['subscription_id'] if 'subscription_id' in keys else None
+        cid = e['category_id'] if 'category_id' in keys else None
+        if sid:
+            sal_entry_map[(sid, e['month'], e['year'])] = e
+        elif subid:
+            sub_entry_map[(subid, e['month'], e['year'])] = e
+        elif cid:
+            entry_map[(cid, e['month'], e['year'])] = e
+
+    # Identify the category rows that absorb line-item rollups
+    salary_cat_id = None
+    sub_cat_id = None
+    for c in expense_cats:
+        nm = (c['name'] or '').lower().strip()
+        if nm in ('salaries & wages', 'salaries and wages', 'salary', 'salaries'):
+            salary_cat_id = c['id']
+        elif nm in ('software & tools', 'software and tools', 'software', 'subscriptions'):
+            sub_cat_id = c['id']
+
+    def _sub_monthly_equiv(cost, frequency):
+        try:
+            raw = float(cost or 0)
+        except (TypeError, ValueError):
+            raw = 0.0
+        freq = (frequency or 'monthly').lower()
+        if freq == 'monthly':
+            return raw
+        if freq == 'quarterly':
+            return raw / 3.0
+        if freq == 'annual':
+            return raw / 12.0
+        return 0.0
+
+    # Merge line-item totals into the category rows per month
+    for fm in fy_months:
+        m, y = fm['month'], fm['year']
+        if salary_cat_id and salary_items:
+            s_budget = 0.0
+            s_actual = 0.0
+            for s in salary_items:
+                e = sal_entry_map.get((s['id'], m, y))
+                if e:
+                    s_budget += float(e['budget_amount'] or 0)
+                    s_actual += float(e['actual_amount'] or 0)
+                else:
+                    s_budget += float(s['monthly_cost'] or 0)
+            existing = entry_map.get((salary_cat_id, m, y))
+            merged = {
+                'budget_amount': s_budget + (float(existing['budget_amount'] or 0) if existing else 0),
+                'actual_amount': s_actual + (float(existing['actual_amount'] or 0) if existing else 0),
+            }
+            entry_map[(salary_cat_id, m, y)] = merged
+
+        if sub_cat_id and sub_items:
+            b_sum = 0.0
+            a_sum = 0.0
+            for s in sub_items:
+                e = sub_entry_map.get((s['id'], m, y))
+                if e:
+                    b_sum += float(e['budget_amount'] or 0)
+                    a_sum += float(e['actual_amount'] or 0)
+                else:
+                    b_sum += _sub_monthly_equiv(s['cost'], s['frequency'])
+            existing = entry_map.get((sub_cat_id, m, y))
+            merged = {
+                'budget_amount': b_sum + (float(existing['budget_amount'] or 0) if existing else 0),
+                'actual_amount': a_sum + (float(existing['actual_amount'] or 0) if existing else 0),
+            }
+            entry_map[(sub_cat_id, m, y)] = merged
 
     return render_template('finance_expenses.html', user=user, fy_year=fy_year, fy_months=fy_months,
                            expense_cats=expense_cats, dept_cats=dept_cats, entry_map=entry_map,
