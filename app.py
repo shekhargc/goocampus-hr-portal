@@ -9278,10 +9278,19 @@ def ops_test_bookings_delete(record_id):
 @app.route('/operations/call-notes')
 @admin_required
 def ops_call_notes_list():
-    """List call notes, optionally filtered by client."""
+    """List call notes with detailed filters: registration number, client name, added_by, note text."""
     conn = get_db()
-    reg = request.args.get('client', '')
-    search = request.args.get('q', '')
+    # Filter parameters
+    reg = request.args.get('reg', '').strip()
+    client_name = request.args.get('client_name', '').strip()
+    added_by_filter = request.args.get('added_by', '').strip()
+    note_search = request.args.get('note_search', '').strip()
+    # Legacy support: 'client' param maps to reg, 'q' maps to note_search
+    if not reg and request.args.get('client', ''):
+        reg = request.args.get('client', '').strip()
+    if not note_search and request.args.get('q', ''):
+        note_search = request.args.get('q', '').strip()
+
     page = request.args.get('page', 1, type=int)
     if page < 1:
         page = 1
@@ -9290,6 +9299,10 @@ def ops_call_notes_list():
     offset = (page - 1) * per_page
 
     try:
+        # Get distinct added_by values for dropdown
+        added_by_list = conn.execute("SELECT DISTINCT added_by FROM ops_call_notes WHERE added_by IS NOT NULL AND added_by != '' ORDER BY added_by").fetchall()
+        added_by_options = [r['added_by'] for r in added_by_list]
+
         # Build base query
         sql_base = '''SELECT n.*, p.first_name, p.last_name, p.prefix
                       FROM ops_call_notes n
@@ -9297,11 +9310,17 @@ def ops_call_notes_list():
                       WHERE 1=1'''
         params = []
         if reg:
-            sql_base += ' AND n.registration_number = ?'
-            params.append(reg)
-        if search:
-            sql_base += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.call_note ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql_base += ' AND n.registration_number ILIKE ?'
+            params.append(f'%{reg}%')
+        if client_name:
+            sql_base += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR (p.first_name || \' \' || p.last_name) ILIKE ?)'
+            params.extend([f'%{client_name}%'] * 3)
+        if added_by_filter:
+            sql_base += ' AND n.added_by = ?'
+            params.append(added_by_filter)
+        if note_search:
+            sql_base += ' AND n.call_note ILIKE ?'
+            params.append(f'%{note_search}%')
 
         # Get total count
         count_sql = f'SELECT COUNT(*) as total FROM (SELECT 1 {sql_base[sql_base.find("FROM"):]})'
@@ -9322,8 +9341,17 @@ def ops_call_notes_list():
         records = []
         total_count = 0
         total_pages = 0
+        added_by_options = []
     conn.close()
-    return render_template('ops_call_notes_list.html', records=records, client_reg=reg, search=search, page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
+
+    # Check if any filter is active
+    has_filters = bool(reg or client_name or added_by_filter or note_search)
+
+    return render_template('ops_call_notes_list.html',
+        records=records, reg=reg, client_name=client_name,
+        added_by_filter=added_by_filter, note_search=note_search,
+        added_by_options=added_by_options, has_filters=has_filters,
+        page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
 
 
 @app.route('/operations/call-notes/add', methods=['GET', 'POST'])

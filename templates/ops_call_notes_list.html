@@ -152,44 +152,106 @@
     background: white;
     border-radius: 8px;
     border: 1px solid var(--gray-200);
-    padding: 1.2rem;
+    padding: 1.5rem;
     margin-bottom: 2rem;
   }
 
-  .filter-group {
-    display: flex;
+  .filter-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    color: var(--gray-700);
+    margin-bottom: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+  }
+
+  .filter-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
     gap: 1rem;
-    flex-wrap: wrap;
-    align-items: flex-end;
+    margin-bottom: 1rem;
+  }
+
+  .filter-actions {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+    padding-top: 0.5rem;
   }
 
   .form-group {
-    flex: 1;
-    min-width: 200px;
+    min-width: 0;
   }
 
   .form-label {
     display: block;
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     font-weight: 600;
     color: var(--gray-600);
     margin-bottom: 0.4rem;
     text-transform: uppercase;
   }
 
-  .form-input {
+  .form-input,
+  .form-select {
     width: 100%;
     padding: 0.6rem 0.8rem;
     border: 1px solid var(--gray-200);
     border-radius: 6px;
     font-size: 0.85rem;
     font-family: inherit;
+    background: white;
+    box-sizing: border-box;
   }
 
-  .form-input:focus {
+  .form-input:focus,
+  .form-select:focus {
     outline: none;
     border-color: var(--navy);
     box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
+  }
+
+  .btn-reset {
+    padding: 0.55rem 1.2rem;
+    background: white;
+    color: var(--gray-600);
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    text-decoration: none;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+
+  .btn-reset:hover {
+    background: var(--gray-50);
+    color: var(--gray-700);
+  }
+
+  .active-filters {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .filter-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    padding: 0.3rem 0.7rem;
+    background: var(--navy);
+    color: white;
+    border-radius: 16px;
+    font-size: 0.75rem;
+    font-weight: 500;
+  }
+
+  .filter-tag-label {
+    opacity: 0.75;
   }
 
   .notes-info {
@@ -457,6 +519,10 @@
       justify-content: center;
     }
 
+    .filter-grid {
+      grid-template-columns: 1fr;
+    }
+
     .note-top {
       flex-direction: column;
       gap: 0.5rem;
@@ -480,9 +546,8 @@
       text-align: center;
     }
 
-    .filter-banner {
-      flex-direction: column;
-      align-items: flex-start;
+    .active-filters {
+      flex-wrap: wrap;
     }
   }
 </style>
@@ -495,7 +560,7 @@
   <div class="header-row">
     <div class="header-left">
       <h2 class="section-title">Call Notes</h2>
-      <span class="badge-pill">{{ records|length }} notes</span>
+      <span class="badge-pill">{{ total_count }} notes</span>
     </div>
     <div class="header-actions">
       <a href="/operations/call-notes/add" class="btn-primary">+ Add Note</a>
@@ -504,33 +569,63 @@
   </div>
 
   <div class="stat-card">
-    <div class="stat-value">{{ records|length }}</div>
-    <div class="stat-label">Total Notes</div>
+    <div class="stat-value">{{ total_count }}</div>
+    <div class="stat-label">{% if has_filters %}Matching Notes{% else %}Total Notes{% endif %}</div>
   </div>
 
-  {% if client_reg %}
-  <div class="filter-banner">
-    <div class="filter-info">
-      <strong>Filtered by:</strong> {{ client_reg }}
-    </div>
-    <a href="/operations/call-notes" class="btn-clear-filter">Clear filter</a>
+  {% if has_filters %}
+  <div class="active-filters">
+    {% if reg %}
+      <span class="filter-tag"><span class="filter-tag-label">Reg#:</span> {{ reg }}</span>
+    {% endif %}
+    {% if client_name %}
+      <span class="filter-tag"><span class="filter-tag-label">Client:</span> {{ client_name }}</span>
+    {% endif %}
+    {% if added_by_filter %}
+      <span class="filter-tag"><span class="filter-tag-label">Added by:</span> {{ added_by_filter }}</span>
+    {% endif %}
+    {% if note_search %}
+      <span class="filter-tag"><span class="filter-tag-label">Notes:</span> {{ note_search }}</span>
+    {% endif %}
   </div>
   {% endif %}
 
   <form method="get" class="filter-section">
-    <div class="filter-group">
+    <div class="filter-title">Filter Call Notes</div>
+    <div class="filter-grid">
       <div class="form-group">
-        <label for="q" class="form-label">Search Notes</label>
-        <input
-          type="text"
-          id="q"
-          name="q"
-          class="form-input"
-          placeholder="Enter name, registration #, or note content..."
-          value="{{ search or '' }}"
-        >
+        <label for="reg" class="form-label">Registration Number</label>
+        <input type="text" id="reg" name="reg" class="form-input"
+          placeholder="e.g. GCUKIP/24-25/001"
+          value="{{ reg or '' }}">
       </div>
-      <button type="submit" class="btn-primary">Filter</button>
+      <div class="form-group">
+        <label for="client_name" class="form-label">Client Name</label>
+        <input type="text" id="client_name" name="client_name" class="form-input"
+          placeholder="Search by first or last name..."
+          value="{{ client_name or '' }}">
+      </div>
+      <div class="form-group">
+        <label for="added_by" class="form-label">Added By</label>
+        <select id="added_by" name="added_by" class="form-select">
+          <option value="">All Team Members</option>
+          {% for person in added_by_options %}
+            <option value="{{ person }}" {% if added_by_filter == person %}selected{% endif %}>{{ person }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div class="form-group">
+        <label for="note_search" class="form-label">Search in Notes</label>
+        <input type="text" id="note_search" name="note_search" class="form-input"
+          placeholder="Search note content..."
+          value="{{ note_search or '' }}">
+      </div>
+    </div>
+    <div class="filter-actions">
+      <button type="submit" class="btn-primary">Apply Filters</button>
+      {% if has_filters %}
+        <a href="/operations/call-notes" class="btn-reset">Clear All Filters</a>
+      {% endif %}
     </div>
   </form>
 
@@ -574,11 +669,18 @@
       {% endfor %}
     </div>
 
+    {# Build filter query string for pagination links #}
+    {% set fq = '' %}
+    {% if reg %}{% set fq = fq ~ '&reg=' ~ reg %}{% endif %}
+    {% if client_name %}{% set fq = fq ~ '&client_name=' ~ client_name %}{% endif %}
+    {% if added_by_filter %}{% set fq = fq ~ '&added_by=' ~ added_by_filter %}{% endif %}
+    {% if note_search %}{% set fq = fq ~ '&note_search=' ~ note_search %}{% endif %}
+
     {% if total_pages > 1 %}
     <div class="pagination-controls">
       {% if page > 1 %}
-        <a href="?page=1{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">« First</a>
-        <a href="?page={{ page - 1 }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">‹ Previous</a>
+        <a href="?page=1{{ fq }}" class="pagination-btn">« First</a>
+        <a href="?page={{ page - 1 }}{{ fq }}" class="pagination-btn">‹ Previous</a>
       {% else %}
         <span class="pagination-btn disabled">« First</span>
         <span class="pagination-btn disabled">‹ Previous</span>
@@ -588,7 +690,7 @@
       {% set end_page = [page + 2, total_pages]|min %}
 
       {% if start_page > 1 %}
-        <a href="?page=1{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">1</a>
+        <a href="?page=1{{ fq }}" class="pagination-btn">1</a>
         {% if start_page > 2 %}
           <span class="pagination-dots">…</span>
         {% endif %}
@@ -598,7 +700,7 @@
         {% if p == page %}
           <span class="pagination-btn active">{{ p }}</span>
         {% else %}
-          <a href="?page={{ p }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">{{ p }}</a>
+          <a href="?page={{ p }}{{ fq }}" class="pagination-btn">{{ p }}</a>
         {% endif %}
       {% endfor %}
 
@@ -606,12 +708,12 @@
         {% if end_page < total_pages - 1 %}
           <span class="pagination-dots">…</span>
         {% endif %}
-        <a href="?page={{ total_pages }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">{{ total_pages }}</a>
+        <a href="?page={{ total_pages }}{{ fq }}" class="pagination-btn">{{ total_pages }}</a>
       {% endif %}
 
       {% if page < total_pages %}
-        <a href="?page={{ page + 1 }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">Next ›</a>
-        <a href="?page={{ total_pages }}{% if search %}&q={{ search }}{% endif %}{% if client_reg %}&client={{ client_reg }}{% endif %}" class="pagination-btn">Last »</a>
+        <a href="?page={{ page + 1 }}{{ fq }}" class="pagination-btn">Next ›</a>
+        <a href="?page={{ total_pages }}{{ fq }}" class="pagination-btn">Last »</a>
       {% else %}
         <span class="pagination-btn disabled">Next ›</span>
         <span class="pagination-btn disabled">Last »</span>
@@ -623,8 +725,8 @@
       <div class="empty-state-icon">📝</div>
       <div class="empty-state-title">No Call Notes Found</div>
       <div class="empty-state-text">
-        {% if search %}
-          No notes match your search. Try adjusting your filters.
+        {% if has_filters %}
+          No notes match your filters. Try adjusting your search criteria.
         {% else %}
           No call notes have been added yet. <a href="/operations/call-notes/add">Add the first one</a>.
         {% endif %}
