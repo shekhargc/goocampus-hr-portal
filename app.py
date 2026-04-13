@@ -9676,35 +9676,34 @@ def ops_payments_api_fix():
             return jsonify(results)
 
         elif action == 'dedup':
-            # Remove duplicate payment records, keeping the one with lowest id
-            raw_conn = conn.conn
-            cur = raw_conn.cursor()
-            # Count before
-            cur.execute('SELECT COUNT(*) FROM ops_payments')
-            before = cur.fetchone()[0]
-            # Delete duplicates using CTE with row_number
-            cur.execute('''
-                DELETE FROM ops_payments
-                WHERE id IN (
-                    SELECT id FROM (
-                        SELECT id, ROW_NUMBER() OVER (
-                            PARTITION BY registration_number, payment_date, amount_paid, gst_paid,
-                                         total_amount_paid, instalment, payment_method, total_package,
-                                         COALESCE(notes, '')
-                            ORDER BY id
-                        ) AS rn
-                        FROM ops_payments
-                    ) dupes
-                    WHERE rn > 1
-                )
-            ''')
-            raw_conn.commit()
-            # Count after
-            cur.execute('SELECT COUNT(*) FROM ops_payments')
-            after = cur.fetchone()[0]
-            cur.close()
-            conn.close()
-            return jsonify({'before': before, 'after': after, 'removed': before - after})
+            import traceback as tb
+            try:
+                raw_conn = conn.conn
+                cur = raw_conn.cursor()
+                cur.execute('SELECT COUNT(*) FROM ops_payments')
+                before = cur.fetchone()[0]
+                # Two-step dedup: find IDs to keep, delete the rest
+                cur.execute('''
+                    CREATE TEMP TABLE keep_ids AS
+                    SELECT MIN(id) AS id
+                    FROM ops_payments
+                    GROUP BY registration_number, payment_date, amount_paid, gst_paid,
+                             total_amount_paid, instalment, payment_method, total_package,
+                             COALESCE(notes, '')
+                ''')
+                cur.execute('''
+                    DELETE FROM ops_payments
+                    WHERE id NOT IN (SELECT id FROM keep_ids)
+                ''')
+                cur.execute('DROP TABLE IF EXISTS keep_ids')
+                raw_conn.commit()
+                cur.execute('SELECT COUNT(*) FROM ops_payments')
+                after = cur.fetchone()[0]
+                cur.close()
+                conn.close()
+                return jsonify({'before': before, 'after': after, 'removed': before - after})
+            except Exception as ex:
+                return jsonify({'error': str(ex), 'trace': tb.format_exc()}), 500
 
         elif action == 'insert_payment':
             # Insert a single payment record bypassing FK constraint temporarily
