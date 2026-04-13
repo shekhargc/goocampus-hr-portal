@@ -8409,69 +8409,82 @@ def migrate_subscriptions_api():
     if token != 'gc2026subload':
         return jsonify({'error': 'unauthorized'}), 401
 
-    conn = get_db()
-    # Clear existing subscription items first (budget_entries has FK)
-    conn.execute("DELETE FROM budget_entries WHERE subscription_id IS NOT NULL")
-    conn.execute("DELETE FROM subscription_items")
-    conn.commit()
-
-    # Subscriptions from the master list
-    # Format: (name, annual_cost_or_0, frequency, primary_department, shared_departments, is_active)
-    # is_active: 1 = active, 0 = cancelled
-    subs = [
-        ('Adobe Creative Suite', 0, 'monthly', 'Marketing', '', 1),
-        ('AI Sensy', 0, 'monthly', 'Sales', '', 1),
-        ('Airtable', 465000, 'annual', 'General', '', 0),
-        ('Apify Starter', 2800, 'annual', 'Workforce Readiness', '', 1),
-        ('Apify Usage Credits', 0, 'monthly', 'Workforce Readiness', '', 1),
-        ('AWS', 20000, 'annual', 'GC World', '', 1),
-        ('Boosted Posts', 104000, 'annual', 'General', '', 1),
-        ('Brevo', 0, 'monthly', 'Marketing', '', 1),
-        ('Callyzer', 0, 'monthly', 'Sales', '', 1),
-        ('Canva', 4000, 'annual', 'General', '', 1),
-        ('Claude API', 0, 'monthly', 'Samvaya', '', 1),
-        ('Claude Max', 9500, 'annual', 'Samvaya', '12th Plus', 1),
-        ('Claude Pro', 1900, 'annual', 'General', '', 1),
-        ('Envato', 0, 'monthly', 'Marketing', '', 1),
-        ('Fillout Forms', 17000, 'annual', 'General', '', 1),
-        ('Framer', 0, 'monthly', 'Marketing', '', 1),
-        ('Freepik', 13000, 'annual', 'Marketing', '', 0),
-        ('GPTZero', 50000, 'annual', 'Workforce Readiness', '', 1),
-        ('Interakt', 0, 'monthly', 'Marketing', '', 1),
-        ('LinkedIn Premium', 16000, 'annual', 'GC World', '', 1),
-        ('Meta Ads', 1558546, 'annual', 'General', '', 1),
-        ('n8n', 6000, 'annual', 'Marketing', '', 1),
-        ('Netlify', 900, 'annual', 'Samvaya', '', 1),
-        ('Placid', 0, 'monthly', 'Operations', '', 1),
-        ('Resend', 0, 'monthly', 'Samvaya', '', 1),
-        ('Riverside', 0, 'monthly', 'GC World', '', 1),
-        ('Supabase', 2300, 'annual', 'Samvaya', '', 1),
-        ('Zoom Pro', 0, 'monthly', 'Operations', 'Marketing', 1),
-    ]
-
-    inserted = 0
-    errors = []
-    for name, annual_cost, freq, primary_dept, shared_dept, is_active in subs:
-        # Convert annual cost to monthly for storage (since page shows monthly)
-        if freq == 'annual' and annual_cost > 0:
-            monthly_cost = round(annual_cost / 12, 2)
-            store_freq = 'monthly'
-        else:
-            monthly_cost = 0
-            store_freq = 'monthly'
+    try:
+        conn = get_db()
+        # Clear existing subscription items first (budget_entries has FK)
         try:
-            conn.execute(
-                "INSERT INTO subscription_items (name, vendor, cost, currency, frequency, primary_department, shared_departments, is_active, notes) "
-                "VALUES (?, ?, ?, 'INR', ?, ?, ?, ?, ?)",
-                (name, '', monthly_cost, store_freq, primary_dept, shared_dept, is_active,
-                 f'Annual cost: {annual_cost}' if annual_cost > 0 else '')
-            )
-            inserted += 1
+            conn.execute("DELETE FROM budget_entries WHERE subscription_id IS NOT NULL")
         except Exception as e:
-            errors.append(f'{name}: {e}')
-    conn.commit()
-    conn.close()
-    return jsonify({'inserted': inserted, 'errors': errors})
+            logging.error(f"migrate-subs: budget_entries delete error: {e}")
+            try: conn.rollback()
+            except: pass
+        try:
+            conn.execute("DELETE FROM subscription_items")
+        except Exception as e:
+            logging.error(f"migrate-subs: subscription_items delete error: {e}")
+            try: conn.rollback()
+            except: pass
+        conn.commit()
+
+        # Subscriptions from the master list
+        subs = [
+            ('Adobe Creative Suite', 0, 'monthly', 'Marketing', '', 1),
+            ('AI Sensy', 0, 'monthly', 'Sales', '', 1),
+            ('Airtable', 465000, 'annual', 'General', '', 0),
+            ('Apify Starter', 2800, 'annual', 'Workforce Readiness', '', 1),
+            ('Apify Usage Credits', 0, 'monthly', 'Workforce Readiness', '', 1),
+            ('AWS', 20000, 'annual', 'GC World', '', 1),
+            ('Boosted Posts', 104000, 'annual', 'General', '', 1),
+            ('Brevo', 0, 'monthly', 'Marketing', '', 1),
+            ('Callyzer', 0, 'monthly', 'Sales', '', 1),
+            ('Canva', 4000, 'annual', 'General', '', 1),
+            ('Claude API', 0, 'monthly', 'Samvaya', '', 1),
+            ('Claude Max', 9500, 'annual', 'Samvaya', '12th Plus', 1),
+            ('Claude Pro', 1900, 'annual', 'General', '', 1),
+            ('Envato', 0, 'monthly', 'Marketing', '', 1),
+            ('Fillout Forms', 17000, 'annual', 'General', '', 1),
+            ('Framer', 0, 'monthly', 'Marketing', '', 1),
+            ('Freepik', 13000, 'annual', 'Marketing', '', 0),
+            ('GPTZero', 50000, 'annual', 'Workforce Readiness', '', 1),
+            ('Interakt', 0, 'monthly', 'Marketing', '', 1),
+            ('LinkedIn Premium', 16000, 'annual', 'GC World', '', 1),
+            ('Meta Ads', 1558546, 'annual', 'General', '', 1),
+            ('n8n', 6000, 'annual', 'Marketing', '', 1),
+            ('Netlify', 900, 'annual', 'Samvaya', '', 1),
+            ('Placid', 0, 'monthly', 'Operations', '', 1),
+            ('Resend', 0, 'monthly', 'Samvaya', '', 1),
+            ('Riverside', 0, 'monthly', 'GC World', '', 1),
+            ('Supabase', 2300, 'annual', 'Samvaya', '', 1),
+            ('Zoom Pro', 0, 'monthly', 'Operations', 'Marketing', 1),
+        ]
+
+        inserted = 0
+        errors = []
+        for name, annual_cost, freq, primary_dept, shared_dept, is_active in subs:
+            if freq == 'annual' and annual_cost > 0:
+                monthly_cost = round(annual_cost / 12, 2)
+            else:
+                monthly_cost = 0
+            try:
+                conn.execute(
+                    "INSERT INTO subscription_items (name, vendor, cost, currency, frequency, primary_department, shared_departments, is_active, notes) "
+                    "VALUES (?, ?, ?, 'INR', 'monthly', ?, ?, ?, ?)",
+                    (name, '', monthly_cost, primary_dept, shared_dept, is_active,
+                     f'Annual cost: {annual_cost}' if annual_cost > 0 else '')
+                )
+                inserted += 1
+            except Exception as e:
+                errors.append(f'{name}: {e}')
+                try: conn.rollback()
+                except: pass
+        conn.commit()
+        conn.close()
+        return jsonify({'inserted': inserted, 'errors': errors})
+    except Exception as e:
+        logging.error(f"migrate-subscriptions error: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': str(e)}), 500
 
 
 # ─────────────────────────────────────────────────────────
