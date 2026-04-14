@@ -4,32 +4,206 @@
 
 {% block extra_css %}
 <style>
-    .late-badge {
+    .filter-bar {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+        background: white; padding: 1.25rem; border-radius: 0.75rem;
+        border: 1px solid var(--gray-200); margin-bottom: 1.5rem;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; }
+    .filter-group label {
+        font-size: 0.72rem; font-weight: 700; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .filter-group input, .filter-group select {
+        padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.85rem; min-width: 140px;
+        background: white; color: var(--navy);
+    }
+    .filter-group input:focus, .filter-group select:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 2px rgba(245,130,32,0.15);
+    }
+    .filter-actions { display: flex; gap: 0.5rem; align-items: flex-end; }
+    .btn-filter {
+        padding: 0.5rem 1rem; border: none; border-radius: 0.4rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-filter-apply { background: var(--orange); color: white; }
+    .btn-filter-apply:hover { background: #e0741a; }
+    .btn-filter-clear { background: var(--gray-200); color: var(--gray-600); }
+    .btn-filter-clear:hover { background: var(--gray-300); }
+
+    .stat-pills { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
+    .stat-pill {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.6rem 1rem; border-radius: 0.5rem;
+        border: 1px solid var(--gray-200); background: white;
+        font-size: 0.85rem; color: var(--gray-600);
+    }
+    .stat-pill .count { font-size: 1.1rem; font-weight: 700; }
+    .stat-pill.total .count { color: var(--navy); }
+    .stat-pill.late .count { color: #D97706; }
+    .stat-pill.reapproval .count { color: #1E40AF; }
+
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table th {
+        background: var(--navy); color: white; padding: 0.75rem 1rem;
+        font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.4px; position: sticky; top: 0; z-index: 5;
+        text-align: left;
+    }
+    .data-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .data-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .data-table td {
+        padding: 0.7rem 1rem; border-bottom: 1px solid var(--gray-100);
+        font-size: 0.88rem; vertical-align: middle;
+    }
+    .data-table tbody tr { cursor: pointer; transition: background 0.15s; }
+    .data-table tbody tr:hover { background: #FFF7ED; }
+    .data-table tbody tr.is-late { background: #FFFBEB; }
+    .data-table tbody tr.is-late:hover { background: #FEF3C7; }
+
+    .emp-cell { display: flex; align-items: center; gap: 0.6rem; }
+    .emp-avatar {
+        width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+        border: 2px solid var(--gray-200); flex-shrink: 0; background: var(--gray-100);
+    }
+    .emp-avatar-placeholder {
+        width: 36px; height: 36px; border-radius: 50%;
+        background: var(--navy); color: white; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
+    }
+    .emp-name { font-weight: 600; color: var(--navy); font-size: 0.9rem; }
+    .emp-code { font-size: 0.72rem; color: var(--gray-400); }
+
+    .late-badge, .modified-badge {
         display: inline-flex; align-items: center; gap: 0.3rem;
-        background: #FEF3C7; color: #92400E; font-size: 0.72rem; font-weight: 700;
-        padding: 0.2rem 0.55rem; border-radius: 9999px; border: 1px solid #FCD34D;
+        font-size: 0.68rem; font-weight: 700;
+        padding: 0.18rem 0.5rem; border-radius: 9999px;
         text-transform: uppercase; letter-spacing: 0.3px;
     }
+    .late-badge { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
+    .modified-badge { background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD; }
+
     .late-count-chip {
         display: inline-flex; align-items: center; gap: 0.35rem;
         background: #FEF3C7; color: #92400E; font-size: 0.78rem; font-weight: 600;
         padding: 0.15rem 0.6rem; border-radius: 9999px;
     }
-    .late-reason {
-        font-size: 0.82rem; color: #92400E; background: #FEF3C7;
-        padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
-        border-left: 3px solid #D97706;
+
+    .reason-cell { max-width: 280px; }
+    .reason-text {
+        color: var(--gray-700); font-size: 0.85rem;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden; line-height: 1.4;
     }
-    .modified-badge {
-        display: inline-flex; align-items: center; gap: 0.3rem;
-        background: #DBEAFE; color: #1E40AF; font-size: 0.72rem; font-weight: 700;
-        padding: 0.2rem 0.55rem; border-radius: 9999px; border: 1px solid #93C5FD;
-        text-transform: uppercase; letter-spacing: 0.3px;
+
+    .type-badge {
+        display: inline-block; padding: 0.25rem 0.7rem; border-radius: 9999px;
+        font-size: 0.74rem; font-weight: 600; background: var(--gray-100); color: var(--gray-700);
     }
-    .mod-reason {
-        font-size: 0.82rem; color: #1E40AF; background: #EFF6FF;
-        padding: 0.4rem 0.65rem; border-radius: 0.4rem; margin-top: 0.4rem;
-        border-left: 3px solid #3B82F6;
+
+    .btn-action {
+        padding: 0.4rem 0.9rem; font-size: 0.75rem; font-weight: 600;
+        border: none; border-radius: 0.35rem; cursor: pointer; transition: all 0.2s;
+    }
+    .btn-approve { background: var(--success-light); color: #166534; border: 1px solid #BBF7D0; }
+    .btn-approve:hover { background: #DCF8EB; }
+    .btn-reject { background: var(--danger-light); color: #991B1B; border: 1px solid #FECACA; }
+    .btn-reject:hover { background: #FED2D2; }
+
+    .empty-state { text-align: center; padding: 4rem 2rem; color: var(--gray-400); }
+    .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
+
+    /* ============ Slide-out Detail Drawer ============ */
+    .drawer-backdrop {
+        position: fixed; inset: 0; background: rgba(15, 27, 51, 0.35);
+        opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0.25s;
+        z-index: 900;
+    }
+    .drawer-backdrop.open { opacity: 1; visibility: visible; }
+
+    .drawer {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: 520px; max-width: 100%;
+        background: white;
+        box-shadow: -8px 0 30px rgba(15, 27, 51, 0.15);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 950;
+        display: flex; flex-direction: column;
+        overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .drawer-head h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--navy); }
+    .drawer-close {
+        background: transparent; border: none; cursor: pointer;
+        width: 32px; height: 32px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--gray-500); font-size: 1.4rem; line-height: 1;
+    }
+    .drawer-close:hover { background: var(--gray-200); color: var(--navy); }
+    .drawer-body { padding: 1.5rem; overflow-y: auto; flex: 1; }
+
+    .drawer-emp {
+        display: flex; gap: 1rem; align-items: center;
+        padding-bottom: 1.25rem; margin-bottom: 1.25rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .drawer-emp .emp-avatar-lg {
+        width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+        border: 3px solid var(--gray-200); background: var(--gray-100);
+    }
+    .drawer-emp .emp-avatar-lg-ph {
+        width: 64px; height: 64px; border-radius: 50%;
+        background: var(--navy); color: white; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 700;
+    }
+    .drawer-emp .name { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .drawer-emp .meta { font-size: 0.82rem; color: var(--gray-500); margin-top: 0.2rem; }
+
+    .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem 1.25rem; margin-bottom: 1.25rem; }
+    .drawer-field .label {
+        font-size: 0.68rem; text-transform: uppercase;
+        color: var(--gray-400); font-weight: 700; letter-spacing: 0.5px;
+        margin-bottom: 0.2rem;
+    }
+    .drawer-field .value {
+        font-size: 0.88rem; color: var(--navy); font-weight: 600; word-break: break-word;
+    }
+    .drawer-field.full { grid-column: 1 / -1; }
+
+    .drawer-reason {
+        background: var(--gray-50); border: 1px solid var(--gray-200);
+        border-radius: 0.5rem; padding: 0.9rem 1rem;
+        font-size: 0.88rem; color: var(--gray-700); line-height: 1.5;
+        white-space: pre-wrap; word-break: break-word;
+    }
+    .drawer-late {
+        background: #FFFBEB; border: 1px solid #FCD34D;
+        border-radius: 0.5rem; padding: 0.8rem 1rem;
+        font-size: 0.85rem; color: #92400E; line-height: 1.5;
+        margin-top: 0.85rem;
+    }
+    .drawer-late .label { color: #92400E; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+    .drawer-actions {
+        padding: 1rem 1.5rem; border-top: 1px solid var(--gray-200);
+        background: var(--gray-50); display: flex; gap: 0.6rem; flex-wrap: wrap;
+    }
+    .drawer-actions .btn-action { flex: 1; padding: 0.7rem 1rem; font-size: 0.85rem; }
+
+    @media (max-width: 768px) {
+        .filter-bar { flex-direction: column; }
+        .filter-group input, .filter-group select { min-width: 100%; }
+        .drawer { width: 100%; }
+        .drawer-grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -37,7 +211,7 @@
 {% block content %}
 <div class="page-header">
     <h1>Pending Leave Approvals</h1>
-    <p>Review and approve pending leave requests from employees</p>
+    <p>Review and approve pending leave requests from your team</p>
 </div>
 
 {% if late_leave_summary %}
@@ -46,99 +220,272 @@
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
         Late Leave Tracker
     </h2>
-    <div style="display: flex; flex-wrap: wrap; gap: 1rem; margin-top: 0.75rem;">
+    <div style="display: flex; flex-wrap: wrap; gap: 0.75rem; margin-top: 0.75rem;">
         {% for emp in late_leave_summary %}
-        <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 0.6rem; padding: 0.65rem 1rem; display: flex; align-items: center; gap: 0.75rem;">
-            <strong style="color: var(--navy);">{{ emp.name }}</strong>
-            <span class="late-count-chip">{{ emp.late_leave_count }}x late</span>
+        <div style="background: #FFFBEB; border: 1px solid #FCD34D; border-radius: 0.6rem; padding: 0.5rem 0.85rem; display: flex; align-items: center; gap: 0.6rem;">
+            <strong style="color: var(--navy); font-size: 0.85rem;">{{ emp.name }}</strong>
+            <span class="late-count-chip">{{ emp.late_leave_count }}x</span>
         </div>
         {% endfor %}
     </div>
 </div>
 {% endif %}
 
-<div class="card">
+<!-- Filter Bar -->
+<form method="GET" class="filter-bar">
+    <div class="filter-group">
+        <label>Employee</label>
+        <input type="text" name="employee" value="{{ f_employee }}" placeholder="Name or code...">
+    </div>
+    <div class="filter-group">
+        <label>Department</label>
+        <input type="text" name="department" value="{{ f_department }}" placeholder="Department...">
+    </div>
+    <div class="filter-group">
+        <label>Leave Type</label>
+        <select name="leave_type">
+            <option value="">All Types</option>
+            <option value="casual" {% if f_type == 'casual' %}selected{% endif %}>Casual</option>
+            <option value="sick" {% if f_type == 'sick' %}selected{% endif %}>Sick</option>
+            <option value="earned" {% if f_type == 'earned' %}selected{% endif %}>Earned</option>
+            <option value="comp_off" {% if f_type == 'comp_off' %}selected{% endif %}>Comp Off</option>
+            <option value="lop" {% if f_type == 'lop' %}selected{% endif %}>LOP</option>
+        </select>
+    </div>
+    <div class="filter-actions">
+        <button type="submit" class="btn-filter btn-filter-apply">Filter</button>
+        <a href="/admin/pending-approvals" class="btn-filter btn-filter-clear" style="text-decoration: none;">Clear</a>
+    </div>
+</form>
+
+<!-- Summary Pills -->
+<div class="stat-pills">
+    <div class="stat-pill total"><span class="count">{{ total_count or 0 }}</span> Pending</div>
+    <div class="stat-pill late"><span class="count">{{ late_count or 0 }}</span> Late Leaves</div>
+    <div class="stat-pill reapproval"><span class="count">{{ reapproval_count or 0 }}</span> Re-approval</div>
+</div>
+
+<!-- Pending Leaves Table -->
+<div class="card" style="padding: 0; overflow: hidden;">
     {% if pending_leaves %}
-    <h2 class="card-title">Leave Requests Awaiting Approval</h2>
-    <table class="table">
+    <div style="overflow-x: auto;">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Employee</th>
-                <th>Code</th>
+                <th>Department</th>
                 <th>Date</th>
                 <th>Type</th>
                 <th>Duration</th>
                 <th>Reason</th>
-                <th>Requested</th>
-                <th>Action</th>
+                <th>Flags</th>
             </tr>
         </thead>
         <tbody>
             {% for leave in pending_leaves %}
-            <tr{% if leave.is_late %} style="background: #FFFBEB;"{% endif %}>
+            <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
                 <td>
-                    <strong>{{ leave.name }}</strong>
-                    {% if leave.original_id %}
-                    <br><span class="modified-badge">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        Re-approval
-                    </span>
-                    {% endif %}
-                    {% if leave.is_late %}
-                    <br><span class="late-badge">
-                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                        Late Leave
-                    </span>
-                    {% endif %}
+                    <div class="emp-cell">
+                        {% if leave.photo_src %}
+                        <img src="{{ leave.photo_src }}" class="emp-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                        <div class="emp-avatar-placeholder" style="display:none;">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                        {% else %}
+                        <div class="emp-avatar-placeholder">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                        {% endif %}
+                        <div>
+                            <div class="emp-name">{{ leave.employee_name or '—' }}</div>
+                            <div class="emp-code">{{ leave.emp_code or '' }}</div>
+                        </div>
+                    </div>
                 </td>
-                <td>{{ leave.emp_code }}</td>
-                <td>{{ leave.leave_date }}</td>
-                <td>{{ leave.leave_type.capitalize() }}</td>
-                <td>
+                <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date }}</td>
+                <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
+                <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
                     {% if leave.day_portion == 'first_half' %}First Half
                     {% elif leave.day_portion == 'second_half' %}Second Half
                     {% else %}Full Day
                     {% endif %}
                 </td>
-                <td>
-                    {{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '-') }}
-                    {% if leave.is_late and leave.reason and '[Late Application Reason]:' in (leave.reason or '') %}
-                    <div class="late-reason">
-                        <strong>Late Reason:</strong> {{ leave.reason.split('[Late Application Reason]: ')[1] if '[Late Application Reason]: ' in (leave.reason or '') else '' }}
-                    </div>
-                    {% endif %}
-                    {% if leave.original_id and leave.modification_reason %}
-                    <div class="mod-reason">
-                        <strong>Modification Reason:</strong> {{ leave.modification_reason }}
-                    </div>
-                    {% endif %}
-                    {% if leave.original_id and leave.original_reason %}
-                    <div style="font-size: 0.78rem; color: var(--gray-500); margin-top: 0.35rem;">
-                        <em>Original: {{ leave.original_reason[:80] }}{% if leave.original_reason|length > 80 %}...{% endif %}</em>
-                    </div>
-                    {% endif %}
+                <td class="reason-cell">
+                    <div class="reason-text">{{ leave.reason_main or '—' }}</div>
                 </td>
-                <td>{{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '-' }}</td>
                 <td>
-                    {% if leave.employee_id == user.id %}
-                    <span style="color: var(--gray-400); font-size: 0.82rem; font-style: italic;">Own request</span>
-                    {% else %}
-                    <div style="display: flex; gap: 0.75rem;">
-                        <form method="POST" action="/admin/approve-leave/{{ leave.id }}" style="display: inline;">
-                            <button type="submit" class="button button-success button-small">Approve</button>
-                        </form>
-                        <form method="POST" action="/admin/reject-leave/{{ leave.id }}" style="display: inline;">
-                            <button type="submit" class="button button-danger button-small">Reject</button>
-                        </form>
-                    </div>
-                    {% endif %}
+                    {% if leave.is_late %}<span class="late-badge">Late</span>{% endif %}
+                    {% if leave.original_id %}<span class="modified-badge" style="margin-left:0.25rem;">Re-approval</span>{% endif %}
                 </td>
             </tr>
             {% endfor %}
         </tbody>
     </table>
+    </div>
     {% else %}
-    <p style="color: var(--gray-500); text-align: center; padding: 3rem;">No pending leave requests. All leave requests have been reviewed.</p>
+    <div class="empty-state">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+        <p>No pending leave requests. All caught up!</p>
+    </div>
     {% endif %}
 </div>
+
+<!-- ============ Slide-out Detail Drawer ============ -->
+<div class="drawer-backdrop" id="leaveBackdrop" onclick="closeLeaveDetail()"></div>
+<aside class="drawer" id="leaveDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Leave Request Details</h3>
+        <button class="drawer-close" type="button" onclick="closeLeaveDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="leaveDrawerBody"></div>
+    <div class="drawer-actions" id="leaveDrawerActions"></div>
+</aside>
+
+<script>
+const LEAVE_REQUESTS = {
+    {% for leave in pending_leaves %}
+    "{{ leave.id }}": {
+        id: {{ leave.id }},
+        employee_id: {{ leave.employee_id }},
+        own: {{ 'true' if leave.employee_id == user.id else 'false' }},
+        name: {{ (leave.employee_name or '')|tojson }},
+        emp_code: {{ (leave.emp_code or '')|tojson }},
+        department: {{ (leave.department or '')|tojson }},
+        designation: {{ (leave.designation or '')|tojson }},
+        email: {{ (leave.email or '')|tojson }},
+        mobile: {{ (leave.mobile or '')|tojson }},
+        photo_src: {{ (leave.photo_src or '')|tojson }},
+        leave_type: {{ (leave.leave_type or '')|tojson }},
+        leave_date: {{ (leave.leave_date|string if leave.leave_date else '')|tojson }},
+        days: {{ (leave.days or 0)|tojson }},
+        day_portion: {{ (leave.day_portion or 'full')|tojson }},
+        reason: {{ (leave.reason_main or '')|tojson }},
+        late_reason: {{ (leave.late_reason or '')|tojson }},
+        is_late: {{ 'true' if leave.is_late else 'false' }},
+        original_id: {{ (leave.original_id or 0)|tojson }},
+        modification_reason: {{ (leave.modification_reason or '')|tojson }},
+        original_reason: {{ (leave.original_reason or '')|tojson }},
+        created_at: {{ (leave.created_at|string if leave.created_at else '')|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+function escapeHtml(s) {
+    if (s == null) return '';
+    return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function initials(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
+function dayPortionLabel(p) { if (p === 'first_half') return 'First Half'; if (p === 'second_half') return 'Second Half'; return 'Full Day'; }
+
+function openLeaveDetail(reqId) {
+    const r = LEAVE_REQUESTS[reqId];
+    if (!r) return;
+    const body = document.getElementById('leaveDrawerBody');
+    const actions = document.getElementById('leaveDrawerActions');
+
+    const avatar = r.photo_src
+        ? `<img src="${escapeHtml(r.photo_src)}" class="emp-avatar-lg" alt="" onerror="this.outerHTML='<div class=\\'emp-avatar-lg-ph\\'>${initials(r.name)}</div>'">`
+        : `<div class="emp-avatar-lg-ph">${initials(r.name)}</div>`;
+
+    let html = `
+        <div class="drawer-emp">
+            ${avatar}
+            <div>
+                <p class="name">${escapeHtml(r.name || '—')}</p>
+                <div class="meta">${escapeHtml(r.emp_code || '')}${r.designation ? ' · ' + escapeHtml(r.designation) : ''}</div>
+                <div class="meta">${escapeHtml(r.department || '')}</div>
+            </div>
+        </div>
+
+        <div class="drawer-grid">
+            <div class="drawer-field">
+                <div class="label">Leave Type</div>
+                <div class="value"><span class="type-badge">${escapeHtml((r.leave_type || '').replace(/^./, c => c.toUpperCase()))}</span></div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Applied On</div>
+                <div class="value">${escapeHtml((r.created_at || '').split(' ')[0] || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Leave Date</div>
+                <div class="value">${escapeHtml(r.leave_date || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Duration</div>
+                <div class="value">${escapeHtml(dayPortionLabel(r.day_portion))} (${r.days} day${r.days == 1 ? '' : 's'})</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Email</div>
+                <div class="value">${escapeHtml(r.email || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Mobile</div>
+                <div class="value">${escapeHtml(r.mobile || '—')}</div>
+            </div>
+            <div class="drawer-field full">
+                <div class="label">Reason</div>
+                <div class="drawer-reason">${escapeHtml(r.reason || '—')}</div>
+            </div>
+    `;
+
+    if (r.is_late && r.late_reason) {
+        html += `
+            <div class="drawer-field full">
+                <div class="drawer-late">
+                    <div class="label">Late Application Reason</div>
+                    ${escapeHtml(r.late_reason)}
+                </div>
+            </div>
+        `;
+    }
+
+    if (r.original_id) {
+        if (r.modification_reason) {
+            html += `
+                <div class="drawer-field full">
+                    <div class="label">Modification Reason</div>
+                    <div class="drawer-reason" style="background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF;">${escapeHtml(r.modification_reason)}</div>
+                </div>
+            `;
+        }
+        if (r.original_reason) {
+            html += `
+                <div class="drawer-field full">
+                    <div class="label">Original Reason</div>
+                    <div class="drawer-reason" style="font-style:italic;">${escapeHtml(r.original_reason)}</div>
+                </div>
+            `;
+        }
+    }
+
+    html += `</div>`;
+    body.innerHTML = html;
+
+    if (r.own) {
+        actions.style.display = 'flex';
+        actions.innerHTML = `<div style="flex:1; text-align:center; color: var(--gray-400); font-style: italic; font-size: 0.85rem;">You cannot approve your own request</div>`;
+    } else {
+        actions.style.display = 'flex';
+        actions.innerHTML = `
+            <form method="POST" action="/admin/approve-leave/${r.id}" style="flex:1;">
+                <button type="submit" class="btn-action btn-approve" style="width:100%;">Approve</button>
+            </form>
+            <form method="POST" action="/admin/reject-leave/${r.id}" style="flex:1;">
+                <button type="submit" class="btn-action btn-reject" style="width:100%;">Reject</button>
+            </form>
+        `;
+    }
+
+    document.getElementById('leaveDrawer').classList.add('open');
+    document.getElementById('leaveDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('leaveBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLeaveDetail() {
+    document.getElementById('leaveDrawer').classList.remove('open');
+    document.getElementById('leaveDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('leaveBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLeaveDetail(); });
+</script>
 {% endblock %}

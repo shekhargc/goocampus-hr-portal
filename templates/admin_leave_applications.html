@@ -39,85 +39,173 @@
         border: 1px solid var(--gray-200); background: white;
         font-size: 0.85rem; color: var(--gray-600);
     }
-    .stat-pill .count {
-        font-size: 1.1rem; font-weight: 700;
-    }
+    .stat-pill .count { font-size: 1.1rem; font-weight: 700; }
     .stat-pill.total .count { color: var(--navy); }
     .stat-pill.pending .count { color: #D97706; }
     .stat-pill.approved .count { color: var(--success); }
     .stat-pill.rejected .count { color: var(--danger); }
 
-    .leave-table { width: 100%; border-collapse: separate; border-spacing: 0; }
-    .leave-table th {
+    .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .data-table th {
         background: var(--navy); color: white; padding: 0.75rem 1rem;
         font-size: 0.78rem; font-weight: 700; text-transform: uppercase;
         letter-spacing: 0.4px; position: sticky; top: 0; z-index: 5;
+        text-align: left;
     }
-    .leave-table th:first-child { border-radius: 0.5rem 0 0 0; }
-    .leave-table th:last-child { border-radius: 0 0.5rem 0 0; }
-    .leave-table td {
+    .data-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .data-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .data-table td {
         padding: 0.7rem 1rem; border-bottom: 1px solid var(--gray-100);
         font-size: 0.88rem; vertical-align: middle;
     }
-    .leave-table tbody tr:hover { background: #FFF7ED; }
-    .leave-table tbody tr.late-row { background: #FFFBEB; }
-    .leave-table tbody tr.late-row:hover { background: #FEF3C7; }
+    .data-table tbody tr { cursor: pointer; transition: background 0.15s; }
+    .data-table tbody tr:hover { background: #FFF7ED; }
+    .data-table tbody tr.is-late { background: #FFFBEB; }
 
     .emp-cell { display: flex; align-items: center; gap: 0.6rem; }
     .emp-avatar {
-        width: 32px; height: 32px; border-radius: 50%; object-fit: cover;
-        border: 2px solid var(--gray-200); flex-shrink: 0;
+        width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
+        border: 2px solid var(--gray-200); flex-shrink: 0; background: var(--gray-100);
     }
     .emp-avatar-placeholder {
-        width: 32px; height: 32px; border-radius: 50%;
+        width: 36px; height: 36px; border-radius: 50%;
         background: var(--navy); color: white; display: flex;
         align-items: center; justify-content: center;
-        font-size: 0.7rem; font-weight: 700; flex-shrink: 0;
+        font-size: 0.85rem; font-weight: 700; flex-shrink: 0;
     }
-    .emp-name { font-weight: 600; color: var(--navy); font-size: 0.85rem; }
+    .emp-name { font-weight: 600; color: var(--navy); font-size: 0.9rem; }
     .emp-code { font-size: 0.72rem; color: var(--gray-400); }
 
-    .type-annual { color: var(--blue); font-weight: 600; }
-    .type-sick { color: var(--success); font-weight: 600; }
-    .type-casual { color: var(--orange); font-weight: 600; }
-
-    .late-badge {
+    .late-badge, .modified-badge {
         display: inline-flex; align-items: center; gap: 0.25rem;
-        background: #FEF3C7; color: #92400E; font-size: 0.68rem; font-weight: 700;
-        padding: 0.15rem 0.45rem; border-radius: 9999px; border: 1px solid #FCD34D;
-        text-transform: uppercase;
+        font-size: 0.68rem; font-weight: 700;
+        padding: 0.18rem 0.5rem; border-radius: 9999px;
+        text-transform: uppercase; letter-spacing: 0.3px;
     }
-    .modified-badge {
-        display: inline-flex; align-items: center; gap: 0.25rem;
-        background: #DBEAFE; color: #1E40AF; font-size: 0.68rem; font-weight: 700;
-        padding: 0.15rem 0.45rem; border-radius: 9999px; border: 1px solid #93C5FD;
-        text-transform: uppercase;
+    .late-badge { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
+    .modified-badge { background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD; }
+
+    .type-badge {
+        display: inline-block; padding: 0.25rem 0.7rem; border-radius: 9999px;
+        font-size: 0.74rem; font-weight: 600; background: var(--gray-100); color: var(--gray-700);
     }
 
-    .reason-cell { max-width: 220px; }
+    .status-badge {
+        display: inline-flex; align-items: center;
+        padding: 0.3rem 0.85rem; border-radius: 9999px;
+        font-size: 0.78rem; font-weight: 600;
+    }
+    .status-badge.pending { background: var(--warning-light); color: #92400E; }
+    .status-badge.approved { background: var(--success-light); color: #166534; }
+    .status-badge.rejected { background: var(--danger-light); color: #991B1B; }
+    .status-badge.retrieved { background: #F3F4F6; color: #6B7280; }
+    .status-badge.modified { background: #DBEAFE; color: #1E40AF; }
+
+    .reason-cell { max-width: 280px; }
     .reason-text {
-        overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-        color: var(--gray-600); font-size: 0.85rem;
-    }
-    .sub-reason {
-        font-size: 0.75rem; margin-top: 0.25rem; font-style: italic;
+        color: var(--gray-700); font-size: 0.85rem;
+        display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+        overflow: hidden; line-height: 1.4;
     }
 
-    .empty-state {
-        text-align: center; padding: 4rem 2rem; color: var(--gray-400);
-    }
+    .empty-state { text-align: center; padding: 4rem 2rem; color: var(--gray-400); }
     .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
-    .empty-state p { font-size: 0.95rem; }
 
-    .results-info {
-        font-size: 0.82rem; color: var(--gray-500); margin-bottom: 0.75rem;
+    .btn-action {
+        padding: 0.4rem 0.9rem; font-size: 0.75rem; font-weight: 600;
+        border: none; border-radius: 0.35rem; cursor: pointer; transition: all 0.2s;
+        text-decoration: none; display: inline-block; text-align: center;
     }
+    .btn-edit { background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; }
+    .btn-edit:hover { background: #DCFCE7; }
+    .btn-delete { background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; }
+    .btn-delete:hover { background: #FECACA; }
+
+    /* Drawer */
+    .drawer-backdrop {
+        position: fixed; inset: 0; background: rgba(15, 27, 51, 0.35);
+        opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0.25s;
+        z-index: 900;
+    }
+    .drawer-backdrop.open { opacity: 1; visibility: visible; }
+    .drawer {
+        position: fixed; top: 0; right: 0; bottom: 0;
+        width: 520px; max-width: 100%;
+        background: white;
+        box-shadow: -8px 0 30px rgba(15, 27, 51, 0.15);
+        transform: translateX(100%);
+        transition: transform 0.3s ease;
+        z-index: 950;
+        display: flex; flex-direction: column; overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head {
+        padding: 1.25rem 1.5rem; border-bottom: 1px solid var(--gray-200);
+        display: flex; justify-content: space-between; align-items: center;
+        background: var(--gray-50);
+    }
+    .drawer-head h3 { margin: 0; font-size: 1.05rem; font-weight: 700; color: var(--navy); }
+    .drawer-close {
+        background: transparent; border: none; cursor: pointer;
+        width: 32px; height: 32px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        color: var(--gray-500); font-size: 1.4rem; line-height: 1;
+    }
+    .drawer-close:hover { background: var(--gray-200); color: var(--navy); }
+    .drawer-body { padding: 1.5rem; overflow-y: auto; flex: 1; }
+    .drawer-emp {
+        display: flex; gap: 1rem; align-items: center;
+        padding-bottom: 1.25rem; margin-bottom: 1.25rem;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .drawer-emp .emp-avatar-lg {
+        width: 64px; height: 64px; border-radius: 50%; object-fit: cover;
+        border: 3px solid var(--gray-200); background: var(--gray-100);
+    }
+    .drawer-emp .emp-avatar-lg-ph {
+        width: 64px; height: 64px; border-radius: 50%;
+        background: var(--navy); color: white; display: flex;
+        align-items: center; justify-content: center;
+        font-size: 1.4rem; font-weight: 700;
+    }
+    .drawer-emp .name { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin: 0; }
+    .drawer-emp .meta { font-size: 0.82rem; color: var(--gray-500); margin-top: 0.2rem; }
+
+    .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.85rem 1.25rem; margin-bottom: 1.25rem; }
+    .drawer-field .label {
+        font-size: 0.68rem; text-transform: uppercase;
+        color: var(--gray-400); font-weight: 700; letter-spacing: 0.5px;
+        margin-bottom: 0.2rem;
+    }
+    .drawer-field .value {
+        font-size: 0.88rem; color: var(--navy); font-weight: 600; word-break: break-word;
+    }
+    .drawer-field.full { grid-column: 1 / -1; }
+    .drawer-reason {
+        background: var(--gray-50); border: 1px solid var(--gray-200);
+        border-radius: 0.5rem; padding: 0.9rem 1rem;
+        font-size: 0.88rem; color: var(--gray-700); line-height: 1.5;
+        white-space: pre-wrap; word-break: break-word;
+    }
+    .drawer-late {
+        background: #FFFBEB; border: 1px solid #FCD34D;
+        border-radius: 0.5rem; padding: 0.8rem 1rem;
+        font-size: 0.85rem; color: #92400E; line-height: 1.5;
+        margin-top: 0.85rem;
+    }
+    .drawer-late .label { color: #92400E; font-weight: 700; font-size: 0.72rem; text-transform: uppercase; margin-bottom: 0.25rem; }
+
+    .drawer-actions {
+        padding: 1rem 1.5rem; border-top: 1px solid var(--gray-200);
+        background: var(--gray-50); display: flex; gap: 0.6rem; flex-wrap: wrap;
+    }
+    .drawer-actions .btn-action { flex: 1; padding: 0.7rem 1rem; font-size: 0.85rem; }
 
     @media (max-width: 768px) {
         .filter-bar { flex-direction: column; }
         .filter-group input, .filter-group select { min-width: 100%; }
-        .stat-pills { gap: 0.5rem; }
-        .stat-pill { padding: 0.4rem 0.75rem; font-size: 0.78rem; }
+        .drawer { width: 100%; }
+        .drawer-grid { grid-template-columns: 1fr; }
     }
 </style>
 {% endblock %}
@@ -138,9 +226,11 @@
         <label>Leave Type</label>
         <select name="leave_type">
             <option value="">All Types</option>
-            <option value="annual" {% if f_type == 'annual' %}selected{% endif %}>Annual</option>
-            <option value="sick" {% if f_type == 'sick' %}selected{% endif %}>Sick</option>
             <option value="casual" {% if f_type == 'casual' %}selected{% endif %}>Casual</option>
+            <option value="sick" {% if f_type == 'sick' %}selected{% endif %}>Sick</option>
+            <option value="earned" {% if f_type == 'earned' %}selected{% endif %}>Earned</option>
+            <option value="comp_off" {% if f_type == 'comp_off' %}selected{% endif %}>Comp Off</option>
+            <option value="lop" {% if f_type == 'lop' %}selected{% endif %}>LOP</option>
         </select>
     </div>
     <div class="filter-group">
@@ -170,25 +260,17 @@
 
 <!-- Summary Pills -->
 <div class="stat-pills">
-    <div class="stat-pill total">
-        <span class="count">{{ total }}</span> Total
-    </div>
-    <div class="stat-pill pending">
-        <span class="count">{{ pending_count }}</span> Pending
-    </div>
-    <div class="stat-pill approved">
-        <span class="count">{{ approved_count }}</span> Approved
-    </div>
-    <div class="stat-pill rejected">
-        <span class="count">{{ rejected_count }}</span> Rejected
-    </div>
+    <div class="stat-pill total"><span class="count">{{ total }}</span> Total</div>
+    <div class="stat-pill pending"><span class="count">{{ pending_count }}</span> Pending</div>
+    <div class="stat-pill approved"><span class="count">{{ approved_count }}</span> Approved</div>
+    <div class="stat-pill rejected"><span class="count">{{ rejected_count }}</span> Rejected</div>
 </div>
 
 <!-- Leave Table -->
 <div class="card" style="padding: 0; overflow: hidden;">
     {% if leaves %}
     <div style="overflow-x: auto;">
-    <table class="leave-table">
+    <table class="data-table">
         <thead>
             <tr>
                 <th>Employee</th>
@@ -198,83 +280,42 @@
                 <th>Duration</th>
                 <th>Reason</th>
                 <th>Status</th>
-                <th>Applied On</th>
-                <th>Action</th>
             </tr>
         </thead>
         <tbody>
             {% for leave in leaves %}
-            <tr{% if leave.is_late %} class="late-row"{% endif %}{% if leave.status == 'retrieved' %} style="opacity: 0.55;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.45;"{% endif %}>
+            <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
                 <td>
                     <div class="emp-cell">
-                        {% if leave.photo_url %}
-                        <img src="{{ leave.photo_url if leave.photo_url.startswith('http') else '/static/photos/' ~ leave.photo_url }}" class="emp-avatar" alt="">
+                        {% if leave.photo_src %}
+                        <img src="{{ leave.photo_src }}" class="emp-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                        <div class="emp-avatar-placeholder" style="display:none;">{{ (leave.employee_name or '?')[0]|upper }}</div>
                         {% else %}
-                        <div class="emp-avatar-placeholder">{{ leave.name[0] }}</div>
+                        <div class="emp-avatar-placeholder">{{ (leave.employee_name or '?')[0]|upper }}</div>
                         {% endif %}
                         <div>
-                            <div class="emp-name">{{ leave.name }}</div>
-                            <div class="emp-code">{{ leave.emp_code }}</div>
+                            <div class="emp-name">{{ leave.employee_name or '—' }}</div>
+                            <div class="emp-code">{{ leave.emp_code or '' }}</div>
                         </div>
                     </div>
                 </td>
-                <td style="font-size: 0.82rem; color: var(--gray-500);">{{ leave.department or '—' }}</td>
+                <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
                     {{ leave.leave_date }}
-                    {% if leave.is_late %}
-                    <br><span class="late-badge">Late</span>
-                    {% endif %}
-                    {% if leave.original_id %}
-                    <br><span class="modified-badge">Re-applied</span>
-                    {% endif %}
+                    {% if leave.is_late %}<br><span class="late-badge">Late</span>{% endif %}
+                    {% if leave.original_id %}<br><span class="modified-badge">Re-applied</span>{% endif %}
                 </td>
-                <td>
-                    {% if leave.leave_type == 'annual' %}
-                    <span class="type-annual">Annual</span>
-                    {% elif leave.leave_type == 'sick' %}
-                    <span class="type-sick">Sick</span>
-                    {% else %}
-                    <span class="type-casual">Casual</span>
-                    {% endif %}
-                </td>
-                <td style="white-space: nowrap;">
+                <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
+                <td style="white-space: nowrap; font-size: 0.82rem; color: var(--gray-600);">
                     {% if leave.day_portion == 'first_half' %}First Half
                     {% elif leave.day_portion == 'second_half' %}Second Half
                     {% else %}Full Day{% endif %}
                 </td>
                 <td class="reason-cell">
-                    <div class="reason-text">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '—') }}</div>
-                    {% if leave.modification_reason %}
-                    <div class="sub-reason" style="color: #D97706;">Mod: {{ leave.modification_reason[:60] }}{% if leave.modification_reason|length > 60 %}...{% endif %}</div>
-                    {% endif %}
+                    <div class="reason-text">{{ leave.reason_main or '—' }}</div>
                 </td>
                 <td>
-                    {% if leave.status == 'pending' %}
-                    <span class="badge badge-pending">Pending</span>
-                    {% elif leave.status == 'approved' %}
-                    <span class="badge badge-approved">Approved</span>
-                    {% elif leave.status == 'rejected' %}
-                    <span class="badge badge-rejected">Rejected</span>
-                    {% elif leave.status == 'retrieved' %}
-                    <span class="badge" style="background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB;">Retrieved</span>
-                    {% elif leave.status == 'modified' %}
-                    <span class="badge" style="background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;">Modified</span>
-                    {% endif %}
-                </td>
-                <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
-                    {{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '—' }}
-                </td>
-                <td style="white-space: nowrap;">
-                    {% if leave.leave_date >= today and leave.status not in ('retrieved', 'modified') %}
-                    <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; text-decoration: none; display: inline-block; margin-right: 0.25rem;">
-                        Edit
-                    </a>
-                    {% endif %}
-                    <form method="POST" action="/admin/delete-leave/{{ leave.id }}" style="display: inline;" onsubmit="return confirm('Delete this leave entry for {{ leave.name }} on {{ leave.leave_date }}?');">
-                        <button type="submit" class="btn-sm" style="background: #FEE2E2; color: #DC2626; border: 1px solid #FECACA; font-size: 0.75rem; padding: 0.25rem 0.5rem; border-radius: 0.35rem; cursor: pointer;">
-                            Delete
-                        </button>
-                    </form>
+                    <span class="status-badge {{ leave.status }}">{{ leave.status.capitalize() }}</span>
                 </td>
             </tr>
             {% endfor %}
@@ -288,4 +329,150 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Drawer -->
+<div class="drawer-backdrop" id="leaveBackdrop" onclick="closeLeaveDetail()"></div>
+<aside class="drawer" id="leaveDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Leave Application Details</h3>
+        <button class="drawer-close" type="button" onclick="closeLeaveDetail()">&times;</button>
+    </div>
+    <div class="drawer-body" id="leaveDrawerBody"></div>
+    <div class="drawer-actions" id="leaveDrawerActions"></div>
+</aside>
+
+<script>
+const TODAY_STR = {{ today|tojson }};
+const LEAVE_REQUESTS = {
+    {% for leave in leaves %}
+    "{{ leave.id }}": {
+        id: {{ leave.id }},
+        name: {{ (leave.employee_name or '')|tojson }},
+        emp_code: {{ (leave.emp_code or '')|tojson }},
+        department: {{ (leave.department or '')|tojson }},
+        designation: {{ (leave.designation or '')|tojson }},
+        email: {{ (leave.email or '')|tojson }},
+        mobile: {{ (leave.mobile or '')|tojson }},
+        photo_src: {{ (leave.photo_src or '')|tojson }},
+        leave_type: {{ (leave.leave_type or '')|tojson }},
+        leave_date: {{ (leave.leave_date|string if leave.leave_date else '')|tojson }},
+        days: {{ (leave.days or 0)|tojson }},
+        day_portion: {{ (leave.day_portion or 'full')|tojson }},
+        reason: {{ (leave.reason_main or '')|tojson }},
+        late_reason: {{ (leave.late_reason or '')|tojson }},
+        is_late: {{ 'true' if leave.is_late else 'false' }},
+        status: {{ (leave.status or '')|tojson }},
+        original_id: {{ (leave.original_id or 0)|tojson }},
+        modification_reason: {{ (leave.modification_reason or '')|tojson }},
+        original_reason: {{ (leave.original_reason or '')|tojson }},
+        approver_name: {{ (leave.approver_name or '')|tojson }},
+        approved_at: {{ (leave.approved_at|string if leave.approved_at else '')|tojson }},
+        created_at: {{ (leave.created_at|string if leave.created_at else '')|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+function escapeHtml(s) { if (s == null) return ''; return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+function initials(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
+function dayPortionLabel(p) { if (p === 'first_half') return 'First Half'; if (p === 'second_half') return 'Second Half'; return 'Full Day'; }
+function statusBadgeHtml(s) { return `<span class="status-badge ${escapeHtml(s)}">${escapeHtml((s || '').replace(/^./, c => c.toUpperCase()))}</span>`; }
+
+function openLeaveDetail(reqId) {
+    const r = LEAVE_REQUESTS[reqId];
+    if (!r) return;
+    const body = document.getElementById('leaveDrawerBody');
+    const actions = document.getElementById('leaveDrawerActions');
+
+    const avatar = r.photo_src
+        ? `<img src="${escapeHtml(r.photo_src)}" class="emp-avatar-lg" alt="" onerror="this.outerHTML='<div class=\\'emp-avatar-lg-ph\\'>${initials(r.name)}</div>'">`
+        : `<div class="emp-avatar-lg-ph">${initials(r.name)}</div>`;
+
+    let html = `
+        <div class="drawer-emp">
+            ${avatar}
+            <div>
+                <p class="name">${escapeHtml(r.name || '—')}</p>
+                <div class="meta">${escapeHtml(r.emp_code || '')}${r.designation ? ' · ' + escapeHtml(r.designation) : ''}</div>
+                <div class="meta">${escapeHtml(r.department || '')}</div>
+            </div>
+        </div>
+
+        <div class="drawer-grid">
+            <div class="drawer-field">
+                <div class="label">Status</div>
+                <div class="value">${statusBadgeHtml(r.status)}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Leave Type</div>
+                <div class="value"><span class="type-badge">${escapeHtml((r.leave_type || '').replace(/^./, c => c.toUpperCase()))}</span></div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Leave Date</div>
+                <div class="value">${escapeHtml(r.leave_date || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Duration</div>
+                <div class="value">${escapeHtml(dayPortionLabel(r.day_portion))} (${r.days})</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Applied On</div>
+                <div class="value">${escapeHtml((r.created_at || '').split(' ')[0] || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Email</div>
+                <div class="value">${escapeHtml(r.email || '—')}</div>
+            </div>
+            <div class="drawer-field">
+                <div class="label">Mobile</div>
+                <div class="value">${escapeHtml(r.mobile || '—')}</div>
+            </div>
+            <div class="drawer-field full">
+                <div class="label">Reason</div>
+                <div class="drawer-reason">${escapeHtml(r.reason || '—')}</div>
+            </div>
+    `;
+
+    if (r.is_late && r.late_reason) {
+        html += `<div class="drawer-field full"><div class="drawer-late"><div class="label">Late Application Reason</div>${escapeHtml(r.late_reason)}</div></div>`;
+    }
+    if (r.modification_reason) {
+        html += `<div class="drawer-field full"><div class="label">Modification Reason</div><div class="drawer-reason" style="background:#EFF6FF;border-color:#BFDBFE;color:#1E40AF;">${escapeHtml(r.modification_reason)}</div></div>`;
+    }
+    if (r.original_reason) {
+        html += `<div class="drawer-field full"><div class="label">Original Reason</div><div class="drawer-reason" style="font-style:italic;">${escapeHtml(r.original_reason)}</div></div>`;
+    }
+    if ((r.status === 'approved' || r.status === 'rejected') && r.approver_name) {
+        html += `<div class="drawer-field full"><div class="label">${r.status === 'approved' ? 'Approved' : 'Rejected'} By</div><div class="value">${escapeHtml(r.approver_name)}${r.approved_at ? ' · ' + escapeHtml((r.approved_at || '').split('.')[0]) : ''}</div></div>`;
+    }
+
+    html += `</div>`;
+    body.innerHTML = html;
+
+    // Actions: edit (if future and not retrieved/modified) + delete
+    let actionsHtml = '';
+    const canEdit = (r.leave_date >= TODAY_STR) && (r.status !== 'retrieved') && (r.status !== 'modified');
+    if (canEdit) {
+        actionsHtml += `<a href="/edit-leave/${r.id}" class="btn-action btn-edit">Edit</a>`;
+    }
+    actionsHtml += `
+        <form method="POST" action="/admin/delete-leave/${r.id}" style="flex:1;" onsubmit="return confirm('Delete this leave entry for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date)}?');">
+            <button type="submit" class="btn-action btn-delete" style="width:100%;">Delete</button>
+        </form>
+    `;
+    actions.innerHTML = actionsHtml;
+    actions.style.display = 'flex';
+
+    document.getElementById('leaveDrawer').classList.add('open');
+    document.getElementById('leaveBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeLeaveDetail() {
+    document.getElementById('leaveDrawer').classList.remove('open');
+    document.getElementById('leaveBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+}
+
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLeaveDetail(); });
+</script>
 {% endblock %}
