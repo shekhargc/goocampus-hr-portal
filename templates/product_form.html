@@ -43,19 +43,11 @@
                     <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Revenue Stream</label>
                     <select name="revenue_stream_id" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;">
                         <option value="">— None —</option>
-                        {% set ns = namespace(current_project='') %}
                         {% for s in streams_all %}
-                            {% set pname = s.project_name or 'Unassigned' %}
-                            {% if pname != ns.current_project %}
-                                {% if ns.current_project %}</optgroup>{% endif %}
-                                <optgroup label="{{ pname }}">
-                                {% set ns.current_project = pname %}
-                            {% endif %}
-                            <option value="{{ s.id }}" {% if product.revenue_stream_id == s.id %}selected{% endif %}>{{ s.name }}</option>
+                        <option value="{{ s.id }}" {% if product.revenue_stream_id == s.id %}selected{% endif %}>{{ s.name }}</option>
                         {% endfor %}
-                        {% if ns.current_project %}</optgroup>{% endif %}
                     </select>
-                    <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">Streams are grouped by project. Picking a stream from another project will reassign this product to that project.</div>
+                    <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">Streams are global. Changing the stream does not change the project.</div>
                 </div>
             </div>
 
