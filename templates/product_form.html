@@ -10,6 +10,7 @@
         <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 2rem 0;">Change the project, revenue stream, costs, or currency. Links update automatically.</p>
 
         <form method="POST" action="/products/{{ product.id }}/edit">
+            <input type="hidden" name="source" value="products" />
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.3rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Name *</label>

@@ -17,32 +17,48 @@
     .section-card h3 .badge { background: #10B981; color: white; font-size: 0.65rem; padding: 0.15rem 0.5rem; border-radius: 10px; }
 
     .budget-table-wrap { overflow-x: auto; }
-    .budget-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.72rem; min-width: 960px; }
-    .budget-table th { background: var(--gray-50); padding: 0.5rem 0.4rem; text-align: right; font-weight: 600; color: var(--gray-600); border-bottom: 2px solid var(--gray-200); white-space: nowrap; position: sticky; top: 0; z-index: 1; }
-    .budget-table th:first-child { text-align: left; min-width: 260px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
-    .budget-table td { padding: 0.45rem 0.4rem; text-align: right; border-bottom: 1px solid var(--gray-100); color: var(--gray-700); }
-    .budget-table td:first-child { text-align: left; font-weight: 500; color: var(--gray-700); position: sticky; left: 0; background: white; z-index: 1; }
+    .budget-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+        font-size: 0.72rem;
+        min-width: 960px;
+    }
+    .budget-table th {
+        background: var(--gray-50);
+        padding: 0.5rem 0.4rem;
+        text-align: right;
+        font-weight: 600;
+        color: var(--gray-600);
+        border-bottom: 2px solid var(--gray-200);
+        white-space: nowrap;
+        position: sticky;
+        top: 0;
+        z-index: 1;
+    }
+    .budget-table th:first-child { text-align: left; min-width: 240px; width: 240px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
+    .budget-table td {
+        padding: 0.45rem 0.4rem;
+        text-align: right;
+        border-bottom: 1px solid var(--gray-100);
+        color: var(--gray-700);
+    }
+    .budget-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); position: sticky; left: 0; background: white; z-index: 1; min-width: 240px; width: 240px; white-space: normal; line-height: 1.35; }
+    .budget-table .quarter-col { background: rgba(16,185,129,0.04); font-weight: 600; }
+    .budget-table .total-col { background: rgba(15,27,51,0.06); font-weight: 700; }
     .budget-table tr.stream-row td { background: #F0FDF4; font-weight: 700; color: #065F46; border-top: 2px solid #A7F3D0; }
     .budget-table tr.stream-row td:first-child { background: #F0FDF4; }
-    .budget-table tr.product-row td:first-child { padding-left: 1.4rem; }
-    .budget-table tr.product-row td:first-child small { color: var(--gray-400); font-weight: 400; font-size: 0.62rem; display: block; }
-    .budget-table .quarter-col { background: rgba(16,185,129,0.04); }
-    .budget-table .total-col { background: rgba(15,27,51,0.06); font-weight: 700; }
-    .budget-table tr.subtotal-row td { background: var(--navy); color: white; font-weight: 700; font-size: 0.76rem; border-top: 2px solid var(--navy); }
-    .budget-table tr.subtotal-row td:first-child { background: var(--navy); color: white; }
-    .budget-table .actual-line { color: var(--gray-400); font-size: 0.65rem; display: block; }
-
-    .revenue-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 0.8rem; margin-bottom: 1.5rem; }
-    .rev-card { background: white; border-radius: 10px; padding: 0.9rem; box-shadow: 0 1px 3px rgba(0,0,0,0.06); border-left: 3px solid #10B981; }
-    .rev-card__name { font-size: 0.72rem; font-weight: 600; color: var(--gray-600); margin-bottom: 0.3rem; }
-    .rev-card__projected { font-size: 1.1rem; font-weight: 700; color: var(--navy); }
-    .rev-card__actual { font-size: 0.72rem; color: var(--gray-500); }
-    .rev-card__meta { font-size: 0.65rem; color: var(--gray-400); margin-top: 0.2rem; }
+    .budget-table .actual-row td { font-size: 0.65rem; color: var(--gray-500); border-bottom: 1px solid var(--gray-50); }
+    .budget-table .actual-row td:first-child { font-weight: 400; padding-left: 1rem; }
+    .budget-table .variance-row td { font-size: 0.65rem; border-bottom: 2px solid var(--gray-100); }
+    .budget-table .variance-row td:first-child { font-weight: 400; padding-left: 1rem; font-style: italic; }
+    .budget-table .subtotal-row td { font-weight: 700; border-top: 2px solid var(--gray-200); background: var(--gray-50); }
+    .budget-table .subtotal-row td:first-child { background: var(--gray-50); }
+    .positive { color: #10B981 !important; }
+    .negative { color: #EF4444 !important; }
 
     .info-banner { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; padding: 0.7rem 1rem; border-radius: 8px; font-size: 0.78rem; margin-bottom: 1.2rem; }
     .info-banner a { color: #047857; font-weight: 600; }
-
-    @media (max-width: 768px) { .revenue-summary { grid-template-columns: repeat(2, 1fr); } }
 </style>
 {% endblock %}
 
@@ -58,40 +74,21 @@
             <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
             <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
             <a href="/finance/budget/revenue?fy={{ fy_year }}" class="active">Revenue</a>
-            <a href="/finance/budget/projects?fy={{ fy_year }}">Project P&L</a>
+            <a href="/finance/budget/projects?fy={{ fy_year }}">Project P&amp;L</a>
             <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
             <a href="/finance/budget/settings?fy={{ fy_year }}">Settings</a>
         </div>
     </div>
 
     <div class="info-banner">
-        Revenue is entered per <strong>Product / Service</strong> in each month and rolled up by <strong>Revenue Stream</strong>. Edit monthly numbers in <a href="/finance/budget?fy={{ fy_year }}">Budget Dashboard → click a month</a>. Manage products in <a href="/products">Products & Services</a>.
+        Projected sales are calculated automatically as <strong>Units × Unit Price</strong>. Set the unit price when <a href="/products">adding a product</a>, then enter units per month in <a href="/finance/budget?fy={{ fy_year }}">Budget Dashboard → click a month</a>.
     </div>
 
-    <!-- Stream Summary Cards -->
-    <div class="revenue-summary">
-        {% for g in revenue_groups %}
-        <div class="rev-card">
-            <div class="rev-card__name">{{ g.stream_name }}</div>
-            <div class="rev-card__projected">₹{{ "{:,.0f}".format(g.total_budget) }}</div>
-            <div class="rev-card__actual">Actual: ₹{{ "{:,.0f}".format(g.total_actual) }}</div>
-            <div class="rev-card__meta">{{ g.products|length }} product{{ 's' if g.products|length != 1 else '' }}</div>
-        </div>
-        {% endfor %}
-        {% if revenue_groups %}
-        <div class="rev-card" style="border-left-color: var(--navy);">
-            <div class="rev-card__name">FY Total</div>
-            <div class="rev-card__projected">₹{{ "{:,.0f}".format(fy_total_budget) }}</div>
-            <div class="rev-card__actual">Actual: ₹{{ "{:,.0f}".format(fy_total_actual) }}</div>
-        </div>
-        {% endif %}
-    </div>
-
-    <!-- Detailed Table -->
+    <!-- Detailed Table: Projected / Actual / Variance per product -->
     <div class="section-card">
         <h3>
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-            Revenue by Stream → Product — Monthly Breakdown
+            Sales by Stream &rarr; Product
             <span class="badge">{{ revenue_groups|length }} stream{{ 's' if revenue_groups|length != 1 else '' }}</span>
         </h3>
 
@@ -103,115 +100,77 @@
                         {% for fm in fy_months %}
                         <th{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ fm.label }}</th>
                         {% endfor %}
-                        <th class="total-col">Annual</th>
+                        <th class="total-col">Annual Total</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% if not revenue_groups %}
-                    <tr><td colspan="{{ fy_months|length + 2 }}" style="text-align: center; color: var(--gray-400); padding: 1.5rem;">No active products yet. <a href="/products" style="color: var(--navy); font-weight: 600;">Add a product →</a></td></tr>
+                    <tr><td colspan="{{ fy_months|length + 2 }}" style="text-align: center; color: var(--gray-400); padding: 1.5rem;">No active products yet. <a href="/products" style="color: var(--navy); font-weight: 600;">Add a product &rarr;</a></td></tr>
                     {% endif %}
                     {% for g in revenue_groups %}
                     <tr class="stream-row">
                         <td>{{ g.stream_name }}</td>
                         {% for i in range(fy_months|length) %}
-                        <td{% if (i + 1) in [3,6,9,12] %} class="quarter-col"{% endif %}>
-                            {{ "₹{:,.0f}".format(g.monthly_budget[i]) if g.monthly_budget[i] > 0 else '–' }}
-                        </td>
+                        <td{% if (i + 1) in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(g.monthly_budget[i]) if g.monthly_budget[i] > 0 else '–' }}</td>
                         {% endfor %}
                         <td class="total-col">₹{{ "{:,.0f}".format(g.total_budget) }}</td>
                     </tr>
                     {% for pr in g.products %}
-                    <tr class="product-row">
-                        <td>↳ {{ pr.name }}<small>{{ pr.project_name }} · {{ pr.type|capitalize }}</small></td>
+                    <tr>
+                        <td>{{ pr.name }} <small style="font-weight:400;color:var(--gray-400);">· {{ pr.project_name }}</small></td>
                         {% for i in range(fy_months|length) %}
-                        <td{% if (i + 1) in [3,6,9,12] %} class="quarter-col"{% endif %}>
-                            {{ "₹{:,.0f}".format(pr.monthly_budget[i]) if pr.monthly_budget[i] > 0 else '–' }}
-                            {% if pr.monthly_actual[i] > 0 %}<span class="actual-line">A: ₹{{ "{:,.0f}".format(pr.monthly_actual[i]) }}</span>{% endif %}
-                        </td>
+                        <td{% if (i + 1) in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(pr.monthly_budget[i]) if pr.monthly_budget[i] > 0 else '–' }}</td>
                         {% endfor %}
-                        <td class="total-col">
-                            ₹{{ "{:,.0f}".format(pr.total_budget) }}
-                            {% if pr.total_actual > 0 %}<span class="actual-line">A: ₹{{ "{:,.0f}".format(pr.total_actual) }}</span>{% endif %}
-                        </td>
+                        <td class="total-col">₹{{ "{:,.0f}".format(pr.total_budget) }}</td>
+                    </tr>
+                    <tr class="actual-row">
+                        <td>&darr; Actual</td>
+                        {% for i in range(fy_months|length) %}
+                        <td{% if (i + 1) in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(pr.monthly_actual[i]) if pr.monthly_actual[i] > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">₹{{ "{:,.0f}".format(pr.total_actual) }}</td>
+                    </tr>
+                    <tr class="variance-row">
+                        <td>&darr; Variance</td>
+                        {% for i in range(fy_months|length) %}
+                        {% set b = pr.monthly_budget[i] %}
+                        {% set a = pr.monthly_actual[i] %}
+                        {% set v = a - b %}
+                        <td class="{{ 'positive' if v >= 0 else 'negative' }}"{% if (i + 1) in [3,6,9,12] %} style="background: rgba(16,185,129,0.04);"{% endif %}>{{ "₹{:,.0f}".format(v) if (b > 0 or a > 0) else '–' }}</td>
+                        {% endfor %}
+                        {% set tv = pr.total_actual - pr.total_budget %}
+                        <td class="total-col {{ 'positive' if tv >= 0 else 'negative' }}">{{ "₹{:,.0f}".format(tv) }}</td>
                     </tr>
                     {% endfor %}
                     {% endfor %}
                     {% if revenue_groups %}
                     <tr class="subtotal-row">
-                        <td>Total Revenue</td>
-                        {% for i in range(fy_months|length) %}
-                        {% set ns = namespace(mb=0) %}
-                        {% for g in revenue_groups %}{% set ns.mb = ns.mb + g.monthly_budget[i] %}{% endfor %}
-                        <td>{{ "₹{:,.0f}".format(ns.mb) if ns.mb > 0 else '–' }}</td>
+                        <td>Total Projected</td>
+                        {% for mt in monthly_totals %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(mt.budget) if mt.budget > 0 else '–' }}</td>
                         {% endfor %}
-                        <td>₹{{ "{:,.0f}".format(fy_total_budget) }}</td>
+                        <td class="total-col">₹{{ "{:,.0f}".format(fy_total_budget) }}</td>
+                    </tr>
+                    <tr class="subtotal-row">
+                        <td>Total Actual</td>
+                        {% for mt in monthly_totals %}
+                        <td{% if loop.index in [3,6,9,12] %} class="quarter-col"{% endif %}>{{ "₹{:,.0f}".format(mt.actual) if mt.actual > 0 else '–' }}</td>
+                        {% endfor %}
+                        <td class="total-col">₹{{ "{:,.0f}".format(fy_total_actual) }}</td>
+                    </tr>
+                    <tr class="subtotal-row">
+                        <td>Total Variance</td>
+                        {% for mt in monthly_totals %}
+                        {% set mv = mt.actual - mt.budget %}
+                        <td class="{{ 'positive' if mv >= 0 else 'negative' }}"{% if loop.index in [3,6,9,12] %} style="background: rgba(16,185,129,0.04);"{% endif %}>{{ "₹{:,.0f}".format(mv) if (mt.budget > 0 or mt.actual > 0) else '–' }}</td>
+                        {% endfor %}
+                        {% set fv = fy_total_actual - fy_total_budget %}
+                        <td class="total-col {{ 'positive' if fv >= 0 else 'negative' }}">₹{{ "{:,.0f}".format(fv) }}</td>
                     </tr>
                     {% endif %}
                 </tbody>
             </table>
         </div>
     </div>
-
-    <!-- Chart -->
-    {% if revenue_groups %}
-    <div class="section-card">
-        <h3>Revenue Trend (by Stream)</h3>
-        <canvas id="revenueChart" height="200"></canvas>
-    </div>
-    {% endif %}
 </div>
-
-{% if revenue_groups %}
-<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
-<script>
-const labels = {{ fy_months|map(attribute='label')|list|tojson }};
-const datasets = [];
-const colors = ['#10B981', '#3B82F6', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#6366F1'];
-{% for g in revenue_groups %}
-datasets.push({
-    label: {{ g.stream_name|tojson }} + ' (Projected)',
-    data: {{ g.monthly_budget|tojson }},
-    borderColor: colors[{{ loop.index0 }} % colors.length],
-    borderWidth: 1.5,
-    borderDash: [4, 2],
-    pointRadius: 2,
-    fill: false,
-    tension: 0.3
-});
-datasets.push({
-    label: {{ g.stream_name|tojson }} + ' (Actual)',
-    data: {{ g.monthly_actual|tojson }},
-    borderColor: colors[{{ loop.index0 }} % colors.length],
-    borderWidth: 2.5,
-    pointRadius: 3,
-    fill: false,
-    tension: 0.3
-});
-{% endfor %}
-
-new Chart(document.getElementById('revenueChart'), {
-    type: 'line',
-    data: { labels, datasets },
-    options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        plugins: {
-            legend: { position: 'bottom', labels: { boxWidth: 10, padding: 10, font: { size: 10 } } },
-            tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ₹' + ctx.parsed.y.toLocaleString('en-IN') } }
-        },
-        scales: {
-            y: {
-                beginAtZero: true,
-                ticks: {
-                    callback: function(v) { return v >= 100000 ? '₹' + (v/100000).toFixed(1) + 'L' : '₹' + v.toLocaleString('en-IN'); },
-                    font: { size: 10 }
-                },
-                grid: { color: 'rgba(0,0,0,0.04)' }
-            },
-            x: { ticks: { font: { size: 10 } }, grid: { display: false } }
-        }
-    }
-});
-</script>
-{% endif %}
 {% endblock %}

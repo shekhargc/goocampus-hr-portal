@@ -135,11 +135,15 @@
 
 {% block content %}
 <div class="add-prod-container">
+    <div style="margin-bottom:1rem;">
+        <a href="/products" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Products</a>
+    </div>
     <div class="add-prod-card">
         <h1 class="add-prod-title">Add Product/Service</h1>
         <p class="add-prod-subtitle">Add a new product or service to <strong>{{ project.name }}</strong>.</p>
 
         <form method="POST" action="/products/add/{{ project.id }}">
+            <input type="hidden" name="source" value="products" />
             <div class="add-prod-form-group">
                 <label class="add-prod-label">Name *</label>
                 <input
@@ -243,7 +247,7 @@
 
             <div class="add-prod-actions">
                 <button type="submit" class="add-prod-submit">Add Product/Service</button>
-                <a href="/projects/{{ project.id }}" class="add-prod-cancel">Cancel</a>
+                <a href="/products" class="add-prod-cancel">Cancel</a>
             </div>
         </form>
     </div>

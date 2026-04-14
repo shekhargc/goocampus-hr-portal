@@ -6532,6 +6532,18 @@ def ensure_budget_tables():
                     conn.rollback()
                 except Exception:
                     pass
+        # Migration: add per-row unit counts so revenue rows can store units
+        # sold and compute amount = units × sale_price at save time.
+        for col in ('budget_units', 'actual_units'):
+            try:
+                conn.execute(f"ALTER TABLE budget_entries ADD COLUMN {col} NUMERIC(14,2) DEFAULT 0")
+                conn.commit()
+                logging.info(f"Added {col} column to budget_entries")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
         # Backfill: heal salary_items rows whose name/department got wiped by
         # the pre-fix edit handler (readonly fields without `name` attribute
         # sent empty strings). Pull canonical name/dept from the employee row.
@@ -7116,11 +7128,21 @@ def finance_revenue():
     # FY totals
     fy_total_budget = sum(g['total_budget'] for g in revenue_groups_list)
     fy_total_actual = sum(g['total_actual'] for g in revenue_groups_list)
+    fy_total_variance = fy_total_budget - fy_total_actual
+
+    # Per-month totals across all streams
+    monthly_totals = []
+    for idx, fm in enumerate(fy_months):
+        m_b = sum(g['monthly_budget'][idx] for g in revenue_groups_list)
+        m_a = sum(g['monthly_actual'][idx] for g in revenue_groups_list)
+        monthly_totals.append({'budget': m_b, 'actual': m_a, 'variance': m_b - m_a})
 
     return render_template('finance_revenue.html', user=user, fy_year=fy_year, fy_months=fy_months,
                            revenue_groups=revenue_groups_list,
                            fy_total_budget=fy_total_budget,
                            fy_total_actual=fy_total_actual,
+                           fy_total_variance=fy_total_variance,
+                           monthly_totals=monthly_totals,
                            get_quarter_label=get_quarter_label)
 
 
@@ -7263,39 +7285,64 @@ def finance_edit_month(month, year):
                     )
 
         # ── Product-level revenue entries ──
+        # When a product has a sale_price, the monthly form collects UNITS
+        # (quantity) and the amount is auto-calculated as units × sale_price
+        # (converted to INR). If sale_price is 0, the form falls back to
+        # rupee amounts for backward compatibility.
         try:
             active_products = conn.execute(
-                "SELECT id, project_id FROM products_services WHERE status = 'active'"
+                "SELECT id, project_id, sale_price, sale_currency FROM products_services WHERE status = 'active'"
             ).fetchall()
         except Exception:
             active_products = []
         for prod in active_products:
             pid = prod['id']
-            pbudget = request.form.get(f'prod_budget_{pid}', '0')
-            pactual = request.form.get(f'prod_actual_{pid}', '0')
+            try:
+                unit_price_inr = float(to_inr(prod['sale_price'], prod['sale_currency'] or 'INR') or 0)
+            except Exception:
+                unit_price_inr = 0.0
+
             pnotes = request.form.get(f'prod_notes_{pid}', '').strip()
-            try:
-                pbudget = float(pbudget) if pbudget else 0
-            except ValueError:
-                pbudget = 0
-            try:
-                pactual = float(pactual) if pactual else 0
-            except ValueError:
-                pactual = 0
+
+            if unit_price_inr > 0:
+                # Units-based entry
+                try:
+                    pbudget_units = float(request.form.get(f'prod_budget_units_{pid}', '0') or 0)
+                except ValueError:
+                    pbudget_units = 0
+                try:
+                    pactual_units = float(request.form.get(f'prod_actual_units_{pid}', '0') or 0)
+                except ValueError:
+                    pactual_units = 0
+                pbudget = pbudget_units * unit_price_inr
+                pactual = pactual_units * unit_price_inr
+            else:
+                # Legacy rupee-amount entry (no sale_price set on product)
+                try:
+                    pbudget = float(request.form.get(f'prod_budget_{pid}', '0') or 0)
+                except ValueError:
+                    pbudget = 0
+                try:
+                    pactual = float(request.form.get(f'prod_actual_{pid}', '0') or 0)
+                except ValueError:
+                    pactual = 0
+                pbudget_units = 0
+                pactual_units = 0
+
             existing_p = conn.execute(
                 "SELECT id FROM budget_entries WHERE product_id = ? AND fy_year = ? AND month = ? AND year = ?",
                 (pid, fy_year, month, year)
             ).fetchone()
             if existing_p:
                 conn.execute(
-                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (pbudget, pactual, pnotes, prod['project_id'], user['id'], existing_p['id'])
+                    "UPDATE budget_entries SET budget_amount = ?, actual_amount = ?, budget_units = ?, actual_units = ?, notes = ?, project_id = ?, updated_by = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (pbudget, pactual, pbudget_units, pactual_units, pnotes, prod['project_id'], user['id'], existing_p['id'])
                 )
             else:
                 if pbudget > 0 or pactual > 0 or pnotes:
                     conn.execute(
-                        "INSERT INTO budget_entries (product_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                        (pid, fy_year, month, year, pbudget, pactual, pnotes, prod['project_id'], user['id'], user['id'])
+                        "INSERT INTO budget_entries (product_id, fy_year, month, year, budget_amount, actual_amount, budget_units, actual_units, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (pid, fy_year, month, year, pbudget, pactual, pbudget_units, pactual_units, pnotes, prod['project_id'], user['id'], user['id'])
                     )
 
         # Auto-fill recurring budgets to other unlocked months
@@ -7602,6 +7649,14 @@ def finance_edit_month(month, year):
         e = product_entry_map.get(p['id'])
         pb = float(e['budget_amount'] or 0) if e else 0.0
         pa = float(e['actual_amount'] or 0) if e else 0.0
+        try:
+            _ekeys = e.keys() if e and hasattr(e, 'keys') else []
+        except Exception:
+            _ekeys = []
+        pb_units = float((e['budget_units'] or 0) if e and 'budget_units' in _ekeys else 0)
+        pa_units = float((e['actual_units'] or 0) if e and 'actual_units' in _ekeys else 0)
+        _sale_cur = p['sale_currency'] if 'sale_currency' in p.keys() else 'INR'
+        _sale_price_inr = float(to_inr(p['sale_price'], _sale_cur) or 0)
         group_index[stream_key]['total_budget'] += pb
         group_index[stream_key]['total_actual'] += pa
         group_index[stream_key]['products'].append({
@@ -7611,9 +7666,12 @@ def finance_edit_month(month, year):
             'project_name': p['project_name'] or '— No project —',
             'project_id': p['project_id'],
             'sale_price': float(p['sale_price'] or 0),
-            'sale_currency': p['sale_currency'] if 'sale_currency' in p.keys() else 'INR',
+            'sale_currency': _sale_cur,
+            'sale_price_inr': _sale_price_inr,
             'budget': pb,
             'actual': pa,
+            'budget_units': pb_units,
+            'actual_units': pa_units,
             'notes': (e['notes'] if e else '') or '',
         })
 

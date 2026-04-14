@@ -391,9 +391,9 @@
             <div class="rev-header">
                 <div>Product / Service</div>
                 <div>Project</div>
-                <div>Sale Price</div>
-                <div>Projected (₹)</div>
-                <div>Actual (₹)</div>
+                <div>Unit Price (₹)</div>
+                <div>Projected Units → ₹</div>
+                <div>Actual Units → ₹</div>
                 <div>Notes</div>
             </div>
 
@@ -409,17 +409,33 @@
                         </span>
                     </div>
                     {% for pr in g.products %}
-                    <div class="rev-row">
+                    <div class="rev-row" data-unit-price="{{ pr.sale_price_inr }}">
                         <div class="rev-cell rev-name">
                             {{ pr.name }}
                             <small>{{ pr.type|capitalize }}</small>
                         </div>
                         <div class="rev-cell rev-project">{{ pr.project_name }}</div>
                         <div class="rev-cell rev-price">
-                            {{ pr.sale_currency }} {{ '{:,.0f}'.format(pr.sale_price) }}
+                            {% if pr.sale_price_inr > 0 %}
+                                ₹{{ '{:,.0f}'.format(pr.sale_price_inr) }}
+                                {% if pr.sale_currency != 'INR' %}<small style="color:var(--gray-400);display:block;font-size:0.62rem;">({{ pr.sale_currency }} {{ '{:,.0f}'.format(pr.sale_price) }})</small>{% endif %}
+                            {% else %}
+                                <small style="color:var(--gray-400);">No unit price — enter ₹ directly</small>
+                            {% endif %}
                         </div>
+                        {% if pr.sale_price_inr > 0 %}
+                        <div class="rev-cell" style="display:flex;flex-direction:column;gap:0.15rem;">
+                            <input type="number" name="prod_budget_units_{{ pr.id }}" value="{{ pr.budget_units or 0 }}" step="1" min="0" placeholder="units" oninput="recalcRevAmt(this)" data-amt-target="b-amt-{{ pr.id }}" style="width:100%;padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:6px;font-size:0.85rem;" {{ 'disabled' if is_locked }}>
+                            <span id="b-amt-{{ pr.id }}" style="font-size:0.68rem;color:var(--gray-500);">= ₹{{ '{:,.0f}'.format(pr.budget) }}</span>
+                        </div>
+                        <div class="rev-cell" style="display:flex;flex-direction:column;gap:0.15rem;">
+                            <input type="number" name="prod_actual_units_{{ pr.id }}" value="{{ pr.actual_units or 0 }}" step="1" min="0" placeholder="units" oninput="recalcRevAmt(this)" data-amt-target="a-amt-{{ pr.id }}" style="width:100%;padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:6px;font-size:0.85rem;" {{ 'disabled' if is_locked }}>
+                            <span id="a-amt-{{ pr.id }}" style="font-size:0.68rem;color:var(--gray-500);">= ₹{{ '{:,.0f}'.format(pr.actual) }}</span>
+                        </div>
+                        {% else %}
                         <input class="rev-cell" type="number" name="prod_budget_{{ pr.id }}" value="{{ pr.budget or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
                         <input class="rev-cell" type="number" name="prod_actual_{{ pr.id }}" value="{{ pr.actual or 0 }}" step="0.01" min="0" placeholder="0" {{ 'disabled' if is_locked }}>
+                        {% endif %}
                         <input class="rev-cell" type="text" name="prod_notes_{{ pr.id }}" value="{{ pr.notes }}" placeholder="Optional…" {{ 'disabled' if is_locked }}>
                     </div>
                     {% endfor %}
@@ -468,4 +484,19 @@
         </div>
     </form>
 </div>
+
+<script>
+// Recalculate projected/actual rupee amount when user types a unit count.
+function recalcRevAmt(inputEl) {
+    const row = inputEl.closest('.rev-row');
+    if (!row) return;
+    const price = parseFloat(row.getAttribute('data-unit-price') || '0');
+    const units = parseFloat(inputEl.value || '0');
+    const target = document.getElementById(inputEl.getAttribute('data-amt-target'));
+    if (target) {
+        const amt = Math.round(price * units);
+        target.textContent = '= ₹' + amt.toLocaleString('en-IN');
+    }
+}
+</script>
 {% endblock %}
