@@ -180,11 +180,19 @@
                 {% if streams %}
                 <select name="revenue_stream_id" class="add-prod-select">
                     <option value="">— None (unassigned) —</option>
+                    {% set ns = namespace(current_project='') %}
                     {% for s in streams %}
-                    <option value="{{ s.id }}" {% if request.args.get('stream') == s.id|string %}selected{% endif %}>{{ s.name }}</option>
+                        {% set pname = s.project_name or 'Unassigned' %}
+                        {% if pname != ns.current_project %}
+                            {% if ns.current_project %}</optgroup>{% endif %}
+                            <optgroup label="{{ pname }}">
+                            {% set ns.current_project = pname %}
+                        {% endif %}
+                        <option value="{{ s.id }}" {% if request.args.get('stream') == s.id|string %}selected{% endif %}{% if s.project_id and s.project_id != project.id %} data-cross-project="1"{% endif %}>{{ s.name }}{% if s.project_id and s.project_id != project.id %} — {{ pname }}{% endif %}</option>
                     {% endfor %}
+                    {% if ns.current_project %}</optgroup>{% endif %}
                 </select>
-                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">Link this product to a revenue stream under {{ project.name }}.</div>
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">Streams are grouped by project. Picking a stream from another project will link this product to that project.</div>
                 {% else %}
                 <div style="background:var(--gray-50);border:1px dashed var(--gray-300);border-radius:0.4rem;padding:0.75rem;font-size:0.82rem;color:var(--gray-600);">
                     No revenue streams exist for this project yet. You can <a href="/projects/{{ project.id }}" style="color:var(--orange);font-weight:600;text-decoration:none;">add a stream</a> first, or leave this product unassigned.

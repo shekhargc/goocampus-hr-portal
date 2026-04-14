@@ -4795,16 +4795,21 @@ def add_product(project_id):
             currency = 'INR'
         cost_currency = currency
         sale_currency = currency
-        # Revenue stream (must belong to this project or be blank)
+        # Revenue stream. If the stream is bound to a different project, accept
+        # it anyway (and adopt the stream's project) so linking is not silently
+        # dropped. Only null out if the stream doesn't exist or is inactive.
         stream_raw = request.form.get('revenue_stream_id', '').strip()
         revenue_stream_id = int(stream_raw) if stream_raw.isdigit() else None
+        effective_project_id = project_id
         if revenue_stream_id:
             chk = conn.execute(
-                'SELECT id FROM revenue_streams WHERE id = ? AND project_id = ?',
-                (revenue_stream_id, project_id)
+                'SELECT id, project_id FROM revenue_streams WHERE id = ? AND is_active = 1',
+                (revenue_stream_id,)
             ).fetchone()
             if not chk:
                 revenue_stream_id = None
+            elif chk['project_id'] and chk['project_id'] != project_id:
+                effective_project_id = chk['project_id']
 
         if not name:
             flash('Name is required', 'error')
@@ -4816,7 +4821,7 @@ def add_product(project_id):
                 (name, description, type, project_id, revenue_stream_id, product_cost, sale_price,
                  cost_currency, sale_currency, created_by)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (name, description, ps_type, project_id, revenue_stream_id, product_cost, sale_price,
+        ''', (name, description, ps_type, effective_project_id, revenue_stream_id, product_cost, sale_price,
               cost_currency, sale_currency, user['id']))
         conn.commit()
         conn.close()
@@ -4824,11 +4829,15 @@ def add_product(project_id):
         src = request.form.get('source', '')
         if src == 'products':
             return redirect(url_for('products_list'))
-        return redirect(url_for('project_detail', project_id=project_id))
+        return redirect(url_for('project_detail', project_id=effective_project_id))
 
-    streams = conn.execute(
-        "SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name"
-    ).fetchall()
+    streams = conn.execute('''
+        SELECT rs.id, rs.name, rs.project_id, p.name AS project_name
+        FROM revenue_streams rs
+        LEFT JOIN projects p ON rs.project_id = p.id
+        WHERE rs.is_active = 1
+        ORDER BY p.name, rs.name
+    ''').fetchall()
     conn.close()
     return render_template('add_product.html', user=user, project=project,
                            streams=streams,
@@ -4853,7 +4862,13 @@ def edit_product(ps_id):
 
     if request.method == 'GET':
         projects_all = conn.execute("SELECT id, name FROM projects ORDER BY name").fetchall()
-        streams_all = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
+        streams_all = conn.execute('''
+            SELECT rs.id, rs.name, rs.project_id, p.name AS project_name
+            FROM revenue_streams rs
+            LEFT JOIN projects p ON rs.project_id = p.id
+            WHERE rs.is_active = 1
+            ORDER BY p.name, rs.name
+        ''').fetchall()
         conn.close()
         product = dict(ps)
         product['cost_currency'] = product.get('cost_currency') or 'INR'
@@ -4887,16 +4902,21 @@ def edit_product(ps_id):
     else:
         project_id_val = ps['project_id']
 
-    # Optional revenue stream reassignment (must belong to project_id_val)
+    # Revenue stream reassignment. The stream is the stronger binding:
+    # if it belongs to a different project than the one selected, auto-adopt
+    # the stream's project so the product stays linked to the stream.
     stream_raw = request.form.get('revenue_stream_id', '').strip()
     revenue_stream_id = int(stream_raw) if stream_raw.isdigit() else None
     if revenue_stream_id:
         chk = conn.execute(
-            'SELECT id FROM revenue_streams WHERE id = ? AND project_id = ?',
-            (revenue_stream_id, project_id_val)
+            'SELECT id, project_id FROM revenue_streams WHERE id = ? AND is_active = 1',
+            (revenue_stream_id,)
         ).fetchone()
         if not chk:
             revenue_stream_id = None
+        elif chk['project_id'] and chk['project_id'] != project_id_val:
+            # Stream belongs to a different project — align to stream's project
+            project_id_val = chk['project_id']
 
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
