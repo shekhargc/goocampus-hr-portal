@@ -4183,8 +4183,31 @@ def wfh_approvals():
     is_mgmt = user['emp_code'] in MANAGEMENT_CODES
     is_admin_user = user['is_admin'] == 1
 
+    # Filters
+    f_employee = (request.args.get('employee') or '').strip()
+    f_department = (request.args.get('department') or '').strip()
+    f_status = (request.args.get('status') or '').strip()
+
+    base_select = '''
+        SELECT w.id, w.employee_id, w.from_date, w.to_date, w.reason, w.status,
+               w.approved_by, w.approved_at, w.rejection_reason, w.created_at,
+               e.name          AS employee_name,
+               e.emp_code      AS emp_code,
+               e.department    AS department,
+               e.designation   AS designation,
+               e.email         AS email,
+               e.mobile        AS mobile,
+               e.photo_url     AS photo_url,
+               a.name          AS approver_name
+        FROM wfh_requests w
+        JOIN employees e ON w.employee_id = e.id
+        LEFT JOIN employees a ON w.approved_by = a.id
+    '''
+
+    where_clauses = []
+    params = []
+
     if not is_admin_user and not is_mgmt:
-        # Only show direct reports' WFH requests
         direct_report_ids = [r['id'] for r in conn.execute(
             'SELECT id FROM employees WHERE reporting_to = ? AND is_active = 1', (user['id'],)
         ).fetchall()]
@@ -4193,26 +4216,73 @@ def wfh_approvals():
             conn.close()
             return redirect(url_for('dashboard'))
         placeholders = ','.join('?' * len(direct_report_ids))
-        requests_list = conn.execute(f'''
-            SELECT w.*, e.name, e.emp_code, e.department, a.name as approver_name
-            FROM wfh_requests w
-            JOIN employees e ON w.employee_id = e.id
-            LEFT JOIN employees a ON w.approved_by = a.id
-            WHERE w.employee_id IN ({placeholders})
-            ORDER BY w.created_at DESC
-        ''', direct_report_ids).fetchall()
-    else:
-        # Admin/management see all
-        requests_list = conn.execute('''
-            SELECT w.*, e.name, e.emp_code, e.department, a.name as approver_name
-            FROM wfh_requests w
-            JOIN employees e ON w.employee_id = e.id
-            LEFT JOIN employees a ON w.approved_by = a.id
-            ORDER BY w.created_at DESC
-        ''').fetchall()
+        where_clauses.append(f'w.employee_id IN ({placeholders})')
+        params.extend(direct_report_ids)
+
+    if f_employee:
+        where_clauses.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        params.extend([like, like])
+    if f_department:
+        where_clauses.append('LOWER(e.department) LIKE ?')
+        params.append(f'%{f_department.lower()}%')
+    if f_status:
+        where_clauses.append('w.status = ?')
+        params.append(f_status)
+
+    sql = base_select
+    if where_clauses:
+        sql += ' WHERE ' + ' AND '.join(where_clauses)
+    sql += ' ORDER BY w.created_at DESC'
+
+    requests_list = conn.execute(sql, tuple(params)).fetchall()
+
+    # Normalize rows to dicts and add photo_src (ready-to-use img URL)
+    enriched = []
+    for r in requests_list:
+        d = dict(r)
+        p = d.get('photo_url') or ''
+        if p:
+            d['photo_src'] = p if p.startswith('http') else f'/static/photos/{p}'
+        else:
+            d['photo_src'] = ''
+        enriched.append(d)
+
+    # Stat counts (respect filters but not status, so pills stay meaningful)
+    count_sql_base = '''
+        SELECT w.status AS st, COUNT(*) AS c
+        FROM wfh_requests w
+        JOIN employees e ON w.employee_id = e.id
+    '''
+    count_where = []
+    count_params = []
+    if not is_admin_user and not is_mgmt:
+        placeholders = ','.join('?' * len(direct_report_ids))
+        count_where.append(f'w.employee_id IN ({placeholders})')
+        count_params.extend(direct_report_ids)
+    if f_employee:
+        count_where.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        count_params.extend([like, like])
+    if f_department:
+        count_where.append('LOWER(e.department) LIKE ?')
+        count_params.append(f'%{f_department.lower()}%')
+    count_sql = count_sql_base
+    if count_where:
+        count_sql += ' WHERE ' + ' AND '.join(count_where)
+    count_sql += ' GROUP BY w.status'
+    rows = conn.execute(count_sql, tuple(count_params)).fetchall()
+    counts_by_status = {r['st']: r['c'] for r in rows}
+    pending_count = counts_by_status.get('pending', 0)
+    approved_count = counts_by_status.get('approved', 0)
+    rejected_count = counts_by_status.get('rejected', 0)
+    total_count = pending_count + approved_count + rejected_count
 
     conn.close()
-    return render_template('wfh_approvals.html', user=user, requests=requests_list)
+    return render_template('wfh_approvals.html', user=user, requests=enriched,
+                           f_employee=f_employee, f_department=f_department, f_status=f_status,
+                           total_count=total_count, pending_count=pending_count,
+                           approved_count=approved_count, rejected_count=rejected_count)
 
 
 @app.route('/wfh/approve/<int:wfh_id>', methods=['POST'])
