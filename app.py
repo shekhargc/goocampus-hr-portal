@@ -4196,7 +4196,7 @@ def wfh_approvals():
                e.department    AS department,
                e.designation   AS designation,
                e.email         AS email,
-               e.mobile        AS mobile,
+               e.phone         AS mobile,
                e.photo_url     AS photo_url,
                a.name          AS approver_name
         FROM wfh_requests w
