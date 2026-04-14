@@ -7182,6 +7182,14 @@ def finance_edit_month(month, year):
                         (cat['id'], fy_year, month, year, budget_val, actual_val, notes_val, project_id, user['id'], user['id'])
                     )
 
+            # Track recurring categories with budget > 0 (must be inside the cat loop)
+            try:
+                _is_recurring = cat['is_recurring'] if 'is_recurring' in cat.keys() else 0
+            except Exception:
+                _is_recurring = 0
+            if _is_recurring and budget_val > 0:
+                recurring_fills.append({'cat_id': cat['id'], 'budget': budget_val, 'notes': notes_val})
+
         # ── Salary line-item expenses ──
         try:
             active_salaries = conn.execute(
@@ -7289,11 +7297,6 @@ def finance_edit_month(month, year):
                         "INSERT INTO budget_entries (product_id, fy_year, month, year, budget_amount, actual_amount, notes, project_id, created_by, updated_by) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                         (pid, fy_year, month, year, pbudget, pactual, pnotes, prod['project_id'], user['id'], user['id'])
                     )
-
-            # Track recurring categories with budget > 0
-            is_recurring = cat.get('is_recurring', 0) if hasattr(cat, 'get') else (cat['is_recurring'] if 'is_recurring' in cat.keys() else 0)
-            if is_recurring and budget_val > 0:
-                recurring_fills.append({'cat_id': cat['id'], 'budget': budget_val, 'notes': notes_val})
 
         # Auto-fill recurring budgets to other unlocked months
         if recurring_fills:
