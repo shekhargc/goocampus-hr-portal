@@ -36,14 +36,17 @@
         top: 0;
         z-index: 1;
     }
-    .budget-table th:first-child { text-align: left; min-width: 180px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
+    .budget-table th:first-child { text-align: left; min-width: 240px; width: 240px; position: sticky; left: 0; background: var(--gray-50); z-index: 2; }
     .budget-table td {
         padding: 0.45rem 0.4rem;
         text-align: right;
         border-bottom: 1px solid var(--gray-100);
         color: var(--gray-700);
     }
-    .budget-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); position: sticky; left: 0; background: white; z-index: 1; }
+    .budget-table td:first-child { text-align: left; font-weight: 600; color: var(--navy); position: sticky; left: 0; background: white; z-index: 1; min-width: 240px; width: 240px; white-space: normal; line-height: 1.35; }
+    .budget-table .cat-badge { display: inline-block; color: white; font-size: 0.55rem; padding: 0.1rem 0.4rem; border-radius: 6px; font-weight: 600; vertical-align: middle; margin-left: 0.25rem; white-space: nowrap; }
+    .budget-table .cat-badge-recur { background: #F59E0B; }
+    .budget-table .cat-badge-dept { background: #3B82F6; }
     .budget-table .quarter-col { background: rgba(59,130,246,0.04); font-weight: 600; }
     .budget-table .total-col { background: rgba(15,27,51,0.06); font-weight: 700; }
     .budget-table .subtotal-row td { font-weight: 700; border-top: 2px solid var(--gray-200); background: var(--gray-50); }
@@ -114,7 +117,7 @@
                     {% for cat in expense_cats %}
                     {% set ns2 = namespace(cat_budget=0, cat_actual=0) %}
                     <tr>
-                        <td>{{ cat.name }}{% if cat.is_recurring %} <span style="background:#F59E0B;color:white;font-size:0.5rem;padding:0.05rem 0.3rem;border-radius:6px;font-weight:600;vertical-align:middle;">R</span>{% endif %}{% if cat.department %} <span style="background:#3B82F6;color:white;font-size:0.5rem;padding:0.05rem 0.3rem;border-radius:6px;font-weight:600;vertical-align:middle;">{{ cat.department }}</span>{% endif %}</td>
+                        <td>{{ cat.name }}{% if cat.is_recurring %}<span class="cat-badge cat-badge-recur">R</span>{% endif %}{% if cat.department %}<span class="cat-badge cat-badge-dept">{{ cat.department }}</span>{% endif %}</td>
                         {% for fm in fy_months %}
                         {% set e = entry_map.get((cat.id, fm.month, fm.year), {}) %}
                         {% set b = e.get('budget_amount', 0) or 0 %}
