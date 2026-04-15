@@ -72,7 +72,7 @@
         <div class="finance-nav">
             <a href="/finance/budget?fy={{ fy_year }}">Dashboard</a>
             <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
-            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Gross Revenue</a>
             <a href="/finance/budget/projects?fy={{ fy_year }}" class="active">Project P&L</a>
             <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
             <a href="/finance/budget/settings?fy={{ fy_year }}">Settings</a>
@@ -103,11 +103,11 @@
             </div>
 
             <div class="project-card__row">
-                <span class="project-card__label">Revenue (Budget)</span>
+                <span class="project-card__label">Gross Revenue (Budget)</span>
                 <span class="project-card__value">{{ "₹{:,.0f}".format(proj.revenue_budget) }}</span>
             </div>
             <div class="project-card__row">
-                <span class="project-card__label">Revenue (Actual)</span>
+                <span class="project-card__label">Gross Revenue (Actual)</span>
                 <span class="project-card__value green">{{ "₹{:,.0f}".format(proj.revenue_actual) }}</span>
             </div>
 
@@ -137,7 +137,7 @@
             <div class="project-card__bar">
                 {% set rev_pct = ((proj.revenue_actual / proj.revenue_budget) * 100) if proj.revenue_budget > 0 else 0 %}
                 <div class="project-card__bar-label">
-                    <span>Revenue Achievement</span>
+                    <span>Gross Revenue Achievement</span>
                     <span>{{ "{:.0f}".format(rev_pct) }}%</span>
                 </div>
                 <div class="project-card__bar-track">
@@ -180,13 +180,13 @@
                 <thead>
                     <tr>
                         <th>Project</th>
-                        <th>Revenue (Budget)</th>
-                        <th>Revenue (Actual)</th>
+                        <th>Gross Revenue (Budget)</th>
+                        <th>Gross Revenue (Actual)</th>
                         <th>Expense (Budget)</th>
                         <th>Expense (Actual)</th>
                         <th>Net P&L (Budget)</th>
                         <th>Net P&L (Actual)</th>
-                        <th>Margin</th>
+                        <th>Sales Revenue %</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -250,7 +250,7 @@
 
     <!-- Monthly Trend Chart -->
     <div class="trend-section">
-        <h3>Monthly Revenue vs Expense by Project</h3>
+        <h3>Monthly Gross Revenue vs Expense by Project</h3>
         <canvas id="projectTrend" height="280"></canvas>
     </div>
 
@@ -327,7 +327,7 @@ if (datasets.length > 0) {
             <h2 style="font-size:1.15rem;font-weight:700;color:var(--navy);margin:0;">Sales Rollup — Revenue Streams & Products</h2>
             <div style="font-size:0.72rem;color:var(--gray-500);">Live FX to INR · from Sales → Projects</div>
         </div>
-        <p style="font-size:0.8rem;color:var(--gray-500);margin:0 0 1.2rem 0;">Cost, revenue and margin aggregated from products entered in the Sales section. Foreign-currency values are converted using the current cached rate.</p>
+        <p style="font-size:0.8rem;color:var(--gray-500);margin:0 0 1.2rem 0;">Cost, Gross Revenue and Sales Revenue aggregated from products entered in the Sales section. Foreign-currency values are converted using the current cached rate.</p>
 
         {% for row in sales_rollup %}
         <div style="border:1px solid var(--gray-200);border-radius:0.5rem;margin-bottom:1rem;overflow:hidden;">
@@ -337,8 +337,8 @@ if (datasets.length > 0) {
                 </div>
                 <div style="display:flex;gap:1.2rem;font-size:0.78rem;">
                     <div><span style="color:var(--gray-500);">Cost</span> <strong style="color:#b91c1c;">₹{{ '{:,.0f}'.format(row.total_cost) }}</strong></div>
-                    <div><span style="color:var(--gray-500);">Revenue</span> <strong style="color:#059669;">₹{{ '{:,.0f}'.format(row.total_revenue) }}</strong></div>
-                    <div><span style="color:var(--gray-500);">Margin</span> <strong style="color:{% if row.total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(row.total_margin) }}</strong></div>
+                    <div><span style="color:var(--gray-500);">Gross Revenue</span> <strong style="color:#059669;">₹{{ '{:,.0f}'.format(row.total_revenue) }}</strong></div>
+                    <div><span style="color:var(--gray-500);">Sales Revenue</span> <strong style="color:{% if row.total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(row.total_margin) }}</strong></div>
                 </div>
             </div>
             <div style="padding:0.5rem 1rem 1rem 1rem;">
@@ -348,8 +348,8 @@ if (datasets.length > 0) {
                             <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Revenue Stream</th>
                             <th style="text-align:left;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Products / Services</th>
                             <th style="text-align:right;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Cost ₹</th>
-                            <th style="text-align:right;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Revenue ₹</th>
-                            <th style="text-align:right;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Margin ₹</th>
+                            <th style="text-align:right;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Gross Revenue ₹</th>
+                            <th style="text-align:right;padding:0.5rem 0.6rem;font-weight:600;color:var(--gray-600);">Sales Revenue ₹</th>
                         </tr>
                     </thead>
                     <tbody>

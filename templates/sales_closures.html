@@ -61,8 +61,8 @@
                         <th style="padding:0.65rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Date</th>
                         <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Product / Client</th>
                         <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Owner</th>
-                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Revenue</th>
-                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Margin</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Gross Revenue</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Sales Revenue</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -98,7 +98,7 @@
                     <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.72rem;text-transform:uppercase;">
                         <th style="padding:0.45rem 0;font-weight:600;">Product</th>
                         <th style="padding:0.45rem 0;font-weight:600;text-align:right;">Deals</th>
-                        <th style="padding:0.45rem 0;font-weight:600;text-align:right;">Margin</th>
+                        <th style="padding:0.45rem 0;font-weight:600;text-align:right;">Sales Revenue</th>
                     </tr></thead>
                     <tbody>
                         {% for p in by_product %}
@@ -138,9 +138,9 @@
         <div class="cd-section">
             <h4>Financials (Original currency)</h4>
             <div class="cd-row"><span class="cd-label">Currency</span><span class="cd-val" id="cdCur">—</span></div>
-            <div class="cd-row"><span class="cd-label">Revenue</span><span class="cd-val" id="cdRev">—</span></div>
+            <div class="cd-row"><span class="cd-label">Gross Revenue</span><span class="cd-val" id="cdRev">—</span></div>
             <div class="cd-row"><span class="cd-label">Cost</span><span class="cd-val" id="cdCost">—</span></div>
-            <div class="cd-row"><span class="cd-label">Margin</span><span class="cd-val" id="cdMargin" style="color:var(--orange);">—</span></div>
+            <div class="cd-row"><span class="cd-label">Sales Revenue</span><span class="cd-val" id="cdMargin" style="color:var(--orange);">—</span></div>
         </div>
         <div class="cd-section">
             <h4>Notes</h4>

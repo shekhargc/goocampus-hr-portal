@@ -5,7 +5,7 @@
     <div style="margin-bottom:1rem;"><a href="/sales/closures" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to Closures</a></div>
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
         <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closure' if mode == 'edit' else 'Record New Closure' }}</h1>
-        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Margin = Revenue − Cost. It's calculated automatically when you save.</p>
+        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Sales Revenue = Gross Revenue − Cost. It's calculated automatically when you save.</p>
 
         <form method="POST">
             {% if mode == 'add' and request.args.get('lead_id') %}
@@ -70,7 +70,7 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Revenue</label>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Gross Revenue</label>
                     <input type="number" step="0.01" min="0" name="revenue" id="cf-rev" value="{{ closure.revenue or 0 if closure else 0 }}" oninput="cfUpdate()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
                 </div>
                 <div>
@@ -80,7 +80,7 @@
             </div>
 
             <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:0.5rem;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.85rem;color:var(--gray-700);">
-                <strong>Margin:</strong> <span id="cf-margin"></span>
+                <strong>Sales Revenue:</strong> <span id="cf-margin"></span>
             </div>
 
             <div style="margin-bottom:1.5rem;">

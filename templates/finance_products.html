@@ -5,7 +5,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
         <div>
             <h1 style="font-size:1.6rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Products & Services (Finance)</h1>
-            <p style="font-size:0.85rem;color:var(--gray-500);margin:0;">Live pull from the Sales catalogue. Each row shows the project and revenue stream the product is linked to, plus INR-converted totals.</p>
+            <p style="font-size:0.85rem;color:var(--gray-500);margin:0;">Live pull from the Sales catalogue. Each row shows the project and Revenue Stream the product is linked to, plus INR-converted totals.</p>
         </div>
         <div style="display:flex;gap:0.6rem;align-items:center;">
             <a href="/finance/budget" style="background:white;border:1px solid var(--gray-300);color:var(--gray-700);text-decoration:none;padding:0.55rem 1rem;border-radius:0.45rem;font-size:0.82rem;font-weight:600;">← Budget</a>
@@ -24,17 +24,17 @@
             <div style="font-size:1.4rem;font-weight:700;color:#b91c1c;margin-top:0.25rem;">₹{{ '{:,.0f}'.format(summary.total_expected_cost) }}</div>
         </div>
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem 1.2rem;">
-            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);font-weight:600;">Expected Revenue</div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);font-weight:600;">Expected Gross Revenue</div>
             <div style="font-size:1.4rem;font-weight:700;color:#059669;margin-top:0.25rem;">₹{{ '{:,.0f}'.format(summary.total_expected_revenue) }}</div>
         </div>
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem 1.2rem;">
-            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);font-weight:600;">Expected Margin</div>
+            <div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);font-weight:600;">Expected Sales Revenue</div>
             <div style="font-size:1.4rem;font-weight:700;color: {% if summary.total_expected_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};margin-top:0.25rem;">₹{{ '{:,.0f}'.format(summary.total_expected_margin) }}</div>
         </div>
     </div>
 
     <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.25);border-radius:0.6rem;padding:0.75rem 1rem;margin-bottom:1.2rem;font-size:0.82rem;color:#065F46;">
-        <strong>How this works:</strong> This list is populated live from Sales → Products & Services. To add or edit a product, head to the Sales module — any change flows into the finance rollup automatically. Booked revenue is pulled from budget entries tagged to the same project.
+        <strong>How this works:</strong> This list is populated live from Sales → Products & Services. To add or edit a product, head to the Sales module — any change flows into the finance rollup automatically. Booked Gross Revenue is pulled from budget entries tagged to the same project.
     </div>
 
     <!-- Products table -->
@@ -47,8 +47,8 @@
                         <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);">Project</th>
                         <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);">Revenue Stream</th>
                         <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Cost (₹)</th>
-                        <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Revenue (₹)</th>
-                        <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Margin (₹)</th>
+                        <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Gross Revenue (₹)</th>
+                        <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Sales Revenue (₹)</th>
                         <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:right;">Project Booked (₹)</th>
                         <th style="padding:0.85rem 1rem;font-weight:600;color:var(--gray-600);border-bottom:1px solid var(--gray-200);text-align:center;">Status</th>
                     </tr>

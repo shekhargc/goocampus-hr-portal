@@ -419,8 +419,8 @@
                     </div>
                     <div style="display:flex;gap:1rem;font-size:0.75rem;">
                         <div><span style="color:var(--gray-500);">Cost</span> <strong style="color:#b91c1c;">₹{{ '{:,.0f}'.format(stream.total_cost) }}</strong></div>
-                        <div><span style="color:var(--gray-500);">Revenue</span> <strong style="color:#059669;">₹{{ '{:,.0f}'.format(stream.total_revenue) }}</strong></div>
-                        <div><span style="color:var(--gray-500);">Margin</span> <strong style="color:{% if stream.total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(stream.total_margin) }}</strong></div>
+                        <div><span style="color:var(--gray-500);">Gross Revenue</span> <strong style="color:#059669;">₹{{ '{:,.0f}'.format(stream.total_revenue) }}</strong></div>
+                        <div><span style="color:var(--gray-500);">Sales Revenue</span> <strong style="color:{% if stream.total_margin >= 0 %}#059669{% else %}#b91c1c{% endif %};">₹{{ '{:,.0f}'.format(stream.total_margin) }}</strong></div>
                     </div>
                     <div style="display:flex;gap:0.4rem;">
                         {% if can_manage %}
@@ -468,11 +468,11 @@
                     </tr>
                     <tr>
                         <th style="text-align:right;background:rgba(74,122,181,0.07);">Cost</th>
-                        <th style="text-align:right;background:rgba(74,122,181,0.07);">Revenue</th>
-                        <th style="text-align:right;background:rgba(74,122,181,0.07);">Margin</th>
+                        <th style="text-align:right;background:rgba(74,122,181,0.07);">Gross Revenue</th>
+                        <th style="text-align:right;background:rgba(74,122,181,0.07);">Sales Revenue</th>
                         <th style="text-align:right;background:rgba(16,185,129,0.07);">Cost ₹</th>
-                        <th style="text-align:right;background:rgba(16,185,129,0.07);">Revenue ₹</th>
-                        <th style="text-align:right;background:rgba(16,185,129,0.07);">Margin ₹</th>
+                        <th style="text-align:right;background:rgba(16,185,129,0.07);">Gross Revenue ₹</th>
+                        <th style="text-align:right;background:rgba(16,185,129,0.07);">Sales Revenue ₹</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -552,7 +552,7 @@
                                         <div class="pd-cost-inr-{{ product.id }}" style="font-size:0.7rem;color:var(--blue-dark);font-weight:600;margin-top:0.2rem;"></div>
                                     </div>
                                     <div>
-                                        <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Revenue</label>
+                                        <label style="font-size:0.7rem;color:var(--gray-500);font-weight:600;">Gross Revenue</label>
                                         <input type="number" step="0.01" min="0" name="sale_price" class="pd-rev-{{ product.id }}" value="{{ product.sale_price or 0 }}" oninput="pdUpdate({{ product.id }})" style="width:100%;padding:0.45rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.82rem;" />
                                         <div class="pd-rev-inr-{{ product.id }}" style="font-size:0.7rem;color:var(--blue-dark);font-weight:600;margin-top:0.2rem;"></div>
                                     </div>

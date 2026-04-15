@@ -247,7 +247,7 @@
         <div class="finance-nav">
             <a href="/finance/budget?fy={{ fy_year }}" class="active">Dashboard</a>
             <a href="/finance/budget/expenses?fy={{ fy_year }}">Expenses</a>
-            <a href="/finance/budget/revenue?fy={{ fy_year }}">Revenue</a>
+            <a href="/finance/budget/revenue?fy={{ fy_year }}">Gross Revenue</a>
             <a href="/finance/budget/projects?fy={{ fy_year }}">Project P&L</a>
             <a href="/finance/budget/report?fy={{ fy_year }}">Report</a>
             <a href="/finance/budget/settings?fy={{ fy_year }}">Settings</a>
@@ -273,7 +273,7 @@
             </div>
         </div>
         <div class="summary-card revenue">
-            <div class="summary-card__label">Total Revenue</div>
+            <div class="summary-card__label">Total Gross Revenue</div>
             <div class="summary-card__row">
                 <span class="summary-card__sublabel">Projected</span>
                 <span class="summary-card__value green">{{ "₹{:,.0f}".format(total_revenue_budget) }}</span>
@@ -301,7 +301,7 @@
                 <span class="summary-card__sub {{ 'green' if expense_var >= 0 else 'red' }}">{{ "₹{:,.0f}".format(expense_var) }} {{ '↓' if expense_var >= 0 else '↑' }}</span>
             </div>
             <div class="summary-card__row">
-                <span class="summary-card__sublabel">Revenue</span>
+                <span class="summary-card__sublabel">Gross Revenue</span>
                 <span class="summary-card__sub {{ 'green' if revenue_var >= 0 else 'red' }}">{{ "₹{:,.0f}".format(revenue_var) }} {{ '↑' if revenue_var >= 0 else '↓' }}</span>
             </div>
         </div>
@@ -324,7 +324,7 @@
                     {% endif %}
                 </div>
                 <div class="month-tile__stat">Expense: <span>{{ "₹{:,.0f}".format(monthly_expense_actual[loop.index0]) }}</span></div>
-                <div class="month-tile__stat">Revenue: <span>{{ "₹{:,.0f}".format(monthly_revenue_actual[loop.index0]) }}</span></div>
+                <div class="month-tile__stat">Gross Revenue: <span>{{ "₹{:,.0f}".format(monthly_revenue_actual[loop.index0]) }}</span></div>
             </a>
             {% endfor %}
         </div>
@@ -364,8 +364,8 @@
                     <th>Quarter</th>
                     <th>Expense Budget</th>
                     <th>Expense Actual</th>
-                    <th>Revenue Projected</th>
-                    <th>Revenue Actual</th>
+                    <th>Gross Revenue Projected</th>
+                    <th>Gross Revenue Actual</th>
                     <th>Net (Budget)</th>
                     <th>Net (Actual)</th>
                 </tr>
@@ -428,7 +428,7 @@ new Chart(ctx, {
                 order: 2
             },
             {
-                label: 'Revenue Projected',
+                label: 'Gross Revenue Projected',
                 type: 'line',
                 data: {{ monthly_revenue_budget|tojson }},
                 borderColor: '#10B981',
@@ -441,7 +441,7 @@ new Chart(ctx, {
                 order: 1
             },
             {
-                label: 'Revenue Actual',
+                label: 'Gross Revenue Actual',
                 type: 'line',
                 data: {{ monthly_revenue_actual|tojson }},
                 borderColor: '#059669',

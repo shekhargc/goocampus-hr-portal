@@ -45,9 +45,9 @@
     {% if totals %}
     <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;margin-bottom:1.5rem;">
         {% for label, t, a, d, key in [
-            ('Annual Margin', totals.annual_target, totals.annual_achieved, totals.annual_diff, 'annual'),
-            ('Quarter Margin', totals.quarter_target, totals.quarter_achieved, totals.quarter_diff, 'quarter'),
-            ('Month Margin', totals.month_target, totals.month_achieved, totals.month_diff, 'month')
+            ('Annual Sales Revenue', totals.annual_target, totals.annual_achieved, totals.annual_diff, 'annual'),
+            ('Quarter Sales Revenue', totals.quarter_target, totals.quarter_achieved, totals.quarter_diff, 'quarter'),
+            ('Month Sales Revenue', totals.month_target, totals.month_achieved, totals.month_diff, 'month')
         ] %}
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.1rem 1.3rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
             <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{{ label }}</div>
@@ -86,9 +86,9 @@
                     <tr style="background:var(--gray-50);text-align:left;">
                         <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;width:55px;">Sl No</th>
                         <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Sales Member</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Annual T/A</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Quarter T/A</th>
-                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Month T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Annual Sales Revenue — Target / Achieved">Annual T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Quarter Sales Revenue — Target / Achieved">Quarter T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;" title="Month Sales Revenue — Target / Achieved">Month T/A</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Leads</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Hot</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Calls</th>
@@ -146,8 +146,8 @@
                     <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.75rem;text-transform:uppercase;">
                         <th style="padding:0.5rem 0.5rem 0.5rem 0;font-weight:600;">Product</th>
                         <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Deals</th>
-                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Revenue</th>
-                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Margin</th>
+                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Gross Revenue</th>
+                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Sales Revenue</th>
                     </tr></thead>
                     <tbody>
                         {% for p in top_products %}

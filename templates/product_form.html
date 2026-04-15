@@ -67,14 +67,14 @@
                     <div id="pf-cost-inr" style="font-size:0.78rem;color:var(--blue-dark);font-weight:600;margin-top:0.35rem;"></div>
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Sales Revenue</label>
+                    <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Gross Revenue</label>
                     <input type="number" step="0.01" min="0" name="sale_price" id="pf-rev" value="{{ product.sale_price or 0 }}" oninput="pfUpdate()" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;" />
                     <div id="pf-rev-inr" style="font-size:0.78rem;color:var(--blue-dark);font-weight:600;margin-top:0.35rem;"></div>
                 </div>
             </div>
 
             <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:0.5rem;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.82rem;color:var(--gray-700);">
-                <strong>Margin Preview:</strong> <span id="pf-margin-orig"></span> <span id="pf-margin-inr" style="color:var(--blue-dark);margin-left:0.5rem;"></span>
+                <strong>Sales Revenue Preview:</strong> <span id="pf-margin-orig"></span> <span id="pf-margin-inr" style="color:var(--blue-dark);margin-left:0.5rem;"></span>
             </div>
 
             <div style="margin-bottom:1.5rem;">
