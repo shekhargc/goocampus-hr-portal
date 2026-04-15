@@ -10692,38 +10692,18 @@ def sales_team_admin():
         action = request.form.get('action')
         if action == 'add':
             eid = int(request.form.get('employee_id'))
-            mgr_raw = request.form.get('manager_employee_id') or ''
-            mgr = int(mgr_raw) if mgr_raw.isdigit() else None
-            if mgr == eid:
-                mgr = None
             r = (request.form.get('role') or 'rep').strip().lower()
+            # Manager role is no longer offered in the UI; only accept rep/viewer from new adds.
+            # ('manager' is still tolerated from legacy edit rows.)
             if r not in ('rep', 'manager', 'viewer'):
                 r = 'rep'
-            if r in ('manager', 'viewer'):
-                mgr = None  # Managers/Viewers don't report to anyone in CRM scope
             try:
-                # If the chosen manager isn't yet on the Sales Team as an active Manager,
-                # auto-promote them so the reporting chain actually works.
-                # BUT: never auto-promote a Viewer — viewers are management/observers,
-                # not sales sellers. If the picked manager is a viewer, drop the link.
-                if mgr is not None:
-                    existing = conn.execute(
-                        "SELECT role, is_active FROM sales_team WHERE employee_id = ?",
-                        (mgr,)
-                    ).fetchone()
-                    if existing and (existing['role'] or '').lower() == 'viewer' and existing['is_active'] == 1:
-                        mgr = None  # Viewer stays a Viewer; they aren't anyone's sales manager
-                    else:
-                        conn.execute(
-                            "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
-                            "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
-                            (mgr,)
-                        )
+                # No manager assignment — manager_employee_id is always NULL now.
                 conn.execute(
-                    'INSERT INTO sales_team (employee_id, manager_employee_id, role, is_active) VALUES (?, ?, ?, 1) '
-                    'ON CONFLICT (employee_id) DO UPDATE SET manager_employee_id = EXCLUDED.manager_employee_id, '
+                    'INSERT INTO sales_team (employee_id, manager_employee_id, role, is_active) VALUES (?, NULL, ?, 1) '
+                    'ON CONFLICT (employee_id) DO UPDATE SET manager_employee_id = NULL, '
                     'role = EXCLUDED.role, is_active = 1',
-                    (eid, mgr, r)
+                    (eid, r)
                 )
                 conn.commit()
                 flash('Sales team member saved', 'success')
@@ -10732,43 +10712,14 @@ def sales_team_admin():
                 flash(f'Could not save: {e}', 'error')
         elif action == 'update':
             eid = int(request.form.get('employee_id'))
-            mgr_raw = request.form.get('manager_employee_id') or ''
-            mgr = int(mgr_raw) if mgr_raw.isdigit() else None
-            # Prevent self-reference: a person cannot be their own manager
-            if mgr == eid:
-                mgr = None
             r = (request.form.get('role') or 'rep').strip().lower()
             if r not in ('rep', 'manager', 'viewer'):
                 r = 'rep'
-            # Managers and Viewers don't have a manager
-            if r in ('manager', 'viewer'):
-                mgr = None
             try:
-                # Auto-promote the selected manager if they aren't already an active Manager
-                # BUT: never promote a Viewer — they're observers, not sales managers.
-                if mgr is not None:
-                    existing = conn.execute(
-                        "SELECT role, is_active FROM sales_team WHERE employee_id = ?",
-                        (mgr,)
-                    ).fetchone()
-                    if existing and (existing['role'] or '').lower() == 'viewer' and existing['is_active'] == 1:
-                        mgr = None  # Viewer stays a Viewer; they aren't anyone's sales manager
-                    else:
-                        conn.execute(
-                            "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
-                            "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
-                            (mgr,)
-                        )
-                # If this member is becoming a Viewer, also clear any reports pointing at them
-                # (a Viewer cannot be another rep's manager)
-                if r == 'viewer':
-                    conn.execute(
-                        'UPDATE sales_team SET manager_employee_id = NULL WHERE manager_employee_id = ?',
-                        (eid,)
-                    )
+                # Role change only; manager hierarchy is no longer used.
                 conn.execute(
-                    'UPDATE sales_team SET role = ?, manager_employee_id = ? WHERE employee_id = ?',
-                    (r, mgr, eid)
+                    'UPDATE sales_team SET role = ?, manager_employee_id = NULL WHERE employee_id = ?',
+                    (r, eid)
                 )
                 conn.commit()
                 flash('Member updated', 'success')
@@ -10818,50 +10769,10 @@ def sales_team_admin():
         "                WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1)"
     ).fetchone()
     no_access_count = no_access_count['c'] if no_access_count else 0
-    current_managers = [m for m in members if (m['role'] or '').lower() == 'manager']
-    current_manager_ids = {m['employee_id'] for m in current_managers}
-    current_viewer_ids = {m['employee_id'] for m in members if (m['role'] or '').lower() == 'viewer'}
-    current_member_ids = {m['employee_id'] for m in members}
-
-    # Manager picker: include anyone with Sales module access, so admin can pick
-    # someone like Santosh (Robin's reporting-to) even if he's not yet a Manager.
-    # The backend will auto-promote them on save.
-    manager_pool_rows = conn.execute(
-        "SELECT e.id AS employee_id, e.name, e.emp_code FROM employees e "
-        "WHERE e.is_active = 1 AND e.emp_code != 'admin' "
-        "AND (e.is_admin = 1 OR EXISTS ("
-        "  SELECT 1 FROM module_access ma "
-        "  WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1"
-        ")) ORDER BY e.name"
-    ).fetchall()
-    manager_pool = []
-    for row in manager_pool_rows:
-        eid_x = row['employee_id']
-        # Viewers cannot act as managers (they're read-only observers, not sales owners)
-        if eid_x in current_viewer_ids:
-            continue
-        if eid_x in current_manager_ids:
-            status = 'manager'
-        elif eid_x in current_member_ids:
-            status = 'rep'
-        else:
-            status = 'new'
-        manager_pool.append({
-            'employee_id': eid_x,
-            'name': row['name'],
-            'emp_code': row['emp_code'],
-            'status': status,
-        })
-
-    # Map: employee id -> reporting_to (for auto-suggesting manager from HR profile)
-    emp_reports_to = {e['id']: e['reporting_to'] for e in available_emps if e['reporting_to']}
     conn.close()
     return render_template('sales_team.html', user=user, members=members,
                            available_emps=available_emps,
-                           managers=manager_pool,
-                           no_access_count=no_access_count,
-                           emp_reports_to=emp_reports_to,
-                           manager_ids=list(current_manager_ids))
+                           no_access_count=no_access_count)
 
 
 # ---- Leads -------------------------------------------------------------
