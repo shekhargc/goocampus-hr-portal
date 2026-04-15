@@ -5,7 +5,7 @@
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="margin-bottom:1.5rem;">
         <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Team</h1>
-        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add reps and managers. Reps see only their own work; managers see their team; admins see everyone.</p>
+        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add sales members and managers. Sales members see only their own work; managers see their team; admins see everyone.</p>
     </div>
 
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
@@ -34,12 +34,12 @@
             <div>
                 <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Role *</label>
                 <select name="role" id="addRoleSelect" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
-                    <option value="rep">Rep</option>
+                    <option value="rep">Sales Member</option>
                     <option value="manager">Manager</option>
                 </select>
             </div>
             <div id="addManagerWrap">
-                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Manager (optional, for reps)</label>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Manager (optional, for sales members)</label>
                 <select name="manager_employee_id" id="addManagerSelect" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
                     <option value="">— No manager —</option>
                     {% for m in managers %}
@@ -80,7 +80,7 @@
                         {% if (m.role or 'rep') == 'manager' %}
                         <span style="background:#e0e7ff;color:#3730a3;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Manager</span>
                         {% else %}
-                        <span style="background:#fef3c7;color:#92400e;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Rep</span>
+                        <span style="background:#fef3c7;color:#92400e;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Sales Member</span>
                         {% endif %}
                     </td>
                     <td style="padding:0.7rem 0.6rem;color:var(--gray-700);" class="view-mode">{{ m.manager_name or '—' }}</td>
@@ -98,7 +98,7 @@
                             <input type="hidden" name="action" value="update" />
                             <input type="hidden" name="employee_id" value="{{ m.employee_id }}" />
                             <select name="role" class="edit-role-{{ m.employee_id }}" onchange="toggleEditManager({{ m.employee_id }})" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
-                                <option value="rep" {% if (m.role or 'rep') == 'rep' %}selected{% endif %}>Rep</option>
+                                <option value="rep" {% if (m.role or 'rep') == 'rep' %}selected{% endif %}>Sales Member</option>
                                 <option value="manager" {% if m.role == 'manager' %}selected{% endif %}>Manager</option>
                             </select>
                             <select name="manager_employee_id" class="edit-mgr-{{ m.employee_id }}" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
