@@ -43,7 +43,7 @@
                 <select name="manager_employee_id" id="addManagerSelect" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
                     <option value="">— No manager —</option>
                     {% for m in managers %}
-                    <option value="{{ m.employee_id }}">{{ m.name }}</option>
+                    <option value="{{ m.employee_id }}">{{ m.name }}{% if m.status == 'manager' %} — Manager{% elif m.status == 'rep' %} (will be promoted to Manager){% else %} (will be added as Manager){% endif %}</option>
                     {% endfor %}
                 </select>
                 <div id="reportsToHint" style="display:none;font-size:0.72rem;color:#059669;margin-top:0.25rem;">Auto-suggested from employee's reporting line.</div>
@@ -104,7 +104,7 @@
                             <select name="manager_employee_id" class="edit-mgr-{{ m.employee_id }}" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
                                 <option value="">— No manager —</option>
                                 {% for mgr in managers %}{% if mgr.employee_id != m.employee_id %}
-                                <option value="{{ mgr.employee_id }}" {% if m.manager_employee_id == mgr.employee_id %}selected{% endif %}>{{ mgr.name }}</option>
+                                <option value="{{ mgr.employee_id }}" {% if m.manager_employee_id == mgr.employee_id %}selected{% endif %}>{{ mgr.name }}{% if mgr.status == 'manager' %} — Manager{% elif mgr.status == 'rep' %} (will promote to Manager){% else %} (will add as Manager){% endif %}</option>
                                 {% endif %}{% endfor %}
                             </select>
                             <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.45rem 0.9rem;border-radius:0.35rem;font-weight:600;cursor:pointer;font-size:0.8rem;">Save</button>
@@ -124,8 +124,9 @@
 <script>
 // Map of employee_id -> reporting_to (from employee profile)
 const EMP_REPORTS_TO = {{ emp_reports_to|tojson }};
-// Set of employee_ids that are currently Managers in the sales team
-const MANAGER_IDS = new Set({{ manager_ids|tojson }});
+// Set of employee_ids eligible to appear in the Manager dropdown (anyone with sales access).
+// Note: backend auto-promotes a non-Manager pick to Manager on save.
+const MANAGER_POOL_IDS = new Set([{% for m in managers %}{{ m.employee_id }}{% if not loop.last %},{% endif %}{% endfor %}]);
 
 function toggleAddManager() {
     const role = document.getElementById('addRoleSelect').value;
@@ -145,7 +146,7 @@ function autofillManagerFromReportsTo() {
     hint.style.display = 'none';
     if (!empId) return;
     const reportsTo = EMP_REPORTS_TO[empId];
-    if (reportsTo && MANAGER_IDS.has(reportsTo)) {
+    if (reportsTo && MANAGER_POOL_IDS.has(reportsTo)) {
         // Only autofill if currently unselected
         if (!mgrSel.value) {
             mgrSel.value = String(reportsTo);

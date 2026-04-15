@@ -78,7 +78,8 @@
             <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
                 <thead>
                     <tr style="background:var(--gray-50);text-align:left;">
-                        <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Rep</th>
+                        <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;width:55px;">Sl No</th>
+                        <th style="padding:0.7rem 0.8rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Rep</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Annual T/A</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Quarter T/A</th>
                         <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Month T/A</th>
@@ -91,14 +92,10 @@
                 <tbody>
                     {% for r in rows %}
                     <tr style="border-top:1px solid var(--gray-100);">
-                        <td style="padding:0.7rem 1rem;">
-                            <div style="display:flex;align-items:center;gap:0.65rem;">
-                                <img src="{{ r.photo_url or '/static/default-avatar.png' }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
-                                <div>
-                                    <div style="font-weight:600;color:var(--navy);">{{ r.name }}</div>
-                                    <div style="font-size:0.72rem;color:var(--gray-500);">{{ r.emp_code }} &middot; <span style="text-transform:capitalize;">{{ r.role }}</span></div>
-                                </div>
-                            </div>
+                        <td style="padding:0.7rem 0.8rem;color:var(--gray-500);font-weight:600;">{{ loop.index }}</td>
+                        <td style="padding:0.7rem 0.8rem;">
+                            <div style="font-weight:600;color:var(--navy);">{{ r.name }}</div>
+                            <div style="font-size:0.72rem;color:var(--gray-500);">{{ r.emp_code }} &middot; <span style="text-transform:capitalize;">{{ r.role }}</span></div>
                         </td>
                         <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
                             <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.annual_target) }}</div>

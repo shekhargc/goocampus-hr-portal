@@ -10654,10 +10654,22 @@ def sales_team_admin():
             eid = int(request.form.get('employee_id'))
             mgr_raw = request.form.get('manager_employee_id') or ''
             mgr = int(mgr_raw) if mgr_raw.isdigit() else None
+            if mgr == eid:
+                mgr = None
             r = (request.form.get('role') or 'rep').strip().lower()
             if r not in ('rep', 'manager'):
                 r = 'rep'
+            if r == 'manager':
+                mgr = None  # Managers don't report to anyone in CRM scope
             try:
+                # If the chosen manager isn't yet on the Sales Team as an active Manager,
+                # auto-promote them so the reporting chain actually works.
+                if mgr is not None:
+                    conn.execute(
+                        "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
+                        "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                        (mgr,)
+                    )
                 conn.execute(
                     'INSERT INTO sales_team (employee_id, manager_employee_id, role, is_active) VALUES (?, ?, ?, 1) '
                     'ON CONFLICT (employee_id) DO UPDATE SET manager_employee_id = EXCLUDED.manager_employee_id, '
@@ -10683,6 +10695,13 @@ def sales_team_admin():
             if r == 'manager':
                 mgr = None
             try:
+                # Auto-promote the selected manager if they aren't already an active Manager
+                if mgr is not None:
+                    conn.execute(
+                        "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
+                        "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                        (mgr,)
+                    )
                 conn.execute(
                     'UPDATE sales_team SET role = ?, manager_employee_id = ? WHERE employee_id = ?',
                     (r, mgr, eid)
@@ -10735,17 +10754,46 @@ def sales_team_admin():
         "                WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1)"
     ).fetchone()
     no_access_count = no_access_count['c'] if no_access_count else 0
-    managers = [m for m in members if (m['role'] or '').lower() == 'manager']
-    # Map: available employee id -> reporting_to (from employee profile).
-    # Used by the Add form to auto-suggest the Sales Manager from the org-chart reporting line.
+    current_managers = [m for m in members if (m['role'] or '').lower() == 'manager']
+    current_manager_ids = {m['employee_id'] for m in current_managers}
+    current_member_ids = {m['employee_id'] for m in members}
+
+    # Manager picker: include anyone with Sales module access, so admin can pick
+    # someone like Santosh (Robin's reporting-to) even if he's not yet a Manager.
+    # The backend will auto-promote them on save.
+    manager_pool_rows = conn.execute(
+        "SELECT e.id AS employee_id, e.name, e.emp_code FROM employees e "
+        "WHERE e.is_active = 1 AND e.emp_code != 'admin' "
+        "AND (e.is_admin = 1 OR EXISTS ("
+        "  SELECT 1 FROM module_access ma "
+        "  WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1"
+        ")) ORDER BY e.name"
+    ).fetchall()
+    manager_pool = []
+    for row in manager_pool_rows:
+        eid_x = row['employee_id']
+        if eid_x in current_manager_ids:
+            status = 'manager'
+        elif eid_x in current_member_ids:
+            status = 'rep'
+        else:
+            status = 'new'
+        manager_pool.append({
+            'employee_id': eid_x,
+            'name': row['name'],
+            'emp_code': row['emp_code'],
+            'status': status,
+        })
+
+    # Map: employee id -> reporting_to (for auto-suggesting manager from HR profile)
     emp_reports_to = {e['id']: e['reporting_to'] for e in available_emps if e['reporting_to']}
-    manager_ids = {m['employee_id'] for m in managers}
     conn.close()
     return render_template('sales_team.html', user=user, members=members,
-                           available_emps=available_emps, managers=managers,
+                           available_emps=available_emps,
+                           managers=manager_pool,
                            no_access_count=no_access_count,
                            emp_reports_to=emp_reports_to,
-                           manager_ids=list(manager_ids))
+                           manager_ids=list(current_manager_ids))
 
 
 # ---- Leads -------------------------------------------------------------
