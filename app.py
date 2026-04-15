@@ -7611,9 +7611,20 @@ def finance_edit_month(month, year):
         return redirect(url_for('finance_edit_month', month=month, year=year, fy=fy_year))
 
     # GET: load existing data
-    # Hide legacy Salaries & Wages category — salaries are now line-item managed
+    # Hide categories that are populated from line-items (not manual entry):
+    #   - Salaries & Wages  → fed from salary_items
+    #   - Software Tool Subscription (old: Software & Tools) → fed from subscription_items
+    # Both are rolled up automatically; showing them in "Other Expense Categories"
+    # would let users double-enter values that the auto-rollup already handles.
     expense_cats = conn.execute(
-        "SELECT * FROM budget_categories WHERE cat_type = 'expense' AND is_active = 1 AND LOWER(name) NOT IN ('salaries & wages', 'salaries and wages', 'salary') ORDER BY sort_order"
+        "SELECT * FROM budget_categories "
+        "WHERE cat_type = 'expense' AND is_active = 1 "
+        "AND LOWER(TRIM(name)) NOT IN ("
+        "  'salaries & wages', 'salaries and wages', 'salary', 'salaries',"
+        "  'software tool subscription', 'software tools subscription',"
+        "  'software & tools', 'software and tools', 'software', 'subscriptions'"
+        ") "
+        "ORDER BY sort_order"
     ).fetchall()
     dept_cats = conn.execute(
         "SELECT * FROM budget_categories WHERE cat_type = 'department' AND is_active = 1 ORDER BY sort_order"
