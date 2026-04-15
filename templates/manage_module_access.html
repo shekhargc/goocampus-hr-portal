@@ -285,6 +285,27 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Sales access level (only applies when Sales module is selected) -->
+            <div id="salesLevelBox" style="display:none;margin:0 0 1.2rem 0;padding:1rem 1.15rem;background:#f8fafc;border:1px solid var(--gray-200);border-radius:0.6rem;">
+                <div style="font-weight:700;color:var(--navy);font-size:0.9rem;margin-bottom:0.35rem;">Sales access level</div>
+                <div style="font-size:0.8rem;color:var(--gray-500);margin-bottom:0.7rem;">Applies to the Sales module only.</div>
+                <label style="display:flex;gap:0.65rem;align-items:flex-start;padding:0.55rem 0.7rem;border:1px solid var(--gray-200);border-radius:0.45rem;background:white;cursor:pointer;margin-bottom:0.45rem;">
+                    <input type="radio" name="access_level" value="standard" checked style="margin-top:0.25rem;accent-color:var(--orange);" />
+                    <div>
+                        <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">Standard (default)</div>
+                        <div style="font-size:0.78rem;color:var(--gray-500);">User can see Sales. To own leads/targets/closures they must also be added under <strong>Sales &rarr; Team</strong>.</div>
+                    </div>
+                </label>
+                <label style="display:flex;gap:0.65rem;align-items:flex-start;padding:0.55rem 0.7rem;border:1px solid var(--gray-200);border-radius:0.45rem;background:white;cursor:pointer;">
+                    <input type="radio" name="access_level" value="admin_view" style="margin-top:0.25rem;accent-color:var(--orange);" />
+                    <div>
+                        <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">Admin View (read-only, sees everything)</div>
+                        <div style="font-size:0.78rem;color:var(--gray-500);">User sees all sales team members' data like an admin, but cannot add, edit, or delete. No targets or leads assigned to them. Use for management who oversee Sales (e.g. Santosh, Ashwini, Ejaz).</div>
+                    </div>
+                </label>
+            </div>
+
             <button type="submit" class="grant-btn" id="grantBtn" disabled>
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
                 Grant Access
@@ -328,6 +349,9 @@
             <div class="access-modules">
                 {% if access.module == 'sales' %}
                 <span class="module-badge module-badge-sales {% if not access.is_active %}module-badge-inactive{% endif %}">Sales</span>
+                {% if access.access_level == 'admin_view' %}
+                <span class="module-badge {% if not access.is_active %}module-badge-inactive{% endif %}" style="background:#fef3c7;color:#92400e;" title="Admin View: read-only access to all sales data">Admin View</span>
+                {% endif %}
                 {% elif access.module == 'projects' %}
                 <span class="module-badge module-badge-projects {% if not access.is_active %}module-badge-inactive{% endif %}">Projects</span>
                 {% elif access.module == 'b2b_meetings' %}
@@ -335,6 +359,19 @@
                 {% endif %}
             </div>
             <div class="actions-cell">
+                {% if access.module == 'sales' %}
+                {% if access.access_level == 'admin_view' %}{% set confirm_msg = 'Switch ' ~ access.name ~ ' back to Standard sales access?' %}{% set next_level = 'standard' %}{% set btn_label = 'Standard' %}{% else %}{% set confirm_msg = 'Give ' ~ access.name ~ ' Admin View access to Sales? They will see all sales data read-only.' %}{% set next_level = 'admin_view' %}{% set btn_label = 'Admin View' %}{% endif %}
+                <!-- Flip Sales access level (standard <-> admin_view) -->
+                <form method="POST" action="/admin/module-access" style="display: inline;"
+                      onsubmit="return confirm('{{ confirm_msg }}');">
+                    <input type="hidden" name="action" value="set_level">
+                    <input type="hidden" name="access_id" value="{{ access.access_id }}">
+                    <input type="hidden" name="new_level" value="{{ next_level }}">
+                    <button type="submit" style="padding:0.35rem 0.7rem;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:0.4rem;cursor:pointer;font-size:0.76rem;font-weight:600;font-family:inherit;" title="Toggle access level">
+                        &#8594; {{ btn_label }}
+                    </button>
+                </form>
+                {% endif %}
                 <!-- Toggle Active/Inactive -->
                 <form method="POST" action="/admin/module-access" style="display: inline;">
                     <input type="hidden" name="action" value="toggle">
@@ -390,6 +427,11 @@ function updateSummary() {
     const modCount = document.querySelectorAll('input[name="modules"]:checked').length;
     const summary = document.getElementById('selectedSummary');
     const btn = document.getElementById('grantBtn');
+
+    // Show/hide Sales access-level picker based on whether Sales module is checked.
+    const salesBox = document.getElementById('salesLevelBox');
+    const salesChecked = document.querySelector('input[name="modules"][value="sales"]:checked');
+    if (salesBox) salesBox.style.display = salesChecked ? '' : 'none';
 
     if (empCount > 0 && modCount > 0) {
         summary.textContent = empCount + ' employee' + (empCount > 1 ? 's' : '') + ' x ' + modCount + ' module' + (modCount > 1 ? 's' : '') + ' = ' + (empCount * modCount) + ' grant' + (empCount * modCount > 1 ? 's' : '');

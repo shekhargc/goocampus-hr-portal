@@ -5,12 +5,13 @@
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="margin-bottom:1.5rem;">
         <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Team</h1>
-        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add sales members and viewers. Sales members see only their own leads, closures, targets, and calls. Viewers see everything across the team (read-only, no targets of their own). Admins see everyone.</p>
+        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add sales members who own leads, closures, targets, and calls. For read-only management visibility (Santosh, Ashwini, Ejaz and similar), grant <strong>Admin View</strong> from <a href="/admin/module-access" style="color:var(--orange);font-weight:600;text-decoration:none;">Module Access</a> instead — they don't need to be on the sales team.</p>
     </div>
 
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
-        <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 0.5rem 0;">Add team member</h2>
-        <p style="margin:0 0 1rem 0;font-size:0.8rem;color:var(--gray-500);">Only employees with <strong>Sales module access</strong> can be added. <a href="/admin/module-access" style="color:var(--orange);font-weight:600;text-decoration:none;">Grant Sales access &rarr;</a></p>
+        <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 0.5rem 0;">Add sales member</h2>
+        <p style="margin:0 0 1rem 0;font-size:0.8rem;color:var(--gray-500);">Sales members own leads, closures, and targets. Only employees with <strong>Sales module access</strong> can be added. <a href="/admin/module-access" style="color:var(--orange);font-weight:600;text-decoration:none;">Grant Sales access &rarr;</a></p>
+        <p style="margin:0 0 1rem 0;font-size:0.8rem;color:var(--gray-500);">For <strong>read-only admin view</strong> (management who oversee sales without owning targets), use <a href="/admin/module-access" style="color:var(--orange);font-weight:600;text-decoration:none;">Module Access &rarr; Admin View</a>.</p>
         {% if available_emps|length == 0 and no_access_count > 0 %}
         <div style="background:#fef3c7;border:1px solid #fcd34d;color:#92400e;padding:0.7rem 0.9rem;border-radius:0.45rem;font-size:0.85rem;margin-bottom:1rem;">
             <strong>No eligible employees.</strong> {{ no_access_count }} active employee(s) don't have Sales module access yet. <a href="/admin/module-access" style="color:#92400e;font-weight:700;text-decoration:underline;">Grant access first &rarr;</a>
@@ -20,8 +21,9 @@
             All eligible employees are already on the team.
         </div>
         {% endif %}
-        <form method="POST" id="addMemberForm" style="display:grid;grid-template-columns:2fr 1.2fr auto;gap:0.7rem;align-items:end;">
+        <form method="POST" id="addMemberForm" style="display:grid;grid-template-columns:1fr auto;gap:0.7rem;align-items:end;">
             <input type="hidden" name="action" value="add" />
+            <input type="hidden" name="role" value="rep" />
             <div>
                 <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Employee *</label>
                 <select name="employee_id" id="addEmployeeSelect" required {% if available_emps|length == 0 %}disabled{% endif %} style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;{% if available_emps|length == 0 %}background:var(--gray-50);{% endif %}">
@@ -31,14 +33,7 @@
                     {% endfor %}
                 </select>
             </div>
-            <div>
-                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Role *</label>
-                <select name="role" id="addRoleSelect" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
-                    <option value="rep">Sales Member</option>
-                    <option value="viewer">Viewer (read-only)</option>
-                </select>
-            </div>
-            <button type="submit" {% if available_emps|length == 0 %}disabled{% endif %} style="background:var(--orange);color:white;border:none;padding:0.55rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:{% if available_emps|length == 0 %}not-allowed;opacity:0.5{% else %}pointer{% endif %};font-size:0.88rem;height:38px;">Add</button>
+            <button type="submit" {% if available_emps|length == 0 %}disabled{% endif %} style="background:var(--orange);color:white;border:none;padding:0.55rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:{% if available_emps|length == 0 %}not-allowed;opacity:0.5{% else %}pointer{% endif %};font-size:0.88rem;height:38px;">Add as Sales Member</button>
         </form>
     </div>
 
@@ -89,7 +84,7 @@
                             <input type="hidden" name="employee_id" value="{{ m.employee_id }}" />
                             <select name="role" class="edit-role-{{ m.employee_id }}" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
                                 <option value="rep" {% if (m.role or 'rep') == 'rep' %}selected{% endif %}>Sales Member</option>
-                                <option value="viewer" {% if m.role == 'viewer' %}selected{% endif %}>Viewer (read-only)</option>
+                                {% if m.role == 'viewer' %}<option value="viewer" selected>Viewer (legacy)</option>{% endif %}
                                 {% if m.role == 'manager' %}<option value="manager" selected>Manager (legacy)</option>{% endif %}
                             </select>
                             <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.45rem 0.9rem;border-radius:0.35rem;font-weight:600;cursor:pointer;font-size:0.8rem;">Save</button>

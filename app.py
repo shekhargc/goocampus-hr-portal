@@ -3933,6 +3933,16 @@ def ensure_crm_tables():
             conn.commit()
         except Exception:
             conn.rollback()  # Required for PostgreSQL to reset aborted transaction state
+        # Add access_level column (migration for existing deployments)
+        # 'standard' = regular module access; 'admin_view' = read-only admin-level visibility across the module
+        try:
+            conn.execute("ALTER TABLE module_access ADD COLUMN access_level TEXT DEFAULT 'standard'")
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
         # Add meeting_category column to b2b_trips (migration for existing deployments)
         try:
             conn.execute("ALTER TABLE b2b_trips ADD COLUMN meeting_category TEXT DEFAULT 'face_to_face'")
@@ -5437,14 +5447,18 @@ def manage_module_access():
         if action == 'grant':
             employee_ids = request.form.getlist('employee_ids')
             modules = request.form.getlist('modules')
+            # access_level only meaningful for sales. 'standard' or 'admin_view'.
+            raw_level = (request.form.get('access_level') or 'standard').strip().lower()
+            sales_level = 'admin_view' if raw_level == 'admin_view' else 'standard'
             if employee_ids and modules:
                 for emp_id in employee_ids:
                     for module in modules:
+                        level = sales_level if module == 'sales' else 'standard'
                         conn.execute('''
-                            INSERT INTO module_access (employee_id, module, granted_by, is_active)
-                            VALUES (?, ?, ?, 1)
-                            ON CONFLICT (employee_id, module) DO UPDATE SET is_active = 1, granted_by = ?
-                        ''', (emp_id, module, user['id'], user['id']))
+                            INSERT INTO module_access (employee_id, module, granted_by, is_active, access_level)
+                            VALUES (?, ?, ?, 1, ?)
+                            ON CONFLICT (employee_id, module) DO UPDATE SET is_active = 1, granted_by = ?, access_level = ?
+                        ''', (emp_id, module, user['id'], level, user['id'], level))
                 conn.commit()
                 flash(f'Access granted to {len(employee_ids)} employee(s) for {len(modules)} module(s)', 'success')
             else:
@@ -5458,6 +5472,20 @@ def manage_module_access():
                 conn.commit()
                 flash('Access status updated', 'success')
 
+        elif action == 'set_level':
+            # Flip access_level between 'standard' and 'admin_view' (sales only).
+            access_id = request.form.get('access_id')
+            new_level = (request.form.get('new_level') or 'standard').strip().lower()
+            if new_level not in ('standard', 'admin_view'):
+                new_level = 'standard'
+            if access_id:
+                conn.execute(
+                    "UPDATE module_access SET access_level = ? WHERE id = ? AND module = 'sales'",
+                    (new_level, access_id)
+                )
+                conn.commit()
+                flash('Access level updated', 'success')
+
         elif action == 'revoke':
             access_id = request.form.get('access_id')
             if access_id:
@@ -5470,7 +5498,8 @@ def manage_module_access():
 
     employees = conn.execute("SELECT id, name, emp_code, department, photo_url FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
     access_list = conn.execute('''
-        SELECT ma.id as access_id, ma.employee_id, ma.module, ma.is_active, ma.created_at,
+        SELECT ma.id as access_id, ma.employee_id, ma.module, ma.is_active,
+               COALESCE(ma.access_level, 'standard') as access_level, ma.created_at,
                e.name, e.emp_code, e.department, e.photo_url,
                g.name as granted_by_name
         FROM module_access ma
@@ -10367,6 +10396,17 @@ def get_sales_role(user):
         return 'admin'
     try:
         conn = get_db()
+        # First: check module_access for admin_view level on sales module.
+        # Viewer role is now driven by Module Access (not Sales Team).
+        ma = conn.execute(
+            "SELECT access_level FROM module_access "
+            "WHERE employee_id = ? AND module = 'sales' AND is_active = 1",
+            (user['id'],)
+        ).fetchone()
+        if ma and (ma['access_level'] or 'standard').lower() == 'admin_view':
+            conn.close()
+            return 'viewer'
+        # Otherwise, fall back to sales_team membership for rep/manager/legacy viewer.
         row = conn.execute(
             'SELECT role FROM sales_team WHERE employee_id = ? AND is_active = 1',
             (user['id'],)
