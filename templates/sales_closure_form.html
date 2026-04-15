@@ -1,0 +1,108 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Record' }} Closure - Sales CRM{% endblock %}
+{% block content %}
+<div style="max-width:780px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/closures" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to Closures</a></div>
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+        <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closure' if mode == 'edit' else 'Record New Closure' }}</h1>
+        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Margin = Revenue − Cost. It's calculated automatically when you save.</p>
+
+        <form method="POST">
+            {% if mode == 'add' and request.args.get('lead_id') %}
+            <input type="hidden" name="lead_id" value="{{ request.args.get('lead_id') }}" />
+            {% endif %}
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Owner *</label>
+                    <select name="employee_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                        {% for o in owners %}
+                        <option value="{{ o.id }}" {% if closure and closure.employee_id == o.id %}selected{% elif not closure and o.id == user.id %}selected{% endif %}>{{ o.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Close Date *</label>
+                    <input type="date" name="close_date" required value="{{ closure.close_date if closure else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Product/Service</label>
+                    <select name="product_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                        <option value="">— Custom (use name below) —</option>
+                        {% for p in products %}
+                        <option value="{{ p.id }}" {% if closure and closure.product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Product Name (override)</label>
+                    <input type="text" name="product_name" maxlength="120" value="{{ closure.product_name if closure else '' }}" placeholder="Optional override" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Client</label>
+                <input type="text" name="client_name" maxlength="120" value="{{ closure.client_name if closure else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+
+            {% if mode == 'add' and leads %}
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Linked Lead (auto-marks lead as Won)</label>
+                <select name="lead_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                    <option value="">— No linked lead —</option>
+                    {% for ld in leads %}
+                    <option value="{{ ld.id }}" {% if request.args.get('lead_id') == ld.id|string %}selected{% endif %}>{{ ld.lead_name }}{% if ld.company %} — {{ ld.company }}{% endif %} ({{ ld.owner_name }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            {% endif %}
+
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Currency</label>
+                    <select name="currency" id="cf-cur" onchange="cfUpdate()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                        {% for c in ['INR','USD','EUR','GBP','AUD','CAD','SGD','AED'] %}
+                        <option value="{{ c }}" {% if closure and closure.currency == c %}selected{% elif not closure and c == 'INR' %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Revenue</label>
+                    <input type="number" step="0.01" min="0" name="revenue" id="cf-rev" value="{{ closure.revenue or 0 if closure else 0 }}" oninput="cfUpdate()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Cost</label>
+                    <input type="number" step="0.01" min="0" name="cost" id="cf-cost" value="{{ closure.cost or 0 if closure else 0 }}" oninput="cfUpdate()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="background:rgba(16,185,129,0.07);border:1px solid rgba(16,185,129,0.2);border-radius:0.5rem;padding:0.75rem 1rem;margin-bottom:1.5rem;font-size:0.85rem;color:var(--gray-700);">
+                <strong>Margin:</strong> <span id="cf-margin"></span>
+            </div>
+
+            <div style="margin-bottom:1.5rem;">
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Notes</label>
+                <textarea name="notes" rows="3" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ closure.notes if closure else '' }}</textarea>
+            </div>
+
+            <div style="display:flex;gap:0.75rem;">
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Record Closure' }}</button>
+                <a href="/sales/closures" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+<script>
+function cfUpdate() {
+    const cur = document.getElementById('cf-cur').value;
+    const rev = parseFloat(document.getElementById('cf-rev').value) || 0;
+    const cost = parseFloat(document.getElementById('cf-cost').value) || 0;
+    const m = rev - cost;
+    document.getElementById('cf-margin').textContent = cur + ' ' + m.toLocaleString('en-IN', {minimumFractionDigits: 2, maximumFractionDigits: 2});
+}
+document.addEventListener('DOMContentLoaded', cfUpdate);
+</script>
+{% endblock %}

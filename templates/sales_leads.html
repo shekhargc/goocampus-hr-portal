@@ -1,0 +1,186 @@
+{% extends "base.html" %}
+{% block title %}Leads - Sales CRM{% endblock %}
+{% block extra_css %}
+<style>
+.lead-drawer-overlay { position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:998;opacity:0;pointer-events:none;transition:opacity 0.2s ease; }
+.lead-drawer-overlay.open { opacity:1;pointer-events:auto; }
+.lead-drawer { position:fixed;top:0;right:0;height:100%;width:520px;max-width:92vw;background:white;box-shadow:-8px 0 30px rgba(0,0,0,0.18);z-index:999;transform:translateX(105%);transition:transform 0.25s ease;display:flex;flex-direction:column; }
+.lead-drawer.open { transform:translateX(0); }
+.lead-drawer-head { padding:1.1rem 1.4rem;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem; }
+.lead-drawer-body { padding:1.2rem 1.4rem;overflow-y:auto;flex:1; }
+.lead-drawer-foot { padding:0.9rem 1.4rem;border-top:1px solid var(--gray-200);background:var(--gray-50);display:flex;gap:0.55rem;flex-wrap:wrap; }
+.lead-drawer-close { background:transparent;border:none;font-size:1.4rem;color:var(--gray-500);cursor:pointer;line-height:1; }
+.ld-section { margin-bottom:1.1rem; }
+.ld-section h4 { font-size:0.72rem;text-transform:uppercase;color:var(--gray-500);font-weight:700;letter-spacing:0.06em;margin:0 0 0.45rem 0; }
+.ld-row { display:flex;justify-content:space-between;padding:0.35rem 0;font-size:0.85rem;border-bottom:1px solid var(--gray-100);gap:1rem; }
+.ld-row:last-child { border-bottom:none; }
+.ld-label { color:var(--gray-500); }
+.ld-val { color:var(--navy);font-weight:600;text-align:right;word-break:break-word; }
+.lead-row { cursor:pointer;transition:background 0.12s; }
+.lead-row:hover { background:var(--orange-light); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Leads</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ leads|length }} lead{{ '' if leads|length == 1 else 's' }} visible. Click a row to see full details.</p>
+        </div>
+        <a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Add Lead</a>
+    </div>
+
+    <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
+        <select name="stage" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All stages</option>
+            {% for s in stages %}<option value="{{ s.id }}" {% if f_stage == s.id|string %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+        <select name="owner" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All owners</option>
+            {% for o in owners %}<option value="{{ o.id }}" {% if f_owner == o.id|string %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+        </select>
+        <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.85rem;color:var(--gray-700);font-weight:600;">
+            <input type="checkbox" name="hot" value="1" {% if f_hot == '1' %}checked{% endif %} /> Hot only
+        </label>
+        <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.5rem 0.85rem;border-radius:0.4rem;font-size:0.85rem;font-weight:600;cursor:pointer;">Filter</button>
+        <a href="/sales/leads" style="padding:0.5rem 0.85rem;border:1px solid var(--gray-300);background:white;color:var(--gray-700);border-radius:0.4rem;font-size:0.85rem;font-weight:600;text-decoration:none;">Reset</a>
+    </form>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+        {% if leads %}
+        <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+            <thead>
+                <tr style="background:var(--gray-50);text-align:left;">
+                    <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Lead</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Stage</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Owner</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Product</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Value</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Close By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for l in leads %}
+                <tr class="lead-row" data-lid="{{ l.id }}" onclick="openLeadDrawer({{ l.id }}, event)" style="border-top:1px solid var(--gray-100);">
+                    <td style="padding:0.7rem 1rem;">
+                        <div style="font-weight:600;color:var(--navy);">
+                            {% if l.is_hot %}<span style="color:#dc2626;margin-right:0.25rem;" title="Hot lead">🔥</span>{% endif %}{{ l.lead_name }}
+                        </div>
+                        <div style="font-size:0.74rem;color:var(--gray-500);margin-top:0.1rem;">{{ l.company or '—' }}{% if l.email %} &middot; {{ l.email }}{% endif %}</div>
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;">
+                        {% if l.stage_name %}<span style="background:{{ l.stage_color or '#3b82f6' }}22;color:{{ l.stage_color or '#3b82f6' }};padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.74rem;font-weight:700;">{{ l.stage_name }}</span>{% else %}<span style="color:var(--gray-400);">—</span>{% endif %}
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;">
+                        <div style="display:flex;align-items:center;gap:0.5rem;">
+                            <img src="{{ l.photo_src }}" style="width:26px;height:26px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                            <span style="color:var(--navy);font-weight:600;font-size:0.84rem;">{{ l.owner_name or '—' }}</span>
+                        </div>
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ l.product_name or '—' }}</td>
+                    <td style="padding:0.7rem 0.6rem;text-align:right;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums;">{% if l.expected_value %}₹{{ '{:,.0f}'.format(l.expected_value) }}{% else %}—{% endif %}</td>
+                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ l.expected_close_date or '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="padding:3rem;text-align:center;color:var(--gray-500);">No leads yet. <a href="/sales/leads/add" style="color:var(--orange);font-weight:600;">Add the first one &rarr;</a></div>
+        {% endif %}
+    </div>
+</div>
+
+<div class="lead-drawer-overlay" id="leadOverlay" onclick="closeLeadDrawer()"></div>
+<div class="lead-drawer" id="leadDrawer">
+    <div class="lead-drawer-head">
+        <div style="min-width:0;flex:1;">
+            <div style="font-size:0.72rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Lead</div>
+            <h2 id="ldName" style="font-size:1.2rem;font-weight:700;color:var(--navy);margin:0.15rem 0 0 0;word-break:break-word;"></h2>
+            <div id="ldCompany" style="font-size:0.85rem;color:var(--gray-500);margin-top:0.2rem;"></div>
+        </div>
+        <button type="button" class="lead-drawer-close" onclick="closeLeadDrawer()" aria-label="Close">&times;</button>
+    </div>
+    <div class="lead-drawer-body">
+        <div class="ld-section">
+            <h4>Status</h4>
+            <div class="ld-row"><span class="ld-label">Stage</span><span class="ld-val" id="ldStage">—</span></div>
+            <div class="ld-row"><span class="ld-label">Hot lead</span><span class="ld-val" id="ldHot">—</span></div>
+            <div class="ld-row"><span class="ld-label">Source</span><span class="ld-val" id="ldSource">—</span></div>
+        </div>
+        <div class="ld-section">
+            <h4>Contact</h4>
+            <div class="ld-row"><span class="ld-label">Phone</span><span class="ld-val" id="ldPhone">—</span></div>
+            <div class="ld-row"><span class="ld-label">Email</span><span class="ld-val" id="ldEmail">—</span></div>
+        </div>
+        <div class="ld-section">
+            <h4>Pipeline</h4>
+            <div class="ld-row"><span class="ld-label">Owner</span><span class="ld-val" id="ldOwner">—</span></div>
+            <div class="ld-row"><span class="ld-label">Product</span><span class="ld-val" id="ldProduct">—</span></div>
+            <div class="ld-row"><span class="ld-label">Project</span><span class="ld-val" id="ldProject">—</span></div>
+            <div class="ld-row"><span class="ld-label">Expected value</span><span class="ld-val" id="ldValue">—</span></div>
+            <div class="ld-row"><span class="ld-label">Expected close</span><span class="ld-val" id="ldClose">—</span></div>
+        </div>
+        <div class="ld-section">
+            <h4>Notes</h4>
+            <div id="ldNotes" style="font-size:0.86rem;color:var(--gray-700);white-space:pre-wrap;background:var(--gray-50);padding:0.7rem 0.85rem;border-radius:0.45rem;border:1px solid var(--gray-100);min-height:2.5rem;">—</div>
+        </div>
+    </div>
+    <div class="lead-drawer-foot">
+        <a href="#" id="ldEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
+        <a href="#" id="ldCloseDealBtn" style="background:var(--orange);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Record Closure</a>
+        {% if role == 'admin' %}
+        <form method="POST" id="ldDelForm" style="display:inline;" onsubmit="return confirm('Delete this lead?');">
+            <button type="submit" style="background:white;color:#b91c1c;border:1px solid #fecaca;padding:0.5rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;">Delete</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const LEADS_DATA = {{ leads|tojson }};
+const LEADS_MAP = {};
+LEADS_DATA.forEach(l => { LEADS_MAP[l.id] = l; });
+
+function fmtMoney(v) {
+    if (v === null || v === undefined || v === '' || isNaN(parseFloat(v))) return '—';
+    return '₹' + Math.round(parseFloat(v)).toLocaleString('en-IN');
+}
+function txt(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
+
+function openLeadDrawer(id, evt) {
+    if (evt) {
+        const t = evt.target;
+        if (t.closest('a, button, input, select, textarea, form')) return;
+    }
+    const l = LEADS_MAP[id];
+    if (!l) return;
+    document.getElementById('ldName').textContent = l.lead_name || '—';
+    document.getElementById('ldCompany').textContent = l.company || '';
+    document.getElementById('ldStage').textContent = l.stage_name || '—';
+    document.getElementById('ldHot').textContent = l.is_hot ? 'Yes 🔥' : 'No';
+    document.getElementById('ldSource').textContent = txt(l.source);
+    document.getElementById('ldPhone').textContent = txt(l.phone);
+    document.getElementById('ldEmail').textContent = txt(l.email);
+    document.getElementById('ldOwner').textContent = txt(l.owner_name);
+    document.getElementById('ldProduct').textContent = txt(l.product_name);
+    document.getElementById('ldProject').textContent = txt(l.project_name);
+    document.getElementById('ldValue').textContent = fmtMoney(l.expected_value);
+    document.getElementById('ldClose').textContent = txt(l.expected_close_date);
+    document.getElementById('ldNotes').textContent = l.notes || '—';
+    document.getElementById('ldEditBtn').href = '/sales/leads/' + id + '/edit';
+    document.getElementById('ldCloseDealBtn').href = '/sales/closures/add?lead_id=' + id;
+    const delForm = document.getElementById('ldDelForm');
+    if (delForm) delForm.action = '/sales/leads/' + id + '/delete';
+    document.getElementById('leadOverlay').classList.add('open');
+    document.getElementById('leadDrawer').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeLeadDrawer() {
+    document.getElementById('leadOverlay').classList.remove('open');
+    document.getElementById('leadDrawer').classList.remove('open');
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeLeadDrawer(); });
+</script>
+{% endblock %}

@@ -1,0 +1,74 @@
+{% extends "base.html" %}
+{% block title %}Lead Stages - Sales CRM{% endblock %}
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;">
+        <div>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Lead Stages</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Configure the stages your reps move leads through. Mark a stage as Won to auto-flag leads when a closure is recorded.</p>
+        </div>
+    </div>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
+        <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Add a new stage</h2>
+        <form method="POST" style="display:grid;grid-template-columns:2fr 0.7fr 0.8fr auto auto auto;gap:0.6rem;align-items:end;">
+            <input type="hidden" name="action" value="add" />
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Stage name *</label>
+                <input type="text" name="name" required maxlength="60" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" placeholder="e.g. Demo scheduled" />
+            </div>
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Order</label>
+                <input type="number" name="sort_order" value="50" style="width:100%;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Color</label>
+                <input type="color" name="color" value="#3b82f6" style="width:100%;height:38px;padding:2px;border:1px solid var(--gray-300);border-radius:0.4rem;box-sizing:border-box;" />
+            </div>
+            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;color:var(--gray-700);font-weight:600;padding-bottom:0.5rem;">
+                <input type="checkbox" name="is_won" value="1" /> Won
+            </label>
+            <label style="display:flex;align-items:center;gap:0.35rem;font-size:0.82rem;color:var(--gray-700);font-weight:600;padding-bottom:0.5rem;">
+                <input type="checkbox" name="is_lost" value="1" /> Lost
+            </label>
+            <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;height:38px;">Add</button>
+        </form>
+    </div>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+            <thead>
+                <tr style="background:var(--gray-50);text-align:left;">
+                    <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Stage</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Order</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Color</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Won</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Lost</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Active</th>
+                    <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in stages %}
+                <tr style="border-top:1px solid var(--gray-100);{% if not s.is_active %}opacity:0.5;{% endif %}">
+                    <form method="POST">
+                        <input type="hidden" name="action" value="edit" />
+                        <input type="hidden" name="id" value="{{ s.id }}" />
+                        <td style="padding:0.5rem 1rem;"><input type="text" name="name" value="{{ s.name }}" maxlength="60" style="width:100%;padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;" /></td>
+                        <td style="padding:0.5rem 0.6rem;"><input type="number" name="sort_order" value="{{ s.sort_order }}" style="width:65px;padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;" /></td>
+                        <td style="padding:0.5rem 0.6rem;"><input type="color" name="color" value="{{ s.color }}" style="width:50px;height:32px;padding:2px;border:1px solid var(--gray-300);border-radius:0.35rem;" /></td>
+                        <td style="padding:0.5rem 0.6rem;"><input type="checkbox" name="is_won" value="1" {% if s.is_won %}checked{% endif %} /></td>
+                        <td style="padding:0.5rem 0.6rem;"><input type="checkbox" name="is_lost" value="1" {% if s.is_lost %}checked{% endif %} /></td>
+                        <td style="padding:0.5rem 0.6rem;"><input type="checkbox" name="is_active" value="1" {% if s.is_active %}checked{% endif %} /></td>
+                        <td style="padding:0.5rem 1rem;text-align:right;">
+                            <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.4rem 0.85rem;border-radius:0.35rem;font-weight:600;cursor:pointer;font-size:0.78rem;">Save</button>
+                        </td>
+                    </form>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

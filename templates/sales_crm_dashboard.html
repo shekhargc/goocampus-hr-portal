@@ -1,0 +1,192 @@
+{% extends "base.html" %}
+{% block title %}Sales CRM - GooCampus HR Portal{% endblock %}
+{% block content %}
+<div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h1 style="font-size:1.65rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales CRM</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">
+                {{ month_label }} &middot; Q{{ quarter }} &middot; Role: <strong style="color:var(--navy);text-transform:capitalize;">{{ role }}</strong>
+            </p>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="/sales/leads" style="background:var(--orange);color:white;padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Leads</a>
+            <a href="/sales/closures" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Closures</a>
+            <a href="/sales/targets" style="background:white;color:var(--navy);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Targets</a>
+            <a href="/sales/calls" style="background:white;color:var(--navy);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Calls</a>
+            {% if is_admin %}
+            <a href="/sales/team" style="background:white;color:var(--gray-700);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Team</a>
+            <a href="/sales/stages" style="background:white;color:var(--gray-700);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Stages</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1.25rem;align-items:center;">
+        <label style="font-size:0.8rem;color:var(--gray-600);font-weight:600;">Period:</label>
+        <select name="year" style="padding:0.4rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            {% for y in range(year-2, year+2) %}
+            <option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>
+            {% endfor %}
+        </select>
+        <select name="month" style="padding:0.4rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            {% for m in range(1, 13) %}
+            <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>
+            {% endfor %}
+        </select>
+        <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.4rem 0.85rem;border-radius:0.4rem;font-size:0.82rem;font-weight:600;cursor:pointer;">Apply</button>
+    </form>
+
+    {% if totals %}
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:1rem;margin-bottom:1.5rem;">
+        {% for label, t, a, d, key in [
+            ('Annual Margin', totals.annual_target, totals.annual_achieved, totals.annual_diff, 'annual'),
+            ('Quarter Margin', totals.quarter_target, totals.quarter_achieved, totals.quarter_diff, 'quarter'),
+            ('Month Margin', totals.month_target, totals.month_achieved, totals.month_diff, 'month')
+        ] %}
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.1rem 1.3rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
+            <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">{{ label }}</div>
+            <div style="display:flex;justify-content:space-between;align-items:flex-end;margin-top:0.5rem;">
+                <div>
+                    <div style="font-size:0.72rem;color:var(--gray-400);">Target</div>
+                    <div style="font-size:1.15rem;font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(t) }}</div>
+                </div>
+                <div>
+                    <div style="font-size:0.72rem;color:var(--gray-400);">Achieved</div>
+                    <div style="font-size:1.15rem;font-weight:700;color:var(--orange);">₹{{ '{:,.0f}'.format(a) }}</div>
+                </div>
+                <div>
+                    <div style="font-size:0.72rem;color:var(--gray-400);">Diff</div>
+                    <div style="font-size:1.15rem;font-weight:700;color:{% if d >= 0 %}#10b981{% else %}#ef4444{% endif %};">{% if d >= 0 %}+{% endif %}₹{{ '{:,.0f}'.format(d) }}</div>
+                </div>
+            </div>
+            {% set pct = (a / t * 100) if t > 0 else 0 %}
+            <div style="height:6px;background:var(--gray-100);border-radius:3px;margin-top:0.65rem;overflow:hidden;">
+                <div style="height:100%;width:{{ pct if pct < 100 else 100 }}%;background:linear-gradient(90deg,var(--orange),var(--orange-dark));border-radius:3px;"></div>
+            </div>
+            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">{{ '%.1f' % pct }}% of target</div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;margin-bottom:1.5rem;">
+        <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;">
+            Team Performance &mdash; {{ month_label }}
+        </div>
+        {% if rows %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                <thead>
+                    <tr style="background:var(--gray-50);text-align:left;">
+                        <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Rep</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Annual T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Quarter T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Month T/A</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Leads</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Hot</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Calls</th>
+                        <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:center;">Talk</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for r in rows %}
+                    <tr style="border-top:1px solid var(--gray-100);">
+                        <td style="padding:0.7rem 1rem;">
+                            <div style="display:flex;align-items:center;gap:0.65rem;">
+                                <img src="{{ r.photo_url or '/static/default-avatar.png' }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                                <div>
+                                    <div style="font-weight:600;color:var(--navy);">{{ r.name }}</div>
+                                    <div style="font-size:0.72rem;color:var(--gray-500);">{{ r.emp_code }} &middot; <span style="text-transform:capitalize;">{{ r.role }}</span></div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
+                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.annual_target) }}</div>
+                            <div style="font-size:0.78rem;color:{% if r.annual_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.annual_achieved) }} ({{ '%.0f' % r.annual_pct }}%)</div>
+                        </td>
+                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
+                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.quarter_target) }}</div>
+                            <div style="font-size:0.78rem;color:{% if r.quarter_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.quarter_achieved) }} ({{ '%.0f' % r.quarter_pct }}%)</div>
+                        </td>
+                        <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
+                            <div style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(r.month_target) }}</div>
+                            <div style="font-size:0.78rem;color:{% if r.month_diff >= 0 %}#10b981{% else %}#ef4444{% endif %};font-weight:600;">₹{{ '{:,.0f}'.format(r.month_achieved) }} ({{ '%.0f' % r.month_pct }}%)</div>
+                        </td>
+                        <td style="padding:0.7rem 0.6rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.leads_open }}</td>
+                        <td style="padding:0.7rem 0.6rem;text-align:center;">
+                            {% if r.leads_hot %}<span style="background:#fee2e2;color:#b91c1c;padding:0.15rem 0.45rem;border-radius:0.3rem;font-weight:700;font-size:0.78rem;">{{ r.leads_hot }}</span>{% else %}<span style="color:var(--gray-400);">0</span>{% endif %}
+                        </td>
+                        <td style="padding:0.7rem 0.6rem;text-align:center;font-weight:600;color:var(--navy);">{{ r.calls_month }}</td>
+                        <td style="padding:0.7rem 0.6rem;text-align:center;color:var(--gray-600);">{{ (r.talk_minutes_month // 60) }}h {{ r.talk_minutes_month % 60 }}m</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:2rem;text-align:center;color:var(--gray-500);">No team members visible. Ask an admin to add reps under <a href="/sales/team" style="color:var(--orange);font-weight:600;">Sales &rarr; Team</a>.</div>
+        {% endif %}
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;">
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;display:flex;justify-content:space-between;align-items:center;">
+                <span>Top Closures &mdash; {{ month_label }}</span>
+                <a href="/sales/closures" style="font-size:0.78rem;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+            </div>
+            <div style="padding:0.5rem 1.3rem 1rem;">
+                {% if top_products %}
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.75rem;text-transform:uppercase;">
+                        <th style="padding:0.5rem 0.5rem 0.5rem 0;font-weight:600;">Product</th>
+                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Deals</th>
+                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Revenue</th>
+                        <th style="padding:0.5rem 0;font-weight:600;text-align:right;">Margin</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for p in top_products %}
+                        <tr style="border-top:1px solid var(--gray-100);">
+                            <td style="padding:0.55rem 0.5rem 0.55rem 0;color:var(--navy);font-weight:600;">{{ p.product_name or '—' }}</td>
+                            <td style="padding:0.55rem 0;text-align:right;">{{ p.deals }}</td>
+                            <td style="padding:0.55rem 0;text-align:right;font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(p.revenue) }}</td>
+                            <td style="padding:0.55rem 0;text-align:right;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(p.margin) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No closures recorded for {{ month_label }} yet. <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a></div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;display:flex;justify-content:space-between;align-items:center;">
+                <span>Hot Leads</span>
+                <a href="/sales/leads?hot=1" style="font-size:0.78rem;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+            </div>
+            <div style="padding:0.5rem 1.3rem 1rem;">
+                {% if hot_leads %}
+                {% for h in hot_leads %}
+                <div style="padding:0.65rem 0;border-top:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;gap:0.75rem;">
+                    <div style="min-width:0;flex:1;">
+                        <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">{{ h.lead_name }}{% if h.company %} <span style="color:var(--gray-500);font-weight:400;">&middot; {{ h.company }}</span>{% endif %}</div>
+                        <div style="font-size:0.75rem;color:var(--gray-500);margin-top:0.1rem;">
+                            {{ h.owner_name or '—' }}
+                            {% if h.expected_close_date %} &middot; closes {{ h.expected_close_date }}{% endif %}
+                        </div>
+                    </div>
+                    <div style="text-align:right;">
+                        {% if h.stage_name %}<span style="background:{{ h.stage_color or '#3b82f6' }}22;color:{{ h.stage_color or '#3b82f6' }};padding:0.2rem 0.5rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">{{ h.stage_name }}</span>{% endif %}
+                        {% if h.expected_value %}<div style="font-size:0.78rem;color:var(--navy);font-weight:600;margin-top:0.2rem;">₹{{ '{:,.0f}'.format(h.expected_value) }}</div>{% endif %}
+                    </div>
+                </div>
+                {% endfor %}
+                {% else %}
+                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No hot leads. <a href="/sales/leads/add" style="color:var(--orange);font-weight:600;">Add a lead &rarr;</a></div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

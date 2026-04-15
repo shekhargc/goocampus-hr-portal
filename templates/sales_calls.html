@@ -1,0 +1,119 @@
+{% extends "base.html" %}
+{% block title %}Call Logs - Sales CRM{% endblock %}
+{% block content %}
+<div style="max-width:1300px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Call Reports</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1] }} {{ year }} &middot; {{ total_calls }} calls &middot; {{ (total_minutes // 60) }}h {{ total_minutes % 60 }}m talk time</p>
+        </div>
+        <form method="GET" style="display:flex;gap:0.5rem;align-items:center;">
+            <select name="year" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+                {% for y in range(year-2, year+2) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+            </select>
+            <select name="month" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+                {% for m in range(1, 13) %}<option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>{% endfor %}
+            </select>
+            <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.5rem 0.85rem;border-radius:0.4rem;font-size:0.85rem;font-weight:600;cursor:pointer;">Apply</button>
+        </form>
+    </div>
+
+    <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:1.25rem;">
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">Daily Entry</div>
+            <form method="POST" style="padding:1.2rem 1.3rem;">
+                {% if role in ['admin', 'manager'] %}
+                <div style="margin-bottom:1rem;">
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">For employee</label>
+                    <select name="employee_id" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                        <option value="{{ user.id }}">{{ user.name }} (me)</option>
+                        {% for o in owners %}{% if o.id != user.id %}<option value="{{ o.id }}">{{ o.name }}</option>{% endif %}{% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <input type="hidden" name="employee_id" value="{{ user.id }}" />
+                {% endif %}
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.7rem;margin-bottom:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Date *</label>
+                        <input type="date" name="log_date" required value="{{ year }}-{{ '%02d' % month }}-{{ '%02d' % (1) }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;"># Calls *</label>
+                        <input type="number" name="num_calls" min="0" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Talk (min)</label>
+                        <input type="number" name="talk_time_minutes" min="0" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div style="margin-bottom:1rem;">
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Notes</label>
+                    <textarea name="notes" rows="2" maxlength="500" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
+                </div>
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.6rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.88rem;">Save Log</button>
+                <p style="margin:0.65rem 0 0 0;font-size:0.74rem;color:var(--gray-500);">One entry per employee per day. Saving again for the same date overwrites.</p>
+            </form>
+
+            <div style="padding:0 1.3rem 1.2rem;">
+                <h3 style="font-size:0.82rem;color:var(--gray-600);font-weight:700;text-transform:uppercase;margin:0.5rem 0 0.5rem 0;">My logs this month</h3>
+                {% if my_logs %}
+                <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                    <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.72rem;text-transform:uppercase;">
+                        <th style="padding:0.4rem 0;font-weight:600;">Date</th>
+                        <th style="padding:0.4rem 0;font-weight:600;text-align:right;">Calls</th>
+                        <th style="padding:0.4rem 0;font-weight:600;text-align:right;">Talk (min)</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for ml in my_logs %}
+                        <tr style="border-top:1px solid var(--gray-100);">
+                            <td style="padding:0.45rem 0;color:var(--navy);font-weight:600;">{{ ml.log_date }}</td>
+                            <td style="padding:0.45rem 0;text-align:right;font-variant-numeric:tabular-nums;">{{ ml.num_calls }}</td>
+                            <td style="padding:0.45rem 0;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ ml.talk_time_minutes }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding:0.7rem 0;color:var(--gray-500);font-size:0.82rem;">No logs yet for this month.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">Team Rollup — {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1] }} {{ year }}</div>
+            {% if rollup %}
+            <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+                <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.74rem;text-transform:uppercase;background:var(--gray-50);">
+                    <th style="padding:0.65rem 1rem;font-weight:600;">Rep</th>
+                    <th style="padding:0.65rem 0.5rem;font-weight:600;text-align:right;">Days Logged</th>
+                    <th style="padding:0.65rem 0.5rem;font-weight:600;text-align:right;">Calls</th>
+                    <th style="padding:0.65rem 1rem;font-weight:600;text-align:right;">Talk Time</th>
+                </tr></thead>
+                <tbody>
+                    {% for r in rollup %}
+                    <tr style="border-top:1px solid var(--gray-100);">
+                        <td style="padding:0.65rem 1rem;">
+                            <div style="display:flex;align-items:center;gap:0.55rem;">
+                                <img src="{{ r.photo_url or '/static/default-avatar.png' }}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                                <div>
+                                    <div style="font-weight:600;color:var(--navy);font-size:0.84rem;">{{ r.name }}</div>
+                                    <div style="font-size:0.7rem;color:var(--gray-500);">{{ r.emp_code }}</div>
+                                </div>
+                            </div>
+                        </td>
+                        <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-700);">{{ r.days_logged }}</td>
+                        <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy);">{{ r.calls }}</td>
+                        <td style="padding:0.65rem 1rem;text-align:right;color:var(--gray-700);">{{ (r.mins // 60) }}h {{ r.mins % 60 }}m</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="padding:2rem;text-align:center;color:var(--gray-500);">No call data for this month.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

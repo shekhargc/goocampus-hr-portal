@@ -1,0 +1,94 @@
+{% extends "base.html" %}
+{% block title %}Sales Team - Sales CRM{% endblock %}
+{% block content %}
+<div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
+    <div style="margin-bottom:1.5rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Team</h1>
+        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add reps and managers. Reps see only their own work; managers see their team; admins see everyone.</p>
+    </div>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
+        <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Add team member</h2>
+        <form method="POST" style="display:grid;grid-template-columns:2fr 1.2fr 2fr auto;gap:0.7rem;align-items:end;">
+            <input type="hidden" name="action" value="add" />
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Employee *</label>
+                <select name="employee_id" required style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    <option value="">— Select employee —</option>
+                    {% for e in available_emps %}
+                    <option value="{{ e.id }}">{{ e.name }} ({{ e.emp_code }}){% if e.designation %} — {{ e.designation }}{% endif %}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Role *</label>
+                <select name="role" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    <option value="rep">Rep</option>
+                    <option value="manager">Manager</option>
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.25rem;">Manager (optional, for reps)</label>
+                <select name="manager_employee_id" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    <option value="">— No manager —</option>
+                    {% for m in managers %}
+                    <option value="{{ m.employee_id }}">{{ m.name }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.88rem;height:38px;">Add</button>
+        </form>
+    </div>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+        <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;">
+            Current Sales Team ({{ members|length }})
+        </div>
+        {% if members %}
+        <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+            <thead>
+                <tr style="background:var(--gray-50);text-align:left;border-top:1px solid var(--gray-100);">
+                    <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Member</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Role</th>
+                    <th style="padding:0.7rem 0.6rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;">Manager</th>
+                    <th style="padding:0.7rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.78rem;text-transform:uppercase;text-align:right;">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in members %}
+                <tr style="border-top:1px solid var(--gray-100);">
+                    <td style="padding:0.7rem 1rem;">
+                        <div style="display:flex;align-items:center;gap:0.65rem;">
+                            <img src="{{ m.photo_url or '/static/default-avatar.png' }}" style="width:34px;height:34px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                            <div>
+                                <div style="font-weight:600;color:var(--navy);">{{ m.name }}</div>
+                                <div style="font-size:0.74rem;color:var(--gray-500);">{{ m.emp_code }}{% if m.designation %} &middot; {{ m.designation }}{% endif %}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;">
+                        {% if (m.role or 'rep') == 'manager' %}
+                        <span style="background:#e0e7ff;color:#3730a3;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Manager</span>
+                        {% else %}
+                        <span style="background:#fef3c7;color:#92400e;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Rep</span>
+                        {% endif %}
+                    </td>
+                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ m.manager_name or '—' }}</td>
+                    <td style="padding:0.7rem 1rem;text-align:right;">
+                        <form method="POST" style="display:inline;" onsubmit="return confirm('Remove {{ m.name }} from the sales team?');">
+                            <input type="hidden" name="action" value="remove" />
+                            <input type="hidden" name="employee_id" value="{{ m.employee_id }}" />
+                            <button type="submit" style="background:white;color:#b91c1c;border:1px solid #fecaca;padding:0.4rem 0.8rem;border-radius:0.35rem;font-weight:600;cursor:pointer;font-size:0.78rem;">Remove</button>
+                        </form>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="padding:2rem;text-align:center;color:var(--gray-500);">No team members yet. Add one above to get started.</div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

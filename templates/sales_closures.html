@@ -1,0 +1,203 @@
+{% extends "base.html" %}
+{% block title %}Closures - Sales CRM{% endblock %}
+{% block extra_css %}
+<style>
+.cls-drawer-overlay { position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:998;opacity:0;pointer-events:none;transition:opacity 0.2s ease; }
+.cls-drawer-overlay.open { opacity:1;pointer-events:auto; }
+.cls-drawer { position:fixed;top:0;right:0;height:100%;width:520px;max-width:92vw;background:white;box-shadow:-8px 0 30px rgba(0,0,0,0.18);z-index:999;transform:translateX(105%);transition:transform 0.25s ease;display:flex;flex-direction:column; }
+.cls-drawer.open { transform:translateX(0); }
+.cls-drawer-head { padding:1.1rem 1.4rem;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:flex-start;gap:1rem; }
+.cls-drawer-body { padding:1.2rem 1.4rem;overflow-y:auto;flex:1; }
+.cls-drawer-foot { padding:0.9rem 1.4rem;border-top:1px solid var(--gray-200);background:var(--gray-50);display:flex;gap:0.55rem;flex-wrap:wrap; }
+.cls-drawer-close { background:transparent;border:none;font-size:1.4rem;color:var(--gray-500);cursor:pointer;line-height:1; }
+.cd-section { margin-bottom:1.1rem; }
+.cd-section h4 { font-size:0.72rem;text-transform:uppercase;color:var(--gray-500);font-weight:700;letter-spacing:0.06em;margin:0 0 0.45rem 0; }
+.cd-row { display:flex;justify-content:space-between;padding:0.35rem 0;font-size:0.85rem;border-bottom:1px solid var(--gray-100);gap:1rem; }
+.cd-row:last-child { border-bottom:none; }
+.cd-label { color:var(--gray-500); }
+.cd-val { color:var(--navy);font-weight:600;text-align:right;word-break:break-word; }
+.cls-row { cursor:pointer;transition:background 0.12s; }
+.cls-row:hover { background:var(--orange-light); }
+</style>
+{% endblock %}
+{% block content %}
+<div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Closures</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ total_deals }} deal{{ '' if total_deals == 1 else 's' }} &middot; ₹{{ '{:,.0f}'.format(total_revenue) }} revenue &middot; ₹{{ '{:,.0f}'.format(total_margin) }} margin</p>
+        </div>
+        <a href="/sales/closures/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Record Closure</a>
+    </div>
+
+    <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
+        <select name="year" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            {% for y in range(year-2, year+2) %}<option value="{{ y }}" {% if y == year %}selected{% endif %}>{{ y }}</option>{% endfor %}
+        </select>
+        <select name="month" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All months</option>
+            {% for m in range(1, 13) %}<option value="{{ m }}" {% if month and month|int == m %}selected{% endif %}>{{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][m-1] }}</option>{% endfor %}
+        </select>
+        <select name="owner" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All owners</option>
+            {% for o in owners %}<option value="{{ o.id }}" {% if f_owner == o.id|string %}selected{% endif %}>{{ o.name }}</option>{% endfor %}
+        </select>
+        <select name="product" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All products</option>
+            {% for p in products %}<option value="{{ p.id }}" {% if f_product == p.id|string %}selected{% endif %}>{{ p.name }}</option>{% endfor %}
+        </select>
+        <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.5rem 0.85rem;border-radius:0.4rem;font-size:0.85rem;font-weight:600;cursor:pointer;">Filter</button>
+        <a href="/sales/closures" style="padding:0.5rem 0.85rem;border:1px solid var(--gray-300);background:white;color:var(--gray-700);border-radius:0.4rem;font-size:0.85rem;font-weight:600;text-decoration:none;">Reset</a>
+    </form>
+
+    <div style="display:grid;grid-template-columns:2fr 1fr;gap:1.25rem;">
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;">All Closures</div>
+            {% if closures %}
+            <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
+                <thead>
+                    <tr style="background:var(--gray-50);text-align:left;border-top:1px solid var(--gray-100);">
+                        <th style="padding:0.65rem 1rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Date</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Product / Client</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;">Owner</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Revenue</th>
+                        <th style="padding:0.65rem 0.5rem;font-weight:600;color:var(--gray-600);font-size:0.74rem;text-transform:uppercase;text-align:right;">Margin</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in closures %}
+                    <tr class="cls-row" data-cid="{{ c.id }}" onclick="openClsDrawer({{ c.id }}, event)" style="border-top:1px solid var(--gray-100);">
+                        <td style="padding:0.65rem 1rem;color:var(--gray-700);">{{ c.close_date }}</td>
+                        <td style="padding:0.65rem 0.5rem;">
+                            <div style="font-weight:600;color:var(--navy);">{{ c.display_name }}</div>
+                            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">{{ c.client_name or '—' }}</div>
+                        </td>
+                        <td style="padding:0.65rem 0.5rem;">
+                            <div style="display:flex;align-items:center;gap:0.45rem;">
+                                <img src="{{ c.photo_src }}" style="width:24px;height:24px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                                <span style="color:var(--navy);font-weight:600;font-size:0.82rem;">{{ c.employee_name or '—' }}</span>
+                            </div>
+                        </td>
+                        <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-700);">{{ c.currency or 'INR' }} {{ '{:,.0f}'.format(c.revenue or 0) }}</td>
+                        <td style="padding:0.65rem 0.5rem;text-align:right;font-weight:700;color:{% if (c.margin or 0) >= 0 %}#10b981{% else %}#ef4444{% endif %};font-variant-numeric:tabular-nums;">{{ c.currency or 'INR' }} {{ '{:,.0f}'.format(c.margin or 0) }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div style="padding:2.5rem;text-align:center;color:var(--gray-500);">No closures in this period. <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a></div>
+            {% endif %}
+        </div>
+
+        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+            <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;">Product-wise Rollup</div>
+            <div style="padding:0.5rem 1.3rem 1rem;">
+                {% if by_product %}
+                <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+                    <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.72rem;text-transform:uppercase;">
+                        <th style="padding:0.45rem 0;font-weight:600;">Product</th>
+                        <th style="padding:0.45rem 0;font-weight:600;text-align:right;">Deals</th>
+                        <th style="padding:0.45rem 0;font-weight:600;text-align:right;">Margin</th>
+                    </tr></thead>
+                    <tbody>
+                        {% for p in by_product %}
+                        <tr style="border-top:1px solid var(--gray-100);">
+                            <td style="padding:0.5rem 0;color:var(--navy);font-weight:600;">{{ p.name }}</td>
+                            <td style="padding:0.5rem 0;text-align:right;">{{ p.deals }}</td>
+                            <td style="padding:0.5rem 0;text-align:right;font-weight:700;color:var(--orange);font-variant-numeric:tabular-nums;">₹{{ '{:,.0f}'.format(p.margin) }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                {% else %}
+                <div style="padding:1rem 0;text-align:center;color:var(--gray-500);font-size:0.85rem;">No data yet.</div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="cls-drawer-overlay" id="clsOverlay" onclick="closeClsDrawer()"></div>
+<div class="cls-drawer" id="clsDrawer">
+    <div class="cls-drawer-head">
+        <div style="min-width:0;flex:1;">
+            <div style="font-size:0.72rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Closure</div>
+            <h2 id="cdName" style="font-size:1.2rem;font-weight:700;color:var(--navy);margin:0.15rem 0 0 0;word-break:break-word;"></h2>
+            <div id="cdClient" style="font-size:0.85rem;color:var(--gray-500);margin-top:0.2rem;"></div>
+        </div>
+        <button type="button" class="cls-drawer-close" onclick="closeClsDrawer()" aria-label="Close">&times;</button>
+    </div>
+    <div class="cls-drawer-body">
+        <div class="cd-section">
+            <h4>Deal</h4>
+            <div class="cd-row"><span class="cd-label">Closed on</span><span class="cd-val" id="cdDate">—</span></div>
+            <div class="cd-row"><span class="cd-label">Owner</span><span class="cd-val" id="cdOwner">—</span></div>
+            <div class="cd-row"><span class="cd-label">Project</span><span class="cd-val" id="cdProject">—</span></div>
+        </div>
+        <div class="cd-section">
+            <h4>Financials (Original currency)</h4>
+            <div class="cd-row"><span class="cd-label">Currency</span><span class="cd-val" id="cdCur">—</span></div>
+            <div class="cd-row"><span class="cd-label">Revenue</span><span class="cd-val" id="cdRev">—</span></div>
+            <div class="cd-row"><span class="cd-label">Cost</span><span class="cd-val" id="cdCost">—</span></div>
+            <div class="cd-row"><span class="cd-label">Margin</span><span class="cd-val" id="cdMargin" style="color:var(--orange);">—</span></div>
+        </div>
+        <div class="cd-section">
+            <h4>Notes</h4>
+            <div id="cdNotes" style="font-size:0.86rem;color:var(--gray-700);white-space:pre-wrap;background:var(--gray-50);padding:0.7rem 0.85rem;border-radius:0.45rem;border:1px solid var(--gray-100);min-height:2.5rem;">—</div>
+        </div>
+    </div>
+    <div class="cls-drawer-foot">
+        <a href="#" id="cdEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
+        {% if role == 'admin' %}
+        <form method="POST" id="cdDelForm" style="display:inline;" onsubmit="return confirm('Delete this closure?');">
+            <button type="submit" style="background:white;color:#b91c1c;border:1px solid #fecaca;padding:0.5rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;">Delete</button>
+        </form>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+const CLS_DATA = {{ closures|tojson }};
+const CLS_MAP = {};
+CLS_DATA.forEach(c => { CLS_MAP[c.id] = c; });
+
+function fmtNum(v) {
+    if (v === null || v === undefined || v === '') return '0';
+    return Math.round(parseFloat(v)).toLocaleString('en-IN');
+}
+function txt(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
+
+function openClsDrawer(id, evt) {
+    if (evt) {
+        const t = evt.target;
+        if (t.closest('a, button, input, select, textarea, form')) return;
+    }
+    const c = CLS_MAP[id];
+    if (!c) return;
+    document.getElementById('cdName').textContent = c.display_name || '—';
+    document.getElementById('cdClient').textContent = c.client_name || '';
+    document.getElementById('cdDate').textContent = txt(c.close_date);
+    document.getElementById('cdOwner').textContent = txt(c.employee_name);
+    document.getElementById('cdProject').textContent = txt(c.project_name);
+    const cur = c.currency || 'INR';
+    document.getElementById('cdCur').textContent = cur;
+    document.getElementById('cdRev').textContent = cur + ' ' + fmtNum(c.revenue);
+    document.getElementById('cdCost').textContent = cur + ' ' + fmtNum(c.cost);
+    document.getElementById('cdMargin').textContent = cur + ' ' + fmtNum(c.margin);
+    document.getElementById('cdNotes').textContent = c.notes || '—';
+    document.getElementById('cdEditBtn').href = '/sales/closures/' + id + '/edit';
+    const delForm = document.getElementById('cdDelForm');
+    if (delForm) delForm.action = '/sales/closures/' + id + '/delete';
+    document.getElementById('clsOverlay').classList.add('open');
+    document.getElementById('clsDrawer').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+function closeClsDrawer() {
+    document.getElementById('clsOverlay').classList.remove('open');
+    document.getElementById('clsDrawer').classList.remove('open');
+    document.body.style.overflow = '';
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeClsDrawer(); });
+</script>
+{% endblock %}

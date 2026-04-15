@@ -10230,8 +10230,1155 @@ def ops_payments_delete(record_id):
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
 
 
+# =====================================================================
+# ====================  SALES CRM (leads, closures, targets, calls)  ===
+# =====================================================================
+def ensure_sales_crm_tables():
+    """Create the Sales CRM tables (leads, closures, targets, call logs,
+    stage definitions, team roster). Idempotent on every boot."""
+    try:
+        conn = get_db()
+        # 1) Configurable lead pipeline stages
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_lead_stages (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(80) NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            is_won INTEGER DEFAULT 0,
+            is_lost INTEGER DEFAULT 0,
+            color VARCHAR(20),
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # 2) Sales team roster (which employees are sales reps; who reports to whom)
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_team (
+            employee_id INTEGER PRIMARY KEY REFERENCES employees(id) ON DELETE CASCADE,
+            manager_employee_id INTEGER REFERENCES employees(id),
+            role VARCHAR(20) DEFAULT 'rep',
+            is_active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # 3) Hot leads
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_leads (
+            id SERIAL PRIMARY KEY,
+            lead_name VARCHAR(160) NOT NULL,
+            company VARCHAR(160),
+            phone VARCHAR(40),
+            email VARCHAR(160),
+            source VARCHAR(80),
+            product_id INTEGER REFERENCES products_services(id),
+            stream_id INTEGER REFERENCES revenue_streams(id),
+            stage_id INTEGER REFERENCES sales_lead_stages(id),
+            owner_employee_id INTEGER REFERENCES employees(id),
+            expected_value NUMERIC(14,2) DEFAULT 0,
+            expected_close_date DATE,
+            is_hot INTEGER DEFAULT 0,
+            notes TEXT,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # 4) Sales closures (won deals; margin auto-computed)
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_closures (
+            id SERIAL PRIMARY KEY,
+            lead_id INTEGER REFERENCES sales_leads(id) ON DELETE SET NULL,
+            employee_id INTEGER REFERENCES employees(id),
+            product_id INTEGER REFERENCES products_services(id),
+            product_name VARCHAR(200),
+            project_id INTEGER REFERENCES projects(id),
+            client_name VARCHAR(160),
+            revenue NUMERIC(14,2) DEFAULT 0,
+            cost NUMERIC(14,2) DEFAULT 0,
+            margin NUMERIC(14,2) DEFAULT 0,
+            currency VARCHAR(8) DEFAULT 'INR',
+            close_date DATE,
+            notes TEXT,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # 5) Sales targets (margin-based). period_type = 'annual' | 'quarter' | 'month'
+        #    period_value: year for annual; 1-4 for quarter; 1-12 for month
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_targets (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+            year INTEGER NOT NULL,
+            period_type VARCHAR(10) NOT NULL,
+            period_value INTEGER NOT NULL,
+            target_margin NUMERIC(14,2) DEFAULT 0,
+            notes TEXT,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (employee_id, year, period_type, period_value)
+        )''')
+        # 6) Daily call logs (rep enters at end of day)
+        conn.execute('''CREATE TABLE IF NOT EXISTS sales_call_logs (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER REFERENCES employees(id) ON DELETE CASCADE,
+            log_date DATE NOT NULL,
+            num_calls INTEGER DEFAULT 0,
+            talk_time_minutes INTEGER DEFAULT 0,
+            notes TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (employee_id, log_date)
+        )''')
+        conn.commit()
+        # Seed default stages if empty
+        cnt = conn.execute('SELECT COUNT(*) AS c FROM sales_lead_stages').fetchone()
+        if cnt and (cnt['c'] if 'c' in cnt.keys() else cnt[0]) == 0:
+            defaults = [
+                ('New', 1, 0, 0, '#3b82f6'),
+                ('Contacted', 2, 0, 0, '#8b5cf6'),
+                ('Qualified', 3, 0, 0, '#06b6d4'),
+                ('Demo / Meeting', 4, 0, 0, '#f59e0b'),
+                ('Proposal Sent', 5, 0, 0, '#f97316'),
+                ('Negotiation', 6, 0, 0, '#eab308'),
+                ('Closed Won', 7, 1, 0, '#10b981'),
+                ('Closed Lost', 8, 0, 1, '#ef4444'),
+            ]
+            for d in defaults:
+                conn.execute(
+                    'INSERT INTO sales_lead_stages (name, sort_order, is_won, is_lost, color) VALUES (?, ?, ?, ?, ?)',
+                    d
+                )
+            conn.commit()
+        conn.close()
+        logging.info("Sales CRM tables ensured.")
+    except Exception as e:
+        logging.error(f"ensure_sales_crm_tables: {e}")
+
+
+# ---- Visibility helpers -------------------------------------------------
+def get_sales_role(user):
+    """Return 'admin', 'manager', 'rep', or None (no sales access)."""
+    if not user:
+        return None
+    if user['is_admin'] == 1:
+        return 'admin'
+    try:
+        conn = get_db()
+        row = conn.execute(
+            'SELECT role FROM sales_team WHERE employee_id = ? AND is_active = 1',
+            (user['id'],)
+        ).fetchone()
+        conn.close()
+        if not row:
+            return None
+        r = (row['role'] or 'rep').lower()
+        if r == 'manager':
+            return 'manager'
+        return 'rep'
+    except Exception:
+        return None
+
+
+def get_visible_sales_employee_ids(user):
+    """Return list of employee ids whose data this user can see.
+    - admin → all sales_team employees
+    - manager → self + reps who have manager_employee_id = user.id
+    - rep → just [self]
+    """
+    role = get_sales_role(user)
+    if not role:
+        return []
+    try:
+        conn = get_db()
+        if role == 'admin':
+            rows = conn.execute(
+                'SELECT employee_id FROM sales_team WHERE is_active = 1'
+            ).fetchall()
+            ids = [r['employee_id'] for r in rows]
+            # Always include the admin themselves so they see their own activity
+            if user['id'] not in ids:
+                ids.append(user['id'])
+        elif role == 'manager':
+            rows = conn.execute(
+                'SELECT employee_id FROM sales_team '
+                'WHERE is_active = 1 AND (employee_id = ? OR manager_employee_id = ?)',
+                (user['id'], user['id'])
+            ).fetchall()
+            ids = [r['employee_id'] for r in rows]
+        else:
+            ids = [user['id']]
+        conn.close()
+        return ids
+    except Exception as e:
+        logging.error(f"get_visible_sales_employee_ids: {e}")
+        return [user['id']]
+
+
+def sales_crm_required(f):
+    """Decorator: sales module access AND a sales role (admin/manager/rep)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        user = get_user()
+        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+            flash('Sales module access required', 'error')
+            return redirect(url_for('dashboard'))
+        if not get_sales_role(user):
+            flash('You are not part of the Sales team. Ask an admin to add you under Sales → Team.', 'error')
+            return redirect(url_for('sales_dashboard'))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+# ---- Sales CRM dashboard -----------------------------------------------
+@app.route('/sales/crm')
+@login_required
+@sales_crm_required
+def sales_crm_dashboard():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    if not visible_ids:
+        return render_template('sales_crm_dashboard.html', user=user, role=role,
+                               rows=[], totals=None, hot_count=0, month_label='', year=datetime.now().year)
+    placeholders = ','.join(['?'] * len(visible_ids))
+
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    month = int(request.args.get('month') or now.month)
+    quarter = (month - 1) // 3 + 1
+    month_label = calendar.month_name[month] + ' ' + str(year)
+
+    conn = get_db()
+    # Per-rep targets (annual / quarter / month) and achieved margin
+    rep_rows_raw = conn.execute(
+        f'SELECT e.id, e.name, e.emp_code, e.photo_url, st.role, st.manager_employee_id '
+        f'FROM employees e JOIN sales_team st ON st.employee_id = e.id '
+        f'WHERE st.is_active = 1 AND e.id IN ({placeholders}) '
+        f'ORDER BY e.name',
+        visible_ids
+    ).fetchall()
+
+    rows = []
+    tot_annual_t = tot_quarter_t = tot_month_t = 0.0
+    tot_annual_a = tot_quarter_a = tot_month_a = 0.0
+    for r in rep_rows_raw:
+        eid = r['id']
+        # Targets
+        ta = conn.execute(
+            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+            "WHERE employee_id = ? AND year = ? AND period_type = 'annual'",
+            (eid, year)
+        ).fetchone()
+        tq = conn.execute(
+            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+            "WHERE employee_id = ? AND year = ? AND period_type = 'quarter' AND period_value = ?",
+            (eid, year, quarter)
+        ).fetchone()
+        tm = conn.execute(
+            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+            "WHERE employee_id = ? AND year = ? AND period_type = 'month' AND period_value = ?",
+            (eid, year, month)
+        ).fetchone()
+        # Achieved margins
+        aa = conn.execute(
+            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ?",
+            (eid, year)
+        ).fetchone()
+        aq_start_month = (quarter - 1) * 3 + 1
+        aq_end_month = aq_start_month + 2
+        aq = conn.execute(
+            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
+            "AND EXTRACT(MONTH FROM close_date) BETWEEN ? AND ?",
+            (eid, year, aq_start_month, aq_end_month)
+        ).fetchone()
+        am = conn.execute(
+            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
+            "AND EXTRACT(MONTH FROM close_date) = ?",
+            (eid, year, month)
+        ).fetchone()
+        # Activity
+        leads_open = conn.execute(
+            "SELECT COUNT(*) AS c FROM sales_leads sl "
+            "LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
+            "WHERE sl.owner_employee_id = ? AND COALESCE(s.is_won,0)=0 AND COALESCE(s.is_lost,0)=0",
+            (eid,)
+        ).fetchone()
+        leads_hot = conn.execute(
+            "SELECT COUNT(*) AS c FROM sales_leads "
+            "WHERE owner_employee_id = ? AND is_hot = 1",
+            (eid,)
+        ).fetchone()
+        calls_month = conn.execute(
+            "SELECT COALESCE(SUM(num_calls),0) AS calls, COALESCE(SUM(talk_time_minutes),0) AS mins "
+            "FROM sales_call_logs WHERE employee_id = ? "
+            "AND EXTRACT(YEAR FROM log_date) = ? AND EXTRACT(MONTH FROM log_date) = ?",
+            (eid, year, month)
+        ).fetchone()
+
+        annual_t = float(ta['t'] or 0); annual_a = float(aa['a'] or 0)
+        quarter_t = float(tq['t'] or 0); quarter_a = float(aq['a'] or 0)
+        month_t = float(tm['t'] or 0); month_a = float(am['a'] or 0)
+        rows.append({
+            'id': eid, 'name': r['name'], 'emp_code': r['emp_code'],
+            'photo_url': r['photo_url'], 'role': r['role'] or 'rep',
+            'annual_target': annual_t, 'annual_achieved': annual_a,
+            'annual_diff': annual_a - annual_t,
+            'annual_pct': (annual_a / annual_t * 100) if annual_t > 0 else 0,
+            'quarter_target': quarter_t, 'quarter_achieved': quarter_a,
+            'quarter_diff': quarter_a - quarter_t,
+            'quarter_pct': (quarter_a / quarter_t * 100) if quarter_t > 0 else 0,
+            'month_target': month_t, 'month_achieved': month_a,
+            'month_diff': month_a - month_t,
+            'month_pct': (month_a / month_t * 100) if month_t > 0 else 0,
+            'leads_open': leads_open['c'] if leads_open else 0,
+            'leads_hot': leads_hot['c'] if leads_hot else 0,
+            'calls_month': calls_month['calls'] if calls_month else 0,
+            'talk_minutes_month': calls_month['mins'] if calls_month else 0,
+        })
+        tot_annual_t += annual_t; tot_annual_a += annual_a
+        tot_quarter_t += quarter_t; tot_quarter_a += quarter_a
+        tot_month_t += month_t; tot_month_a += month_a
+
+    totals = {
+        'annual_target': tot_annual_t, 'annual_achieved': tot_annual_a,
+        'annual_diff': tot_annual_a - tot_annual_t,
+        'quarter_target': tot_quarter_t, 'quarter_achieved': tot_quarter_a,
+        'quarter_diff': tot_quarter_a - tot_quarter_t,
+        'month_target': tot_month_t, 'month_achieved': tot_month_a,
+        'month_diff': tot_month_a - tot_month_t,
+    }
+
+    # Top closures product-wise (this month, scoped to visible employees)
+    top_products = conn.execute(
+        f"SELECT product_name, COUNT(*) AS deals, COALESCE(SUM(revenue),0) AS revenue, "
+        f"COALESCE(SUM(margin),0) AS margin "
+        f"FROM sales_closures WHERE employee_id IN ({placeholders}) "
+        f"AND EXTRACT(YEAR FROM close_date) = ? AND EXTRACT(MONTH FROM close_date) = ? "
+        f"GROUP BY product_name ORDER BY margin DESC LIMIT 8",
+        list(visible_ids) + [year, month]
+    ).fetchall()
+
+    # Hot leads list
+    hot_leads = conn.execute(
+        f"SELECT sl.id, sl.lead_name, sl.company, sl.expected_value, sl.expected_close_date, "
+        f"e.name AS owner_name, s.name AS stage_name, s.color AS stage_color "
+        f"FROM sales_leads sl "
+        f"LEFT JOIN employees e ON sl.owner_employee_id = e.id "
+        f"LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
+        f"WHERE sl.is_hot = 1 AND sl.owner_employee_id IN ({placeholders}) "
+        f"ORDER BY sl.expected_close_date NULLS LAST LIMIT 10",
+        visible_ids
+    ).fetchall()
+    conn.close()
+
+    return render_template('sales_crm_dashboard.html', user=user, role=role,
+                           rows=rows, totals=totals,
+                           top_products=top_products, hot_leads=hot_leads,
+                           year=year, month=month, quarter=quarter,
+                           month_label=month_label,
+                           is_admin=role == 'admin')
+
+
+# ---- Lead stages admin -------------------------------------------------
+@app.route('/sales/stages', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_stages():
+    user = get_user()
+    role = get_sales_role(user)
+    if role != 'admin':
+        flash('Admins only', 'error')
+        return redirect(url_for('sales_crm_dashboard'))
+    conn = get_db()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            name = (request.form.get('name') or '').strip()
+            if name:
+                so = int(request.form.get('sort_order') or 0)
+                color = (request.form.get('color') or '#3b82f6').strip()
+                is_won = 1 if request.form.get('is_won') else 0
+                is_lost = 1 if request.form.get('is_lost') else 0
+                conn.execute(
+                    'INSERT INTO sales_lead_stages (name, sort_order, color, is_won, is_lost) VALUES (?, ?, ?, ?, ?)',
+                    (name, so, color, is_won, is_lost)
+                )
+                conn.commit()
+                flash('Stage added', 'success')
+        elif action == 'edit':
+            sid = int(request.form.get('id'))
+            conn.execute(
+                'UPDATE sales_lead_stages SET name=?, sort_order=?, color=?, is_won=?, is_lost=?, is_active=? WHERE id=?',
+                (
+                    (request.form.get('name') or '').strip(),
+                    int(request.form.get('sort_order') or 0),
+                    (request.form.get('color') or '#3b82f6').strip(),
+                    1 if request.form.get('is_won') else 0,
+                    1 if request.form.get('is_lost') else 0,
+                    1 if request.form.get('is_active') else 0,
+                    sid
+                )
+            )
+            conn.commit()
+            flash('Stage updated', 'success')
+        elif action == 'delete':
+            sid = int(request.form.get('id'))
+            conn.execute('UPDATE sales_lead_stages SET is_active = 0 WHERE id = ?', (sid,))
+            conn.commit()
+            flash('Stage deactivated', 'success')
+        conn.close()
+        return redirect(url_for('sales_stages'))
+
+    stages = conn.execute(
+        'SELECT * FROM sales_lead_stages ORDER BY is_active DESC, sort_order, name'
+    ).fetchall()
+    conn.close()
+    return render_template('sales_stages.html', user=user, stages=stages)
+
+
+# ---- Sales team admin --------------------------------------------------
+@app.route('/sales/team', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_team_admin():
+    user = get_user()
+    role = get_sales_role(user)
+    if role != 'admin':
+        flash('Admins only', 'error')
+        return redirect(url_for('sales_crm_dashboard'))
+    conn = get_db()
+    if request.method == 'POST':
+        action = request.form.get('action')
+        if action == 'add':
+            eid = int(request.form.get('employee_id'))
+            mgr_raw = request.form.get('manager_employee_id') or ''
+            mgr = int(mgr_raw) if mgr_raw.isdigit() else None
+            r = (request.form.get('role') or 'rep').strip().lower()
+            if r not in ('rep', 'manager'):
+                r = 'rep'
+            try:
+                conn.execute(
+                    'INSERT INTO sales_team (employee_id, manager_employee_id, role, is_active) VALUES (?, ?, ?, 1) '
+                    'ON CONFLICT (employee_id) DO UPDATE SET manager_employee_id = EXCLUDED.manager_employee_id, '
+                    'role = EXCLUDED.role, is_active = 1',
+                    (eid, mgr, r)
+                )
+                conn.commit()
+                flash('Sales team member saved', 'success')
+            except Exception as e:
+                conn.rollback()
+                flash(f'Could not save: {e}', 'error')
+        elif action == 'remove':
+            eid = int(request.form.get('employee_id'))
+            conn.execute('UPDATE sales_team SET is_active = 0 WHERE employee_id = ?', (eid,))
+            conn.commit()
+            flash('Removed from sales team', 'success')
+        conn.close()
+        return redirect(url_for('sales_team_admin'))
+
+    members = conn.execute('''
+        SELECT st.employee_id, st.role, st.manager_employee_id, st.is_active,
+               e.name, e.emp_code, e.photo_url, e.designation,
+               m.name AS manager_name
+        FROM sales_team st
+        JOIN employees e ON st.employee_id = e.id
+        LEFT JOIN employees m ON st.manager_employee_id = m.id
+        WHERE st.is_active = 1
+        ORDER BY st.role DESC, e.name
+    ''').fetchall()
+    member_ids = [m['employee_id'] for m in members]
+    available_emps_q = "SELECT id, name, emp_code, designation FROM employees WHERE status = 'active'"
+    if member_ids:
+        ph = ','.join(['?'] * len(member_ids))
+        available_emps_q += f' AND id NOT IN ({ph})'
+        available_emps = conn.execute(available_emps_q + ' ORDER BY name', member_ids).fetchall()
+    else:
+        available_emps = conn.execute(available_emps_q + ' ORDER BY name').fetchall()
+    managers = [m for m in members if (m['role'] or '').lower() == 'manager']
+    conn.close()
+    return render_template('sales_team.html', user=user, members=members,
+                           available_emps=available_emps, managers=managers)
+
+
+# ---- Leads -------------------------------------------------------------
+@app.route('/sales/leads')
+@login_required
+@sales_crm_required
+def sales_leads_list():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    if not visible_ids:
+        return render_template('sales_leads.html', user=user, leads=[], stages=[], owners=[], role=role)
+    placeholders = ','.join(['?'] * len(visible_ids))
+    f_stage = request.args.get('stage')
+    f_owner = request.args.get('owner')
+    f_hot = request.args.get('hot')
+
+    where = [f'sl.owner_employee_id IN ({placeholders})']
+    params = list(visible_ids)
+    if f_stage and f_stage.isdigit():
+        where.append('sl.stage_id = ?'); params.append(int(f_stage))
+    if f_owner and f_owner.isdigit():
+        where.append('sl.owner_employee_id = ?'); params.append(int(f_owner))
+    if f_hot == '1':
+        where.append('sl.is_hot = 1')
+
+    conn = get_db()
+    leads = conn.execute(
+        f'''SELECT sl.*, s.name AS stage_name, s.color AS stage_color,
+                  s.is_won AS stage_won, s.is_lost AS stage_lost,
+                  e.name AS owner_name, e.photo_url AS owner_photo,
+                  ps.name AS product_name, p.name AS project_name
+           FROM sales_leads sl
+           LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id
+           LEFT JOIN employees e ON sl.owner_employee_id = e.id
+           LEFT JOIN products_services ps ON sl.product_id = ps.id
+           LEFT JOIN projects p ON ps.project_id = p.id
+           WHERE {' AND '.join(where)}
+           ORDER BY sl.is_hot DESC, sl.expected_close_date NULLS LAST, sl.created_at DESC''',
+        params
+    ).fetchall()
+    stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
+    owners = conn.execute(
+        f'SELECT id, name, photo_url FROM employees WHERE id IN ({placeholders}) ORDER BY name',
+        visible_ids
+    ).fetchall()
+    conn.close()
+    leads_dicts = []
+    for l in leads:
+        d = dict(l)
+        d['photo_src'] = d.get('owner_photo') or '/static/default-avatar.png'
+        leads_dicts.append(d)
+    return render_template('sales_leads.html', user=user, leads=leads_dicts,
+                           stages=stages, owners=owners, role=role,
+                           f_stage=f_stage, f_owner=f_owner, f_hot=f_hot)
+
+
+@app.route('/sales/leads/add', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_leads_add():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    conn = get_db()
+    if request.method == 'POST':
+        owner = request.form.get('owner_employee_id')
+        owner_id = int(owner) if owner and owner.isdigit() else user['id']
+        if owner_id not in visible_ids and role != 'admin':
+            owner_id = user['id']
+        product_id = request.form.get('product_id')
+        product_id = int(product_id) if product_id and product_id.isdigit() else None
+        stream_id = request.form.get('stream_id')
+        stream_id = int(stream_id) if stream_id and stream_id.isdigit() else None
+        stage_id = request.form.get('stage_id')
+        stage_id = int(stage_id) if stage_id and stage_id.isdigit() else None
+        try:
+            ev = float(request.form.get('expected_value') or 0)
+        except ValueError:
+            ev = 0.0
+        ecd = request.form.get('expected_close_date') or None
+        conn.execute(
+            '''INSERT INTO sales_leads
+               (lead_name, company, phone, email, source, product_id, stream_id, stage_id,
+                owner_employee_id, expected_value, expected_close_date, is_hot, notes, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                (request.form.get('lead_name') or '').strip() or 'Untitled lead',
+                (request.form.get('company') or '').strip(),
+                (request.form.get('phone') or '').strip(),
+                (request.form.get('email') or '').strip(),
+                (request.form.get('source') or '').strip(),
+                product_id, stream_id, stage_id, owner_id, ev, ecd,
+                1 if request.form.get('is_hot') else 0,
+                (request.form.get('notes') or '').strip(),
+                user['id']
+            )
+        )
+        conn.commit()
+        conn.close()
+        flash('Lead added', 'success')
+        return redirect(url_for('sales_leads_list'))
+
+    stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
+    if visible_ids:
+        ph = ','.join(['?'] * len(visible_ids))
+        owners = conn.execute(
+            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
+            visible_ids
+        ).fetchall()
+    else:
+        owners = []
+    conn.close()
+    return render_template('sales_lead_form.html', user=user, lead=None, mode='add',
+                           stages=stages, products=products, streams=streams, owners=owners,
+                           role=role)
+
+
+@app.route('/sales/leads/<int:lead_id>/edit', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_leads_edit(lead_id):
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    conn = get_db()
+    lead = conn.execute('SELECT * FROM sales_leads WHERE id = ?', (lead_id,)).fetchone()
+    if not lead:
+        conn.close()
+        flash('Lead not found', 'error')
+        return redirect(url_for('sales_leads_list'))
+    if lead['owner_employee_id'] not in visible_ids and role != 'admin':
+        conn.close()
+        flash('Access denied', 'error')
+        return redirect(url_for('sales_leads_list'))
+    if request.method == 'POST':
+        owner = request.form.get('owner_employee_id')
+        owner_id = int(owner) if owner and owner.isdigit() else lead['owner_employee_id']
+        if owner_id not in visible_ids and role != 'admin':
+            owner_id = lead['owner_employee_id']
+        product_id = request.form.get('product_id')
+        product_id = int(product_id) if product_id and product_id.isdigit() else None
+        stream_id = request.form.get('stream_id')
+        stream_id = int(stream_id) if stream_id and stream_id.isdigit() else None
+        stage_id = request.form.get('stage_id')
+        stage_id = int(stage_id) if stage_id and stage_id.isdigit() else None
+        try:
+            ev = float(request.form.get('expected_value') or 0)
+        except ValueError:
+            ev = 0.0
+        ecd = request.form.get('expected_close_date') or None
+        conn.execute(
+            '''UPDATE sales_leads SET
+               lead_name = ?, company = ?, phone = ?, email = ?, source = ?,
+               product_id = ?, stream_id = ?, stage_id = ?, owner_employee_id = ?,
+               expected_value = ?, expected_close_date = ?, is_hot = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?''',
+            (
+                (request.form.get('lead_name') or '').strip() or lead['lead_name'],
+                (request.form.get('company') or '').strip(),
+                (request.form.get('phone') or '').strip(),
+                (request.form.get('email') or '').strip(),
+                (request.form.get('source') or '').strip(),
+                product_id, stream_id, stage_id, owner_id, ev, ecd,
+                1 if request.form.get('is_hot') else 0,
+                (request.form.get('notes') or '').strip(),
+                lead_id
+            )
+        )
+        conn.commit()
+        conn.close()
+        flash('Lead updated', 'success')
+        return redirect(url_for('sales_leads_list'))
+
+    stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    streams = conn.execute("SELECT id, name FROM revenue_streams WHERE is_active = 1 ORDER BY name").fetchall()
+    if visible_ids:
+        ph = ','.join(['?'] * len(visible_ids))
+        owners = conn.execute(
+            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
+            visible_ids
+        ).fetchall()
+    else:
+        owners = []
+    conn.close()
+    return render_template('sales_lead_form.html', user=user, lead=lead, mode='edit',
+                           stages=stages, products=products, streams=streams, owners=owners,
+                           role=role)
+
+
+@app.route('/sales/leads/<int:lead_id>/delete', methods=['POST'])
+@login_required
+@sales_crm_required
+def sales_leads_delete(lead_id):
+    user = get_user()
+    role = get_sales_role(user)
+    if role != 'admin':
+        flash('Admins only', 'error')
+        return redirect(url_for('sales_leads_list'))
+    conn = get_db()
+    conn.execute('DELETE FROM sales_leads WHERE id = ?', (lead_id,))
+    conn.commit()
+    conn.close()
+    flash('Lead deleted', 'success')
+    return redirect(url_for('sales_leads_list'))
+
+
+# ---- Closures ----------------------------------------------------------
+@app.route('/sales/closures')
+@login_required
+@sales_crm_required
+def sales_closures_list():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    if not visible_ids:
+        return render_template('sales_closures.html', user=user, closures=[], owners=[], products=[], role=role)
+    placeholders = ','.join(['?'] * len(visible_ids))
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    month_filter = request.args.get('month')
+    f_owner = request.args.get('owner')
+    f_product = request.args.get('product')
+
+    where = [f'c.employee_id IN ({placeholders})', 'EXTRACT(YEAR FROM c.close_date) = ?']
+    params = list(visible_ids) + [year]
+    if month_filter and month_filter.isdigit():
+        where.append('EXTRACT(MONTH FROM c.close_date) = ?'); params.append(int(month_filter))
+    if f_owner and f_owner.isdigit():
+        where.append('c.employee_id = ?'); params.append(int(f_owner))
+    if f_product and f_product.isdigit():
+        where.append('c.product_id = ?'); params.append(int(f_product))
+
+    conn = get_db()
+    closures = conn.execute(
+        f'''SELECT c.*, e.name AS employee_name, e.photo_url AS emp_photo,
+                  ps.name AS product_name_live, p.name AS project_name
+           FROM sales_closures c
+           LEFT JOIN employees e ON c.employee_id = e.id
+           LEFT JOIN products_services ps ON c.product_id = ps.id
+           LEFT JOIN projects p ON c.project_id = p.id
+           WHERE {' AND '.join(where)}
+           ORDER BY c.close_date DESC, c.id DESC''',
+        params
+    ).fetchall()
+    owners = conn.execute(
+        f'SELECT id, name FROM employees WHERE id IN ({placeholders}) ORDER BY name',
+        visible_ids
+    ).fetchall()
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    # Aggregates
+    total_revenue = sum(float(c['revenue'] or 0) for c in closures)
+    total_margin = sum(float(c['margin'] or 0) for c in closures)
+    total_deals = len(closures)
+    # Product-wise rollup
+    by_product = {}
+    for c in closures:
+        key = c['product_name'] or c['product_name_live'] or 'Unspecified'
+        if key not in by_product:
+            by_product[key] = {'name': key, 'deals': 0, 'revenue': 0.0, 'margin': 0.0}
+        by_product[key]['deals'] += 1
+        by_product[key]['revenue'] += float(c['revenue'] or 0)
+        by_product[key]['margin'] += float(c['margin'] or 0)
+    by_product = sorted(by_product.values(), key=lambda x: x['margin'], reverse=True)
+    conn.close()
+
+    closures_dicts = []
+    for c in closures:
+        d = dict(c)
+        d['photo_src'] = d.get('emp_photo') or '/static/default-avatar.png'
+        d['display_name'] = d.get('product_name') or d.get('product_name_live') or '—'
+        closures_dicts.append(d)
+
+    return render_template('sales_closures.html', user=user, closures=closures_dicts,
+                           owners=owners, products=products,
+                           total_revenue=total_revenue, total_margin=total_margin,
+                           total_deals=total_deals, by_product=by_product,
+                           year=year, month=month_filter,
+                           f_owner=f_owner, f_product=f_product, role=role)
+
+
+@app.route('/sales/closures/add', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_closures_add():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    conn = get_db()
+    if request.method == 'POST':
+        owner = request.form.get('employee_id')
+        owner_id = int(owner) if owner and owner.isdigit() else user['id']
+        if owner_id not in visible_ids and role != 'admin':
+            owner_id = user['id']
+        product_id = request.form.get('product_id')
+        product_id = int(product_id) if product_id and product_id.isdigit() else None
+        product_name = (request.form.get('product_name') or '').strip()
+        project_id = None
+        if product_id:
+            row = conn.execute('SELECT name, project_id FROM products_services WHERE id = ?', (product_id,)).fetchone()
+            if row:
+                if not product_name:
+                    product_name = row['name']
+                project_id = row['project_id']
+        try:
+            revenue = float(request.form.get('revenue') or 0)
+        except ValueError:
+            revenue = 0.0
+        try:
+            cost = float(request.form.get('cost') or 0)
+        except ValueError:
+            cost = 0.0
+        margin = revenue - cost
+        currency = (request.form.get('currency') or 'INR').upper()
+        close_date = request.form.get('close_date') or datetime.now().strftime('%Y-%m-%d')
+        lead_id_raw = request.form.get('lead_id')
+        lead_id = int(lead_id_raw) if lead_id_raw and lead_id_raw.isdigit() else None
+        conn.execute(
+            '''INSERT INTO sales_closures
+               (lead_id, employee_id, product_id, product_name, project_id, client_name,
+                revenue, cost, margin, currency, close_date, notes, created_by)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                lead_id, owner_id, product_id, product_name or None, project_id,
+                (request.form.get('client_name') or '').strip(),
+                revenue, cost, margin, currency, close_date,
+                (request.form.get('notes') or '').strip(),
+                user['id']
+            )
+        )
+        # If linked to a lead, mark it as won (find a stage with is_won=1)
+        if lead_id:
+            won = conn.execute(
+                'SELECT id FROM sales_lead_stages WHERE is_won = 1 AND is_active = 1 ORDER BY sort_order LIMIT 1'
+            ).fetchone()
+            if won:
+                conn.execute('UPDATE sales_leads SET stage_id = ? WHERE id = ?', (won['id'], lead_id))
+        conn.commit()
+        conn.close()
+        flash('Closure recorded', 'success')
+        return redirect(url_for('sales_closures_list'))
+
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    if visible_ids:
+        ph = ','.join(['?'] * len(visible_ids))
+        owners = conn.execute(
+            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
+            visible_ids
+        ).fetchall()
+        leads = conn.execute(
+            f'''SELECT sl.id, sl.lead_name, sl.company, e.name AS owner_name
+                FROM sales_leads sl LEFT JOIN employees e ON sl.owner_employee_id = e.id
+                WHERE sl.owner_employee_id IN ({ph})
+                ORDER BY sl.created_at DESC LIMIT 200''',
+            visible_ids
+        ).fetchall()
+    else:
+        owners = []
+        leads = []
+    conn.close()
+    return render_template('sales_closure_form.html', user=user, mode='add', closure=None,
+                           products=products, owners=owners, leads=leads, role=role)
+
+
+@app.route('/sales/closures/<int:cid>/edit', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_closures_edit(cid):
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    conn = get_db()
+    closure = conn.execute('SELECT * FROM sales_closures WHERE id = ?', (cid,)).fetchone()
+    if not closure:
+        conn.close()
+        flash('Closure not found', 'error')
+        return redirect(url_for('sales_closures_list'))
+    if closure['employee_id'] not in visible_ids and role != 'admin':
+        conn.close()
+        flash('Access denied', 'error')
+        return redirect(url_for('sales_closures_list'))
+    if request.method == 'POST':
+        owner = request.form.get('employee_id')
+        owner_id = int(owner) if owner and owner.isdigit() else closure['employee_id']
+        if owner_id not in visible_ids and role != 'admin':
+            owner_id = closure['employee_id']
+        product_id = request.form.get('product_id')
+        product_id = int(product_id) if product_id and product_id.isdigit() else None
+        product_name = (request.form.get('product_name') or '').strip() or closure['product_name']
+        project_id = closure['project_id']
+        if product_id:
+            row = conn.execute('SELECT name, project_id FROM products_services WHERE id = ?', (product_id,)).fetchone()
+            if row:
+                if not product_name:
+                    product_name = row['name']
+                project_id = row['project_id']
+        try:
+            revenue = float(request.form.get('revenue') or 0)
+        except ValueError:
+            revenue = float(closure['revenue'] or 0)
+        try:
+            cost = float(request.form.get('cost') or 0)
+        except ValueError:
+            cost = float(closure['cost'] or 0)
+        margin = revenue - cost
+        currency = (request.form.get('currency') or closure['currency'] or 'INR').upper()
+        close_date = request.form.get('close_date') or closure['close_date']
+        conn.execute(
+            '''UPDATE sales_closures SET
+               employee_id = ?, product_id = ?, product_name = ?, project_id = ?, client_name = ?,
+               revenue = ?, cost = ?, margin = ?, currency = ?, close_date = ?, notes = ?,
+               updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?''',
+            (
+                owner_id, product_id, product_name, project_id,
+                (request.form.get('client_name') or '').strip(),
+                revenue, cost, margin, currency, close_date,
+                (request.form.get('notes') or '').strip(),
+                cid
+            )
+        )
+        conn.commit()
+        conn.close()
+        flash('Closure updated', 'success')
+        return redirect(url_for('sales_closures_list'))
+
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
+    ).fetchall()
+    if visible_ids:
+        ph = ','.join(['?'] * len(visible_ids))
+        owners = conn.execute(
+            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
+            visible_ids
+        ).fetchall()
+    else:
+        owners = []
+    conn.close()
+    return render_template('sales_closure_form.html', user=user, mode='edit', closure=closure,
+                           products=products, owners=owners, leads=[], role=role)
+
+
+@app.route('/sales/closures/<int:cid>/delete', methods=['POST'])
+@login_required
+@sales_crm_required
+def sales_closures_delete(cid):
+    user = get_user()
+    role = get_sales_role(user)
+    if role != 'admin':
+        flash('Admins only', 'error')
+        return redirect(url_for('sales_closures_list'))
+    conn = get_db()
+    conn.execute('DELETE FROM sales_closures WHERE id = ?', (cid,))
+    conn.commit()
+    conn.close()
+    flash('Closure deleted', 'success')
+    return redirect(url_for('sales_closures_list'))
+
+
+# ---- Targets -----------------------------------------------------------
+@app.route('/sales/targets', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_targets_view():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    conn = get_db()
+
+    if request.method == 'POST':
+        if role not in ('admin', 'manager'):
+            flash('Only admins or managers can edit targets', 'error')
+            return redirect(url_for('sales_targets_view', year=year))
+        eid = int(request.form.get('employee_id'))
+        if eid not in visible_ids:
+            flash('Access denied', 'error')
+            return redirect(url_for('sales_targets_view', year=year))
+        # Annual
+        try:
+            annual = float(request.form.get('annual') or 0)
+        except ValueError:
+            annual = 0.0
+        conn.execute(
+            '''INSERT INTO sales_targets (employee_id, year, period_type, period_value, target_margin, created_by)
+               VALUES (?, ?, 'annual', ?, ?, ?)
+               ON CONFLICT (employee_id, year, period_type, period_value)
+               DO UPDATE SET target_margin = EXCLUDED.target_margin, updated_at = CURRENT_TIMESTAMP''',
+            (eid, year, year, annual, user['id'])
+        )
+        # Quarterly (1-4)
+        for q in range(1, 5):
+            try:
+                qv = float(request.form.get(f'q{q}') or 0)
+            except ValueError:
+                qv = 0.0
+            conn.execute(
+                '''INSERT INTO sales_targets (employee_id, year, period_type, period_value, target_margin, created_by)
+                   VALUES (?, ?, 'quarter', ?, ?, ?)
+                   ON CONFLICT (employee_id, year, period_type, period_value)
+                   DO UPDATE SET target_margin = EXCLUDED.target_margin, updated_at = CURRENT_TIMESTAMP''',
+                (eid, year, q, qv, user['id'])
+            )
+        # Monthly (1-12)
+        for m in range(1, 13):
+            try:
+                mv = float(request.form.get(f'm{m}') or 0)
+            except ValueError:
+                mv = 0.0
+            conn.execute(
+                '''INSERT INTO sales_targets (employee_id, year, period_type, period_value, target_margin, created_by)
+                   VALUES (?, ?, 'month', ?, ?, ?)
+                   ON CONFLICT (employee_id, year, period_type, period_value)
+                   DO UPDATE SET target_margin = EXCLUDED.target_margin, updated_at = CURRENT_TIMESTAMP''',
+                (eid, year, m, mv, user['id'])
+            )
+        conn.commit()
+        conn.close()
+        flash('Targets saved', 'success')
+        return redirect(url_for('sales_targets_view', year=year))
+
+    if not visible_ids:
+        conn.close()
+        return render_template('sales_targets.html', user=user, role=role, year=year,
+                               team=[], can_edit=role in ('admin', 'manager'))
+    placeholders = ','.join(['?'] * len(visible_ids))
+    team = conn.execute(
+        f'''SELECT e.id, e.name, e.emp_code, e.photo_url
+            FROM employees e JOIN sales_team st ON st.employee_id = e.id
+            WHERE st.is_active = 1 AND e.id IN ({placeholders})
+            ORDER BY e.name''',
+        visible_ids
+    ).fetchall()
+    team_data = []
+    for t in team:
+        eid = t['id']
+        targets = conn.execute(
+            "SELECT period_type, period_value, target_margin FROM sales_targets "
+            "WHERE employee_id = ? AND year = ?",
+            (eid, year)
+        ).fetchall()
+        annual = 0.0
+        quarters = {1: 0.0, 2: 0.0, 3: 0.0, 4: 0.0}
+        months = {i: 0.0 for i in range(1, 13)}
+        for tr in targets:
+            v = float(tr['target_margin'] or 0)
+            if tr['period_type'] == 'annual':
+                annual = v
+            elif tr['period_type'] == 'quarter':
+                quarters[int(tr['period_value'])] = v
+            elif tr['period_type'] == 'month':
+                months[int(tr['period_value'])] = v
+        # Achieved per month
+        achieved = {i: 0.0 for i in range(1, 13)}
+        ach_rows = conn.execute(
+            "SELECT EXTRACT(MONTH FROM close_date) AS m, COALESCE(SUM(margin),0) AS s "
+            "FROM sales_closures WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
+            "GROUP BY EXTRACT(MONTH FROM close_date)",
+            (eid, year)
+        ).fetchall()
+        for ar in ach_rows:
+            achieved[int(ar['m'])] = float(ar['s'] or 0)
+        team_data.append({
+            'id': eid, 'name': t['name'], 'emp_code': t['emp_code'], 'photo_url': t['photo_url'],
+            'annual': annual, 'quarters': quarters, 'months': months, 'achieved': achieved,
+            'achieved_total': sum(achieved.values())
+        })
+    conn.close()
+    return render_template('sales_targets.html', user=user, role=role, year=year,
+                           team=team_data, can_edit=role in ('admin', 'manager'))
+
+
+# ---- Call logs ---------------------------------------------------------
+@app.route('/sales/calls', methods=['GET', 'POST'])
+@login_required
+@sales_crm_required
+def sales_calls_view():
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    month = int(request.args.get('month') or now.month)
+    conn = get_db()
+    if request.method == 'POST':
+        # Daily entry by rep (or admin/manager on someone they can see)
+        target_eid = request.form.get('employee_id')
+        if target_eid and target_eid.isdigit():
+            target_eid = int(target_eid)
+        else:
+            target_eid = user['id']
+        if target_eid not in visible_ids and role != 'admin':
+            target_eid = user['id']
+        log_date = request.form.get('log_date') or datetime.now().strftime('%Y-%m-%d')
+        try:
+            num_calls = int(request.form.get('num_calls') or 0)
+        except ValueError:
+            num_calls = 0
+        try:
+            talk_time = int(request.form.get('talk_time_minutes') or 0)
+        except ValueError:
+            talk_time = 0
+        notes = (request.form.get('notes') or '').strip()
+        try:
+            conn.execute(
+                '''INSERT INTO sales_call_logs (employee_id, log_date, num_calls, talk_time_minutes, notes)
+                   VALUES (?, ?, ?, ?, ?)
+                   ON CONFLICT (employee_id, log_date)
+                   DO UPDATE SET num_calls = EXCLUDED.num_calls,
+                                 talk_time_minutes = EXCLUDED.talk_time_minutes,
+                                 notes = EXCLUDED.notes,
+                                 updated_at = CURRENT_TIMESTAMP''',
+                (target_eid, log_date, num_calls, talk_time, notes)
+            )
+            conn.commit()
+            flash('Call log saved', 'success')
+        except Exception as e:
+            conn.rollback()
+            flash(f'Could not save: {e}', 'error')
+        conn.close()
+        return redirect(url_for('sales_calls_view', year=year, month=month))
+
+    if not visible_ids:
+        conn.close()
+        return render_template('sales_calls.html', user=user, role=role,
+                               year=year, month=month,
+                               my_logs=[], rollup=[], owners=[],
+                               total_calls=0, total_minutes=0)
+    placeholders = ','.join(['?'] * len(visible_ids))
+    # Monthly rollup (per rep)
+    rollup = conn.execute(
+        f'''SELECT e.id, e.name, e.photo_url, e.emp_code,
+                  COALESCE(SUM(cl.num_calls), 0) AS calls,
+                  COALESCE(SUM(cl.talk_time_minutes), 0) AS mins,
+                  COUNT(cl.id) AS days_logged
+           FROM employees e JOIN sales_team st ON st.employee_id = e.id
+           LEFT JOIN sales_call_logs cl ON cl.employee_id = e.id
+                AND EXTRACT(YEAR FROM cl.log_date) = ?
+                AND EXTRACT(MONTH FROM cl.log_date) = ?
+           WHERE st.is_active = 1 AND e.id IN ({placeholders})
+           GROUP BY e.id, e.name, e.photo_url, e.emp_code
+           ORDER BY calls DESC, e.name''',
+        [year, month] + visible_ids
+    ).fetchall()
+    total_calls = sum(int(r['calls'] or 0) for r in rollup)
+    total_minutes = sum(int(r['mins'] or 0) for r in rollup)
+
+    # Current user's recent daily logs (for the entry table)
+    my_logs = conn.execute(
+        "SELECT log_date, num_calls, talk_time_minutes, notes FROM sales_call_logs "
+        "WHERE employee_id = ? AND EXTRACT(YEAR FROM log_date) = ? "
+        "AND EXTRACT(MONTH FROM log_date) = ? ORDER BY log_date DESC",
+        (user['id'], year, month)
+    ).fetchall()
+
+    owners = conn.execute(
+        f'SELECT id, name FROM employees WHERE id IN ({placeholders}) ORDER BY name',
+        visible_ids
+    ).fetchall()
+    conn.close()
+    return render_template('sales_calls.html', user=user, role=role,
+                           year=year, month=month,
+                           my_logs=my_logs, rollup=rollup, owners=owners,
+                           total_calls=total_calls, total_minutes=total_minutes)
+
+
 # Run on startup
 ensure_crm_tables()
+ensure_sales_crm_tables()
 ensure_kra_tables()
 ensure_notification_tables()
 ensure_budget_tables()
