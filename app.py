@@ -10694,29 +10694,43 @@ def sales_dashboard():
       - rep: personal 'My Sales' view (hero stats, quick actions, my leads)
       - admin / viewer / manager: team overview with clickable member drill-down
     """
-    user = get_user()
-    role = get_sales_role(user)
-    now = datetime.now()
-    year = int(request.args.get('year') or now.year)
-    month = int(request.args.get('month') or now.month)
-    quarter = (month - 1) // 3 + 1
-    month_label = calendar.month_name[month] + ' ' + str(year)
+    import traceback
+    try:
+        user = get_user()
+        role = get_sales_role(user)
+        now = datetime.now()
+        year = int(request.args.get('year') or now.year)
+        month = int(request.args.get('month') or now.month)
+        quarter = (month - 1) // 3 + 1
+        month_label = calendar.month_name[month] + ' ' + str(year)
 
-    if role == 'rep':
-        conn = get_db()
-        snap = _get_sales_member_snapshot(conn, user['id'], year, month, quarter)
-        news = conn.execute(
-            "SELECT n.*, e.name AS posted_by_name, e.photo_url "
-            "FROM sales_news n JOIN employees e ON n.posted_by = e.id "
-            "WHERE n.is_active = 1 ORDER BY n.created_at DESC LIMIT 3"
-        ).fetchall()
-        conn.close()
-        return render_template('sales_my.html', user=user, role=role, viewing='self',
-                               member=user, snap=snap, news=news,
-                               year=year, month=month, quarter=quarter,
-                               month_label=month_label)
-    # admin / viewer / manager
-    return _render_team_overview(user, role, year, month, quarter, month_label)
+        if role == 'rep':
+            conn = get_db()
+            snap = _get_sales_member_snapshot(conn, user['id'], year, month, quarter)
+            try:
+                news = conn.execute(
+                    "SELECT n.*, e.name AS posted_by_name, e.photo_url "
+                    "FROM sales_news n JOIN employees e ON n.posted_by = e.id "
+                    "WHERE n.is_active = 1 ORDER BY n.created_at DESC LIMIT 3"
+                ).fetchall()
+            except Exception as news_err:
+                logging.error(f"sales_dashboard news fetch: {news_err}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                news = []
+            conn.close()
+            return render_template('sales_my.html', user=user, role=role, viewing='self',
+                                   member=user, snap=snap, news=news,
+                                   year=year, month=month, quarter=quarter,
+                                   month_label=month_label)
+        # admin / viewer / manager
+        return _render_team_overview(user, role, year, month, quarter, month_label)
+    except Exception as e:
+        logging.error(f"sales_dashboard ERROR: {e}\n{traceback.format_exc()}")
+        flash(f'Sales dashboard error: {type(e).__name__}: {e}', 'error')
+        return redirect(url_for('dashboard'))
 
 
 # ---- Per-member drill-down (admin / viewer / manager) ------------------
@@ -10724,38 +10738,42 @@ def sales_dashboard():
 @login_required
 @sales_crm_required
 def sales_member_detail(employee_id):
-    user = get_user()
-    role = get_sales_role(user)
-    # Reps can only view themselves via this route
-    if role == 'rep' and employee_id != user['id']:
-        flash('You can only view your own sales dashboard.', 'error')
-        return redirect(url_for('sales_dashboard'))
-    # Manager can only see reports + self
-    if role == 'manager':
-        if employee_id not in get_visible_sales_employee_ids(user):
-            flash('You can only view members in your team.', 'error')
+    import traceback
+    try:
+        user = get_user()
+        role = get_sales_role(user)
+        if role == 'rep' and employee_id != user['id']:
+            flash('You can only view your own sales dashboard.', 'error')
             return redirect(url_for('sales_dashboard'))
-    now = datetime.now()
-    year = int(request.args.get('year') or now.year)
-    month = int(request.args.get('month') or now.month)
-    quarter = (month - 1) // 3 + 1
-    month_label = calendar.month_name[month] + ' ' + str(year)
-    conn = get_db()
-    member = conn.execute(
-        'SELECT id, name, emp_code, photo_url, department FROM employees WHERE id = ?',
-        (employee_id,)
-    ).fetchone()
-    if not member:
+        if role == 'manager':
+            if employee_id not in get_visible_sales_employee_ids(user):
+                flash('You can only view members in your team.', 'error')
+                return redirect(url_for('sales_dashboard'))
+        now = datetime.now()
+        year = int(request.args.get('year') or now.year)
+        month = int(request.args.get('month') or now.month)
+        quarter = (month - 1) // 3 + 1
+        month_label = calendar.month_name[month] + ' ' + str(year)
+        conn = get_db()
+        member = conn.execute(
+            'SELECT id, name, emp_code, photo_url, department FROM employees WHERE id = ?',
+            (employee_id,)
+        ).fetchone()
+        if not member:
+            conn.close()
+            flash('Member not found.', 'error')
+            return redirect(url_for('sales_dashboard'))
+        snap = _get_sales_member_snapshot(conn, employee_id, year, month, quarter)
         conn.close()
-        flash('Member not found.', 'error')
+        return render_template('sales_my.html', user=user, role=role,
+                               viewing='other' if employee_id != user['id'] else 'self',
+                               member=member, snap=snap, news=[],
+                               year=year, month=month, quarter=quarter,
+                               month_label=month_label)
+    except Exception as e:
+        logging.error(f"sales_member_detail ERROR: {e}\n{traceback.format_exc()}")
+        flash(f'Sales member view error: {type(e).__name__}: {e}', 'error')
         return redirect(url_for('sales_dashboard'))
-    snap = _get_sales_member_snapshot(conn, employee_id, year, month, quarter)
-    conn.close()
-    return render_template('sales_my.html', user=user, role=role,
-                           viewing='other' if employee_id != user['id'] else 'self',
-                           member=member, snap=snap, news=[],
-                           year=year, month=month, quarter=quarter,
-                           month_label=month_label)
 
 
 # ---- /sales/crm legacy redirect ----------------------------------------
