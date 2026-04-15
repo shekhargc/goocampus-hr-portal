@@ -48,6 +48,7 @@
                     {% endfor %}
                 </select>
                 <div id="reportsToHint" style="display:none;font-size:0.72rem;color:#059669;margin-top:0.25rem;">Auto-suggested from employee's reporting line.</div>
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.25rem;">Viewers aren't listed here — they see everything automatically and don't act as sales managers.</div>
             </div>
             <button type="submit" {% if available_emps|length == 0 %}disabled{% endif %} style="background:var(--orange);color:white;border:none;padding:0.55rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:{% if available_emps|length == 0 %}not-allowed;opacity:0.5{% else %}pointer{% endif %};font-size:0.88rem;height:38px;">Add</button>
         </form>

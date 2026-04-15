@@ -10704,12 +10704,21 @@ def sales_team_admin():
             try:
                 # If the chosen manager isn't yet on the Sales Team as an active Manager,
                 # auto-promote them so the reporting chain actually works.
+                # BUT: never auto-promote a Viewer — viewers are management/observers,
+                # not sales sellers. If the picked manager is a viewer, drop the link.
                 if mgr is not None:
-                    conn.execute(
-                        "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
-                        "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                    existing = conn.execute(
+                        "SELECT role, is_active FROM sales_team WHERE employee_id = ?",
                         (mgr,)
-                    )
+                    ).fetchone()
+                    if existing and (existing['role'] or '').lower() == 'viewer' and existing['is_active'] == 1:
+                        mgr = None  # Viewer stays a Viewer; they aren't anyone's sales manager
+                    else:
+                        conn.execute(
+                            "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
+                            "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                            (mgr,)
+                        )
                 conn.execute(
                     'INSERT INTO sales_team (employee_id, manager_employee_id, role, is_active) VALUES (?, ?, ?, 1) '
                     'ON CONFLICT (employee_id) DO UPDATE SET manager_employee_id = EXCLUDED.manager_employee_id, '
@@ -10736,11 +10745,26 @@ def sales_team_admin():
                 mgr = None
             try:
                 # Auto-promote the selected manager if they aren't already an active Manager
+                # BUT: never promote a Viewer — they're observers, not sales managers.
                 if mgr is not None:
-                    conn.execute(
-                        "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
-                        "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                    existing = conn.execute(
+                        "SELECT role, is_active FROM sales_team WHERE employee_id = ?",
                         (mgr,)
+                    ).fetchone()
+                    if existing and (existing['role'] or '').lower() == 'viewer' and existing['is_active'] == 1:
+                        mgr = None  # Viewer stays a Viewer; they aren't anyone's sales manager
+                    else:
+                        conn.execute(
+                            "INSERT INTO sales_team (employee_id, role, is_active) VALUES (?, 'manager', 1) "
+                            "ON CONFLICT (employee_id) DO UPDATE SET role = 'manager', is_active = 1",
+                            (mgr,)
+                        )
+                # If this member is becoming a Viewer, also clear any reports pointing at them
+                # (a Viewer cannot be another rep's manager)
+                if r == 'viewer':
+                    conn.execute(
+                        'UPDATE sales_team SET manager_employee_id = NULL WHERE manager_employee_id = ?',
+                        (eid,)
                     )
                 conn.execute(
                     'UPDATE sales_team SET role = ?, manager_employee_id = ? WHERE employee_id = ?',
