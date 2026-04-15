@@ -261,6 +261,145 @@
     @media (max-width: 768px) {
         .prod-container { padding: 1.5rem 1rem; }
     }
+
+    /* ===== Clickable rows ===== */
+    .prod-table tbody tr[data-type] { cursor: pointer; transition: background 0.12s; }
+    .prod-table tbody tr[data-type].is-open { background: rgba(245,130,32,0.07) !important; }
+    .prod-table td.col-actions * { cursor: auto; }
+
+    /* ===== Slide-out drawer (matches WFH approvals) ===== */
+    .prod-drawer-overlay {
+        position: fixed; inset: 0;
+        background: rgba(15,23,42,0.35);
+        opacity: 0; pointer-events: none;
+        transition: opacity 0.2s ease;
+        z-index: 998;
+    }
+    .prod-drawer-overlay.open { opacity: 1; pointer-events: auto; }
+
+    .prod-drawer {
+        position: fixed;
+        top: 0; right: 0;
+        width: 520px; max-width: 100vw;
+        height: 100vh;
+        background: var(--white);
+        box-shadow: -10px 0 35px rgba(15,23,42,0.2);
+        transform: translateX(100%);
+        transition: transform 0.28s cubic-bezier(0.22,0.8,0.36,1);
+        z-index: 999;
+        display: flex; flex-direction: column;
+        font-family: 'Inter', sans-serif;
+    }
+    .prod-drawer.open { transform: translateX(0); }
+
+    .prod-drawer-head {
+        padding: 1.25rem 1.5rem;
+        border-bottom: 1px solid var(--gray-200);
+        display: flex; align-items: flex-start; gap: 0.85rem;
+        background: linear-gradient(180deg, rgba(245,130,32,0.06), transparent);
+    }
+    .prod-drawer-icon {
+        width: 52px; height: 52px; border-radius: 0.65rem;
+        background: rgba(245,130,32,0.12);
+        color: var(--orange);
+        display: flex; align-items: center; justify-content: center;
+        font-size: 1.35rem; font-weight: 800; flex-shrink: 0;
+    }
+    .prod-drawer-icon.service { background: rgba(74,122,181,0.12); color: var(--blue-dark); }
+    .prod-drawer-title {
+        font-size: 1.05rem; font-weight: 700; color: var(--navy);
+        line-height: 1.3; margin-bottom: 0.2rem;
+        word-break: break-word;
+    }
+    .prod-drawer-sub {
+        font-size: 0.78rem; color: var(--gray-500);
+        display: flex; gap: 0.4rem; align-items: center; flex-wrap: wrap;
+    }
+    .prod-drawer-close {
+        background: transparent; border: none;
+        font-size: 1.4rem; color: var(--gray-400);
+        cursor: pointer; padding: 0.25rem 0.5rem;
+        margin-left: auto; line-height: 1;
+    }
+    .prod-drawer-close:hover { color: var(--gray-700); }
+
+    .prod-drawer-body {
+        flex: 1; overflow-y: auto;
+        padding: 1.25rem 1.5rem;
+    }
+    .prod-drawer-section {
+        margin-bottom: 1.5rem;
+    }
+    .prod-drawer-section-title {
+        font-size: 0.68rem;
+        font-weight: 700;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        margin-bottom: 0.6rem;
+    }
+    .prod-drawer-grid {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.85rem 1.2rem;
+    }
+    .prod-drawer-field-label {
+        font-size: 0.7rem;
+        color: var(--gray-500);
+        font-weight: 600;
+        margin-bottom: 0.2rem;
+    }
+    .prod-drawer-field-value {
+        font-size: 0.88rem;
+        color: var(--gray-800);
+        font-weight: 600;
+        word-break: break-word;
+    }
+    .prod-drawer-field-value.muted { color: var(--gray-400); font-weight: 500; }
+    .prod-drawer-field-value.mono { font-variant-numeric: tabular-nums; }
+    .prod-drawer-field-value.money-pos { color: #059669; }
+    .prod-drawer-field-value.money-neg { color: #b91c1c; }
+
+    .prod-drawer-desc {
+        font-size: 0.86rem;
+        color: var(--gray-700);
+        line-height: 1.55;
+        background: var(--gray-50);
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        padding: 0.85rem 1rem;
+        white-space: pre-wrap;
+        word-break: break-word;
+    }
+
+    .prod-drawer-foot {
+        padding: 1rem 1.5rem;
+        border-top: 1px solid var(--gray-200);
+        background: var(--gray-50);
+        display: flex; gap: 0.5rem; flex-wrap: wrap;
+    }
+    .prod-drawer-btn {
+        flex: 1; min-width: 120px;
+        padding: 0.65rem 1rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem; font-weight: 600;
+        border: 1px solid transparent;
+        cursor: pointer;
+        text-decoration: none;
+        text-align: center;
+        font-family: 'Inter', sans-serif;
+    }
+    .prod-drawer-btn-edit { background: var(--orange); color: white; }
+    .prod-drawer-btn-edit:hover { background: var(--orange-dark); }
+    .prod-drawer-btn-project { background: var(--white); color: var(--blue-dark); border-color: var(--blue-light); }
+    .prod-drawer-btn-project:hover { background: var(--blue-light); }
+    .prod-drawer-btn-delete { background: rgba(239,68,68,0.1); color: #b91c1c; border-color: rgba(239,68,68,0.25); }
+    .prod-drawer-btn-delete:hover { background: rgba(239,68,68,0.18); }
+
+    @media (max-width: 640px) {
+        .prod-drawer { width: 100vw; }
+        .prod-drawer-grid { grid-template-columns: 1fr; }
+    }
 </style>
 {% endblock %}
 
@@ -355,7 +494,7 @@
                 {% set cur = p.cost_currency or 'INR' %}
                 {% set is_fc = cur != 'INR' %}
                 {% set orig_margin = (p.sale_price or 0) - (p.product_cost or 0) %}
-                <tr data-type="{{ p.type }}" data-status="{{ p.status }}" data-foreign="{{ '1' if is_fc else '0' }}">
+                <tr data-type="{{ p.type }}" data-status="{{ p.status }}" data-foreign="{{ '1' if is_fc else '0' }}" data-pid="{{ p.id }}" onclick="openProductDrawer({{ p.id }}, event)">
                     <td class="col-name">
                         <div class="prod-name">{{ p.name }}</div>
                         <div class="prod-meta" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.15rem;display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
@@ -393,7 +532,7 @@
                         {% endif %}
                     </td>
                     {% if is_admin %}
-                    <td class="col-actions">
+                    <td class="col-actions" onclick="event.stopPropagation();">
                         <a href="/products/{{ p.id }}/edit" class="btn-sm-edit" style="text-decoration:none;display:inline-block;">Edit</a>
                         <form method="POST" action="/products/{{ p.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete &quot;{{ p.name }}&quot;?');">
                             <input type="hidden" name="source" value="products" />
@@ -480,6 +619,115 @@
     </div>
     {% endif %}
 
+    <!-- ===== Slide-out drawer ===== -->
+    <div class="prod-drawer-overlay" id="prod-drawer-overlay" onclick="closeProductDrawer()"></div>
+    <aside class="prod-drawer" id="prod-drawer" role="dialog" aria-hidden="true">
+        <div class="prod-drawer-head">
+            <div class="prod-drawer-icon" id="pd-icon">P</div>
+            <div style="flex:1;min-width:0;">
+                <div class="prod-drawer-title" id="pd-title">—</div>
+                <div class="prod-drawer-sub" id="pd-sub">—</div>
+            </div>
+            <button class="prod-drawer-close" onclick="closeProductDrawer()" aria-label="Close">×</button>
+        </div>
+        <div class="prod-drawer-body">
+            <div class="prod-drawer-section">
+                <div class="prod-drawer-section-title">Classification</div>
+                <div class="prod-drawer-grid">
+                    <div>
+                        <div class="prod-drawer-field-label">Type</div>
+                        <div class="prod-drawer-field-value" id="pd-type">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Status</div>
+                        <div class="prod-drawer-field-value" id="pd-status">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Project</div>
+                        <div class="prod-drawer-field-value" id="pd-project">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Revenue Stream</div>
+                        <div class="prod-drawer-field-value" id="pd-stream">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="prod-drawer-section">
+                <div class="prod-drawer-section-title">Pricing — Original Currency</div>
+                <div class="prod-drawer-grid">
+                    <div>
+                        <div class="prod-drawer-field-label">Currency</div>
+                        <div class="prod-drawer-field-value" id="pd-currency">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Unit Cost</div>
+                        <div class="prod-drawer-field-value mono" id="pd-cost-orig">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Sale / Revenue</div>
+                        <div class="prod-drawer-field-value mono" id="pd-rev-orig">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Margin</div>
+                        <div class="prod-drawer-field-value mono" id="pd-margin-orig">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="prod-drawer-section">
+                <div class="prod-drawer-section-title">Converted to INR (live FX)</div>
+                <div class="prod-drawer-grid">
+                    <div>
+                        <div class="prod-drawer-field-label">Cost ₹</div>
+                        <div class="prod-drawer-field-value mono money-neg" id="pd-cost-inr">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Revenue ₹</div>
+                        <div class="prod-drawer-field-value mono money-pos" id="pd-rev-inr">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Margin ₹</div>
+                        <div class="prod-drawer-field-value mono" id="pd-margin-inr">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Margin %</div>
+                        <div class="prod-drawer-field-value mono" id="pd-margin-pct">—</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="prod-drawer-section">
+                <div class="prod-drawer-section-title">Description</div>
+                <div class="prod-drawer-desc" id="pd-desc">—</div>
+            </div>
+
+            <div class="prod-drawer-section">
+                <div class="prod-drawer-section-title">Meta</div>
+                <div class="prod-drawer-grid">
+                    <div>
+                        <div class="prod-drawer-field-label">Created By</div>
+                        <div class="prod-drawer-field-value" id="pd-createdby">—</div>
+                    </div>
+                    <div>
+                        <div class="prod-drawer-field-label">Created At</div>
+                        <div class="prod-drawer-field-value" id="pd-createdat">—</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% if is_admin %}
+        <div class="prod-drawer-foot">
+            <a href="#" class="prod-drawer-btn prod-drawer-btn-project" id="pd-btn-project">View Project</a>
+            <a href="#" class="prod-drawer-btn prod-drawer-btn-edit" id="pd-btn-edit">Edit</a>
+            <form method="POST" id="pd-delete-form" style="flex:1;min-width:120px;margin:0;" onsubmit="return confirm('Delete this product?');">
+                <input type="hidden" name="source" value="products" />
+                <button type="submit" class="prod-drawer-btn prod-drawer-btn-delete" style="width:100%;">Delete</button>
+            </form>
+        </div>
+        {% endif %}
+    </aside>
+
     {% if can_manage and projects %}
     <div id="add-section" style="margin-top:2rem;background:var(--white);border:1px solid var(--gray-200);border-radius:0.75rem;padding:1.75rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
         <h2 style="font-size:1.1rem;font-weight:700;color:var(--navy);margin-bottom:1rem;">Add New Product/Service</h2>
@@ -538,6 +786,147 @@
 <script>
 // Server-injected FX rates (1 unit → INR)
 const FX_RATES = {{ fx_rates|tojson }};
+
+// Server-injected full product data keyed by id (for drawer)
+const PRODUCTS_DATA = {
+    {% for p in products %}
+    "{{ p.id }}": {
+        id: {{ p.id }},
+        name: {{ (p.name or '')|tojson }},
+        type: {{ (p.type or 'product')|tojson }},
+        status: {{ (p.status or 'active')|tojson }},
+        description: {{ (p.description or '')|tojson }},
+        project_id: {{ p.project_id|tojson if p.project_id else 'null' }},
+        project_name: {{ (p.project_name or '')|tojson }},
+        stream_name: {{ (p.stream_name or '')|tojson }},
+        currency: {{ (p.cost_currency or 'INR')|tojson }},
+        product_cost: {{ (p.product_cost or 0)|tojson }},
+        sale_price: {{ (p.sale_price or 0)|tojson }},
+        cost_inr: {{ (p.cost_inr or 0)|tojson }},
+        revenue_inr: {{ (p.revenue_inr or 0)|tojson }},
+        margin_inr: {{ (p.margin_inr or 0)|tojson }},
+        created_by_name: {{ (p.created_by_name or '')|tojson }},
+        created_at: {{ (p.created_at.strftime('%d %b %Y, %I:%M %p') if p.created_at else '')|tojson }}
+    }{% if not loop.last %},{% endif %}
+    {% endfor %}
+};
+
+const IS_ADMIN = {{ 'true' if is_admin else 'false' }};
+
+function fmtMoney(amount, currency) {
+    const n = parseFloat(amount) || 0;
+    const sym = currency === 'INR' ? '₹' : (currency + ' ');
+    return sym + Math.round(n).toLocaleString(currency === 'INR' ? 'en-IN' : 'en-US');
+}
+
+function openProductDrawer(pid, ev) {
+    if (ev) {
+        // Clicks on actions cell shouldn't open drawer
+        const t = ev.target;
+        if (t.closest('.col-actions')) return;
+    }
+    const p = PRODUCTS_DATA[pid];
+    if (!p) return;
+
+    // Highlight row
+    document.querySelectorAll('.prod-table tbody tr.is-open').forEach(r => r.classList.remove('is-open'));
+    const row = document.querySelector('.prod-table tbody tr[data-pid="' + pid + '"]');
+    if (row) row.classList.add('is-open');
+
+    const isService = p.type === 'service';
+    const icon = document.getElementById('pd-icon');
+    icon.textContent = isService ? 'S' : 'P';
+    icon.classList.toggle('service', isService);
+
+    document.getElementById('pd-title').textContent = p.name || 'Untitled';
+    const subBits = [isService ? 'Service' : 'Product'];
+    if (p.project_name) subBits.push(p.project_name);
+    document.getElementById('pd-sub').textContent = subBits.join(' · ');
+
+    document.getElementById('pd-type').textContent = isService ? 'Service' : 'Product';
+    document.getElementById('pd-status').textContent = p.status === 'active' ? '● Active' : '● Inactive';
+    document.getElementById('pd-status').style.color = p.status === 'active' ? '#059669' : 'var(--gray-500)';
+
+    const projCell = document.getElementById('pd-project');
+    if (p.project_id && p.project_name) {
+        projCell.innerHTML = '<a href="/projects/' + p.project_id + '" style="color:var(--blue-dark);text-decoration:none;">' + p.project_name + '</a>';
+    } else {
+        projCell.innerHTML = '<span class="muted">— unassigned —</span>';
+    }
+
+    const streamCell = document.getElementById('pd-stream');
+    streamCell.textContent = p.stream_name || '— unassigned —';
+    streamCell.classList.toggle('muted', !p.stream_name);
+
+    const cur = p.currency || 'INR';
+    const isFC = cur !== 'INR';
+    document.getElementById('pd-currency').textContent = cur;
+
+    const origMargin = (p.sale_price || 0) - (p.product_cost || 0);
+    document.getElementById('pd-cost-orig').textContent = isFC ? fmtMoney(p.product_cost, cur) : '—';
+    document.getElementById('pd-rev-orig').textContent = isFC ? fmtMoney(p.sale_price, cur) : '—';
+    const marginOrigEl = document.getElementById('pd-margin-orig');
+    marginOrigEl.textContent = isFC ? fmtMoney(origMargin, cur) : '—';
+    marginOrigEl.classList.remove('money-pos', 'money-neg');
+    if (isFC) marginOrigEl.classList.add(origMargin >= 0 ? 'money-pos' : 'money-neg');
+
+    document.getElementById('pd-cost-inr').textContent = fmtMoney(p.cost_inr, 'INR');
+    document.getElementById('pd-rev-inr').textContent = fmtMoney(p.revenue_inr, 'INR');
+    const mEl = document.getElementById('pd-margin-inr');
+    mEl.textContent = fmtMoney(p.margin_inr, 'INR');
+    mEl.classList.remove('money-pos', 'money-neg');
+    mEl.classList.add(p.margin_inr >= 0 ? 'money-pos' : 'money-neg');
+
+    const pctEl = document.getElementById('pd-margin-pct');
+    if (p.revenue_inr && p.revenue_inr > 0) {
+        const pct = (p.margin_inr / p.revenue_inr) * 100;
+        pctEl.textContent = pct.toFixed(1) + '%';
+        pctEl.classList.remove('money-pos', 'money-neg');
+        pctEl.classList.add(pct >= 0 ? 'money-pos' : 'money-neg');
+    } else {
+        pctEl.textContent = '—';
+        pctEl.classList.remove('money-pos', 'money-neg');
+    }
+
+    const descEl = document.getElementById('pd-desc');
+    if (p.description && p.description.trim()) {
+        descEl.textContent = p.description;
+        descEl.style.color = '';
+    } else {
+        descEl.textContent = 'No description.';
+        descEl.style.color = 'var(--gray-400)';
+    }
+
+    document.getElementById('pd-createdby').textContent = p.created_by_name || '—';
+    document.getElementById('pd-createdat').textContent = p.created_at || '—';
+
+    if (IS_ADMIN) {
+        const btnEdit = document.getElementById('pd-btn-edit');
+        if (btnEdit) btnEdit.href = '/products/' + p.id + '/edit';
+        const btnProj = document.getElementById('pd-btn-project');
+        if (btnProj) {
+            if (p.project_id) { btnProj.href = '/projects/' + p.project_id; btnProj.style.display = ''; }
+            else btnProj.style.display = 'none';
+        }
+        const delForm = document.getElementById('pd-delete-form');
+        if (delForm) delForm.action = '/products/' + p.id + '/delete';
+    }
+
+    document.getElementById('prod-drawer').classList.add('open');
+    document.getElementById('prod-drawer-overlay').classList.add('open');
+    document.getElementById('prod-drawer').setAttribute('aria-hidden', 'false');
+}
+
+function closeProductDrawer() {
+    document.getElementById('prod-drawer').classList.remove('open');
+    document.getElementById('prod-drawer-overlay').classList.remove('open');
+    document.getElementById('prod-drawer').setAttribute('aria-hidden', 'true');
+    document.querySelectorAll('.prod-table tbody tr.is-open').forEach(r => r.classList.remove('is-open'));
+}
+
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeProductDrawer();
+});
 
 function filterProducts(filter, btn) {
     document.querySelectorAll('.prod-filter-btn').forEach(b => b.classList.remove('active'));
