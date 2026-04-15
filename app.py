@@ -10686,7 +10686,7 @@ def sales_team_admin():
         ORDER BY st.role DESC, e.name
     ''').fetchall()
     member_ids = [m['employee_id'] for m in members]
-    available_emps_q = "SELECT id, name, emp_code, designation FROM employees WHERE status = 'active'"
+    available_emps_q = "SELECT id, name, emp_code, designation FROM employees WHERE is_active = 1 AND emp_code != 'admin'"
     if member_ids:
         ph = ','.join(['?'] * len(member_ids))
         available_emps_q += f' AND id NOT IN ({ph})'
