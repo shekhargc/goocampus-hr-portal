@@ -172,6 +172,41 @@
         }
         .nav-dropdown-menu-inner a svg { flex-shrink: 0; }
 
+        /* Wide / multi-column dropdown menus for long sub-lists */
+        .nav-dropdown-menu--wide { min-width: 500px; }
+        .nav-dropdown-menu--wide .nav-dropdown-menu-inner {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(220px, 1fr));
+            gap: 0.1rem;
+            padding: 0.4rem;
+            max-height: none;
+            overflow-y: visible;
+        }
+        .nav-dropdown-menu--wide-3 { min-width: 720px; }
+        .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner {
+            display: grid;
+            grid-template-columns: repeat(3, minmax(220px, 1fr));
+            gap: 0.1rem;
+            padding: 0.4rem;
+            max-height: none;
+            overflow-y: visible;
+        }
+        .nav-dropdown-menu--wide .nav-dropdown-menu-inner a,
+        .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner a {
+            padding: 0.65rem 0.8rem;
+            border-radius: 0.45rem;
+            border-top: none !important;
+            font-size: 0.86rem;
+        }
+        @media (max-width: 960px) {
+            .nav-dropdown-menu--wide,
+            .nav-dropdown-menu--wide-3 { min-width: 260px; }
+            .nav-dropdown-menu--wide .nav-dropdown-menu-inner,
+            .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner {
+                grid-template-columns: 1fr;
+            }
+        }
+
         /* Approvals Badge */
         .nav-badge {
             background: var(--danger);
@@ -779,7 +814,7 @@
                             HR
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto; min-width: 220px;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/hr-dashboard">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
@@ -838,7 +873,7 @@
                             KRA
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em;">KRA Management</div>
                                 <a href="/kra/admin/templates">
@@ -876,7 +911,7 @@
                             Sales
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/sales">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
@@ -948,7 +983,7 @@
                             Finance
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/finance/budget">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
@@ -996,7 +1031,7 @@
                             Operations
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/operations/plab">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
@@ -1068,7 +1103,7 @@
                             HR
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto; min-width: 220px;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/leave-info">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -1176,7 +1211,7 @@
                             Sales
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
                                 <a href="/sales">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
