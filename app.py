@@ -5167,6 +5167,7 @@ def sales_dashboard():
         ''', (today_str, week_end, user['id'])).fetchall()
 
     conn.close()
+    sales_role = get_sales_role(user)
     return render_template('sales_dashboard.html', user=user,
                          recent_news=recent_news, recent_trips=recent_trips,
                          project_count=project_count, product_count=product_count,
@@ -5175,7 +5176,8 @@ def sales_dashboard():
                          meeting_types=meeting_types, top_performers=top_performers,
                          active_projects=active_projects, upcoming_meetings=upcoming_meetings,
                          month_name=month_name, current_year=now.year,
-                         is_company_view=is_company_view)
+                         is_company_view=is_company_view,
+                         sales_role=sales_role)
 
 
 # ─── B2B Meetings Routes ───
@@ -10686,17 +10688,35 @@ def sales_team_admin():
         ORDER BY st.role DESC, e.name
     ''').fetchall()
     member_ids = [m['employee_id'] for m in members]
-    available_emps_q = "SELECT id, name, emp_code, designation FROM employees WHERE is_active = 1 AND emp_code != 'admin'"
+    # Only show employees who already have Sales module access — they need it to use the CRM.
+    # Admins are always allowed (is_admin = 1 bypasses the module_access check at runtime).
+    available_emps_q = (
+        "SELECT e.id, e.name, e.emp_code, e.designation FROM employees e "
+        "WHERE e.is_active = 1 AND e.emp_code != 'admin' "
+        "AND (e.is_admin = 1 OR EXISTS ("
+        "  SELECT 1 FROM module_access ma "
+        "  WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1"
+        "))"
+    )
     if member_ids:
         ph = ','.join(['?'] * len(member_ids))
-        available_emps_q += f' AND id NOT IN ({ph})'
-        available_emps = conn.execute(available_emps_q + ' ORDER BY name', member_ids).fetchall()
+        available_emps_q += f' AND e.id NOT IN ({ph})'
+        available_emps = conn.execute(available_emps_q + ' ORDER BY e.name', member_ids).fetchall()
     else:
-        available_emps = conn.execute(available_emps_q + ' ORDER BY name').fetchall()
+        available_emps = conn.execute(available_emps_q + ' ORDER BY e.name').fetchall()
+    # Count employees who have sales module access but aren't yet on the team — surfaced as a hint.
+    no_access_count = conn.execute(
+        "SELECT COUNT(*) AS c FROM employees e "
+        "WHERE e.is_active = 1 AND e.emp_code != 'admin' AND e.is_admin = 0 "
+        "AND NOT EXISTS (SELECT 1 FROM module_access ma "
+        "                WHERE ma.employee_id = e.id AND ma.module = 'sales' AND ma.is_active = 1)"
+    ).fetchone()
+    no_access_count = no_access_count['c'] if no_access_count else 0
     managers = [m for m in members if (m['role'] or '').lower() == 'manager']
     conn.close()
     return render_template('sales_team.html', user=user, members=members,
-                           available_emps=available_emps, managers=managers)
+                           available_emps=available_emps, managers=managers,
+                           no_access_count=no_access_count)
 
 
 # ---- Leads -------------------------------------------------------------
