@@ -5052,10 +5052,15 @@ def delete_sales_news(news_id):
 
 # ─── Sales Dashboard ───
 
-@app.route('/sales')
+@app.route('/b2b/dashboard')
 @login_required
 @sales_access_required
-def sales_dashboard():
+def b2b_dashboard():
+    """B2B travel/meetings overview — trips, meetings, projects, news.
+
+    Previously lived at /sales. Moved here when /sales was repurposed as the
+    unified Sales CRM dashboard. Still reachable via the Meetings nav.
+    """
     user = get_user()
     conn = get_db()
 
@@ -10481,7 +10486,9 @@ def sales_crm_required(f):
             return redirect(url_for('dashboard'))
         if not get_sales_role(user):
             flash('You are not part of the Sales team. Ask an admin to add you under Sales → Team.', 'error')
-            return redirect(url_for('sales_dashboard'))
+            # Redirect to main dashboard (not sales_dashboard) to avoid redirect loop,
+            # since sales_dashboard itself is decorated with sales_crm_required.
+            return redirect(url_for('dashboard'))
         return f(*args, **kwargs)
     return wrapper
 
@@ -10499,127 +10506,146 @@ def sales_write_required(f):
         role = get_sales_role(user)
         if not role:
             flash('You are not part of the Sales team.', 'error')
-            return redirect(url_for('sales_dashboard'))
+            return redirect(url_for('dashboard'))
         if role == 'viewer':
             flash('Viewer role — Sales CRM is read-only for you.', 'error')
-            return redirect(url_for('sales_crm_dashboard'))
+            return redirect(url_for('sales_dashboard'))
         return f(*args, **kwargs)
     return wrapper
 
 
-# ---- Sales CRM dashboard -----------------------------------------------
-@app.route('/sales/crm')
-@login_required
-@sales_crm_required
-def sales_crm_dashboard():
-    user = get_user()
-    role = get_sales_role(user)
+# ---- Sales dashboard helpers -------------------------------------------
+def _get_sales_member_snapshot(conn, eid, year, month, quarter):
+    """Compute a single sales team member's dashboard data — targets,
+    achieved margin, lead/call activity, and the top of their leads/closures lists.
+    Used by both the personal 'My Sales' view and the admin drill-down."""
+    ta = conn.execute(
+        "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+        "WHERE employee_id = ? AND year = ? AND period_type = 'annual'",
+        (eid, year)
+    ).fetchone()
+    tq = conn.execute(
+        "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+        "WHERE employee_id = ? AND year = ? AND period_type = 'quarter' AND period_value = ?",
+        (eid, year, quarter)
+    ).fetchone()
+    tm = conn.execute(
+        "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
+        "WHERE employee_id = ? AND year = ? AND period_type = 'month' AND period_value = ?",
+        (eid, year, month)
+    ).fetchone()
+    aa = conn.execute(
+        "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+        "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ?",
+        (eid, year)
+    ).fetchone()
+    aq_start = (quarter - 1) * 3 + 1
+    aq = conn.execute(
+        "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+        "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
+        "AND EXTRACT(MONTH FROM close_date) BETWEEN ? AND ?",
+        (eid, year, aq_start, aq_start + 2)
+    ).fetchone()
+    am = conn.execute(
+        "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
+        "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
+        "AND EXTRACT(MONTH FROM close_date) = ?",
+        (eid, year, month)
+    ).fetchone()
+    leads_open = conn.execute(
+        "SELECT COUNT(*) AS c FROM sales_leads sl "
+        "LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
+        "WHERE sl.owner_employee_id = ? AND COALESCE(s.is_won,0)=0 AND COALESCE(s.is_lost,0)=0",
+        (eid,)
+    ).fetchone()
+    leads_hot = conn.execute(
+        "SELECT COUNT(*) AS c FROM sales_leads "
+        "WHERE owner_employee_id = ? AND is_hot = 1",
+        (eid,)
+    ).fetchone()
+    calls_month = conn.execute(
+        "SELECT COALESCE(SUM(num_calls),0) AS calls, COALESCE(SUM(talk_time_minutes),0) AS mins "
+        "FROM sales_call_logs WHERE employee_id = ? "
+        "AND EXTRACT(YEAR FROM log_date) = ? AND EXTRACT(MONTH FROM log_date) = ?",
+        (eid, year, month)
+    ).fetchone()
+    my_leads = conn.execute(
+        "SELECT sl.id, sl.lead_name, sl.company, sl.expected_value, sl.expected_close_date, sl.is_hot, "
+        "s.name AS stage_name, s.color AS stage_color "
+        "FROM sales_leads sl LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
+        "WHERE sl.owner_employee_id = ? "
+        "AND COALESCE(s.is_won,0)=0 AND COALESCE(s.is_lost,0)=0 "
+        "ORDER BY sl.is_hot DESC, sl.expected_close_date NULLS LAST LIMIT 10",
+        (eid,)
+    ).fetchall()
+    my_closures = conn.execute(
+        "SELECT id, lead_name, company, product_name, revenue, margin, close_date "
+        "FROM sales_closures WHERE employee_id = ? "
+        "AND EXTRACT(YEAR FROM close_date) = ? "
+        "ORDER BY close_date DESC LIMIT 6",
+        (eid, year)
+    ).fetchall()
+    annual_t = float(ta['t'] or 0); annual_a = float(aa['a'] or 0)
+    quarter_t = float(tq['t'] or 0); quarter_a = float(aq['a'] or 0)
+    month_t = float(tm['t'] or 0); month_a = float(am['a'] or 0)
+    return {
+        'annual_target': annual_t, 'annual_achieved': annual_a,
+        'annual_diff': annual_a - annual_t,
+        'annual_pct': (annual_a / annual_t * 100) if annual_t > 0 else 0,
+        'quarter_target': quarter_t, 'quarter_achieved': quarter_a,
+        'quarter_diff': quarter_a - quarter_t,
+        'quarter_pct': (quarter_a / quarter_t * 100) if quarter_t > 0 else 0,
+        'month_target': month_t, 'month_achieved': month_a,
+        'month_diff': month_a - month_t,
+        'month_pct': (month_a / month_t * 100) if month_t > 0 else 0,
+        'leads_open': leads_open['c'] if leads_open else 0,
+        'leads_hot': leads_hot['c'] if leads_hot else 0,
+        'calls_month': calls_month['calls'] if calls_month else 0,
+        'talk_minutes_month': calls_month['mins'] if calls_month else 0,
+        'my_leads': my_leads,
+        'my_closures': my_closures,
+    }
+
+
+def _render_team_overview(user, role, year, month, quarter, month_label):
+    """Shared team overview rendering for admin / viewer / manager roles.
+    Each per-member row is clickable and drills into /sales/member/<id>."""
     visible_ids = get_visible_sales_employee_ids(user)
     if not visible_ids:
         return render_template('sales_crm_dashboard.html', user=user, role=role,
-                               rows=[], totals=None, hot_count=0, month_label='', year=datetime.now().year)
+                               rows=[], totals=None, top_products=[], hot_leads=[],
+                               news=[], year=year, month=month, quarter=quarter,
+                               month_label=month_label, is_admin=(role == 'admin'))
     placeholders = ','.join(['?'] * len(visible_ids))
-
-    now = datetime.now()
-    year = int(request.args.get('year') or now.year)
-    month = int(request.args.get('month') or now.month)
-    quarter = (month - 1) // 3 + 1
-    month_label = calendar.month_name[month] + ' ' + str(year)
-
     conn = get_db()
-    # Per-rep targets (annual / quarter / month) and achieved margin
     rep_rows_raw = conn.execute(
-        f'SELECT e.id, e.name, e.emp_code, e.photo_url, st.role, st.manager_employee_id '
+        f'SELECT e.id, e.name, e.emp_code, e.photo_url, st.role '
         f'FROM employees e JOIN sales_team st ON st.employee_id = e.id '
         f'WHERE st.is_active = 1 AND e.id IN ({placeholders}) '
         f'ORDER BY e.name',
         visible_ids
     ).fetchall()
-
     rows = []
     tot_annual_t = tot_quarter_t = tot_month_t = 0.0
     tot_annual_a = tot_quarter_a = tot_month_a = 0.0
     for r in rep_rows_raw:
-        eid = r['id']
-        # Targets
-        ta = conn.execute(
-            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
-            "WHERE employee_id = ? AND year = ? AND period_type = 'annual'",
-            (eid, year)
-        ).fetchone()
-        tq = conn.execute(
-            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
-            "WHERE employee_id = ? AND year = ? AND period_type = 'quarter' AND period_value = ?",
-            (eid, year, quarter)
-        ).fetchone()
-        tm = conn.execute(
-            "SELECT COALESCE(SUM(target_margin),0) AS t FROM sales_targets "
-            "WHERE employee_id = ? AND year = ? AND period_type = 'month' AND period_value = ?",
-            (eid, year, month)
-        ).fetchone()
-        # Achieved margins
-        aa = conn.execute(
-            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
-            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ?",
-            (eid, year)
-        ).fetchone()
-        aq_start_month = (quarter - 1) * 3 + 1
-        aq_end_month = aq_start_month + 2
-        aq = conn.execute(
-            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
-            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
-            "AND EXTRACT(MONTH FROM close_date) BETWEEN ? AND ?",
-            (eid, year, aq_start_month, aq_end_month)
-        ).fetchone()
-        am = conn.execute(
-            "SELECT COALESCE(SUM(margin),0) AS a FROM sales_closures "
-            "WHERE employee_id = ? AND EXTRACT(YEAR FROM close_date) = ? "
-            "AND EXTRACT(MONTH FROM close_date) = ?",
-            (eid, year, month)
-        ).fetchone()
-        # Activity
-        leads_open = conn.execute(
-            "SELECT COUNT(*) AS c FROM sales_leads sl "
-            "LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
-            "WHERE sl.owner_employee_id = ? AND COALESCE(s.is_won,0)=0 AND COALESCE(s.is_lost,0)=0",
-            (eid,)
-        ).fetchone()
-        leads_hot = conn.execute(
-            "SELECT COUNT(*) AS c FROM sales_leads "
-            "WHERE owner_employee_id = ? AND is_hot = 1",
-            (eid,)
-        ).fetchone()
-        calls_month = conn.execute(
-            "SELECT COALESCE(SUM(num_calls),0) AS calls, COALESCE(SUM(talk_time_minutes),0) AS mins "
-            "FROM sales_call_logs WHERE employee_id = ? "
-            "AND EXTRACT(YEAR FROM log_date) = ? AND EXTRACT(MONTH FROM log_date) = ?",
-            (eid, year, month)
-        ).fetchone()
-
-        annual_t = float(ta['t'] or 0); annual_a = float(aa['a'] or 0)
-        quarter_t = float(tq['t'] or 0); quarter_a = float(aq['a'] or 0)
-        month_t = float(tm['t'] or 0); month_a = float(am['a'] or 0)
+        snap = _get_sales_member_snapshot(conn, r['id'], year, month, quarter)
         rows.append({
-            'id': eid, 'name': r['name'], 'emp_code': r['emp_code'],
+            'id': r['id'], 'name': r['name'], 'emp_code': r['emp_code'],
             'photo_url': r['photo_url'], 'role': r['role'] or 'rep',
-            'annual_target': annual_t, 'annual_achieved': annual_a,
-            'annual_diff': annual_a - annual_t,
-            'annual_pct': (annual_a / annual_t * 100) if annual_t > 0 else 0,
-            'quarter_target': quarter_t, 'quarter_achieved': quarter_a,
-            'quarter_diff': quarter_a - quarter_t,
-            'quarter_pct': (quarter_a / quarter_t * 100) if quarter_t > 0 else 0,
-            'month_target': month_t, 'month_achieved': month_a,
-            'month_diff': month_a - month_t,
-            'month_pct': (month_a / month_t * 100) if month_t > 0 else 0,
-            'leads_open': leads_open['c'] if leads_open else 0,
-            'leads_hot': leads_hot['c'] if leads_hot else 0,
-            'calls_month': calls_month['calls'] if calls_month else 0,
-            'talk_minutes_month': calls_month['mins'] if calls_month else 0,
+            'annual_target': snap['annual_target'], 'annual_achieved': snap['annual_achieved'],
+            'annual_diff': snap['annual_diff'], 'annual_pct': snap['annual_pct'],
+            'quarter_target': snap['quarter_target'], 'quarter_achieved': snap['quarter_achieved'],
+            'quarter_diff': snap['quarter_diff'], 'quarter_pct': snap['quarter_pct'],
+            'month_target': snap['month_target'], 'month_achieved': snap['month_achieved'],
+            'month_diff': snap['month_diff'], 'month_pct': snap['month_pct'],
+            'leads_open': snap['leads_open'], 'leads_hot': snap['leads_hot'],
+            'calls_month': snap['calls_month'],
+            'talk_minutes_month': snap['talk_minutes_month'],
         })
-        tot_annual_t += annual_t; tot_annual_a += annual_a
-        tot_quarter_t += quarter_t; tot_quarter_a += quarter_a
-        tot_month_t += month_t; tot_month_a += month_a
-
+        tot_annual_t += snap['annual_target']; tot_annual_a += snap['annual_achieved']
+        tot_quarter_t += snap['quarter_target']; tot_quarter_a += snap['quarter_achieved']
+        tot_month_t += snap['month_target']; tot_month_a += snap['month_achieved']
     totals = {
         'annual_target': tot_annual_t, 'annual_achieved': tot_annual_a,
         'annual_diff': tot_annual_a - tot_annual_t,
@@ -10628,8 +10654,6 @@ def sales_crm_dashboard():
         'month_target': tot_month_t, 'month_achieved': tot_month_a,
         'month_diff': tot_month_a - tot_month_t,
     }
-
-    # Top closures product-wise (this month, scoped to visible employees)
     top_products = conn.execute(
         f"SELECT product_name, COUNT(*) AS deals, COALESCE(SUM(revenue),0) AS revenue, "
         f"COALESCE(SUM(margin),0) AS margin "
@@ -10638,11 +10662,9 @@ def sales_crm_dashboard():
         f"GROUP BY product_name ORDER BY margin DESC LIMIT 8",
         list(visible_ids) + [year, month]
     ).fetchall()
-
-    # Hot leads list
     hot_leads = conn.execute(
         f"SELECT sl.id, sl.lead_name, sl.company, sl.expected_value, sl.expected_close_date, "
-        f"e.name AS owner_name, s.name AS stage_name, s.color AS stage_color "
+        f"e.name AS owner_name, e.id AS owner_id, s.name AS stage_name, s.color AS stage_color "
         f"FROM sales_leads sl "
         f"LEFT JOIN employees e ON sl.owner_employee_id = e.id "
         f"LEFT JOIN sales_lead_stages s ON sl.stage_id = s.id "
@@ -10650,14 +10672,99 @@ def sales_crm_dashboard():
         f"ORDER BY sl.expected_close_date NULLS LAST LIMIT 10",
         visible_ids
     ).fetchall()
+    news = conn.execute(
+        "SELECT n.*, e.name AS posted_by_name, e.photo_url "
+        "FROM sales_news n JOIN employees e ON n.posted_by = e.id "
+        "WHERE n.is_active = 1 ORDER BY n.created_at DESC LIMIT 3"
+    ).fetchall()
     conn.close()
-
     return render_template('sales_crm_dashboard.html', user=user, role=role,
                            rows=rows, totals=totals,
                            top_products=top_products, hot_leads=hot_leads,
+                           news=news, year=year, month=month, quarter=quarter,
+                           month_label=month_label, is_admin=(role == 'admin'))
+
+
+# ---- Sales dashboard (unified CRM landing) -----------------------------
+@app.route('/sales')
+@login_required
+@sales_crm_required
+def sales_dashboard():
+    """Unified Sales landing page. Role-aware:
+      - rep: personal 'My Sales' view (hero stats, quick actions, my leads)
+      - admin / viewer / manager: team overview with clickable member drill-down
+    """
+    user = get_user()
+    role = get_sales_role(user)
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    month = int(request.args.get('month') or now.month)
+    quarter = (month - 1) // 3 + 1
+    month_label = calendar.month_name[month] + ' ' + str(year)
+
+    if role == 'rep':
+        conn = get_db()
+        snap = _get_sales_member_snapshot(conn, user['id'], year, month, quarter)
+        news = conn.execute(
+            "SELECT n.*, e.name AS posted_by_name, e.photo_url "
+            "FROM sales_news n JOIN employees e ON n.posted_by = e.id "
+            "WHERE n.is_active = 1 ORDER BY n.created_at DESC LIMIT 3"
+        ).fetchall()
+        conn.close()
+        return render_template('sales_my.html', user=user, role=role, viewing='self',
+                               member=user, snap=snap, news=news,
+                               year=year, month=month, quarter=quarter,
+                               month_label=month_label)
+    # admin / viewer / manager
+    return _render_team_overview(user, role, year, month, quarter, month_label)
+
+
+# ---- Per-member drill-down (admin / viewer / manager) ------------------
+@app.route('/sales/member/<int:employee_id>')
+@login_required
+@sales_crm_required
+def sales_member_detail(employee_id):
+    user = get_user()
+    role = get_sales_role(user)
+    # Reps can only view themselves via this route
+    if role == 'rep' and employee_id != user['id']:
+        flash('You can only view your own sales dashboard.', 'error')
+        return redirect(url_for('sales_dashboard'))
+    # Manager can only see reports + self
+    if role == 'manager':
+        if employee_id not in get_visible_sales_employee_ids(user):
+            flash('You can only view members in your team.', 'error')
+            return redirect(url_for('sales_dashboard'))
+    now = datetime.now()
+    year = int(request.args.get('year') or now.year)
+    month = int(request.args.get('month') or now.month)
+    quarter = (month - 1) // 3 + 1
+    month_label = calendar.month_name[month] + ' ' + str(year)
+    conn = get_db()
+    member = conn.execute(
+        'SELECT id, name, emp_code, photo_url, department FROM employees WHERE id = ?',
+        (employee_id,)
+    ).fetchone()
+    if not member:
+        conn.close()
+        flash('Member not found.', 'error')
+        return redirect(url_for('sales_dashboard'))
+    snap = _get_sales_member_snapshot(conn, employee_id, year, month, quarter)
+    conn.close()
+    return render_template('sales_my.html', user=user, role=role,
+                           viewing='other' if employee_id != user['id'] else 'self',
+                           member=member, snap=snap, news=[],
                            year=year, month=month, quarter=quarter,
-                           month_label=month_label,
-                           is_admin=role == 'admin')
+                           month_label=month_label)
+
+
+# ---- /sales/crm legacy redirect ----------------------------------------
+@app.route('/sales/crm')
+@login_required
+def sales_crm_dashboard():
+    """Legacy URL — the CRM dashboard now lives at /sales."""
+    args = {k: v for k, v in request.args.items()}
+    return redirect(url_for('sales_dashboard', **args), code=301)
 
 
 # ---- Lead stages admin -------------------------------------------------

@@ -349,9 +349,11 @@
             <div class="access-modules">
                 {% if access.module == 'sales' %}
                 <span class="module-badge module-badge-sales {% if not access.is_active %}module-badge-inactive{% endif %}">Sales</span>
-                {% if access.access_level == 'admin_view' %}
-                <span class="module-badge {% if not access.is_active %}module-badge-inactive{% endif %}" style="background:#fef3c7;color:#92400e;" title="Admin View: read-only access to all sales data">Admin View</span>
-                {% endif %}
+                <span class="module-badge {% if not access.is_active %}module-badge-inactive{% endif %}"
+                      style="background:{% if access.access_level == 'admin_view' %}#fef3c7;color:#92400e{% else %}#e0e7ff;color:#3730a3{% endif %};"
+                      title="{% if access.access_level == 'admin_view' %}Admin View: read-only access to all sales data{% else %}Standard: can see Sales section; only own data unless also in Sales Team{% endif %}">
+                    {% if access.access_level == 'admin_view' %}Admin View{% else %}Standard{% endif %}
+                </span>
                 {% elif access.module == 'projects' %}
                 <span class="module-badge module-badge-projects {% if not access.is_active %}module-badge-inactive{% endif %}">Projects</span>
                 {% elif access.module == 'b2b_meetings' %}
@@ -360,15 +362,15 @@
             </div>
             <div class="actions-cell">
                 {% if access.module == 'sales' %}
-                {% if access.access_level == 'admin_view' %}{% set confirm_msg = 'Switch ' ~ access.name ~ ' back to Standard sales access?' %}{% set next_level = 'standard' %}{% set btn_label = 'Standard' %}{% else %}{% set confirm_msg = 'Give ' ~ access.name ~ ' Admin View access to Sales? They will see all sales data read-only.' %}{% set next_level = 'admin_view' %}{% set btn_label = 'Admin View' %}{% endif %}
+                {% if access.access_level == 'admin_view' %}{% set confirm_msg = 'Change ' ~ access.name ~ ' from Admin View back to Standard sales access? They will lose cross-team read access.' %}{% set next_level = 'standard' %}{% set btn_label = 'Switch to Standard' %}{% set btn_bg = '#e0e7ff' %}{% set btn_fg = '#3730a3' %}{% else %}{% set confirm_msg = 'Grant ' ~ access.name ~ ' Admin View? They will see ALL sales data across the team (read-only). Confirm?' %}{% set next_level = 'admin_view' %}{% set btn_label = 'Switch to Admin View' %}{% set btn_bg = '#fef3c7' %}{% set btn_fg = '#92400e' %}{% endif %}
                 <!-- Flip Sales access level (standard <-> admin_view) -->
                 <form method="POST" action="/admin/module-access" style="display: inline;"
                       onsubmit="return confirm('{{ confirm_msg }}');">
                     <input type="hidden" name="action" value="set_level">
                     <input type="hidden" name="access_id" value="{{ access.access_id }}">
                     <input type="hidden" name="new_level" value="{{ next_level }}">
-                    <button type="submit" style="padding:0.35rem 0.7rem;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:0.4rem;cursor:pointer;font-size:0.76rem;font-weight:600;font-family:inherit;" title="Toggle access level">
-                        &#8594; {{ btn_label }}
+                    <button type="submit" style="padding:0.35rem 0.75rem;background:{{ btn_bg }};color:{{ btn_fg }};border:1px solid rgba(0,0,0,0.08);border-radius:0.4rem;cursor:pointer;font-size:0.76rem;font-weight:700;font-family:inherit;" title="{{ confirm_msg }}">
+                        {{ btn_label }}
                     </button>
                 </form>
                 {% endif %}

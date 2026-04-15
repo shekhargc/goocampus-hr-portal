@@ -97,10 +97,13 @@
                 </thead>
                 <tbody>
                     {% for r in rows %}
-                    <tr style="border-top:1px solid var(--gray-100);">
+                    <tr style="border-top:1px solid var(--gray-100);cursor:pointer;transition:background 0.15s;" onclick="window.location='/sales/member/{{ r.id }}'" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background=''" title="Click to drill into {{ r.name }}'s sales data">
                         <td style="padding:0.7rem 0.8rem;color:var(--gray-500);font-weight:600;">{{ loop.index }}</td>
                         <td style="padding:0.7rem 0.8rem;">
-                            <div style="font-weight:600;color:var(--navy);">{{ r.name }}</div>
+                            <div style="font-weight:600;color:var(--navy);display:flex;align-items:center;gap:0.4rem;">
+                                {{ r.name }}
+                                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2.5" style="opacity:0.7;"><polyline points="9 18 15 12 9 6"/></svg>
+                            </div>
                             <div style="font-size:0.72rem;color:var(--gray-500);">{{ r.emp_code }} &middot; <span style="text-transform:capitalize;">{{ r.role }}</span></div>
                         </td>
                         <td style="padding:0.7rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;">
@@ -191,5 +194,23 @@
             </div>
         </div>
     </div>
+
+    {% if news %}
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;margin-top:1.5rem;">
+        <div style="padding:0.9rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;display:flex;justify-content:space-between;align-items:center;">
+            <span>Sales News</span>
+            <a href="/sales/news" style="font-size:0.78rem;color:var(--orange);text-decoration:none;font-weight:600;">All updates &rarr;</a>
+        </div>
+        <div style="padding:0.3rem 1.3rem 1rem;">
+            {% for n in news %}
+            <div style="padding:0.75rem 0;border-top:1px solid var(--gray-100);">
+                <div style="font-weight:600;color:var(--navy);font-size:0.92rem;">{{ n.title }}</div>
+                {% if n.body %}<div style="font-size:0.82rem;color:var(--gray-600);margin-top:0.2rem;line-height:1.5;">{{ n.body[:220] }}{% if n.body|length > 220 %}…{% endif %}</div>{% endif %}
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">{{ n.posted_by_name }} &middot; {{ n.created_at.strftime('%d %b %Y') if n.created_at.strftime is defined else n.created_at }}</div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+    {% endif %}
 </div>
 {% endblock %}
