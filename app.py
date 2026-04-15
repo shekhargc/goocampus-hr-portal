@@ -10579,7 +10579,7 @@ def _get_sales_member_snapshot(conn, eid, year, month, quarter):
         (eid,)
     ).fetchall()
     my_closures = conn.execute(
-        "SELECT id, lead_name, company, product_name, revenue, margin, close_date "
+        "SELECT id, client_name, product_name, revenue, margin, close_date "
         "FROM sales_closures WHERE employee_id = ? "
         "AND EXTRACT(YEAR FROM close_date) = ? "
         "ORDER BY close_date DESC LIMIT 6",
