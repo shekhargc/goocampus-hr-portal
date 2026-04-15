@@ -499,7 +499,7 @@
                         <div class="prod-name">{{ p.name }}</div>
                         <div class="prod-meta" style="font-size:0.72rem;color:var(--gray-500);margin-top:0.15rem;display:flex;gap:0.4rem;align-items:center;flex-wrap:wrap;">
                             {% if p.project_id %}
-                            <a href="/projects/{{ p.project_id }}" style="color:var(--blue-dark);text-decoration:none;font-weight:600;">{{ p.project_name or 'Unnamed' }}</a>
+                            <span style="color:var(--blue-dark);font-weight:600;">{{ p.project_name or 'Unnamed' }}</span>
                             {% else %}
                             <span style="color:var(--gray-400);">— No project —</span>
                             {% endif %}
@@ -821,9 +821,10 @@ function fmtMoney(amount, currency) {
 
 function openProductDrawer(pid, ev) {
     if (ev) {
-        // Clicks on actions cell shouldn't open drawer
         const t = ev.target;
+        // Clicks on actions cell, anchors, buttons, or form controls shouldn't open drawer
         if (t.closest('.col-actions')) return;
+        if (t.closest('a, button, input, select, textarea, form')) return;
     }
     const p = PRODUCTS_DATA[pid];
     if (!p) return;
