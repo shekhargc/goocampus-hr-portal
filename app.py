@@ -6784,6 +6784,24 @@ def seed_budget_categories():
     """Seed default budget categories for expense and revenue."""
     try:
         conn = get_db()
+        # One-time rename: old "Software & Tools" label → new "Software Tool Subscription".
+        # Safe to run every boot — it's a no-op after the first successful rename
+        # because the WHERE clause won't match anymore.
+        try:
+            conn.execute(
+                "UPDATE budget_categories SET name = ? "
+                "WHERE LOWER(TRIM(name)) IN ('software & tools','software and tools','subscriptions') "
+                "AND type = 'expense'",
+                ('Software Tool Subscription',)
+            )
+            conn.commit()
+        except Exception as _rn_err:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.warning(f"budget category rename skipped: {_rn_err}")
+
         count = conn.execute('SELECT COUNT(*) as cnt FROM budget_categories').fetchone()
         if count['cnt'] > 0:
             conn.close()
@@ -6795,7 +6813,7 @@ def seed_budget_categories():
             ('Rent & Utilities', None, 'expense', None, 2),
             ('Marketing & Advertising', None, 'expense', None, 3),
             ('Travel & Conveyance', None, 'expense', None, 4),
-            ('Software & Tools', None, 'expense', None, 5),
+            ('Software Tool Subscription', None, 'expense', None, 5),
             ('Office Supplies', None, 'expense', None, 6),
             ('Professional Services', None, 'expense', None, 7),
             ('Communication & Internet', None, 'expense', None, 8),
@@ -7167,7 +7185,8 @@ def finance_expenses():
         nm = (c['name'] or '').lower().strip()
         if nm in ('salaries & wages', 'salaries and wages', 'salary', 'salaries'):
             salary_cat_id = c['id']
-        elif nm in ('software & tools', 'software and tools', 'software', 'subscriptions'):
+        elif nm in ('software tool subscription', 'software tools subscription',
+                    'software & tools', 'software and tools', 'software', 'subscriptions'):
             sub_cat_id = c['id']
 
     def _sub_monthly_equiv(cost, frequency):
