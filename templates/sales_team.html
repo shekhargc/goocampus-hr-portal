@@ -5,7 +5,7 @@
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="margin-bottom:1.5rem;">
         <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Team</h1>
-        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add sales members and managers. Sales members see only their own work; managers see their team; admins see everyone.</p>
+        <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">Add sales members, managers, and viewers. Sales members see only their own work; managers see their team; viewers see everything read-only (no targets/leads/closures of their own); admins see everyone.</p>
     </div>
 
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);margin-bottom:1.5rem;">
@@ -36,6 +36,7 @@
                 <select name="role" id="addRoleSelect" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
                     <option value="rep">Sales Member</option>
                     <option value="manager">Manager</option>
+                    <option value="viewer">Viewer (read-only)</option>
                 </select>
             </div>
             <div id="addManagerWrap">
@@ -79,11 +80,13 @@
                     <td style="padding:0.7rem 0.6rem;" class="view-mode">
                         {% if (m.role or 'rep') == 'manager' %}
                         <span style="background:#e0e7ff;color:#3730a3;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Manager</span>
+                        {% elif (m.role or 'rep') == 'viewer' %}
+                        <span style="background:#e2e8f0;color:#334155;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Viewer</span>
                         {% else %}
                         <span style="background:#fef3c7;color:#92400e;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.75rem;font-weight:700;">Sales Member</span>
                         {% endif %}
                     </td>
-                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);" class="view-mode">{{ m.manager_name or '—' }}</td>
+                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);" class="view-mode">{% if (m.role or 'rep') == 'viewer' %}<span style="color:var(--gray-400);">n/a</span>{% else %}{{ m.manager_name or '—' }}{% endif %}</td>
                     <td style="padding:0.7rem 0.8rem;text-align:right;" class="view-mode">
                         <button type="button" onclick="editRow({{ m.employee_id }})" style="background:white;color:var(--navy);border:1px solid var(--gray-300);padding:0.4rem 0.8rem;border-radius:0.35rem;font-weight:600;cursor:pointer;font-size:0.78rem;margin-right:0.3rem;">Edit</button>
                         <form method="POST" style="display:inline;" onsubmit="return confirm('Remove {{ m.name }} from the sales team?');">
@@ -100,6 +103,7 @@
                             <select name="role" class="edit-role-{{ m.employee_id }}" onchange="toggleEditManager({{ m.employee_id }})" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
                                 <option value="rep" {% if (m.role or 'rep') == 'rep' %}selected{% endif %}>Sales Member</option>
                                 <option value="manager" {% if m.role == 'manager' %}selected{% endif %}>Manager</option>
+                                <option value="viewer" {% if m.role == 'viewer' %}selected{% endif %}>Viewer (read-only)</option>
                             </select>
                             <select name="manager_employee_id" class="edit-mgr-{{ m.employee_id }}" style="padding:0.4rem 0.55rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
                                 <option value="">— No manager —</option>
@@ -131,7 +135,7 @@ const MANAGER_POOL_IDS = new Set([{% for m in managers %}{{ m.employee_id }}{% i
 function toggleAddManager() {
     const role = document.getElementById('addRoleSelect').value;
     const wrap = document.getElementById('addManagerWrap');
-    if (role === 'manager') {
+    if (role === 'manager' || role === 'viewer') {
         wrap.style.visibility = 'hidden';
         document.getElementById('addManagerSelect').value = '';
     } else {
@@ -172,7 +176,7 @@ function toggleEditManager(id) {
     const roleSel = document.querySelector('.edit-role-' + id);
     const mgrSel = document.querySelector('.edit-mgr-' + id);
     if (!roleSel || !mgrSel) return;
-    if (roleSel.value === 'manager') {
+    if (roleSel.value === 'manager' || roleSel.value === 'viewer') {
         mgrSel.value = '';
         mgrSel.disabled = true;
         mgrSel.style.background = 'var(--gray-50)';

@@ -28,7 +28,7 @@
             <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Closures</h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ total_deals }} deal{{ '' if total_deals == 1 else 's' }} &middot; ₹{{ '{:,.0f}'.format(total_revenue) }} revenue &middot; ₹{{ '{:,.0f}'.format(total_margin) }} margin</p>
         </div>
-        <a href="/sales/closures/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Record Closure</a>
+        {% if role != 'viewer' %}<a href="/sales/closures/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Record Closure</a>{% else %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
     </div>
 
     <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
@@ -86,7 +86,7 @@
                 </tbody>
             </table>
             {% else %}
-            <div style="padding:2.5rem;text-align:center;color:var(--gray-500);">No closures in this period. <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a></div>
+            <div style="padding:2.5rem;text-align:center;color:var(--gray-500);">No closures in this period.{% if role != 'viewer' %} <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a>{% endif %}</div>
             {% endif %}
         </div>
 
@@ -148,11 +148,16 @@
         </div>
     </div>
     <div class="cls-drawer-foot">
+        {% if role != 'viewer' %}
         <a href="#" id="cdEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
+        {% endif %}
         {% if role == 'admin' %}
         <form method="POST" id="cdDelForm" style="display:inline;" onsubmit="return confirm('Delete this closure?');">
             <button type="submit" style="background:white;color:#b91c1c;border:1px solid #fecaca;padding:0.5rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;">Delete</button>
         </form>
+        {% endif %}
+        {% if role == 'viewer' %}
+        <span style="color:var(--gray-500);font-size:0.82rem;">Viewer — read-only access</span>
         {% endif %}
     </div>
 </div>
@@ -186,7 +191,8 @@ function openClsDrawer(id, evt) {
     document.getElementById('cdCost').textContent = cur + ' ' + fmtNum(c.cost);
     document.getElementById('cdMargin').textContent = cur + ' ' + fmtNum(c.margin);
     document.getElementById('cdNotes').textContent = c.notes || '—';
-    document.getElementById('cdEditBtn').href = '/sales/closures/' + id + '/edit';
+    const editBtn = document.getElementById('cdEditBtn');
+    if (editBtn) editBtn.href = '/sales/closures/' + id + '/edit';
     const delForm = document.getElementById('cdDelForm');
     if (delForm) delForm.action = '/sales/closures/' + id + '/delete';
     document.getElementById('clsOverlay').classList.add('open');

@@ -21,7 +21,10 @@
 
     <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:1.25rem;">
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
-            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">Daily Entry</div>
+            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">{% if role == 'viewer' %}Team Call Logs (view-only){% else %}Daily Entry{% endif %}</div>
+            {% if role == 'viewer' %}
+            <div style="padding:1.2rem 1.3rem;color:var(--gray-600);font-size:0.88rem;">You have viewer access — logs are read-only. See the rollup on the right for team activity.</div>
+            {% else %}
             <form method="POST" style="padding:1.2rem 1.3rem;">
                 {% if role in ['admin', 'manager'] %}
                 <div style="margin-bottom:1rem;">
@@ -55,7 +58,9 @@
                 <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.6rem 1.2rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.88rem;">Save Log</button>
                 <p style="margin:0.65rem 0 0 0;font-size:0.74rem;color:var(--gray-500);">One entry per employee per day. Saving again for the same date overwrites.</p>
             </form>
+            {% endif %}
 
+            {% if role != 'viewer' %}
             <div style="padding:0 1.3rem 1.2rem;">
                 <h3 style="font-size:0.82rem;color:var(--gray-600);font-weight:700;text-transform:uppercase;margin:0.5rem 0 0.5rem 0;">My logs this month</h3>
                 {% if my_logs %}
@@ -79,6 +84,7 @@
                 <div style="padding:0.7rem 0;color:var(--gray-500);font-size:0.82rem;">No logs yet for this month.</div>
                 {% endif %}
             </div>
+            {% endif %}
         </div>
 
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">

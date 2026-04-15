@@ -10353,7 +10353,14 @@ def ensure_sales_crm_tables():
 
 # ---- Visibility helpers -------------------------------------------------
 def get_sales_role(user):
-    """Return 'admin', 'manager', 'rep', or None (no sales access)."""
+    """Return 'admin', 'viewer', 'manager', 'rep', or None (no sales access).
+
+    Roles:
+      - admin: full control (is_admin=1)
+      - viewer: read-only, sees all data like admin, not a sales seller
+      - manager: sees self + direct reports, can write own data
+      - rep (Sales Member): sees only self, can write own data
+    """
     if not user:
         return None
     if user['is_admin'] == 1:
@@ -10370,29 +10377,41 @@ def get_sales_role(user):
         r = (row['role'] or 'rep').lower()
         if r == 'manager':
             return 'manager'
+        if r == 'viewer':
+            return 'viewer'
         return 'rep'
     except Exception:
         return None
 
 
+def is_sales_viewer(user):
+    """True if the user has sales viewer role (read-only)."""
+    return get_sales_role(user) == 'viewer'
+
+
 def get_visible_sales_employee_ids(user):
     """Return list of employee ids whose data this user can see.
-    - admin → all sales_team employees
+    - admin → all sales_team employees (excluding viewers)
+    - viewer → all sales_team employees (excluding viewers) — view-only like admin
     - manager → self + reps who have manager_employee_id = user.id
     - rep → just [self]
+
+    Viewers are excluded from the returned list because they don't own
+    leads/closures/targets — there is nothing to show under a viewer.
     """
     role = get_sales_role(user)
     if not role:
         return []
     try:
         conn = get_db()
-        if role == 'admin':
+        if role in ('admin', 'viewer'):
             rows = conn.execute(
-                'SELECT employee_id FROM sales_team WHERE is_active = 1'
+                "SELECT employee_id FROM sales_team WHERE is_active = 1 "
+                "AND COALESCE(role, 'rep') != 'viewer'"
             ).fetchall()
             ids = [r['employee_id'] for r in rows]
-            # Always include the admin themselves so they see their own activity
-            if user['id'] not in ids:
+            # Admin is always included (even if not in sales_team) so they see their own legacy data
+            if role == 'admin' and user['id'] not in ids:
                 ids.append(user['id'])
         elif role == 'manager':
             rows = conn.execute(
@@ -10411,7 +10430,7 @@ def get_visible_sales_employee_ids(user):
 
 
 def sales_crm_required(f):
-    """Decorator: sales module access AND a sales role (admin/manager/rep)."""
+    """Decorator: sales module access AND a sales role (admin/viewer/manager/rep)."""
     @wraps(f)
     def wrapper(*args, **kwargs):
         if 'user_id' not in session:
@@ -10423,6 +10442,27 @@ def sales_crm_required(f):
         if not get_sales_role(user):
             flash('You are not part of the Sales team. Ask an admin to add you under Sales → Team.', 'error')
             return redirect(url_for('sales_dashboard'))
+        return f(*args, **kwargs)
+    return wrapper
+
+
+def sales_write_required(f):
+    """Decorator: blocks viewers from write endpoints (lead/closure/target/call add/edit/delete)."""
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        if 'user_id' not in session:
+            return redirect(url_for('login'))
+        user = get_user()
+        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+            flash('Sales module access required', 'error')
+            return redirect(url_for('dashboard'))
+        role = get_sales_role(user)
+        if not role:
+            flash('You are not part of the Sales team.', 'error')
+            return redirect(url_for('sales_dashboard'))
+        if role == 'viewer':
+            flash('Viewer role — Sales CRM is read-only for you.', 'error')
+            return redirect(url_for('sales_crm_dashboard'))
         return f(*args, **kwargs)
     return wrapper
 
@@ -10657,10 +10697,10 @@ def sales_team_admin():
             if mgr == eid:
                 mgr = None
             r = (request.form.get('role') or 'rep').strip().lower()
-            if r not in ('rep', 'manager'):
+            if r not in ('rep', 'manager', 'viewer'):
                 r = 'rep'
-            if r == 'manager':
-                mgr = None  # Managers don't report to anyone in CRM scope
+            if r in ('manager', 'viewer'):
+                mgr = None  # Managers/Viewers don't report to anyone in CRM scope
             try:
                 # If the chosen manager isn't yet on the Sales Team as an active Manager,
                 # auto-promote them so the reporting chain actually works.
@@ -10689,10 +10729,10 @@ def sales_team_admin():
             if mgr == eid:
                 mgr = None
             r = (request.form.get('role') or 'rep').strip().lower()
-            if r not in ('rep', 'manager'):
+            if r not in ('rep', 'manager', 'viewer'):
                 r = 'rep'
-            # If promoted to Manager, clear their own manager (a manager shouldn't report to another manager in CRM scope)
-            if r == 'manager':
+            # Managers and Viewers don't have a manager
+            if r in ('manager', 'viewer'):
                 mgr = None
             try:
                 # Auto-promote the selected manager if they aren't already an active Manager
@@ -10756,6 +10796,7 @@ def sales_team_admin():
     no_access_count = no_access_count['c'] if no_access_count else 0
     current_managers = [m for m in members if (m['role'] or '').lower() == 'manager']
     current_manager_ids = {m['employee_id'] for m in current_managers}
+    current_viewer_ids = {m['employee_id'] for m in members if (m['role'] or '').lower() == 'viewer'}
     current_member_ids = {m['employee_id'] for m in members}
 
     # Manager picker: include anyone with Sales module access, so admin can pick
@@ -10772,6 +10813,9 @@ def sales_team_admin():
     manager_pool = []
     for row in manager_pool_rows:
         eid_x = row['employee_id']
+        # Viewers cannot act as managers (they're read-only observers, not sales owners)
+        if eid_x in current_viewer_ids:
+            continue
         if eid_x in current_manager_ids:
             status = 'manager'
         elif eid_x in current_member_ids:
@@ -10853,7 +10897,7 @@ def sales_leads_list():
 
 @app.route('/sales/leads/add', methods=['GET', 'POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_leads_add():
     user = get_user()
     role = get_sales_role(user)
@@ -10918,7 +10962,7 @@ def sales_leads_add():
 
 @app.route('/sales/leads/<int:lead_id>/edit', methods=['GET', 'POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_leads_edit(lead_id):
     user = get_user()
     role = get_sales_role(user)
@@ -10994,7 +11038,7 @@ def sales_leads_edit(lead_id):
 
 @app.route('/sales/leads/<int:lead_id>/delete', methods=['POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_leads_delete(lead_id):
     user = get_user()
     role = get_sales_role(user)
@@ -11087,7 +11131,7 @@ def sales_closures_list():
 
 @app.route('/sales/closures/add', methods=['GET', 'POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_closures_add():
     user = get_user()
     role = get_sales_role(user)
@@ -11172,7 +11216,7 @@ def sales_closures_add():
 
 @app.route('/sales/closures/<int:cid>/edit', methods=['GET', 'POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_closures_edit(cid):
     user = get_user()
     role = get_sales_role(user)
@@ -11250,7 +11294,7 @@ def sales_closures_edit(cid):
 
 @app.route('/sales/closures/<int:cid>/delete', methods=['POST'])
 @login_required
-@sales_crm_required
+@sales_write_required
 def sales_closures_delete(cid):
     user = get_user()
     role = get_sales_role(user)
@@ -11392,6 +11436,10 @@ def sales_calls_view():
     month = int(request.args.get('month') or now.month)
     conn = get_db()
     if request.method == 'POST':
+        if role == 'viewer':
+            conn.close()
+            flash('Viewer role — Sales CRM is read-only for you.', 'error')
+            return redirect(url_for('sales_calls_view', year=year, month=month))
         # Daily entry by rep (or admin/manager on someone they can see)
         target_eid = request.form.get('employee_id')
         if target_eid and target_eid.isdigit():

@@ -28,7 +28,7 @@
             <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Leads</h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ leads|length }} lead{{ '' if leads|length == 1 else 's' }} visible. Click a row to see full details.</p>
         </div>
-        <a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Add Lead</a>
+        {% if role != 'viewer' %}<a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Add Lead</a>{% else %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
     </div>
 
     <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
@@ -86,7 +86,7 @@
             </tbody>
         </table>
         {% else %}
-        <div style="padding:3rem;text-align:center;color:var(--gray-500);">No leads yet. <a href="/sales/leads/add" style="color:var(--orange);font-weight:600;">Add the first one &rarr;</a></div>
+        <div style="padding:3rem;text-align:center;color:var(--gray-500);">No leads yet.{% if role != 'viewer' %} <a href="/sales/leads/add" style="color:var(--orange);font-weight:600;">Add the first one &rarr;</a>{% endif %}</div>
         {% endif %}
     </div>
 </div>
@@ -127,12 +127,17 @@
         </div>
     </div>
     <div class="lead-drawer-foot">
+        {% if role != 'viewer' %}
         <a href="#" id="ldEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
         <a href="#" id="ldCloseDealBtn" style="background:var(--orange);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Record Closure</a>
+        {% endif %}
         {% if role == 'admin' %}
         <form method="POST" id="ldDelForm" style="display:inline;" onsubmit="return confirm('Delete this lead?');">
             <button type="submit" style="background:white;color:#b91c1c;border:1px solid #fecaca;padding:0.5rem 1rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.85rem;">Delete</button>
         </form>
+        {% endif %}
+        {% if role == 'viewer' %}
+        <span style="color:var(--gray-500);font-size:0.82rem;">Viewer — read-only access</span>
         {% endif %}
     </div>
 </div>
@@ -168,8 +173,10 @@ function openLeadDrawer(id, evt) {
     document.getElementById('ldValue').textContent = fmtMoney(l.expected_value);
     document.getElementById('ldClose').textContent = txt(l.expected_close_date);
     document.getElementById('ldNotes').textContent = l.notes || '—';
-    document.getElementById('ldEditBtn').href = '/sales/leads/' + id + '/edit';
-    document.getElementById('ldCloseDealBtn').href = '/sales/closures/add?lead_id=' + id;
+    const ldEditBtn = document.getElementById('ldEditBtn');
+    if (ldEditBtn) ldEditBtn.href = '/sales/leads/' + id + '/edit';
+    const ldCloseDealBtn = document.getElementById('ldCloseDealBtn');
+    if (ldCloseDealBtn) ldCloseDealBtn.href = '/sales/closures/add?lead_id=' + id;
     const delForm = document.getElementById('ldDelForm');
     if (delForm) delForm.action = '/sales/leads/' + id + '/delete';
     document.getElementById('leadOverlay').classList.add('open');
