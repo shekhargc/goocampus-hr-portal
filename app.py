@@ -10669,6 +10669,29 @@ def sales_team_admin():
             except Exception as e:
                 conn.rollback()
                 flash(f'Could not save: {e}', 'error')
+        elif action == 'update':
+            eid = int(request.form.get('employee_id'))
+            mgr_raw = request.form.get('manager_employee_id') or ''
+            mgr = int(mgr_raw) if mgr_raw.isdigit() else None
+            # Prevent self-reference: a person cannot be their own manager
+            if mgr == eid:
+                mgr = None
+            r = (request.form.get('role') or 'rep').strip().lower()
+            if r not in ('rep', 'manager'):
+                r = 'rep'
+            # If promoted to Manager, clear their own manager (a manager shouldn't report to another manager in CRM scope)
+            if r == 'manager':
+                mgr = None
+            try:
+                conn.execute(
+                    'UPDATE sales_team SET role = ?, manager_employee_id = ? WHERE employee_id = ?',
+                    (r, mgr, eid)
+                )
+                conn.commit()
+                flash('Member updated', 'success')
+            except Exception as e:
+                conn.rollback()
+                flash(f'Could not update: {e}', 'error')
         elif action == 'remove':
             eid = int(request.form.get('employee_id'))
             conn.execute('UPDATE sales_team SET is_active = 0 WHERE employee_id = ?', (eid,))
@@ -10679,7 +10702,7 @@ def sales_team_admin():
 
     members = conn.execute('''
         SELECT st.employee_id, st.role, st.manager_employee_id, st.is_active,
-               e.name, e.emp_code, e.photo_url, e.designation,
+               e.name, e.emp_code, e.photo_url, e.designation, e.reporting_to,
                m.name AS manager_name
         FROM sales_team st
         JOIN employees e ON st.employee_id = e.id
@@ -10691,7 +10714,7 @@ def sales_team_admin():
     # Only show employees who already have Sales module access — they need it to use the CRM.
     # Admins are always allowed (is_admin = 1 bypasses the module_access check at runtime).
     available_emps_q = (
-        "SELECT e.id, e.name, e.emp_code, e.designation FROM employees e "
+        "SELECT e.id, e.name, e.emp_code, e.designation, e.reporting_to FROM employees e "
         "WHERE e.is_active = 1 AND e.emp_code != 'admin' "
         "AND (e.is_admin = 1 OR EXISTS ("
         "  SELECT 1 FROM module_access ma "
@@ -10713,10 +10736,16 @@ def sales_team_admin():
     ).fetchone()
     no_access_count = no_access_count['c'] if no_access_count else 0
     managers = [m for m in members if (m['role'] or '').lower() == 'manager']
+    # Map: available employee id -> reporting_to (from employee profile).
+    # Used by the Add form to auto-suggest the Sales Manager from the org-chart reporting line.
+    emp_reports_to = {e['id']: e['reporting_to'] for e in available_emps if e['reporting_to']}
+    manager_ids = {m['employee_id'] for m in managers}
     conn.close()
     return render_template('sales_team.html', user=user, members=members,
                            available_emps=available_emps, managers=managers,
-                           no_access_count=no_access_count)
+                           no_access_count=no_access_count,
+                           emp_reports_to=emp_reports_to,
+                           manager_ids=list(manager_ids))
 
 
 # ---- Leads -------------------------------------------------------------
