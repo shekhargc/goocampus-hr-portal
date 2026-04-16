@@ -96,6 +96,45 @@
                 </div>
             </div>
 
+            <!-- Closure fields — shown when stage is "Closed Won" -->
+            <div id="closure-fields" style="display:none;margin-bottom:1.1rem;background:var(--green-50, #f0fdf4);border:1px solid var(--green-200, #bbf7d0);border-radius:0.65rem;padding:1.2rem;">
+                <p style="margin:0 0 0.8rem 0;font-size:0.82rem;font-weight:700;color:var(--green-700, #15803d);">
+                    Closure will be auto-recorded. Confirm amounts below:
+                </p>
+                {% if already_has_closure|default(false) %}
+                <p style="margin:0 0 0.6rem 0;font-size:0.8rem;color:var(--gray-500);">A closure already exists for this lead — no duplicate will be created.</p>
+                {% endif %}
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Gross Revenue</label>
+                        <input type="number" step="0.01" min="0" name="closure_revenue" id="closure_revenue"
+                               value="{{ lead.expected_value or 0 if lead else 0 }}"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Cost</label>
+                        <input type="number" step="0.01" min="0" name="closure_cost" id="closure_cost" value="0"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Currency</label>
+                        <select name="closure_currency" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                            <option value="INR" selected>INR</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="AUD">AUD</option>
+                            <option value="CAD">CAD</option>
+                            <option value="SGD">SGD</option>
+                            <option value="AED">AED</option>
+                        </select>
+                    </div>
+                </div>
+                <p id="closure-margin-preview" style="margin:0.7rem 0 0 0;font-size:0.82rem;color:var(--gray-600);">
+                    Sales Revenue: <strong id="margin-val">0.00</strong>
+                </p>
+            </div>
+
             <div style="margin-bottom:1.5rem;">
                 <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Notes</label>
                 <textarea name="notes" rows="4" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
@@ -106,6 +145,41 @@
                 <a href="/sales/leads" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
             </div>
         </form>
+
+        <script>
+        (function() {
+            var wonIds = {{ won_stage_ids|default([])|tojson }};
+            var stageSelect = document.querySelector('select[name="stage_id"]');
+            var closureBox = document.getElementById('closure-fields');
+            var revInput = document.getElementById('closure_revenue');
+            var costInput = document.getElementById('closure_cost');
+            var marginVal = document.getElementById('margin-val');
+            var evInput = document.querySelector('input[name="expected_value"]');
+
+            function toggleClosure() {
+                var sel = parseInt(stageSelect.value);
+                if (wonIds.indexOf(sel) !== -1) {
+                    closureBox.style.display = 'block';
+                    // Pre-fill revenue from expected value if currently 0
+                    if (parseFloat(revInput.value) === 0 && evInput) {
+                        revInput.value = evInput.value || 0;
+                    }
+                    updateMargin();
+                } else {
+                    closureBox.style.display = 'none';
+                }
+            }
+            function updateMargin() {
+                var r = parseFloat(revInput.value) || 0;
+                var c = parseFloat(costInput.value) || 0;
+                marginVal.textContent = (r - c).toFixed(2);
+            }
+            stageSelect.addEventListener('change', toggleClosure);
+            if (revInput) revInput.addEventListener('input', updateMargin);
+            if (costInput) costInput.addEventListener('input', updateMargin);
+            toggleClosure();
+        })();
+        </script>
     </div>
 </div>
 {% endblock %}

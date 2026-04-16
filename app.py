@@ -11019,14 +11019,15 @@ def sales_leads_add():
         except ValueError:
             ev = 0.0
         ecd = request.form.get('expected_close_date') or None
+        lead_name_new = (request.form.get('lead_name') or '').strip() or 'Untitled lead'
+        company_new = (request.form.get('company') or '').strip()
         conn.execute(
             '''INSERT INTO sales_leads
                (lead_name, company, phone, email, source, product_id, stream_id, stage_id,
                 owner_employee_id, expected_value, expected_close_date, is_hot, notes, created_by)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (
-                (request.form.get('lead_name') or '').strip() or 'Untitled lead',
-                (request.form.get('company') or '').strip(),
+                lead_name_new, company_new,
                 (request.form.get('phone') or '').strip(),
                 (request.form.get('email') or '').strip(),
                 (request.form.get('source') or '').strip(),
@@ -11036,12 +11037,63 @@ def sales_leads_add():
                 user['id']
             )
         )
+        # If stage is Won, auto-create closure for the newly added lead
+        if stage_id:
+            won_stage = conn.execute(
+                'SELECT id FROM sales_lead_stages WHERE id = ? AND is_won = 1',
+                (stage_id,)
+            ).fetchone()
+            if won_stage:
+                new_lead_row = conn.execute(
+                    'SELECT id FROM sales_leads WHERE lead_name = ? AND owner_employee_id = ? ORDER BY id DESC LIMIT 1',
+                    (lead_name_new, owner_id)
+                ).fetchone()
+                new_lead_id = new_lead_row['id'] if new_lead_row else None
+                if new_lead_id:
+                    try:
+                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
+                    except ValueError:
+                        cl_revenue = ev or 0.0
+                    try:
+                        cl_cost = float(request.form.get('closure_cost') or 0)
+                    except ValueError:
+                        cl_cost = 0.0
+                    cl_margin = cl_revenue - cl_cost
+                    cl_currency = (request.form.get('closure_currency') or 'INR').upper()
+                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
+                    cl_product_name = ''
+                    cl_project_id = None
+                    if product_id:
+                        prow = conn.execute(
+                            'SELECT name, project_id FROM products_services WHERE id = ?',
+                            (product_id,)
+                        ).fetchone()
+                        if prow:
+                            cl_product_name = prow['name']
+                            cl_project_id = prow['project_id']
+                    conn.execute(
+                        '''INSERT INTO sales_closures
+                           (lead_id, employee_id, product_id, product_name, project_id,
+                            client_name, revenue, cost, margin, currency, close_date,
+                            notes, created_by)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (
+                            new_lead_id, owner_id, product_id, cl_product_name or None,
+                            cl_project_id,
+                            company_new or lead_name_new,
+                            cl_revenue, cl_cost, cl_margin, cl_currency, cl_close_date,
+                            f'Auto-created from hot lead: {lead_name_new}',
+                            user['id']
+                        )
+                    )
+                    flash('Closure auto-recorded from won lead', 'success')
         conn.commit()
         conn.close()
         flash('Lead added', 'success')
         return redirect(url_for('sales_leads_list'))
 
     stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
+    won_stage_ids = [s['id'] for s in stages if s['is_won']]
     products = conn.execute(
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
@@ -11057,7 +11109,8 @@ def sales_leads_add():
     conn.close()
     return render_template('sales_lead_form.html', user=user, lead=None, mode='add',
                            stages=stages, products=products, streams=streams, owners=owners,
-                           role=role)
+                           role=role, won_stage_ids=won_stage_ids,
+                           already_has_closure=False)
 
 
 @app.route('/sales/leads/<int:lead_id>/edit', methods=['GET', 'POST'])
@@ -11093,6 +11146,8 @@ def sales_leads_edit(lead_id):
         except ValueError:
             ev = 0.0
         ecd = request.form.get('expected_close_date') or None
+        lead_name_new = (request.form.get('lead_name') or '').strip() or lead['lead_name']
+        company_new = (request.form.get('company') or '').strip()
         conn.execute(
             '''UPDATE sales_leads SET
                lead_name = ?, company = ?, phone = ?, email = ?, source = ?,
@@ -11101,8 +11156,7 @@ def sales_leads_edit(lead_id):
                updated_at = CURRENT_TIMESTAMP
                WHERE id = ?''',
             (
-                (request.form.get('lead_name') or '').strip() or lead['lead_name'],
-                (request.form.get('company') or '').strip(),
+                lead_name_new, company_new,
                 (request.form.get('phone') or '').strip(),
                 (request.form.get('email') or '').strip(),
                 (request.form.get('source') or '').strip(),
@@ -11112,12 +11166,78 @@ def sales_leads_edit(lead_id):
                 lead_id
             )
         )
+        # --- Auto-create closure when stage changes to Won -----------------
+        if stage_id:
+            won_stage = conn.execute(
+                'SELECT id FROM sales_lead_stages WHERE id = ? AND is_won = 1',
+                (stage_id,)
+            ).fetchone()
+            old_was_won = False
+            if lead['stage_id']:
+                old_won_check = conn.execute(
+                    'SELECT id FROM sales_lead_stages WHERE id = ? AND is_won = 1',
+                    (lead['stage_id'],)
+                ).fetchone()
+                old_was_won = old_won_check is not None
+            if won_stage and not old_was_won:
+                # Only auto-create if no closure already linked to this lead
+                existing_closure = conn.execute(
+                    'SELECT id FROM sales_closures WHERE lead_id = ?', (lead_id,)
+                ).fetchone()
+                if not existing_closure:
+                    # Pull revenue/cost from form (shown when Won selected),
+                    # fallback to expected_value for revenue
+                    try:
+                        cl_revenue = float(request.form.get('closure_revenue') or ev or 0)
+                    except ValueError:
+                        cl_revenue = ev or 0.0
+                    try:
+                        cl_cost = float(request.form.get('closure_cost') or 0)
+                    except ValueError:
+                        cl_cost = 0.0
+                    cl_margin = cl_revenue - cl_cost
+                    cl_currency = (request.form.get('closure_currency') or 'INR').upper()
+                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
+                    # Resolve product name and project
+                    cl_product_name = ''
+                    cl_project_id = None
+                    if product_id:
+                        prow = conn.execute(
+                            'SELECT name, project_id FROM products_services WHERE id = ?',
+                            (product_id,)
+                        ).fetchone()
+                        if prow:
+                            cl_product_name = prow['name']
+                            cl_project_id = prow['project_id']
+                    conn.execute(
+                        '''INSERT INTO sales_closures
+                           (lead_id, employee_id, product_id, product_name, project_id,
+                            client_name, revenue, cost, margin, currency, close_date,
+                            notes, created_by)
+                           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                        (
+                            lead_id, owner_id, product_id, cl_product_name or None,
+                            cl_project_id,
+                            company_new or lead_name_new,
+                            cl_revenue, cl_cost, cl_margin, cl_currency, cl_close_date,
+                            f'Auto-created from hot lead: {lead_name_new}',
+                            user['id']
+                        )
+                    )
+                    flash('Closure auto-recorded from won lead', 'success')
+        # -------------------------------------------------------------------
         conn.commit()
         conn.close()
         flash('Lead updated', 'success')
         return redirect(url_for('sales_leads_list'))
 
     stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
+    won_stage_ids = [s['id'] for s in stages if s['is_won']]
+    already_has_closure = False
+    if lead:
+        already_has_closure = conn.execute(
+            'SELECT id FROM sales_closures WHERE lead_id = ?', (lead_id,)
+        ).fetchone() is not None
     products = conn.execute(
         "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
     ).fetchall()
@@ -11133,7 +11253,8 @@ def sales_leads_edit(lead_id):
     conn.close()
     return render_template('sales_lead_form.html', user=user, lead=lead, mode='edit',
                            stages=stages, products=products, streams=streams, owners=owners,
-                           role=role)
+                           role=role, won_stage_ids=won_stage_ids,
+                           already_has_closure=already_has_closure)
 
 
 @app.route('/sales/leads/<int:lead_id>/delete', methods=['POST'])
