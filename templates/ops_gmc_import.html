@@ -6,35 +6,30 @@
         <a href="/operations/gmc" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to GMC Registrations</a>
     </div>
     <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
-        <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Import GMC Registrations from Zoho</h1>
+        <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Import GMC Registrations</h1>
         <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.5rem 0;">
-            Upload 3 CSV files from the Zoho Creator export folder. Duplicates (same registration number + GMC reference) are skipped.
+            Upload the GMC Registration CSV exported from Zoho. The "Enter Candidate Name" column should contain the registration number (e.g. "Dr.Name - GCUKIP/24-25/036").
         </p>
         <form method="POST" enctype="multipart/form-data">
-            <div style="margin-bottom:1.2rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">1. GMC Data CSV *</label>
-                <p style="font-size:0.78rem;color:var(--gray-400);margin:0 0 0.3rem 0;">File: <code>basic#GMC_Registration_Form.csv</code></p>
-                <input type="file" name="data_csv" accept=".csv" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.88rem;" />
-            </div>
-            <div style="margin-bottom:1.2rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">2. Relationship CSV *</label>
-                <p style="font-size:0.78rem;color:var(--gray-400);margin:0 0 0.3rem 0;">File: <code>rel#Enter_Candidate_Name#GMC_Registration_Form.csv</code></p>
-                <input type="file" name="rel_csv" accept=".csv" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.88rem;" />
-            </div>
             <div style="margin-bottom:1.5rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">3. UK Registration CSV *</label>
-                <p style="font-size:0.78rem;color:var(--gray-400);margin:0 0 0.3rem 0;">File: <code>basic#GC_UK_Registration.csv</code></p>
-                <input type="file" name="reg_csv" accept=".csv" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.88rem;" />
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GMC CSV File *</label>
+                <p style="font-size:0.78rem;color:var(--gray-400);margin:0 0 0.3rem 0;">File: <code>GMC Registration Form.csv</code></p>
+                <input type="file" name="csv_file" accept=".csv" required style="width:100%;padding:0.5rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.88rem;" />
             </div>
             <button type="submit" style="width:100%;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">Import GMC Records</button>
         </form>
         <div style="margin-top:1.5rem;padding:1rem;background:var(--gray-50);border-radius:0.5rem;">
             <h3 style="font-size:0.85rem;font-weight:700;color:var(--navy);margin:0 0 0.5rem 0;">How it works</h3>
             <p style="font-size:0.8rem;color:var(--gray-500);margin:0;line-height:1.6;">
-                The relationship CSV links each GMC record to a UK Registration record via Zoho IDs.
-                The UK Registration CSV maps those Zoho IDs to registration numbers.
+                The registration number is extracted from the "Enter Candidate Name" column (text after " - ").
                 Records are matched to existing PLAB clients by registration number.
-                Duplicates are detected by registration number + GMC Reference Number.
+                Duplicates (same registration number + GMC reference) are skipped automatically.
+            </p>
+        </div>
+        <div style="margin-top:1rem;padding:1rem;background:var(--gray-50);border-radius:0.5rem;">
+            <h3 style="font-size:0.85rem;font-weight:700;color:var(--navy);margin:0 0 0.5rem 0;">Expected Columns</h3>
+            <p style="font-size:0.78rem;color:var(--gray-500);margin:0;line-height:1.8;font-family:monospace;">
+                Enter Candidate Name, GMC Reference Number, GMC Setup, Registration Date, License, License Received Date, Login ID, Login Pwd
             </p>
         </div>
     </div>
