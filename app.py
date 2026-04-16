@@ -11274,6 +11274,28 @@ def sales_leads_delete(lead_id):
     return redirect(url_for('sales_leads_list'))
 
 
+# ---- Product lookup API (for lead form auto-fill) ----------------------
+@app.route('/sales/api/product/<int:pid>')
+@login_required
+def sales_product_info(pid):
+    conn = get_db()
+    row = conn.execute(
+        'SELECT id, name, revenue_stream_id, sale_price, product_cost FROM products_services WHERE id = ?',
+        (pid,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        return jsonify({'error': 'not found'}), 404
+    return jsonify({
+        'id': row['id'],
+        'name': row['name'],
+        'stream_id': row['revenue_stream_id'],
+        'sale_price': float(row['sale_price'] or 0),
+        'product_cost': float(row['product_cost'] or 0),
+        'margin': float((row['sale_price'] or 0) - (row['product_cost'] or 0))
+    })
+
+
 # ---- Closures ----------------------------------------------------------
 @app.route('/sales/closures')
 @login_required

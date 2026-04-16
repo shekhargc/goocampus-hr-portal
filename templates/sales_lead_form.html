@@ -178,6 +178,37 @@
             if (revInput) revInput.addEventListener('input', updateMargin);
             if (costInput) costInput.addEventListener('input', updateMargin);
             toggleClosure();
+
+            // --- Auto-fill stream & expected value when product changes ---
+            var productSelect = document.querySelector('select[name="product_id"]');
+            var streamSelect = document.querySelector('select[name="stream_id"]');
+
+            if (productSelect) {
+                productSelect.addEventListener('change', function() {
+                    var pid = this.value;
+                    if (!pid) return;
+                    fetch('/sales/api/product/' + pid)
+                        .then(function(r) { return r.json(); })
+                        .then(function(d) {
+                            if (d.error) return;
+                            // Auto-set stream
+                            if (d.stream_id && streamSelect) {
+                                streamSelect.value = d.stream_id;
+                            }
+                            // Auto-set expected value from sale_price (Gross Revenue)
+                            if (d.sale_price && evInput) {
+                                evInput.value = d.sale_price;
+                            }
+                            // If closure panel is open, update closure revenue too
+                            if (closureBox.style.display !== 'none' && revInput) {
+                                revInput.value = d.sale_price || 0;
+                                if (costInput) costInput.value = d.product_cost || 0;
+                                updateMargin();
+                            }
+                        })
+                        .catch(function() {});
+                });
+            }
         })();
         </script>
     </div>
