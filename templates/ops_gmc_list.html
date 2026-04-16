@@ -1,0 +1,111 @@
+{% extends "base.html" %}
+{% block title %}GMC Registration{% endblock %}
+{% block content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">GMC Registration</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage GMC registration records for PLAB clients</p>
+        </div>
+        <a href="/operations/gmc/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add GMC Registration
+        </a>
+    </div>
+
+    <!-- Filters Card -->
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="q" placeholder="Search candidate name..." value="{{ search or '' }}" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Filter by Status</label>
+                <select name="status" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Statuses</option>
+                    {% for status in gmc_setup_statuses %}
+                    <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div></div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/gmc" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Records Table -->
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">GMC Ref#</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">GMC Setup</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">License</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">License Received</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr style="border-bottom:1px solid var(--gray-200);hover:background:var(--gray-50);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">
+                            {{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}
+                        </td>
+                        <td style="padding:12px 16px;">
+                            {{ record.gmc_reference_number or '—' }}
+                        </td>
+                        <td style="padding:12px 16px;">
+                            {% if record.gmc_setup %}
+                            <span style="display:inline-block;padding:4px 12px;background:
+                                {% if record.gmc_setup == 'Completed' %}#ECFDF5;color:#065F46;
+                                {% elif record.gmc_setup == 'In Process' %}#FEF3C7;color:#92400E;
+                                {% else %}#F3F4F6;color:#374151;
+                                {% endif %}
+                                border-radius:999px;font-size:12px;font-weight:600;">
+                                {{ record.gmc_setup }}
+                            </span>
+                            {% else %}
+                            <span style="color:var(--gray-500);">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:12px 16px;">
+                            {{ record.registration_date or '—' }}
+                        </td>
+                        <td style="padding:12px 16px;">
+                            {{ record.license or '—' }}
+                        </td>
+                        <td style="padding:12px 16px;">
+                            {{ record.license_received_date or '—' }}
+                        </td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            <a href="/operations/gmc/{{ record.id }}/edit" style="color:var(--orange);text-decoration:none;font-weight:600;margin-right:12px;">Edit</a>
+                            <form method="POST" action="/operations/gmc/{{ record.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this record?');">
+                                <button type="submit" style="background:none;border:none;color:#DC2626;text-decoration:none;font-weight:600;cursor:pointer;padding:0;">Delete</button>
+                            </form>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No GMC registration records found.</p>
+            <a href="/operations/gmc/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endblock %}

@@ -9083,6 +9083,56 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── EPIC Registration ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_epic_registration (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            epic_registration TEXT,
+            epic_status TEXT,
+            notary_camp TEXT,
+            registration_date TEXT,
+            documents_stage TEXT,
+            document_stage_status TEXT,
+            login_id TEXT,
+            login_pwd TEXT,
+            secret_question_1 TEXT,
+            secret_answer_1 TEXT,
+            secret_question_2 TEXT,
+            secret_answer_2 TEXT,
+            secret_question_3 TEXT,
+            secret_answer_3 TEXT,
+            secret_question_4 TEXT,
+            secret_answer_4 TEXT,
+            epic_id_number TEXT,
+            notary_camp_login TEXT,
+            notary_camp_password TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
+        )''')
+
+        # ── GMC Registration ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_gmc_registration (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            gmc_reference_number TEXT,
+            login_pwd TEXT,
+            secret_question TEXT,
+            secret_answer TEXT,
+            gmc_setup TEXT,
+            registration_date TEXT,
+            english_exam TEXT,
+            exam_date TEXT,
+            english_result_expiry_date TEXT,
+            license TEXT,
+            license_received_date TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
+        )''')
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -9111,6 +9161,17 @@ COACHING_METHODS = ['Online', 'Offline', 'Hybrid']
 EXAM_NAMES = ['OET', 'IELTS', 'PLAB 1', 'PLAB 2', 'MRCP', 'MRCS', 'MRCEM']
 EXAM_STATUSES = ['Booked', 'Attended', 'Cancelled by Client', 'Cancelled by Authority', 'Rescheduled', 'Missed']
 EXAM_RESULTS = ['Passed', 'Failed']
+
+# ── EPIC Registration dropdowns ──
+EPIC_REG_STATUSES = ['Completed', 'Not Completed', 'In Process']
+EPIC_STATUSES = ['Verification Stage', 'In Process', 'Sent to GMC']
+NOTARY_CAMP_STATUSES = ['Completed', 'Not Completed']
+DOC_STAGE_OPTIONS = ['Uploaded', 'Not Uploaded', 'In Process']
+DOC_STAGE_STATUS_OPTIONS = ['Accepted', 'In Process', 'Rejected']
+
+# ── GMC Registration dropdowns ──
+GMC_SETUP_STATUSES = ['Completed', 'Not Completed', 'In Process']
+GMC_LICENSE_STATUSES = ['Received', 'Not Received', 'In Process']
 
 # ── Payment dropdowns ──
 PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque']
@@ -9255,6 +9316,8 @@ def ops_plab_dashboard(client_id):
     call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
     payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
+    epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
+    gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
                            amount_paid=amount_paid, gst_paid=gst_paid,
@@ -9263,7 +9326,8 @@ def ops_plab_dashboard(client_id):
                            plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES,
                            coaching=coaching, english_logins=english_logins,
                            test_bookings=test_bookings, call_notes=call_notes,
-                           call_notes_count=call_notes_count, payments=payments)
+                           call_notes_count=call_notes_count, payments=payments,
+                           epic_records=epic_records, gmc_records=gmc_records)
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -10264,6 +10328,254 @@ def ops_payments_delete(record_id):
     conn.close()
     flash('Payment deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – EPIC Registration
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/epic')
+@admin_required
+def ops_epic_list():
+    """List all EPIC registration records with search/filter."""
+    conn = get_db()
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_epic_registration e
+                 LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if status_filter:
+            sql += ' AND e.epic_registration = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY e.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_epic_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_epic_list.html', records=records,
+                           search=search, status_filter=status_filter,
+                           epic_reg_statuses=EPIC_REG_STATUSES,
+                           epic_statuses=EPIC_STATUSES)
+
+
+@app.route('/operations/epic/add', methods=['GET', 'POST'])
+@admin_required
+def ops_epic_add():
+    """Add EPIC registration record."""
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_epic_registration (
+            registration_number, epic_registration, epic_status, notary_camp,
+            registration_date, documents_stage, document_stage_status,
+            login_id, login_pwd, secret_question_1, secret_answer_1,
+            secret_question_2, secret_answer_2, secret_question_3, secret_answer_3,
+            secret_question_4, secret_answer_4, epic_id_number,
+            notary_camp_login, notary_camp_password, notes, created_by, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('epic_registration'), f.get('epic_status'),
+            f.get('notary_camp'), f.get('registration_date'), f.get('documents_stage'),
+            f.get('document_stage_status'), f.get('login_id'), f.get('login_pwd'),
+            f.get('secret_question_1'), f.get('secret_answer_1'),
+            f.get('secret_question_2'), f.get('secret_answer_2'),
+            f.get('secret_question_3'), f.get('secret_answer_3'),
+            f.get('secret_question_4'), f.get('secret_answer_4'),
+            f.get('epic_id_number'), f.get('notary_camp_login'),
+            f.get('notary_camp_password'), f.get('notes'),
+            session.get('user_id', 0), datetime.now()
+        ))
+        conn.commit()
+        conn.close()
+        flash('EPIC registration record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_epic_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('reg', '')
+    return render_template('ops_epic_form.html', record=None, clients=clients,
+                           epic_reg_statuses=EPIC_REG_STATUSES, epic_statuses=EPIC_STATUSES,
+                           notary_camp_statuses=NOTARY_CAMP_STATUSES,
+                           doc_stage_options=DOC_STAGE_OPTIONS,
+                           doc_stage_status_options=DOC_STAGE_STATUS_OPTIONS,
+                           pre_reg=pre_reg)
+
+
+@app.route('/operations/epic/<int:eid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_epic_edit(eid):
+    """Edit EPIC registration record."""
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_epic_registration WHERE id = ?", (eid,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_epic_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_epic_registration SET
+            registration_number=?, epic_registration=?, epic_status=?, notary_camp=?,
+            registration_date=?, documents_stage=?, document_stage_status=?,
+            login_id=?, login_pwd=?, secret_question_1=?, secret_answer_1=?,
+            secret_question_2=?, secret_answer_2=?, secret_question_3=?, secret_answer_3=?,
+            secret_question_4=?, secret_answer_4=?, epic_id_number=?,
+            notary_camp_login=?, notary_camp_password=?, notes=?, updated_at=?
+            WHERE id=?''', (
+            f.get('registration_number'), f.get('epic_registration'), f.get('epic_status'),
+            f.get('notary_camp'), f.get('registration_date'), f.get('documents_stage'),
+            f.get('document_stage_status'), f.get('login_id'), f.get('login_pwd'),
+            f.get('secret_question_1'), f.get('secret_answer_1'),
+            f.get('secret_question_2'), f.get('secret_answer_2'),
+            f.get('secret_question_3'), f.get('secret_answer_3'),
+            f.get('secret_question_4'), f.get('secret_answer_4'),
+            f.get('epic_id_number'), f.get('notary_camp_login'),
+            f.get('notary_camp_password'), f.get('notes'),
+            datetime.now(), eid
+        ))
+        conn.commit()
+        conn.close()
+        flash('EPIC registration record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_epic_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_epic_form.html', record=record, clients=clients,
+                           epic_reg_statuses=EPIC_REG_STATUSES, epic_statuses=EPIC_STATUSES,
+                           notary_camp_statuses=NOTARY_CAMP_STATUSES,
+                           doc_stage_options=DOC_STAGE_OPTIONS,
+                           doc_stage_status_options=DOC_STAGE_STATUS_OPTIONS,
+                           pre_reg='')
+
+
+@app.route('/operations/epic/<int:eid>/delete', methods=['POST'])
+@admin_required
+def ops_epic_delete(eid):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_epic_registration WHERE id = ?", (eid,))
+    conn.commit()
+    conn.close()
+    flash('EPIC registration record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_epic_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – GMC Registration
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/gmc')
+@admin_required
+def ops_gmc_list():
+    """List all GMC registration records with search/filter."""
+    conn = get_db()
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT g.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_gmc_registration g
+                 LEFT JOIN plab_clients p ON g.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if status_filter:
+            sql += ' AND g.gmc_setup = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR g.registration_number ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY g.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_gmc_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_gmc_list.html', records=records,
+                           search=search, status_filter=status_filter,
+                           gmc_setup_statuses=GMC_SETUP_STATUSES,
+                           gmc_license_statuses=GMC_LICENSE_STATUSES)
+
+
+@app.route('/operations/gmc/add', methods=['GET', 'POST'])
+@admin_required
+def ops_gmc_add():
+    """Add GMC registration record."""
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_gmc_registration (
+            registration_number, gmc_reference_number, login_pwd, secret_question,
+            secret_answer, gmc_setup, registration_date, english_exam, exam_date,
+            english_result_expiry_date, license, license_received_date, notes,
+            created_by, updated_at
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('gmc_reference_number'),
+            f.get('login_pwd'), f.get('secret_question'), f.get('secret_answer'),
+            f.get('gmc_setup'), f.get('registration_date'), f.get('english_exam'),
+            f.get('exam_date'), f.get('english_result_expiry_date'),
+            f.get('license'), f.get('license_received_date'), f.get('notes'),
+            session.get('user_id', 0), datetime.now()
+        ))
+        conn.commit()
+        conn.close()
+        flash('GMC registration record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_gmc_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    pre_reg = request.args.get('reg', '')
+    return render_template('ops_gmc_form.html', record=None, clients=clients,
+                           gmc_setup_statuses=GMC_SETUP_STATUSES,
+                           gmc_license_statuses=GMC_LICENSE_STATUSES,
+                           pre_reg=pre_reg)
+
+
+@app.route('/operations/gmc/<int:gid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_gmc_edit(gid):
+    """Edit GMC registration record."""
+    conn = get_db()
+    record = conn.execute("SELECT * FROM ops_gmc_registration WHERE id = ?", (gid,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_gmc_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_gmc_registration SET
+            registration_number=?, gmc_reference_number=?, login_pwd=?,
+            secret_question=?, secret_answer=?, gmc_setup=?, registration_date=?,
+            english_exam=?, exam_date=?, english_result_expiry_date=?,
+            license=?, license_received_date=?, notes=?, updated_at=?
+            WHERE id=?''', (
+            f.get('registration_number'), f.get('gmc_reference_number'),
+            f.get('login_pwd'), f.get('secret_question'), f.get('secret_answer'),
+            f.get('gmc_setup'), f.get('registration_date'), f.get('english_exam'),
+            f.get('exam_date'), f.get('english_result_expiry_date'),
+            f.get('license'), f.get('license_received_date'), f.get('notes'),
+            datetime.now(), gid
+        ))
+        conn.commit()
+        conn.close()
+        flash('GMC registration record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_gmc_list'))
+    clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    conn.close()
+    return render_template('ops_gmc_form.html', record=record, clients=clients,
+                           gmc_setup_statuses=GMC_SETUP_STATUSES,
+                           gmc_license_statuses=GMC_LICENSE_STATUSES,
+                           pre_reg='')
+
+
+@app.route('/operations/gmc/<int:gid>/delete', methods=['POST'])
+@admin_required
+def ops_gmc_delete(gid):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_gmc_registration WHERE id = ?", (gid,))
+    conn.commit()
+    conn.close()
+    flash('GMC registration record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_gmc_list'))
 
 
 # =====================================================================

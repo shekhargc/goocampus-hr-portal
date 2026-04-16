@@ -705,6 +705,98 @@
     {% endif %}
   </div>
 
+  <!-- EPIC Registration Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">EPIC Registration ({{ epic_records|length }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/epic/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add EPIC</a>
+        {% if epic_records|length > 0 %}
+        <a href="/operations/epic?q={{ client.first_name }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if epic_records %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">EPIC Reg</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">EPIC Status</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Notary Camp</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Documents</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Doc Status</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in epic_records %}
+          <tr style="border-bottom:1px solid var(--gray-200);">
+            <td style="padding:8px;color:var(--gray-700);">{{ r.epic_registration or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.epic_status or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.notary_camp or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.documents_stage or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.document_stage_status or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <a href="/operations/epic/{{ r.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No EPIC registration records yet</p>
+    {% endif %}
+  </div>
+
+  <!-- GMC Registration Section -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">GMC Registration ({{ gmc_records|length }})</h3>
+      <div style="display:flex;gap:8px;">
+        <a href="/operations/gmc/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add GMC</a>
+        {% if gmc_records|length > 0 %}
+        <a href="/operations/gmc?q={{ client.first_name }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
+        {% endif %}
+      </div>
+    </div>
+    {% if gmc_records %}
+    <div style="overflow-x:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">GMC Ref#</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">GMC Setup</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">License</th>
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">License Received</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in gmc_records %}
+          <tr style="border-bottom:1px solid var(--gray-200);">
+            <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_reference_number or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_setup or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.license or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.license_received_date or '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <a href="/operations/gmc/{{ r.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No GMC registration records yet</p>
+    {% endif %}
+  </div>
+
   <!-- Footer Info -->
   <div style="background:white;border-radius:12px;padding:16px;box-shadow:0 1px 3px rgba(0,0,0,0.1);font-size:12px;color:var(--gray-600);">
     <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;">

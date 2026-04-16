@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit GMC Registration' if record else 'Add GMC Registration' }}{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/gmc" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to GMC Registration</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit GMC Registration' if record else 'Add GMC Registration' }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}
+            Update GMC registration details and credentials.
+            {% else %}
+            Add GMC registration information for a PLAB client.
+            {% endif %}
+        </p>
+
+        <form method="POST" action="{% if record %}/operations/gmc/{{ record.id }}/edit{% else %}/operations/gmc/add{% endif %}">
+
+            <!-- Registration Details -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Name *</label>
+                    <select name="registration_number" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">Select candidate...</option>
+                        {% for c in clients %}
+                        <option value="{{ c.registration_number }}" {% if pre_reg == c.registration_number or (record and record.registration_number == c.registration_number) %}selected{% endif %}>
+                            {{ c.prefix or '' }} {{ c.first_name }} {{ c.last_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GMC Reference Number</label>
+                    <input type="text" name="gmc_reference_number" value="{{ record.gmc_reference_number or '' }}" placeholder="GMC reference number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">GMC Setup Status</label>
+                    <select name="gmc_setup" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for status in gmc_setup_statuses %}
+                        <option value="{{ status }}" {% if record and record.gmc_setup == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Date</label>
+                    <input type="date" name="registration_date" value="{{ record.registration_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- Login Details -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Login Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Login Password</label>
+                    <input type="password" name="login_pwd" value="{{ record.login_pwd or '' }}" placeholder="Login password" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Secret Question</label>
+                    <input type="text" name="secret_question" value="{{ record.secret_question or '' }}" placeholder="Secret question" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Secret Answer</label>
+                <input type="text" name="secret_answer" value="{{ record.secret_answer or '' }}" placeholder="Secret answer" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- Registration & Dates -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration & Dates</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Exam</label>
+                    <input type="text" name="english_exam" value="{{ record.english_exam or '' }}" placeholder="e.g., IELTS, OET" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Date</label>
+                    <input type="date" name="exam_date" value="{{ record.exam_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Result Expiry Date</label>
+                <input type="date" name="english_result_expiry_date" value="{{ record.english_result_expiry_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- License -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">License</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">License Status</label>
+                    <select name="license" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for status in gmc_license_statuses %}
+                        <option value="{{ status }}" {% if record and record.license == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">License Received Date</label>
+                    <input type="date" name="license_received_date" value="{{ record.license_received_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- Notes -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes</label>
+                <textarea name="notes" placeholder="Any additional information..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;min-height:80px;">{{ record.notes or '' }}</textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <div style="display:flex;gap:0.8rem;margin-top:1.5rem;">
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;cursor:pointer;">
+                    {{ 'Update' if record else 'Add' }} GMC Registration
+                </button>
+                <a href="/operations/gmc" style="background:var(--gray-100);color:var(--gray-700);border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;text-decoration:none;display:inline-block;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,159 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit EPIC Registration' if record else 'Add EPIC Registration' }}{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/epic" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to EPIC Registration</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit EPIC Registration' if record else 'Add EPIC Registration' }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}
+            Update EPIC registration details and credentials.
+            {% else %}
+            Add EPIC registration information for a PLAB client.
+            {% endif %}
+        </p>
+
+        <form method="POST" action="{% if record %}/operations/epic/{{ record.id }}/edit{% else %}/operations/epic/add{% endif %}">
+
+            <!-- Registration Details -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Name *</label>
+                    <select name="registration_number" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">Select candidate...</option>
+                        {% for c in clients %}
+                        <option value="{{ c.registration_number }}" {% if pre_reg == c.registration_number or (record and record.registration_number == c.registration_number) %}selected{% endif %}>
+                            {{ c.prefix or '' }} {{ c.first_name }} {{ c.last_name }}
+                        </option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC Registration Status</label>
+                    <select name="epic_registration" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for status in epic_reg_statuses %}
+                        <option value="{{ status }}" {% if record and record.epic_registration == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC Status</label>
+                    <select name="epic_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for status in epic_statuses %}
+                        <option value="{{ status }}" {% if record and record.epic_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Date</label>
+                    <input type="date" name="registration_date" value="{{ record.registration_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- Notary Camp -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notary Camp</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Status</label>
+                    <select name="notary_camp" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for status in notary_camp_statuses %}
+                        <option value="{{ status }}" {% if record and record.notary_camp == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Login</label>
+                    <input type="text" name="notary_camp_login" value="{{ record.notary_camp_login or '' }}" placeholder="Notary camp login" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Password</label>
+                <input type="password" name="notary_camp_password" value="{{ record.notary_camp_password or '' }}" placeholder="Notary camp password" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- Documents -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Documents Stage</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Documents Stage</label>
+                    <select name="documents_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for opt in doc_stage_options %}
+                        <option value="{{ opt }}" {% if record and record.documents_stage == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Document Status</label>
+                    <select name="document_stage_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
+                        <option value="">—</option>
+                        {% for opt in doc_stage_status_options %}
+                        <option value="{{ opt }}" {% if record and record.document_stage_status == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- Login Details -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Login Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Login ID</label>
+                    <input type="text" name="login_id" value="{{ record.login_id or '' }}" placeholder="Login ID" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Login Password</label>
+                    <input type="password" name="login_pwd" value="{{ record.login_pwd or '' }}" placeholder="Login password" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- Secret Questions -->
+            {% for i in range(1, 5) %}
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Secret Question {{ i }}</label>
+                    <input type="text" name="secret_question_{{ i }}" value="{{ record['secret_question_' + i|string] or '' }}" placeholder="Secret question" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Secret Answer {{ i }}</label>
+                    <input type="text" name="secret_answer_{{ i }}" value="{{ record['secret_answer_' + i|string] or '' }}" placeholder="Secret answer" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            {% endfor %}
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC ID Number</label>
+                <input type="text" name="epic_id_number" value="{{ record.epic_id_number or '' }}" placeholder="EPIC ID number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- Notes -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes</label>
+                <textarea name="notes" placeholder="Any additional information..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;min-height:80px;">{{ record.notes or '' }}</textarea>
+            </div>
+
+            <!-- Submit Button -->
+            <div style="display:flex;gap:0.8rem;margin-top:1.5rem;">
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;cursor:pointer;">
+                    {{ 'Update' if record else 'Add' }} EPIC Registration
+                </button>
+                <a href="/operations/epic" style="background:var(--gray-100);color:var(--gray-700);border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;text-decoration:none;display:inline-block;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
