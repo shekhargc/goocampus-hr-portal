@@ -10578,6 +10578,210 @@ def ops_gmc_delete(gid):
     return redirect(request.args.get('next') or url_for('ops_gmc_list'))
 
 
+# ── EPIC + GMC CSV Import (Zoho export) ─────────────────────────────
+def _parse_zoho_date(val):
+    """Convert Zoho date strings like '25-Dec-2025' or epoch ms to YYYY-MM-DD."""
+    if not val or not val.strip():
+        return ''
+    val = val.strip()
+    # epoch milliseconds
+    if val.isdigit() and len(val) > 10:
+        from datetime import datetime as dt
+        try:
+            return dt.utcfromtimestamp(int(val) / 1000).strftime('%Y-%m-%d')
+        except Exception:
+            return ''
+    # DD-Mon-YYYY
+    for fmt in ('%d-%b-%Y', '%Y-%m-%d', '%d-%m-%Y'):
+        try:
+            from datetime import datetime as dt
+            return dt.strptime(val, fmt).strftime('%Y-%m-%d')
+        except ValueError:
+            continue
+    return val
+
+
+@app.route('/operations/epic/import', methods=['GET', 'POST'])
+@admin_required
+def ops_epic_import():
+    """Import EPIC registration records from Zoho CSV export.
+    Requires 3 files: data CSV, relationship CSV, and UK Registration CSV."""
+    if request.method == 'POST':
+        import csv, io
+        data_file = request.files.get('data_csv')
+        rel_file = request.files.get('rel_csv')
+        reg_file = request.files.get('reg_csv')
+        if not data_file or not rel_file or not reg_file:
+            flash('Please upload all 3 CSV files', 'error')
+            return redirect(request.url)
+        try:
+            # Parse UK Registration → build Zoho ID → registration_number map
+            reg_stream = io.StringIO(reg_file.stream.read().decode('utf-8-sig'))
+            zoho_to_reg = {}
+            for row in csv.DictReader(reg_stream):
+                zid = row.get('ID', '').strip()
+                rn = row.get('Registation_Number', '').strip()
+                if zid and rn:
+                    zoho_to_reg[zid] = rn
+
+            # Parse relationship CSV → EPIC Zoho ID → UK Zoho ID
+            rel_stream = io.StringIO(rel_file.stream.read().decode('utf-8-sig'))
+            epic_to_uk = {}
+            for row in csv.DictReader(rel_stream):
+                vals = list(row.values())
+                epic_to_uk[vals[0].strip()] = vals[1].strip()
+
+            # Parse data CSV and insert
+            data_stream = io.StringIO(data_file.stream.read().decode('utf-8-sig'))
+            conn = get_db()
+            imported = skipped = 0
+            for row in csv.DictReader(data_stream):
+                zoho_id = row.get('ID', '').strip()
+                uk_zoho_id = epic_to_uk.get(zoho_id)
+                reg_num = zoho_to_reg.get(uk_zoho_id, '') if uk_zoho_id else ''
+                if not reg_num:
+                    skipped += 1
+                    continue
+                # Check if client exists
+                client = conn.execute("SELECT registration_number FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+                # Check duplicate
+                exists = conn.execute("SELECT id FROM ops_epic_registration WHERE registration_number = ? AND epic_id_number = ?",
+                    (reg_num, row.get('EPIC_ID_Number1', '').strip())).fetchone()
+                if exists:
+                    skipped += 1
+                    continue
+                conn.execute('''INSERT INTO ops_epic_registration (
+                    registration_number, epic_registration, epic_status,
+                    notary_camp, registration_date, documents_stage, document_stage_status,
+                    login_id, login_pwd,
+                    secret_question_1, secret_answer_1,
+                    secret_question_2, secret_answer_2,
+                    secret_question_3, secret_answer_3,
+                    secret_question_4, secret_answer_4,
+                    epic_id_number, notary_camp_login, notary_camp_password,
+                    created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    reg_num,
+                    row.get('EPIC_Registration', '').strip(),
+                    row.get('EPIC_Status', '').strip(),
+                    row.get('Notary_Camp', '').strip(),
+                    _parse_zoho_date(row.get('Registration_Date', '')),
+                    row.get('Documents_Stage', '').strip(),
+                    row.get('Document_Status', '').strip(),
+                    row.get('Login_ID1', '').strip(),
+                    row.get('Login_ID', '').strip(),
+                    row.get('Secret', '').strip(),
+                    row.get('Secret_Answer_1', '').strip(),
+                    row.get('Secret_Question_2', '').strip(),
+                    row.get('Secret_Answer_2', '').strip(),
+                    row.get('Secret_Question_3', '').strip(),
+                    row.get('Secret_Answer_3', '').strip(),
+                    row.get('Secret_Question_4', '').strip(),
+                    row.get('Secret_Answer_4', '').strip(),
+                    row.get('EPIC_ID_Number1', '').strip(),
+                    row.get('Notary_Camp_Login', '').strip(),
+                    row.get('Notary_Camp_Password', '').strip(),
+                    session.get('user_id', 0)
+                ))
+                imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'EPIC import complete: {imported} imported, {skipped} skipped', 'success')
+            return redirect(url_for('ops_epic_list'))
+        except Exception as e:
+            logging.error(f"EPIC import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_epic_import.html')
+
+
+@app.route('/operations/gmc/import', methods=['GET', 'POST'])
+@admin_required
+def ops_gmc_import():
+    """Import GMC registration records from Zoho CSV export."""
+    if request.method == 'POST':
+        import csv, io
+        data_file = request.files.get('data_csv')
+        rel_file = request.files.get('rel_csv')
+        reg_file = request.files.get('reg_csv')
+        if not data_file or not rel_file or not reg_file:
+            flash('Please upload all 3 CSV files', 'error')
+            return redirect(request.url)
+        try:
+            reg_stream = io.StringIO(reg_file.stream.read().decode('utf-8-sig'))
+            zoho_to_reg = {}
+            for row in csv.DictReader(reg_stream):
+                zid = row.get('ID', '').strip()
+                rn = row.get('Registation_Number', '').strip()
+                if zid and rn:
+                    zoho_to_reg[zid] = rn
+
+            rel_stream = io.StringIO(rel_file.stream.read().decode('utf-8-sig'))
+            gmc_to_uk = {}
+            for row in csv.DictReader(rel_stream):
+                vals = list(row.values())
+                gmc_to_uk[vals[0].strip()] = vals[1].strip()
+
+            data_stream = io.StringIO(data_file.stream.read().decode('utf-8-sig'))
+            conn = get_db()
+            imported = skipped = 0
+            for row in csv.DictReader(data_stream):
+                zoho_id = row.get('ID', '').strip()
+                uk_zoho_id = gmc_to_uk.get(zoho_id)
+                reg_num = zoho_to_reg.get(uk_zoho_id, '') if uk_zoho_id else ''
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute("SELECT registration_number FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+                # Check duplicate by reg_num + gmc_reference_number
+                gmc_ref = row.get('Login_ID', '').strip()  # Login_ID is the GMC reference number in Zoho
+                exists = conn.execute("SELECT id FROM ops_gmc_registration WHERE registration_number = ? AND gmc_reference_number = ?",
+                    (reg_num, gmc_ref)).fetchone()
+                if exists:
+                    skipped += 1
+                    continue
+                conn.execute('''INSERT INTO ops_gmc_registration (
+                    registration_number, gmc_reference_number, login_pwd,
+                    secret_question, secret_answer,
+                    gmc_setup, registration_date,
+                    english_exam, exam_date, english_result_expiry_date,
+                    license, license_received_date,
+                    created_by
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (
+                    reg_num,
+                    gmc_ref,
+                    row.get('Login_Pwd', '').strip(),
+                    row.get('Secret_Question_1', '').strip(),
+                    row.get('Secret_Answer', '').strip(),
+                    row.get('GMC_Setup', '').strip(),
+                    _parse_zoho_date(row.get('Registration_Date', '')),
+                    row.get('English_Exam', '').strip(),
+                    _parse_zoho_date(row.get('Exam_Date', '')),
+                    _parse_zoho_date(row.get('English_Result_Expiry_Date', '')),
+                    row.get('Licence', '').strip(),
+                    _parse_zoho_date(row.get('License_Received_Date', '')),
+                    session.get('user_id', 0)
+                ))
+                imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'GMC import complete: {imported} imported, {skipped} skipped', 'success')
+            return redirect(url_for('ops_gmc_list'))
+        except Exception as e:
+            logging.error(f"GMC import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_gmc_import.html')
+
+
 # =====================================================================
 # ====================  SALES CRM (leads, closures, targets, calls)  ===
 # =====================================================================
