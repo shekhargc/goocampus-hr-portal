@@ -1,12 +1,45 @@
 {% extends "base.html" %}
 {% block title %}EPIC Registration{% endblock %}
 {% block content %}
+<style>
+/* ============ Slide-out Detail Drawer ============ */
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg{width:56px;height:56px;border-radius:50%;object-fit:cover;border:2px solid var(--orange)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+.badge-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-green{background:#ECFDF5;color:#065F46}
+.badge-yellow{background:#FEF3C7;color:#92400E}
+.badge-gray{background:#F3F4F6;color:#374151}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+</style>
+
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
     <!-- Header -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
         <div>
             <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">EPIC Registration</h1>
-            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage EPIC registration records for PLAB clients</p>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage EPIC registration records for PLAB clients &middot; Click a row to view details</p>
         </div>
         <div style="display:flex;gap:10px;">
             <a href="/operations/epic/import" style="padding:10px 20px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
@@ -54,52 +87,36 @@
                 <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
                     <tr>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">EPIC Reg</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">EPIC Status</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Notary Camp</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Documents</th>
-                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for record in records %}
-                    <tr style="border-bottom:1px solid var(--gray-200);hover:background:var(--gray-50);">
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openEpicDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">
                             {{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}
                         </td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
+                            {{ record.registration_number or '—' }}
+                        </td>
                         <td style="padding:12px 16px;">
                             {% if record.epic_registration %}
-                            <span style="display:inline-block;padding:4px 12px;background:
-                                {% if record.epic_registration == 'Completed' %}#ECFDF5;color:#065F46;
-                                {% elif record.epic_registration == 'In Process' %}#FEF3C7;color:#92400E;
-                                {% else %}#F3F4F6;color:#374151;
-                                {% endif %}
-                                border-radius:999px;font-size:12px;font-weight:600;">
+                            <span class="badge-pill {% if record.epic_registration == 'Completed' %}badge-green{% elif record.epic_registration == 'In Process' %}badge-yellow{% else %}badge-gray{% endif %}">
                                 {{ record.epic_registration }}
                             </span>
                             {% else %}
                             <span style="color:var(--gray-500);">—</span>
                             {% endif %}
                         </td>
-                        <td style="padding:12px 16px;">
-                            {{ record.epic_status or '—' }}
-                        </td>
-                        <td style="padding:12px 16px;">
-                            {{ record.notary_camp or '—' }}
-                        </td>
-                        <td style="padding:12px 16px;">
-                            {{ record.registration_date or '—' }}
-                        </td>
-                        <td style="padding:12px 16px;">
-                            {{ record.documents_stage or '—' }}
-                        </td>
-                        <td style="padding:12px 16px;text-align:center;">
-                            <a href="/operations/epic/{{ record.id }}/edit" style="color:var(--orange);text-decoration:none;font-weight:600;margin-right:12px;">Edit</a>
-                            <form method="POST" action="/operations/epic/{{ record.id }}/delete" style="display:inline;" onsubmit="return confirm('Delete this record?');">
-                                <button type="submit" style="background:none;border:none;color:#DC2626;text-decoration:none;font-weight:600;cursor:pointer;padding:0;">Delete</button>
-                            </form>
-                        </td>
+                        <td style="padding:12px 16px;">{{ record.epic_status or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.notary_camp or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.registration_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.documents_stage or '—' }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -113,4 +130,146 @@
         {% endif %}
     </div>
 </div>
+
+<!-- ============ Slide-out Detail Drawer ============ -->
+<div class="drawer-backdrop" id="epicBackdrop" onclick="closeEpicDetail()"></div>
+<aside class="drawer" id="epicDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>EPIC Registration Details</h3>
+        <button class="drawer-close" type="button" onclick="closeEpicDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="epicDrawerBody"></div>
+    <div class="drawer-actions" id="epicDrawerActions"></div>
+</aside>
+
+<script>
+const EPIC_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        epic_registration: {{ (record.epic_registration or '')|tojson }},
+        epic_status: {{ (record.epic_status or '')|tojson }},
+        notary_camp: {{ (record.notary_camp or '')|tojson }},
+        registration_date: {{ (record.registration_date or '')|tojson }},
+        documents_stage: {{ (record.documents_stage or '')|tojson }},
+        document_stage_status: {{ (record.document_stage_status or '')|tojson }},
+        login_id: {{ (record.login_id or '')|tojson }},
+        login_pwd: {{ (record.login_pwd or '')|tojson }},
+        secret_question_1: {{ (record.secret_question_1 or '')|tojson }},
+        secret_answer_1: {{ (record.secret_answer_1 or '')|tojson }},
+        secret_question_2: {{ (record.secret_question_2 or '')|tojson }},
+        secret_answer_2: {{ (record.secret_answer_2 or '')|tojson }},
+        secret_question_3: {{ (record.secret_question_3 or '')|tojson }},
+        secret_answer_3: {{ (record.secret_answer_3 or '')|tojson }},
+        secret_question_4: {{ (record.secret_question_4 or '')|tojson }},
+        secret_answer_4: {{ (record.secret_answer_4 or '')|tojson }},
+        epic_id_number: {{ (record.epic_id_number or '')|tojson }},
+        notary_camp_login: {{ (record.notary_camp_login or '')|tojson }},
+        notary_camp_password: {{ (record.notary_camp_password or '')|tojson }},
+        notes: {{ (record.notes or '')|tojson }}
+    },
+    {% endfor %}
+};
+
+let activeRowId = null;
+
+function badgeHtml(val) {
+    if (!val) return '<span style="color:var(--gray-400);">—</span>';
+    let cls = 'badge-gray';
+    if (val === 'Completed') cls = 'badge-green';
+    else if (val === 'In Process' || val === 'In Progress') cls = 'badge-yellow';
+    return `<span class="badge-pill ${cls}">${val}</span>`;
+}
+
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
+
+function openEpicDetail(id) {
+    const r = EPIC_RECORDS[id];
+    if (!r) return;
+
+    // Highlight active row
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        ${field('EPIC Registration', badgeHtml(r.epic_registration))}
+        ${field('EPIC Status', r.epic_status)}
+        ${field('Notary Camp', r.notary_camp)}
+        ${field('Registration Date', r.registration_date)}
+        ${field('Documents Stage', r.documents_stage)}
+        ${field('Document Stage Status', r.document_stage_status)}
+        ${field('EPIC ID Number', r.epic_id_number)}
+    </div>
+
+    <div class="drawer-section">
+        <h4>Login Credentials</h4>
+        <div class="drawer-grid">
+            ${field('Login ID', r.login_id)}
+            ${field('Password', r.login_pwd)}
+            ${field('Notary Camp Login', r.notary_camp_login)}
+            ${field('Notary Camp Password', r.notary_camp_password)}
+        </div>
+    </div>`;
+
+    // Secret questions section (only show if at least one exists)
+    const hasSecrets = r.secret_question_1 || r.secret_question_2 || r.secret_question_3 || r.secret_question_4;
+    if (hasSecrets) {
+        html += `<div class="drawer-section"><h4>Secret Questions</h4><div class="drawer-grid">`;
+        if (r.secret_question_1) html += field('Question 1', r.secret_question_1) + field('Answer 1', r.secret_answer_1);
+        if (r.secret_question_2) html += field('Question 2', r.secret_question_2) + field('Answer 2', r.secret_answer_2);
+        if (r.secret_question_3) html += field('Question 3', r.secret_question_3) + field('Answer 3', r.secret_answer_3);
+        if (r.secret_question_4) html += field('Question 4', r.secret_question_4) + field('Answer 4', r.secret_answer_4);
+        html += `</div></div>`;
+    }
+
+    if (r.notes) {
+        html += `<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">${r.notes}</p></div>`;
+    }
+
+    document.getElementById('epicDrawerBody').innerHTML = html;
+    document.getElementById('epicDrawerActions').innerHTML = `
+        <a href="/operations/epic/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
+    document.getElementById('epicDrawer').classList.add('open');
+    document.getElementById('epicDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('epicBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeEpicDetail() {
+    document.getElementById('epicDrawer').classList.remove('open');
+    document.getElementById('epicDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('epicBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeEpicDetail(); });
+</script>
 {% endblock %}
