@@ -195,9 +195,9 @@
                             if (d.stream_id && streamSelect) {
                                 streamSelect.value = d.stream_id;
                             }
-                            // Auto-set expected value from sale_price (Gross Revenue)
-                            if (d.sale_price && evInput) {
-                                evInput.value = d.sale_price;
+                            // Auto-set expected value from Sales Revenue (margin)
+                            if (evInput) {
+                                evInput.value = d.margin || 0;
                             }
                             // If closure panel is open, update closure revenue too
                             if (closureBox.style.display !== 'none' && revInput) {
