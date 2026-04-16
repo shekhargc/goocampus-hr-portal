@@ -291,6 +291,239 @@
     text-decoration: underline;
   }
 
+  /* ============ Slide-out Detail Drawer ============ */
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 27, 51, 0.35);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s, visibility 0.25s;
+    z-index: 900;
+  }
+
+  .drawer-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 520px;
+    max-width: 100%;
+    background: white;
+    box-shadow: -8px 0 30px rgba(15, 27, 51, 0.15);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 950;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .drawer.open {
+    transform: translateX(0);
+  }
+
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--gray-200);
+    background: var(--gray-50);
+  }
+
+  .drawer-head h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--gray-500);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .drawer-close:hover {
+    color: var(--navy);
+  }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .drawer-emp {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .emp-avatar-lg-ph {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--orange);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .drawer-emp .name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .drawer-emp .meta {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  .drawer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 24px;
+  }
+
+  .drawer-field .label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--gray-500);
+    margin-bottom: 4px;
+  }
+
+  .drawer-field .value {
+    font-size: 14px;
+    color: var(--navy);
+    font-weight: 500;
+  }
+
+  .drawer-field.full {
+    grid-column: 1 / -1;
+  }
+
+  .drawer-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-200);
+  }
+
+  .drawer-section h4 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--gray-500);
+    margin: 0 0 14px 0;
+  }
+
+  .drawer-actions {
+    padding: 16px 24px;
+    border-top: 1px solid var(--gray-200);
+    display: flex;
+    gap: 10px;
+  }
+
+  .drawer-actions a {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+  }
+
+  tr.clickable-row {
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tr.clickable-row:hover {
+    background: var(--gray-50) !important;
+  }
+
+  tr.clickable-row.active-row {
+    background: #FFF7ED !important;
+  }
+
+  /* ============ Autocomplete Search ============ */
+  .autocomplete-wrap {
+    position: relative;
+  }
+
+  .suggestions-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .suggestions-dropdown.visible {
+    display: block;
+  }
+
+  .suggestion-item {
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  .suggestion-item:hover,
+  .suggestion-item.highlighted {
+    background: var(--gray-50);
+  }
+
+  .suggestion-name {
+    color: var(--gray-700);
+    font-weight: 500;
+  }
+
+  .suggestion-reg {
+    color: var(--gray-500);
+    font-size: 0.75rem;
+  }
+
   @media (max-width: 768px) {
     .ops-content {
       padding: 1rem;
@@ -319,6 +552,10 @@
     .data-table th {
       padding: 0.75rem 0.5rem;
     }
+
+    .drawer {
+      width: 100%;
+    }
   }
 </style>
 {% endblock %}
@@ -345,20 +582,18 @@
 
   <form method="get" class="filter-section">
     <div class="filter-group">
-      <div class="form-group">
-        <label for="q" class="form-label">Search by Name or Reg #</label>
-        <input
-          type="text"
-          id="q"
-          name="q"
-          class="form-input"
-          placeholder="Enter name or registration number..."
-          value="{{ search or '' }}"
-        >
+      <div class="form-group autocomplete-wrap">
+        <label for="engSearch" class="form-label">Search by Name or Reg #</label>
+        <input type="text" id="engSearch" name="q" class="form-input" placeholder="Type candidate name..." value="{{ search or '' }}" autocomplete="off">
+        <div id="engSuggestions" class="suggestions-dropdown"></div>
       </div>
       <button type="submit" class="btn-primary">Filter</button>
     </div>
   </form>
+
+  {% if records %}
+    <p style="font-size: 0.85rem; color: var(--gray-500); margin: -1.5rem 0 1.5rem 0;">Click a row to view details</p>
+  {% endif %}
 
   {% if records %}
     <table class="data-table">
@@ -375,7 +610,7 @@
       </thead>
       <tbody>
         {% for record in records %}
-          <tr>
+          <tr class="clickable-row" id="row-{{ record.id }}" onclick="openEngDetail({{ record.id }})">
             <td class="client-name">
               {% if record.prefix %}{{ record.prefix }} {% endif %}{{ record.first_name }} {{ record.last_name }}
             </td>
@@ -389,7 +624,7 @@
                 <button
                   type="button"
                   class="password-toggle"
-                  onclick="togglePassword(this)"
+                  onclick="togglePassword(this, event)"
                   title="Show/hide password"
                 >eye</button>
               {% endif %}
@@ -403,7 +638,7 @@
                 <button
                   type="button"
                   class="password-toggle"
-                  onclick="togglePassword(this)"
+                  onclick="togglePassword(this, event)"
                   title="Show/hide password"
                 >eye</button>
               {% endif %}
@@ -435,8 +670,41 @@
   {% endif %}
 </div>
 
+<div class="drawer-backdrop" id="engBackdrop" onclick="closeEngDetail()"></div>
+<aside class="drawer" id="engDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>English Login Details</h3>
+        <button class="drawer-close" type="button" onclick="closeEngDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="engDrawerBody"></div>
+    <div class="drawer-actions" id="engDrawerActions"></div>
+</aside>
+
 <script>
-  function togglePassword(btn) {
+  const ENG_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+      id: {{ record.id }},
+      name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+      registration_number: {{ (record.registration_number or '')|tojson }},
+      ielts_login_id: {{ (record.ielts_login_id or '')|tojson }},
+      ielts_password: {{ (record.ielts_password or '')|tojson }},
+      ielts_hint_question: {{ (record.ielts_hint_question or '')|tojson }},
+      ielts_security_answer: {{ (record.ielts_security_answer or '')|tojson }},
+      oet_login_id: {{ (record.oet_login_id or '')|tojson }},
+      oet_password: {{ (record.oet_password or '')|tojson }},
+      oet_hint_question: {{ (record.oet_hint_question or '')|tojson }},
+      oet_security_answer: {{ (record.oet_security_answer or '')|tojson }},
+      notes: {{ (record.notes or '')|tojson }}
+    },
+    {% endfor %}
+  };
+
+  let currentEngDrawerId = null;
+  let engSearchCache = [];
+
+  function togglePassword(btn, event) {
+    if (event) event.stopPropagation();
     const span = btn.previousElementSibling;
     const isVisible = span.dataset.visible === 'true';
 
@@ -450,5 +718,202 @@
       btn.textContent = 'hide';
     }
   }
+
+  function openEngDetail(id) {
+    const record = ENG_RECORDS[id];
+    if (!record) return;
+
+    currentEngDrawerId = id;
+    const row = document.getElementById(`row-${id}`);
+    if (row) {
+      document.querySelectorAll('tr.clickable-row').forEach(tr => tr.classList.remove('active-row'));
+      row.classList.add('active-row');
+    }
+
+    const body = document.getElementById('engDrawerBody');
+    const actions = document.getElementById('engDrawerActions');
+
+    const initials = record.name.split(' ')
+      .map(word => word.charAt(0).toUpperCase())
+      .join('')
+      .slice(0, 2);
+
+    let drawerHTML = `
+      <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+          <p class="name">${record.name}</p>
+          <p class="meta">Reg #: ${record.registration_number}</p>
+        </div>
+      </div>
+    `;
+
+    if (record.ielts_login_id || record.ielts_password || record.ielts_hint_question || record.ielts_security_answer) {
+      drawerHTML += `
+        <div class="drawer-section">
+          <h4>IELTS Credentials</h4>
+          <div class="drawer-grid">
+            ${record.ielts_login_id ? `
+              <div class="drawer-field">
+                <div class="label">Login ID</div>
+                <div class="value">${record.ielts_login_id}</div>
+              </div>
+            ` : ''}
+            ${record.ielts_password ? `
+              <div class="drawer-field">
+                <div class="label">Password</div>
+                <div class="value">${record.ielts_password}</div>
+              </div>
+            ` : ''}
+            ${record.ielts_hint_question ? `
+              <div class="drawer-field full">
+                <div class="label">Hint Question</div>
+                <div class="value">${record.ielts_hint_question}</div>
+              </div>
+            ` : ''}
+            ${record.ielts_security_answer ? `
+              <div class="drawer-field full">
+                <div class="label">Security Answer</div>
+                <div class="value">${record.ielts_security_answer}</div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    if (record.oet_login_id || record.oet_password || record.oet_hint_question || record.oet_security_answer) {
+      drawerHTML += `
+        <div class="drawer-section">
+          <h4>OET Credentials</h4>
+          <div class="drawer-grid">
+            ${record.oet_login_id ? `
+              <div class="drawer-field">
+                <div class="label">Login ID</div>
+                <div class="value">${record.oet_login_id}</div>
+              </div>
+            ` : ''}
+            ${record.oet_password ? `
+              <div class="drawer-field">
+                <div class="label">Password</div>
+                <div class="value">${record.oet_password}</div>
+              </div>
+            ` : ''}
+            ${record.oet_hint_question ? `
+              <div class="drawer-field full">
+                <div class="label">Hint Question</div>
+                <div class="value">${record.oet_hint_question}</div>
+              </div>
+            ` : ''}
+            ${record.oet_security_answer ? `
+              <div class="drawer-field full">
+                <div class="label">Security Answer</div>
+                <div class="value">${record.oet_security_answer}</div>
+              </div>
+            ` : ''}
+          </div>
+        </div>
+      `;
+    }
+
+    if (record.notes) {
+      drawerHTML += `
+        <div class="drawer-section">
+          <h4>Notes</h4>
+          <div class="drawer-field full">
+            <div class="value">${record.notes}</div>
+          </div>
+        </div>
+      `;
+    }
+
+    body.innerHTML = drawerHTML;
+
+    actions.innerHTML = `
+      <a href="/operations/english-logins/${record.id}/edit" class="btn-sm btn-edit" style="text-decoration:none;background:var(--navy);color:white;padding:10px;border-radius:6px;font-weight:600;">Edit Record</a>
+      <a href="/operations/plab/${record.id}" class="btn-sm btn-secondary" style="text-decoration:none;background:white;color:var(--navy);border:1px solid var(--gray-200);padding:10px;border-radius:6px;font-weight:600;">View PLAB Profile</a>
+    `;
+
+    const drawer = document.getElementById('engDrawer');
+    const backdrop = document.getElementById('engBackdrop');
+    drawer.classList.add('open');
+    backdrop.classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closeEngDetail() {
+    const drawer = document.getElementById('engDrawer');
+    const backdrop = document.getElementById('engBackdrop');
+    const row = currentEngDrawerId ? document.getElementById(`row-${currentEngDrawerId}`) : null;
+
+    drawer.classList.remove('open');
+    backdrop.classList.remove('open');
+    document.body.style.overflow = 'auto';
+    currentEngDrawerId = null;
+
+    if (row) {
+      row.classList.remove('active-row');
+    }
+  }
+
+  document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+      closeEngDetail();
+    }
+  });
+
+  async function fetchEngAutocomplete(query) {
+    if (!query || query.length < 2) {
+      document.getElementById('engSuggestions').classList.remove('visible');
+      return;
+    }
+
+    try {
+      const response = await fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`);
+      const data = await response.json();
+      engSearchCache = data.results || [];
+      renderEngSuggestions(engSearchCache);
+    } catch (error) {
+      console.error('Autocomplete error:', error);
+    }
+  }
+
+  function renderEngSuggestions(results) {
+    const dropdown = document.getElementById('engSuggestions');
+    if (results.length === 0) {
+      dropdown.classList.remove('visible');
+      return;
+    }
+
+    dropdown.innerHTML = results.map((item, idx) => `
+      <div class="suggestion-item" data-idx="${idx}" onclick="selectEngSuggestion(${idx}, event)">
+        <span class="suggestion-name">${item.name}</span>
+        <span class="suggestion-reg">${item.registration_number}</span>
+      </div>
+    `).join('');
+
+    dropdown.classList.add('visible');
+  }
+
+  function selectEngSuggestion(idx, event) {
+    if (event) event.stopPropagation();
+    const item = engSearchCache[idx];
+    if (item) {
+      document.getElementById('engSearch').value = item.name;
+      document.getElementById('engSuggestions').classList.remove('visible');
+      const form = document.querySelector('.filter-section');
+      form.submit();
+    }
+  }
+
+  document.getElementById('engSearch').addEventListener('input', function(e) {
+    fetchEngAutocomplete(e.target.value);
+  });
+
+  document.addEventListener('click', function(e) {
+    if (!e.target.closest('.autocomplete-wrap')) {
+      document.getElementById('engSuggestions').classList.remove('visible');
+    }
+  });
 </script>
 {% endblock %}

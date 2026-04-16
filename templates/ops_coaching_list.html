@@ -299,6 +299,253 @@
     margin: 0;
   }
 
+  .plab-subtitle {
+    font-size: 0.9rem;
+    color: var(--gray-500);
+    margin-top: 0.25rem;
+    font-weight: 400;
+  }
+
+  /* ============ Slide-out Detail Drawer ============ */
+  .drawer-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 27, 51, 0.35);
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 0.25s, visibility 0.25s;
+    z-index: 900;
+  }
+
+  .drawer-backdrop.open {
+    opacity: 1;
+    visibility: visible;
+  }
+
+  .drawer {
+    position: fixed;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    width: 520px;
+    max-width: 100%;
+    background: white;
+    box-shadow: -8px 0 30px rgba(15, 27, 51, 0.15);
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+    z-index: 950;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .drawer.open {
+    transform: translateX(0);
+  }
+
+  .drawer-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 20px 24px;
+    border-bottom: 1px solid var(--gray-200);
+    background: var(--gray-50);
+  }
+
+  .drawer-head h3 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 28px;
+    color: var(--gray-500);
+    cursor: pointer;
+    padding: 0;
+    line-height: 1;
+  }
+
+  .drawer-close:hover {
+    color: var(--navy);
+  }
+
+  .drawer-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+  }
+
+  .drawer-emp {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    margin-bottom: 24px;
+    padding-bottom: 20px;
+    border-bottom: 1px solid var(--gray-200);
+  }
+
+  .emp-avatar-lg-ph {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;
+    background: var(--orange);
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 20px;
+    font-weight: 700;
+    flex-shrink: 0;
+  }
+
+  .drawer-emp .name {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .drawer-emp .meta {
+    font-size: 13px;
+    color: var(--gray-500);
+    margin-top: 2px;
+  }
+
+  .drawer-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px 24px;
+  }
+
+  .drawer-field .label {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--gray-500);
+    margin-bottom: 4px;
+  }
+
+  .drawer-field .value {
+    font-size: 14px;
+    color: var(--navy);
+    font-weight: 500;
+  }
+
+  .drawer-field.full {
+    grid-column: 1 / -1;
+  }
+
+  .drawer-section {
+    margin-top: 24px;
+    padding-top: 20px;
+    border-top: 1px solid var(--gray-200);
+  }
+
+  .drawer-section h4 {
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--gray-500);
+    margin: 0 0 14px 0;
+  }
+
+  .drawer-actions {
+    padding: 16px 24px;
+    border-top: 1px solid var(--gray-200);
+    display: flex;
+    gap: 10px;
+  }
+
+  .drawer-actions a {
+    flex: 1;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    text-decoration: none;
+    background: var(--navy);
+    color: white;
+    transition: background 0.2s;
+  }
+
+  .drawer-actions a:hover {
+    background: #0F1B33;
+  }
+
+  tr.clickable-row {
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tr.clickable-row:hover {
+    background: var(--gray-50) !important;
+  }
+
+  tr.clickable-row.active-row {
+    background: #FFF7ED !important;
+  }
+
+  /* ============ Autocomplete Search ============ */
+  .autocomplete-wrap {
+    position: relative;
+  }
+
+  .suggestions-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .suggestions-dropdown.visible {
+    display: block;
+  }
+
+  .suggestion-item {
+    padding: 0.6rem 0.8rem;
+    cursor: pointer;
+    font-size: 0.85rem;
+    border-bottom: 1px solid var(--gray-100);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .suggestion-item:last-child {
+    border-bottom: none;
+  }
+
+  .suggestion-item:hover,
+  .suggestion-item.highlighted {
+    background: var(--gray-50);
+  }
+
+  .suggestion-name {
+    color: var(--gray-700);
+    font-weight: 500;
+  }
+
+  .suggestion-reg {
+    color: var(--gray-500);
+    font-size: 0.75rem;
+  }
+
   @media (max-width: 768px) {
     .plab-header {
       flex-direction: column;
@@ -340,6 +587,10 @@
     .action-links {
       flex-direction: column;
     }
+
+    .drawer {
+      width: 100%;
+    }
   }
 </style>
 {% endblock %}
@@ -348,12 +599,15 @@
 <div class="plab-content">
   <!-- Header -->
   <div class="plab-header">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <h1>Coaching & Training</h1>
-      <span class="client-badge">
-        <span style="font-size: 1rem;">📚</span>
-        {{ records|length }} Records
-      </span>
+    <div style="display: flex; align-items: center; gap: 1rem; flex-direction: column; align-items: flex-start;">
+      <div style="display: flex; align-items: center; gap: 1rem;">
+        <h1>Coaching & Training</h1>
+        <span class="client-badge">
+          <span style="font-size: 1rem;">📚</span>
+          {{ records|length }} Records
+        </span>
+      </div>
+      <div class="plab-subtitle">Click a row to view details</div>
     </div>
     <div class="plab-header-actions">
       <a href="/operations/coaching/add" class="btn-primary">+ Add Training</a>
@@ -393,15 +647,17 @@
   <!-- Filter Section -->
   <div class="filter-section">
     <form method="GET" class="filter-form">
-      <div class="form-group">
-        <label for="search">Search</label>
+      <div class="form-group autocomplete-wrap">
+        <label for="coachSearch">Search</label>
         <input
           type="text"
-          id="search"
+          id="coachSearch"
           name="q"
-          placeholder="Client name, reg#..."
+          placeholder="Type candidate name..."
           value="{{ search or '' }}"
+          autocomplete="off"
         />
+        <div id="coachSuggestions" class="suggestions-dropdown"></div>
       </div>
       <div class="form-group">
         <label for="status">Status</label>
@@ -437,16 +693,12 @@
       </thead>
       <tbody>
         {% for record in records %}
-        <tr>
+        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCoachDetail({{ record.id }})">
           <td>
-            <a href="/operations/clients/{{ record.id }}" class="row-link">
-              {{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}
-            </a>
+            {{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}
           </td>
           <td>
-            <a href="/operations/coaching/{{ record.id }}" class="row-link">
-              {{ record.registration_number }}
-            </a>
+            {{ record.registration_number }}
           </td>
           <td>{{ record.course_type or '–' }}</td>
           <td>{{ record.coaching_method or '–' }}</td>
@@ -475,8 +727,8 @@
           <td>{{ record.end_date or '–' }}</td>
           <td>
             <div class="action-links">
-              <a href="/operations/coaching/{{ record.id }}/edit">Edit</a>
-              <a href="/operations/coaching/{{ record.id }}/delete" class="delete" onclick="return confirm('Are you sure?');">Delete</a>
+              <a href="/operations/coaching/{{ record.id }}/edit" onclick="event.stopPropagation();">Edit</a>
+              <a href="/operations/coaching/{{ record.id }}/delete" class="delete" onclick="event.stopPropagation(); return confirm('Are you sure?');">Delete</a>
             </div>
           </td>
         </tr>
@@ -498,4 +750,268 @@
   </div>
   {% endif %}
 </div>
+
+<!-- Drawer Backdrop -->
+<div class="drawer-backdrop" id="coachBackdrop" onclick="closeCoachDetail()"></div>
+
+<!-- Detail Drawer -->
+<aside class="drawer" id="coachDrawer" aria-hidden="true">
+  <div class="drawer-head">
+    <h3>Coaching & Training Details</h3>
+    <button class="drawer-close" type="button" onclick="closeCoachDetail()" aria-label="Close">&times;</button>
+  </div>
+  <div class="drawer-body" id="coachDrawerBody"></div>
+  <div class="drawer-actions" id="coachDrawerActions"></div>
+</aside>
+
+<script>
+// Data object with all coaching records
+const COACH_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        course_type: {{ (record.course_type or '')|tojson }},
+        coaching_method: {{ (record.coaching_method or '')|tojson }},
+        coaching_status: {{ (record.coaching_status or '')|tojson }},
+        batch_month: {{ (record.batch_month or '')|tojson }},
+        batch_year: {{ (record.batch_year or '')|tojson }},
+        start_date: {{ (record.start_date or '')|tojson }},
+        end_date: {{ (record.end_date or '')|tojson }},
+        notes: {{ (record.notes or '')|tojson }}
+    },
+    {% endfor %}
+};
+
+// Open drawer with record details
+function openCoachDetail(recordId) {
+  const record = COACH_RECORDS[recordId];
+  if (!record) return;
+
+  const drawer = document.getElementById('coachDrawer');
+  const backdrop = document.getElementById('coachBackdrop');
+  const body = document.getElementById('coachDrawerBody');
+  const actionsDiv = document.getElementById('coachDrawerActions');
+
+  // Get initials for avatar
+  const initials = record.name
+    .split(' ')
+    .filter(n => n.length > 0)
+    .map(n => n[0].toUpperCase())
+    .slice(0, 2)
+    .join('');
+
+  // Build status badge
+  let statusBadgeClass = 'badge-on-going';
+  if (record.coaching_status === 'Completed') {
+    statusBadgeClass = 'badge-completed';
+  } else if (record.coaching_status === 'Pending') {
+    statusBadgeClass = 'badge-pending';
+  } else if (record.coaching_status === 'Cancelled') {
+    statusBadgeClass = 'badge-cancelled';
+  }
+
+  // Build batch display
+  const batchDisplay = record.batch_month && record.batch_year
+    ? `${record.batch_month}/${record.batch_year}`
+    : '–';
+
+  // Build drawer content
+  let html = `
+    <div class="drawer-emp">
+      <div class="emp-avatar-lg-ph">${initials || '?'}</div>
+      <div>
+        <p class="name">${record.name}</p>
+        <p class="meta">Reg# ${record.registration_number || '–'}</p>
+      </div>
+    </div>
+
+    <div class="drawer-grid">
+      <div class="drawer-field">
+        <div class="label">Course Type</div>
+        <div class="value">${record.course_type || '–'}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="label">Coaching Method</div>
+        <div class="value">${record.coaching_method || '–'}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="label">Status</div>
+        <div class="value"><span class="badge-pill ${statusBadgeClass}">${record.coaching_status || '–'}</span></div>
+      </div>
+      <div class="drawer-field">
+        <div class="label">Batch</div>
+        <div class="value">${batchDisplay}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="label">Start Date</div>
+        <div class="value">${record.start_date || '–'}</div>
+      </div>
+      <div class="drawer-field">
+        <div class="label">End Date</div>
+        <div class="value">${record.end_date || '–'}</div>
+      </div>
+  `;
+
+  // Add notes section if present
+  if (record.notes) {
+    html += `
+      <div class="drawer-section" style="grid-column: 1 / -1;">
+        <h4>Notes</h4>
+        <div class="value">${record.notes}</div>
+      </div>
+    `;
+  }
+
+  html += `</div>`;
+
+  body.innerHTML = html;
+
+  // Build actions
+  actionsDiv.innerHTML = `
+    <a href="/operations/coaching/${recordId}/edit">Edit Record</a>
+    <a href="/operations/clients/${recordId}">View PLAB Profile</a>
+  `;
+
+  // Show drawer
+  drawer.classList.add('open');
+  backdrop.classList.add('open');
+  drawer.setAttribute('aria-hidden', 'false');
+}
+
+// Close drawer
+function closeCoachDetail() {
+  const drawer = document.getElementById('coachDrawer');
+  const backdrop = document.getElementById('coachBackdrop');
+
+  drawer.classList.remove('open');
+  backdrop.classList.remove('open');
+  drawer.setAttribute('aria-hidden', 'true');
+}
+
+// Close drawer on Escape key
+document.addEventListener('keydown', function(event) {
+  if (event.key === 'Escape') {
+    closeCoachDetail();
+  }
+});
+
+// ============ Autocomplete Search ============
+let coachSearchTimeout;
+let coachHighlightedIndex = -1;
+
+document.addEventListener('DOMContentLoaded', function() {
+  const searchInput = document.getElementById('coachSearch');
+  const suggestionsDiv = document.getElementById('coachSuggestions');
+
+  if (!searchInput) return;
+
+  // Input event for autocomplete
+  searchInput.addEventListener('input', function(e) {
+    clearTimeout(coachSearchTimeout);
+    const query = e.target.value.trim();
+
+    if (query.length < 2) {
+      suggestionsDiv.classList.remove('visible');
+      suggestionsDiv.innerHTML = '';
+      return;
+    }
+
+    coachSearchTimeout = setTimeout(() => {
+      fetchCoachSuggestions(query);
+    }, 250);
+  });
+
+  // Keyboard navigation
+  searchInput.addEventListener('keydown', function(e) {
+    const items = suggestionsDiv.querySelectorAll('.suggestion-item');
+    const itemCount = items.length;
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      coachHighlightedIndex = Math.min(coachHighlightedIndex + 1, itemCount - 1);
+      updateCoachHighlight(items);
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      coachHighlightedIndex = Math.max(coachHighlightedIndex - 1, -1);
+      updateCoachHighlight(items);
+    } else if (e.key === 'Enter') {
+      e.preventDefault();
+      if (coachHighlightedIndex >= 0 && items[coachHighlightedIndex]) {
+        const recordId = items[coachHighlightedIndex].dataset.recordId;
+        selectCoachSuggestion(recordId, items[coachHighlightedIndex].dataset.name);
+      }
+    } else if (e.key === 'Escape') {
+      suggestionsDiv.classList.remove('visible');
+      coachHighlightedIndex = -1;
+    }
+  });
+
+  // Close suggestions when clicking outside
+  document.addEventListener('click', function(e) {
+    if (e.target !== searchInput && !suggestionsDiv.contains(e.target)) {
+      suggestionsDiv.classList.remove('visible');
+    }
+  });
+});
+
+function fetchCoachSuggestions(query) {
+  const suggestionsDiv = document.getElementById('coachSuggestions');
+  const allRecords = Object.values(COACH_RECORDS);
+
+  // Filter records based on name or registration number
+  const filtered = allRecords.filter(record => {
+    const name = (record.name || '').toLowerCase();
+    const reg = (record.registration_number || '').toLowerCase();
+    const q = query.toLowerCase();
+    return name.includes(q) || reg.includes(q);
+  });
+
+  if (filtered.length === 0) {
+    suggestionsDiv.innerHTML = '<div style="padding: 0.8rem; text-align: center; color: var(--gray-500); font-size: 0.85rem;">No results found</div>';
+    suggestionsDiv.classList.add('visible');
+    coachHighlightedIndex = -1;
+    return;
+  }
+
+  // Build suggestions HTML
+  let html = '';
+  filtered.slice(0, 10).forEach((record, index) => {
+    html += `
+      <div class="suggestion-item" data-record-id="${record.id}" data-name="${record.name}" onclick="selectCoachSuggestion(${record.id}, '${record.name}')">
+        <span class="suggestion-name">${record.name}</span>
+        <span class="suggestion-reg">${record.registration_number || ''}</span>
+      </div>
+    `;
+  });
+
+  suggestionsDiv.innerHTML = html;
+  suggestionsDiv.classList.add('visible');
+  coachHighlightedIndex = -1;
+}
+
+function updateCoachHighlight(items) {
+  items.forEach((item, index) => {
+    if (index === coachHighlightedIndex) {
+      item.classList.add('highlighted');
+    } else {
+      item.classList.remove('highlighted');
+    }
+  });
+}
+
+function selectCoachSuggestion(recordId, name) {
+  const searchInput = document.getElementById('coachSearch');
+  const suggestionsDiv = document.getElementById('coachSuggestions');
+
+  searchInput.value = name;
+  suggestionsDiv.classList.remove('visible');
+  coachHighlightedIndex = -1;
+
+  // Optionally open the detail drawer
+  openCoachDetail(recordId);
+}
+</script>
+
 {% endblock %}

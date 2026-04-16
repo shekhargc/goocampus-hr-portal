@@ -314,6 +314,48 @@
     margin: 0;
   }
 
+  .plab-subtitle {
+    font-size: 0.9rem;
+    color: var(--gray-500);
+    margin-top: -0.5rem;
+    margin-bottom: 1.5rem;
+  }
+
+  /* ============ Slide-out Detail Drawer ============ */
+  .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+  .drawer-backdrop.open{opacity:1;visibility:visible}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+  .drawer.open{transform:translateX(0)}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+  .drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+  .drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+  .drawer-close:hover{color:var(--navy)}
+  .drawer-body{flex:1;overflow-y:auto;padding:24px}
+  .drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+  .emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+  .drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+  .drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+  .drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+  .drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+  .drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+  .drawer-field.full{grid-column:1/-1}
+  .drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+  .drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+  .drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+  .drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+  tr.clickable-row{cursor:pointer;transition:background .15s}
+  tr.clickable-row:hover{background:var(--gray-50)!important}
+  tr.clickable-row.active-row{background:#FFF7ED!important}
+  /* ============ Autocomplete Search ============ */
+  .autocomplete-wrap{position:relative}
+  .suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+  .suggestions-dropdown.visible{display:block}
+  .suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+  .suggestion-item:last-child{border-bottom:none}
+  .suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+  .suggestion-name{color:var(--gray-700);font-weight:500}
+  .suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+
   @media (max-width: 768px) {
     .plab-header {
       flex-direction: column;
@@ -355,6 +397,10 @@
     .action-links {
       flex-direction: column;
     }
+
+    .drawer {
+      width: 100%;
+    }
   }
 </style>
 {% endblock %}
@@ -375,6 +421,9 @@
       <a href="/operations/clients" class="btn-secondary">← Back to Clients</a>
     </div>
   </div>
+
+  <!-- Subtitle -->
+  <p class="plab-subtitle">Click a row to view details</p>
 
   <!-- Stats Cards -->
   <div class="stat-card-grid">
@@ -415,15 +464,17 @@
   <!-- Filter Section -->
   <div class="filter-section">
     <form method="GET" class="filter-form">
-      <div class="form-group">
-        <label for="search">Search</label>
+      <div class="form-group autocomplete-wrap">
+        <label for="tbSearch">Search</label>
         <input
           type="text"
-          id="search"
+          id="tbSearch"
           name="q"
-          placeholder="Client name, reg#, exam..."
+          placeholder="Type candidate name..."
           value="{{ search or '' }}"
+          autocomplete="off"
         />
+        <div id="tbSuggestions" class="suggestions-dropdown"></div>
       </div>
       <div class="form-group">
         <label for="exam">Exam</label>
@@ -470,17 +521,9 @@
       </thead>
       <tbody>
         {% for record in records %}
-        <tr>
-          <td>
-            <a href="/operations/clients/{{ record.id }}" class="row-link">
-              {{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}
-            </a>
-          </td>
-          <td>
-            <a href="/operations/test-bookings/{{ record.id }}" class="row-link">
-              {{ record.registration_number }}
-            </a>
-          </td>
+        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openTbDetail({{ record.id }})">
+          <td style="font-weight:600;color:var(--navy);">{{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}</td>
+          <td>{{ record.registration_number }}</td>
           <td>{{ record.exam or '–' }}</td>
           <td>
             {% if record.exam_date %}
@@ -547,4 +590,178 @@
   </div>
   {% endif %}
 </div>
+
+<!-- Detail Drawer -->
+<div class="drawer-backdrop" id="tbBackdrop" onclick="closeTbDetail()"></div>
+<aside class="drawer" id="tbDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Test Booking Details</h3>
+        <button class="drawer-close" type="button" onclick="closeTbDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="tbDrawerBody"></div>
+    <div class="drawer-actions" id="tbDrawerActions"></div>
+</aside>
+
+<script>
+const TB_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        exam: {{ (record.exam or '')|tojson }},
+        exam_type: {{ (record.exam_type or '')|tojson }},
+        booking_date: {{ (record.booking_date or '')|tojson }},
+        exam_date: {{ (record.exam_date or '')|tojson }},
+        exam_status: {{ (record.exam_status or '')|tojson }},
+        exam_result: {{ (record.exam_result or '')|tojson }},
+        exam_result_date: {{ (record.exam_result_date or '')|tojson }},
+        score: {{ (record.score or '')|tojson }},
+        test_center: {{ (record.test_center or '')|tojson }},
+        city_state: {{ (record.city_state or '')|tojson }},
+        country: {{ (record.country or '')|tojson }},
+        booked_by: {{ (record.booked_by or '')|tojson }},
+        revaluation: {{ (record.revaluation or '')|tojson }},
+        notes: {{ (record.notes or '')|tojson }}
+    },
+    {% endfor %}
+};
+
+let activeRowId = null;
+
+function statusBadge(val) {
+    if (!val) return '<span style="color:var(--gray-400);">—</span>';
+    const map = {Booked:'badge-booked',Attended:'badge-attended',Cancelled:'badge-cancelled',Missed:'badge-missed',Rescheduled:'badge-rescheduled'};
+    return `<span class="badge-pill ${map[val]||''}" style="${map[val]?'':'background:#F3F4F6;color:#64748B;'}">${val}</span>`;
+}
+
+function resultBadge(val) {
+    if (!val) return '<span style="color:var(--gray-400);">—</span>';
+    if (val === 'Passed') return '<span class="badge-pill badge-passed">' + val + '</span>';
+    if (val === 'Failed') return '<span class="badge-pill badge-failed">' + val + '</span>';
+    return val;
+}
+
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
+
+function openTbDetail(id) {
+    const r = TB_RECORDS[id];
+    if (!r) return;
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
+        </div>
+    </div>
+    <div class="drawer-grid">
+        ${field('Exam', r.exam)}
+        ${field('Exam Type', r.exam_type)}
+        ${field('Booking Date', r.booking_date)}
+        ${field('Exam Date', r.exam_date)}
+        ${field('Status', statusBadge(r.exam_status))}
+        ${field('Result', resultBadge(r.exam_result))}
+        ${field('Result Date', r.exam_result_date)}
+        ${field('Score', r.score)}
+    </div>
+    <div class="drawer-section">
+        <h4>Location & Details</h4>
+        <div class="drawer-grid">
+            ${field('Test Center', r.test_center)}
+            ${field('City/State', r.city_state)}
+            ${field('Country', r.country)}
+            ${field('Booked By', r.booked_by)}
+            ${field('Revaluation', r.revaluation)}
+        </div>
+    </div>`;
+    if (r.notes) {
+        html += `<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">${r.notes}</p></div>`;
+    }
+
+    document.getElementById('tbDrawerBody').innerHTML = html;
+    document.getElementById('tbDrawerActions').innerHTML = `
+        <a href="/operations/test-bookings/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+    document.getElementById('tbDrawer').classList.add('open');
+    document.getElementById('tbDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('tbBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeTbDetail() {
+    document.getElementById('tbDrawer').classList.remove('open');
+    document.getElementById('tbDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('tbBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeTbDetail(); });
+
+/* Autocomplete */
+(function() {
+    const input = document.getElementById('tbSearch');
+    const dropdown = document.getElementById('tbSuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+    input.addEventListener('keydown', function(e) {
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
+    }
+    function selectItem(item) {
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
+    }
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
 {% endblock %}
