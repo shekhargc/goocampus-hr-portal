@@ -10751,7 +10751,7 @@ def ops_gmc_import():
                     row.get('English Exam', '').strip(),
                     _parse_zoho_date(row.get('Exam Date', '')),
                     _parse_zoho_date(row.get('English Result Expiry Date', '')),
-                    row.get('License', row.get('Licence', '')).strip(),
+                    row.get('License', row.get('License ', row.get('Licence', ''))).strip(),
                     _parse_zoho_date(row.get('License Received Date', '')),
                     session.get('user_id', 0)
                 ))
