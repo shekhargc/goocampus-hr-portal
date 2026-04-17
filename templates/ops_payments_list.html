@@ -341,6 +341,32 @@
     font-size: 0.75rem;
   }
 
+  /* ============ Slide-out Detail Drawer ============ */
+  .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+  .drawer-backdrop.open{opacity:1;visibility:visible}
+  .drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+  .drawer.open{transform:translateX(0)}
+  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+  .drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+  .drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+  .drawer-close:hover{color:var(--navy)}
+  .drawer-body{flex:1;overflow-y:auto;padding:24px}
+  .drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+  .emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+  .drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+  .drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+  .drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+  .drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+  .drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+  .drawer-field.full{grid-column:1/-1}
+  .drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+  .drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+  .drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+  .drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+  tr.clickable-row{cursor:pointer;transition:background .15s}
+  tr.clickable-row:hover{background:var(--gray-50)!important}
+  tr.clickable-row.active-row{background:#FFF7ED!important}
+
   @media (max-width: 768px) {
     .payments-header {
       flex-direction: column;
@@ -393,9 +419,13 @@
 <div class="payments-content">
   <!-- Header -->
   <div class="payments-header">
-    <h1>All Payments</h1>
+    <div style="width: 100%;">
+      <h1>All Payments</h1>
+      <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Click a row to view details</p>
+    </div>
     <div class="payments-header-actions">
       <a href="/operations/payments/add" class="btn-primary">+ Add Payment</a>
+    </div>
     </div>
   </div>
 
@@ -487,7 +517,7 @@
       </thead>
       <tbody>
         {% for record in records %}
-        <tr>
+        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openPayDetail({{ record.id }})">
           <td>{{ record.payment_date or '–' }}</td>
           <td>{{ record.registration_number or '–' }}</td>
           <td>
@@ -561,8 +591,99 @@
   {% endif %}
 </div>
 
+<div class="drawer-backdrop" id="payBackdrop" onclick="closePayDetail()"></div>
+<aside class="drawer" id="payDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Payment Details</h3>
+        <button class="drawer-close" type="button" onclick="closePayDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="payDrawerBody"></div>
+    <div class="drawer-actions" id="payDrawerActions"></div>
+</aside>
+
 <!-- JavaScript for Indian number formatting and autocomplete -->
 <script>
+  const PAY_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        payment_date: {{ (record.payment_date or '')|tojson }},
+        amount_paid: {{ record.amount_paid or 0 }},
+        gst_paid: {{ record.gst_paid or 0 }},
+        total_amount_paid: {{ record.total_amount_paid or 0 }},
+        instalment: {{ (record.instalment or '')|tojson }},
+        payment_method: {{ (record.payment_method or '')|tojson }},
+        total_package: {{ record.total_package or 0 }},
+        notes: {{ (record.notes or '')|tojson }}
+    },
+    {% endfor %}
+  };
+
+  let activeRowId = null;
+
+  function field(label, value) {
+    return '<div class="drawer-field"><div class="label">' + label + '</div><div class="value">' + (value || '<span style="color:var(--gray-400);">—</span>') + '</div></div>';
+  }
+
+  function openPayDetail(id) {
+    const r = PAY_RECORDS[id];
+    if (!r) return;
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = '<div class="drawer-emp">' +
+        '<div class="emp-avatar-lg-ph">' + initials + '</div>' +
+        '<div><p class="name">' + r.name + '</p>' +
+        '<div class="meta">' + r.registration_number + '</div></div></div>' +
+        '<div class="drawer-grid">' +
+        field('Payment Date', r.payment_date) +
+        field('Instalment', r.instalment) +
+        field('Amount Paid', '₹' + r.amount_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
+        field('GST Paid', '₹' + r.gst_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
+        field('Total Amount', '₹' + r.total_amount_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
+        field('Payment Method', r.payment_method) +
+        '</div>';
+    if (r.total_package) {
+        html += '<div class="drawer-section"><h4>Package Info</h4><div class="drawer-grid">' +
+            field('Total Package', '₹' + r.total_package.toLocaleString('en-IN', {minimumFractionDigits:2})) +
+            '</div></div>';
+    }
+    if (r.notes) {
+        html += '<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">' + r.notes + '</p></div>';
+    }
+
+    document.getElementById('payDrawerBody').innerHTML = html;
+    document.getElementById('payDrawerActions').innerHTML =
+        '<a href="/operations/payments/' + r.id + '/edit" style="background:var(--orange);color:white;">Edit Payment</a>' +
+        '<a href="/operations/plab/dashboard/' + encodeURIComponent(r.registration_number) + '" style="background:var(--navy);color:white;">View PLAB Profile</a>';
+    document.getElementById('payDrawer').classList.add('open');
+    document.getElementById('payDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('payBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+  }
+
+  function closePayDetail() {
+    document.getElementById('payDrawer').classList.remove('open');
+    document.getElementById('payDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('payBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+  }
+
+  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePayDetail(); });
+
   function formatIndianCurrency(amount) {
     if (!amount || amount === 0) return '₹0';
 
