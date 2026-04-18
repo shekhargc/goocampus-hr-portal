@@ -9133,6 +9133,215 @@ def ensure_ops_tables():
             updated_at TIMESTAMP
         )''')
 
+        # ── Research & Publication ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_research_publication (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            research_status TEXT,
+            research_topic TEXT,
+            published_copy TEXT,
+            research_start_date TEXT,
+            research_end_date TEXT,
+            research_provider TEXT,
+            published_journal_name TEXT,
+            author_position TEXT,
+            research_batch TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            additional_notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Online Subscriptions ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_subscriptions (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            online_subscription TEXT,
+            issued_date TEXT,
+            activation_type TEXT,
+            notes TEXT,
+            client_email TEXT,
+            login_id TEXT,
+            password TEXT,
+            booked_by TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Webinars & Conferences ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_webinars_conferences (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            event_type TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            duration_days TEXT,
+            event_value TEXT,
+            cpd_points TEXT,
+            event_name TEXT,
+            participation_type TEXT,
+            notes TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── UK Visa & Travel ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_uk_visa_travel (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            visa_application_status TEXT,
+            documents_collected TEXT,
+            note_on_documents TEXT,
+            documents_status TEXT,
+            visa_interview_date TEXT,
+            visa_status TEXT,
+            note_on_visa_status TEXT,
+            visa_issued_date TEXT,
+            visa_period TEXT,
+            visa_expiry_date TEXT,
+            visa_type TEXT,
+            departure_date TEXT,
+            quarantine TEXT,
+            quarantine_days TEXT,
+            quarantine_hotel_name TEXT,
+            lodging_name TEXT,
+            check_in_date TEXT,
+            check_out_date TEXT,
+            lodging_type TEXT,
+            note TEXT,
+            arrival_date TEXT,
+            uk_phone_number TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Academic Details ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_academic_details (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            img_fmg TEXT,
+            img_medical_college TEXT,
+            fmg_medical_college TEXT,
+            country TEXT,
+            mbbs_status TEXT,
+            mbbs_start_date TEXT,
+            mbbs_end_date TEXT,
+            speciality_interest_1 TEXT,
+            speciality_interest_2 TEXT,
+            internship_status TEXT,
+            internship_hospital TEXT,
+            internship_location TEXT,
+            internship_hospital_2 TEXT,
+            internship_location_2 TEXT,
+            internship_start_date TEXT,
+            internship_end_date TEXT,
+            internship_gap TEXT,
+            gap_in_months TEXT,
+            gap_reason TEXT,
+            working_status TEXT,
+            working_hospital_name TEXT,
+            additional_info TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Online Courses ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_courses (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            courses_name TEXT,
+            course_type TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            validity_months TEXT,
+            course_provider TEXT,
+            certification_body TEXT,
+            subject_name TEXT,
+            notes TEXT,
+            client_email TEXT,
+            booked_by TEXT,
+            course_status TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── UK Observerships ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_uk_observerships (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            hospital_name TEXT,
+            hospital_location TEXT,
+            start_date TEXT,
+            end_date TEXT,
+            speciality TEXT,
+            payment TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── NGO Activities ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_ngo_activities (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            ngo_vendor_name TEXT,
+            activity_type TEXT,
+            batch_name_no TEXT,
+            activity_start_date TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Mentorship ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_mentorship (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            session_date TEXT,
+            start_time TEXT,
+            end_time TEXT,
+            duration_minutes TEXT,
+            amount_paid NUMERIC(14,2) DEFAULT 0,
+            payment_status TEXT,
+            candidate_attendance TEXT,
+            additional_notes TEXT,
+            session_confirmation TEXT,
+            program_provider TEXT,
+            mentor_attendance TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── UK Cab Bookings ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_uk_cab_bookings (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            candidate_email TEXT,
+            contact_number TEXT,
+            whatsapp_number TEXT,
+            whatsapp_number_2 TEXT,
+            vendor TEXT,
+            booking_date TEXT,
+            invoice_number TEXT,
+            pick_up_date TEXT,
+            pick_up_location TEXT,
+            drop_location TEXT,
+            additional_notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -9176,6 +9385,57 @@ GMC_LICENSE_STATUSES = ['Received', 'Not Received', 'In Process']
 # ── Payment dropdowns ──
 PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque']
 INSTALMENT_OPTIONS = ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment']
+
+# ── Research & Publication dropdowns ──
+RESEARCH_STATUSES = ['Started', 'In Progress', 'Completed', 'Published']
+AUTHOR_POSITIONS = ['First Author', 'Second Author', 'Third Author', 'Co-Author', 'Corresponding Author']
+
+# ── Online Subscriptions dropdowns ──
+ONLINE_SUBSCRIPTION_TYPES = ['Plabable (PLAB)', 'Plab keys (PLAB)', 'Cerebellum', 'Marrow', 'PrepLadder Subscription', 'PassMedicine', 'BMJ OnExamination', 'Other']
+ACTIVATION_TYPES = ['New Access', 'Renewed']
+SUBSCRIPTION_BOOKED_BY = ['Booked & Paid by GooCampus', 'Booked & Paid by Candidate', 'Booked by GooCampus Paid by Candidate']
+
+# ── Webinars & Conferences dropdowns ──
+EVENT_TYPES = ['Webinar', 'Conference']
+EVENT_VALUES = ['Paid', 'Free']
+PARTICIPATION_TYPES = ['Attendee', 'Speaker', 'Presenter', 'Panelist', 'Organizer']
+
+# ── UK Visa & Travel dropdowns ──
+VISA_APP_STATUSES = ['Not Started', 'In Process', 'Completed']
+VISA_DOC_COLLECTED = ['Collected', 'Not Collected', 'Partial']
+VISA_DOC_STATUSES = ['Accepted', 'In Process', 'Rejected']
+VISA_STATUSES = ['Accepted', 'Rejected', 'In Process', 'Not Applied']
+VISA_PERIODS = ['6 Months', '1 Year', '2 Years', '5 Years', '10 Years']
+VISA_TYPES = ['Visitor Visas', 'Student Visa', 'Work Visa', 'Skilled Worker Visa', 'Other']
+LODGING_TYPES = ['Hotel', 'Hostel', 'Airbnb', 'Shared Accommodation', 'Other']
+
+# ── Academic Details dropdowns ──
+IMG_FMG_OPTIONS = ['IMG', 'FMG']
+MBBS_STATUSES = ['Completed', 'In Progress', 'Not Started']
+INTERNSHIP_STATUSES = ['Completed', 'In Progress', 'Not Started']
+INTERNSHIP_GAP_OPTIONS = ['Yes', 'No']
+WORKING_STATUSES = ['Working', 'Not Working']
+
+# ── Online Courses dropdowns ──
+COURSE_NAMES = ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS', 'Other']
+COURSE_TYPES = ['Online', 'Offline']
+COURSE_STATUSES = ['Completed', 'In Progress', 'Not Started', 'Cancelled']
+COURSE_BOOKED_BY = ['Booked & Paid by GooCampus', 'Booked & Paid by Candidate', 'Booked by GooCampus Paid by Candidate']
+
+# ── UK Observerships dropdowns ──
+OBSERVERSHIP_PAYMENTS = ['Paid by GC', 'Paid by Candidate', 'Free']
+
+# ── NGO Activities dropdowns ──
+NGO_VENDOR_NAMES = ['Aarogya Seva', 'StepOne', 'Other']
+NGO_ACTIVITY_TYPES = ['Online', 'Offline']
+
+# ── Mentorship dropdowns ──
+MENTORSHIP_PAYMENT_STATUSES = ['Paid', 'Free']
+MENTORSHIP_ATTENDANCE = ['Present', 'Absent']
+MENTORSHIP_CONFIRMATION = ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled']
+
+# ── UK Cab Bookings dropdowns ──
+CAB_VENDORS = ['Imran', 'Other']
 
 
 def _next_registration_number(conn):
@@ -10576,6 +10836,955 @@ def ops_gmc_delete(gid):
     conn.close()
     flash('GMC registration record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_gmc_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Research & Publication
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/research-publication')
+@admin_required
+def ops_research_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT r.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_research_publication r
+                 LEFT JOIN plab_clients p ON r.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if status_filter:
+            sql += ' AND r.research_status = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR r.research_topic ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY r.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_research_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_research_list.html', records=records, search=search,
+                           status_filter=status_filter, research_statuses=RESEARCH_STATUSES)
+
+
+@app.route('/operations/research-publication/add', methods=['GET', 'POST'])
+@admin_required
+def ops_research_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_research_publication (
+            registration_number, research_status, research_topic, published_copy,
+            research_start_date, research_end_date, research_provider,
+            published_journal_name, author_position, research_batch,
+            mobile_number, candidate_email, additional_notes, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
+            f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
+            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
+            f.get('additional_notes'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Research record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_research_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_research_form.html', record=None,
+                           research_statuses=RESEARCH_STATUSES, author_positions=AUTHOR_POSITIONS, pre_reg=pre_reg)
+
+
+@app.route('/operations/research-publication/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_research_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT r.*, p.first_name, p.last_name, p.prefix FROM ops_research_publication r LEFT JOIN plab_clients p ON r.registration_number=p.registration_number WHERE r.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_research_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_research_publication SET
+            registration_number=?, research_status=?, research_topic=?, published_copy=?,
+            research_start_date=?, research_end_date=?, research_provider=?,
+            published_journal_name=?, author_position=?, research_batch=?,
+            mobile_number=?, candidate_email=?, additional_notes=? WHERE id=?''', (
+            f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
+            f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
+            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
+            f.get('additional_notes'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Research record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_research_list'))
+    conn.close()
+    return render_template('ops_research_form.html', record=record,
+                           research_statuses=RESEARCH_STATUSES, author_positions=AUTHOR_POSITIONS, pre_reg='')
+
+
+@app.route('/operations/research-publication/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_research_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_research_publication WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Research record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_research_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Online Subscriptions
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/online-subscriptions')
+@admin_required
+def ops_subscriptions_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT s.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_online_subscriptions s
+                 LEFT JOIN plab_clients p ON s.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR s.online_subscription ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY s.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_subscriptions_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_subscriptions_list.html', records=records, search=search,
+                           subscription_types=ONLINE_SUBSCRIPTION_TYPES)
+
+
+@app.route('/operations/online-subscriptions/add', methods=['GET', 'POST'])
+@admin_required
+def ops_subscriptions_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_online_subscriptions (
+            registration_number, online_subscription, issued_date, activation_type,
+            notes, client_email, login_id, password, booked_by,
+            mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('online_subscription'), f.get('issued_date'),
+            f.get('activation_type'), f.get('notes'), f.get('client_email'),
+            f.get('login_id'), f.get('password'), f.get('booked_by'),
+            f.get('mobile_number'), f.get('candidate_email'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Subscription record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_subscriptions_form.html', record=None,
+                           subscription_types=ONLINE_SUBSCRIPTION_TYPES, activation_types=ACTIVATION_TYPES,
+                           booked_by_options=SUBSCRIPTION_BOOKED_BY, pre_reg=pre_reg)
+
+
+@app.route('/operations/online-subscriptions/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_subscriptions_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT s.*, p.first_name, p.last_name, p.prefix FROM ops_online_subscriptions s LEFT JOIN plab_clients p ON s.registration_number=p.registration_number WHERE s.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_subscriptions_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_online_subscriptions SET
+            registration_number=?, online_subscription=?, issued_date=?, activation_type=?,
+            notes=?, client_email=?, login_id=?, password=?, booked_by=?,
+            mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('online_subscription'), f.get('issued_date'),
+            f.get('activation_type'), f.get('notes'), f.get('client_email'),
+            f.get('login_id'), f.get('password'), f.get('booked_by'),
+            f.get('mobile_number'), f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Subscription record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
+    conn.close()
+    return render_template('ops_subscriptions_form.html', record=record,
+                           subscription_types=ONLINE_SUBSCRIPTION_TYPES, activation_types=ACTIVATION_TYPES,
+                           booked_by_options=SUBSCRIPTION_BOOKED_BY, pre_reg='')
+
+
+@app.route('/operations/online-subscriptions/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_subscriptions_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_online_subscriptions WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Subscription record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Webinars & Conferences
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/webinars-conferences')
+@admin_required
+def ops_webinars_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    type_filter = request.args.get('type', '')
+    try:
+        sql = '''SELECT w.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_webinars_conferences w
+                 LEFT JOIN plab_clients p ON w.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if type_filter:
+            sql += ' AND w.event_type = ?'
+            params.append(type_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR w.event_name ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY w.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_webinars_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_webinars_list.html', records=records, search=search,
+                           type_filter=type_filter, event_types=EVENT_TYPES)
+
+
+@app.route('/operations/webinars-conferences/add', methods=['GET', 'POST'])
+@admin_required
+def ops_webinars_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_webinars_conferences (
+            registration_number, event_type, start_date, end_date, duration_days,
+            event_value, cpd_points, event_name, participation_type,
+            notes, mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('event_type'), f.get('start_date'),
+            f.get('end_date'), f.get('duration_days'), f.get('event_value'),
+            f.get('cpd_points'), f.get('event_name'), f.get('participation_type'),
+            f.get('notes'), f.get('mobile_number'), f.get('candidate_email'),
+            session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Webinar/Conference record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_webinars_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_webinars_form.html', record=None,
+                           event_types=EVENT_TYPES, event_values=EVENT_VALUES,
+                           participation_types=PARTICIPATION_TYPES, pre_reg=pre_reg)
+
+
+@app.route('/operations/webinars-conferences/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_webinars_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT w.*, p.first_name, p.last_name, p.prefix FROM ops_webinars_conferences w LEFT JOIN plab_clients p ON w.registration_number=p.registration_number WHERE w.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_webinars_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_webinars_conferences SET
+            registration_number=?, event_type=?, start_date=?, end_date=?, duration_days=?,
+            event_value=?, cpd_points=?, event_name=?, participation_type=?,
+            notes=?, mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('event_type'), f.get('start_date'),
+            f.get('end_date'), f.get('duration_days'), f.get('event_value'),
+            f.get('cpd_points'), f.get('event_name'), f.get('participation_type'),
+            f.get('notes'), f.get('mobile_number'), f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Webinar/Conference record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_webinars_list'))
+    conn.close()
+    return render_template('ops_webinars_form.html', record=record,
+                           event_types=EVENT_TYPES, event_values=EVENT_VALUES,
+                           participation_types=PARTICIPATION_TYPES, pre_reg='')
+
+
+@app.route('/operations/webinars-conferences/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_webinars_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_webinars_conferences WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Webinar/Conference record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_webinars_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – UK Visa & Travel
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/uk-visa-travel')
+@admin_required
+def ops_visa_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT v.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_uk_visa_travel v
+                 LEFT JOIN plab_clients p ON v.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if status_filter:
+            sql += ' AND v.visa_application_status = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ?)'
+            params.extend([f'%{search}%'] * 2)
+        sql += ' ORDER BY v.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_visa_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_visa_list.html', records=records, search=search,
+                           status_filter=status_filter, visa_app_statuses=VISA_APP_STATUSES)
+
+
+@app.route('/operations/uk-visa-travel/add', methods=['GET', 'POST'])
+@admin_required
+def ops_visa_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_uk_visa_travel (
+            registration_number, visa_application_status, documents_collected,
+            note_on_documents, documents_status, visa_interview_date, visa_status,
+            note_on_visa_status, visa_issued_date, visa_period, visa_expiry_date,
+            visa_type, departure_date, quarantine, quarantine_days,
+            quarantine_hotel_name, lodging_name, check_in_date, check_out_date,
+            lodging_type, note, arrival_date, uk_phone_number,
+            mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('visa_application_status'), f.get('documents_collected'),
+            f.get('note_on_documents'), f.get('documents_status'), f.get('visa_interview_date'),
+            f.get('visa_status'), f.get('note_on_visa_status'), f.get('visa_issued_date'),
+            f.get('visa_period'), f.get('visa_expiry_date'), f.get('visa_type'),
+            f.get('departure_date'), f.get('quarantine'), f.get('quarantine_days'),
+            f.get('quarantine_hotel_name'), f.get('lodging_name'), f.get('check_in_date'),
+            f.get('check_out_date'), f.get('lodging_type'), f.get('note'),
+            f.get('arrival_date'), f.get('uk_phone_number'),
+            f.get('mobile_number'), f.get('candidate_email'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Visa & Travel record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_visa_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_visa_form.html', record=None,
+                           visa_app_statuses=VISA_APP_STATUSES, visa_doc_collected=VISA_DOC_COLLECTED,
+                           visa_doc_statuses=VISA_DOC_STATUSES, visa_statuses=VISA_STATUSES,
+                           visa_periods=VISA_PERIODS, visa_types=VISA_TYPES,
+                           lodging_types=LODGING_TYPES, pre_reg=pre_reg)
+
+
+@app.route('/operations/uk-visa-travel/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_visa_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT v.*, p.first_name, p.last_name, p.prefix FROM ops_uk_visa_travel v LEFT JOIN plab_clients p ON v.registration_number=p.registration_number WHERE v.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_visa_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_uk_visa_travel SET
+            registration_number=?, visa_application_status=?, documents_collected=?,
+            note_on_documents=?, documents_status=?, visa_interview_date=?, visa_status=?,
+            note_on_visa_status=?, visa_issued_date=?, visa_period=?, visa_expiry_date=?,
+            visa_type=?, departure_date=?, quarantine=?, quarantine_days=?,
+            quarantine_hotel_name=?, lodging_name=?, check_in_date=?, check_out_date=?,
+            lodging_type=?, note=?, arrival_date=?, uk_phone_number=?,
+            mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('visa_application_status'), f.get('documents_collected'),
+            f.get('note_on_documents'), f.get('documents_status'), f.get('visa_interview_date'),
+            f.get('visa_status'), f.get('note_on_visa_status'), f.get('visa_issued_date'),
+            f.get('visa_period'), f.get('visa_expiry_date'), f.get('visa_type'),
+            f.get('departure_date'), f.get('quarantine'), f.get('quarantine_days'),
+            f.get('quarantine_hotel_name'), f.get('lodging_name'), f.get('check_in_date'),
+            f.get('check_out_date'), f.get('lodging_type'), f.get('note'),
+            f.get('arrival_date'), f.get('uk_phone_number'),
+            f.get('mobile_number'), f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Visa & Travel record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_visa_list'))
+    conn.close()
+    return render_template('ops_visa_form.html', record=record,
+                           visa_app_statuses=VISA_APP_STATUSES, visa_doc_collected=VISA_DOC_COLLECTED,
+                           visa_doc_statuses=VISA_DOC_STATUSES, visa_statuses=VISA_STATUSES,
+                           visa_periods=VISA_PERIODS, visa_types=VISA_TYPES,
+                           lodging_types=LODGING_TYPES, pre_reg='')
+
+
+@app.route('/operations/uk-visa-travel/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_visa_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_uk_visa_travel WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Visa & Travel record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_visa_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Academic Details
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/academic-details')
+@admin_required
+def ops_academic_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT a.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_academic_details a
+                 LEFT JOIN plab_clients p ON a.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR a.img_medical_college ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY a.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_academic_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_academic_list.html', records=records, search=search)
+
+
+@app.route('/operations/academic-details/add', methods=['GET', 'POST'])
+@admin_required
+def ops_academic_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_academic_details (
+            registration_number, img_fmg, img_medical_college, fmg_medical_college,
+            country, mbbs_status, mbbs_start_date, mbbs_end_date,
+            speciality_interest_1, speciality_interest_2, internship_status,
+            internship_hospital, internship_location, internship_hospital_2,
+            internship_location_2, internship_start_date, internship_end_date,
+            internship_gap, gap_in_months, gap_reason, working_status,
+            working_hospital_name, additional_info, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('img_fmg'), f.get('img_medical_college'),
+            f.get('fmg_medical_college'), f.get('country'), f.get('mbbs_status'),
+            f.get('mbbs_start_date'), f.get('mbbs_end_date'), f.get('speciality_interest_1'),
+            f.get('speciality_interest_2'), f.get('internship_status'),
+            f.get('internship_hospital'), f.get('internship_location'),
+            f.get('internship_hospital_2'), f.get('internship_location_2'),
+            f.get('internship_start_date'), f.get('internship_end_date'),
+            f.get('internship_gap'), f.get('gap_in_months'), f.get('gap_reason'),
+            f.get('working_status'), f.get('working_hospital_name'),
+            f.get('additional_info'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Academic details added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_academic_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_academic_form.html', record=None,
+                           img_fmg_options=IMG_FMG_OPTIONS, mbbs_statuses=MBBS_STATUSES,
+                           internship_statuses=INTERNSHIP_STATUSES, internship_gap_options=INTERNSHIP_GAP_OPTIONS,
+                           working_statuses=WORKING_STATUSES, pre_reg=pre_reg)
+
+
+@app.route('/operations/academic-details/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_academic_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT a.*, p.first_name, p.last_name, p.prefix FROM ops_academic_details a LEFT JOIN plab_clients p ON a.registration_number=p.registration_number WHERE a.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_academic_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_academic_details SET
+            registration_number=?, img_fmg=?, img_medical_college=?, fmg_medical_college=?,
+            country=?, mbbs_status=?, mbbs_start_date=?, mbbs_end_date=?,
+            speciality_interest_1=?, speciality_interest_2=?, internship_status=?,
+            internship_hospital=?, internship_location=?, internship_hospital_2=?,
+            internship_location_2=?, internship_start_date=?, internship_end_date=?,
+            internship_gap=?, gap_in_months=?, gap_reason=?, working_status=?,
+            working_hospital_name=?, additional_info=? WHERE id=?''', (
+            f.get('registration_number'), f.get('img_fmg'), f.get('img_medical_college'),
+            f.get('fmg_medical_college'), f.get('country'), f.get('mbbs_status'),
+            f.get('mbbs_start_date'), f.get('mbbs_end_date'), f.get('speciality_interest_1'),
+            f.get('speciality_interest_2'), f.get('internship_status'),
+            f.get('internship_hospital'), f.get('internship_location'),
+            f.get('internship_hospital_2'), f.get('internship_location_2'),
+            f.get('internship_start_date'), f.get('internship_end_date'),
+            f.get('internship_gap'), f.get('gap_in_months'), f.get('gap_reason'),
+            f.get('working_status'), f.get('working_hospital_name'),
+            f.get('additional_info'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Academic details updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_academic_list'))
+    conn.close()
+    return render_template('ops_academic_form.html', record=record,
+                           img_fmg_options=IMG_FMG_OPTIONS, mbbs_statuses=MBBS_STATUSES,
+                           internship_statuses=INTERNSHIP_STATUSES, internship_gap_options=INTERNSHIP_GAP_OPTIONS,
+                           working_statuses=WORKING_STATUSES, pre_reg='')
+
+
+@app.route('/operations/academic-details/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_academic_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_academic_details WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Academic details deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_academic_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Online Courses
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/online-courses')
+@admin_required
+def ops_courses_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    status_filter = request.args.get('status', '')
+    try:
+        sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_online_courses c
+                 LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if status_filter:
+            sql += ' AND c.course_status = ?'
+            params.append(status_filter)
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.courses_name ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY c.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_courses_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_courses_list.html', records=records, search=search,
+                           status_filter=status_filter, course_statuses=COURSE_STATUSES)
+
+
+@app.route('/operations/online-courses/add', methods=['GET', 'POST'])
+@admin_required
+def ops_courses_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_online_courses (
+            registration_number, courses_name, course_type, start_date, end_date,
+            validity_months, course_provider, certification_body, subject_name,
+            notes, client_email, booked_by, course_status,
+            mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('courses_name'), f.get('course_type'),
+            f.get('start_date'), f.get('end_date'), f.get('validity_months'),
+            f.get('course_provider'), f.get('certification_body'), f.get('subject_name'),
+            f.get('notes'), f.get('client_email'), f.get('booked_by'),
+            f.get('course_status'), f.get('mobile_number'), f.get('candidate_email'),
+            session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Course record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_courses_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_courses_form.html', record=None,
+                           course_names=COURSE_NAMES, course_types=COURSE_TYPES,
+                           course_statuses=COURSE_STATUSES, booked_by_options=COURSE_BOOKED_BY, pre_reg=pre_reg)
+
+
+@app.route('/operations/online-courses/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_courses_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT c.*, p.first_name, p.last_name, p.prefix FROM ops_online_courses c LEFT JOIN plab_clients p ON c.registration_number=p.registration_number WHERE c.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_courses_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_online_courses SET
+            registration_number=?, courses_name=?, course_type=?, start_date=?, end_date=?,
+            validity_months=?, course_provider=?, certification_body=?, subject_name=?,
+            notes=?, client_email=?, booked_by=?, course_status=?,
+            mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('courses_name'), f.get('course_type'),
+            f.get('start_date'), f.get('end_date'), f.get('validity_months'),
+            f.get('course_provider'), f.get('certification_body'), f.get('subject_name'),
+            f.get('notes'), f.get('client_email'), f.get('booked_by'),
+            f.get('course_status'), f.get('mobile_number'), f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Course record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_courses_list'))
+    conn.close()
+    return render_template('ops_courses_form.html', record=record,
+                           course_names=COURSE_NAMES, course_types=COURSE_TYPES,
+                           course_statuses=COURSE_STATUSES, booked_by_options=COURSE_BOOKED_BY, pre_reg='')
+
+
+@app.route('/operations/online-courses/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_courses_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_online_courses WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Course record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_courses_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – UK Observerships
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/uk-observerships')
+@admin_required
+def ops_observerships_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT o.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_uk_observerships o
+                 LEFT JOIN plab_clients p ON o.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR o.hospital_name ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY o.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_observerships_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_observerships_list.html', records=records, search=search)
+
+
+@app.route('/operations/uk-observerships/add', methods=['GET', 'POST'])
+@admin_required
+def ops_observerships_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_uk_observerships (
+            registration_number, hospital_name, hospital_location, start_date, end_date,
+            speciality, payment, mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('hospital_name'), f.get('hospital_location'),
+            f.get('start_date'), f.get('end_date'), f.get('speciality'),
+            f.get('payment'), f.get('mobile_number'), f.get('candidate_email'),
+            session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Observership record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_observerships_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_observerships_form.html', record=None,
+                           observership_payments=OBSERVERSHIP_PAYMENTS, pre_reg=pre_reg)
+
+
+@app.route('/operations/uk-observerships/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_observerships_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT o.*, p.first_name, p.last_name, p.prefix FROM ops_uk_observerships o LEFT JOIN plab_clients p ON o.registration_number=p.registration_number WHERE o.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_observerships_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_uk_observerships SET
+            registration_number=?, hospital_name=?, hospital_location=?, start_date=?, end_date=?,
+            speciality=?, payment=?, mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('hospital_name'), f.get('hospital_location'),
+            f.get('start_date'), f.get('end_date'), f.get('speciality'),
+            f.get('payment'), f.get('mobile_number'), f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Observership record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_observerships_list'))
+    conn.close()
+    return render_template('ops_observerships_form.html', record=record,
+                           observership_payments=OBSERVERSHIP_PAYMENTS, pre_reg='')
+
+
+@app.route('/operations/uk-observerships/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_observerships_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_uk_observerships WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Observership record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_observerships_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – NGO Activities
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/ngo-activities')
+@admin_required
+def ops_ngo_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT n.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_ngo_activities n
+                 LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.ngo_vendor_name ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY n.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_ngo_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_ngo_list.html', records=records, search=search)
+
+
+@app.route('/operations/ngo-activities/add', methods=['GET', 'POST'])
+@admin_required
+def ops_ngo_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_ngo_activities (
+            registration_number, ngo_vendor_name, activity_type,
+            batch_name_no, activity_start_date, created_by
+        ) VALUES (?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
+            f.get('batch_name_no'), f.get('activity_start_date'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('NGO Activity record added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_ngo_form.html', record=None,
+                           ngo_vendors=NGO_VENDOR_NAMES, activity_types=NGO_ACTIVITY_TYPES, pre_reg=pre_reg)
+
+
+@app.route('/operations/ngo-activities/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_ngo_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT n.*, p.first_name, p.last_name, p.prefix FROM ops_ngo_activities n LEFT JOIN plab_clients p ON n.registration_number=p.registration_number WHERE n.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_ngo_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_ngo_activities SET
+            registration_number=?, ngo_vendor_name=?, activity_type=?,
+            batch_name_no=?, activity_start_date=? WHERE id=?''', (
+            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
+            f.get('batch_name_no'), f.get('activity_start_date'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('NGO Activity record updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
+    conn.close()
+    return render_template('ops_ngo_form.html', record=record,
+                           ngo_vendors=NGO_VENDOR_NAMES, activity_types=NGO_ACTIVITY_TYPES, pre_reg='')
+
+
+@app.route('/operations/ngo-activities/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_ngo_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_ngo_activities WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('NGO Activity record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_ngo_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Mentorship
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/mentorship')
+@admin_required
+def ops_mentorship_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT m.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_mentorship m
+                 LEFT JOIN plab_clients p ON m.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR m.program_provider ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY m.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_mentorship_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_mentorship_list.html', records=records, search=search)
+
+
+@app.route('/operations/mentorship/add', methods=['GET', 'POST'])
+@admin_required
+def ops_mentorship_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_mentorship (
+            registration_number, session_date, start_time, end_time,
+            duration_minutes, amount_paid, payment_status, candidate_attendance,
+            additional_notes, session_confirmation, program_provider,
+            mentor_attendance, mobile_number, candidate_email, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('session_date'), f.get('start_time'),
+            f.get('end_time'), f.get('duration_minutes'),
+            f.get('amount_paid') or 0, f.get('payment_status'),
+            f.get('candidate_attendance'), f.get('additional_notes'),
+            f.get('session_confirmation'), f.get('program_provider'),
+            f.get('mentor_attendance'), f.get('mobile_number'),
+            f.get('candidate_email'), session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Mentorship session added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_mentorship_form.html', record=None,
+                           payment_statuses=MENTORSHIP_PAYMENT_STATUSES,
+                           attendance_options=MENTORSHIP_ATTENDANCE,
+                           confirmation_options=MENTORSHIP_CONFIRMATION, pre_reg=pre_reg)
+
+
+@app.route('/operations/mentorship/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_mentorship_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT m.*, p.first_name, p.last_name, p.prefix FROM ops_mentorship m LEFT JOIN plab_clients p ON m.registration_number=p.registration_number WHERE m.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_mentorship_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_mentorship SET
+            registration_number=?, session_date=?, start_time=?, end_time=?,
+            duration_minutes=?, amount_paid=?, payment_status=?, candidate_attendance=?,
+            additional_notes=?, session_confirmation=?, program_provider=?,
+            mentor_attendance=?, mobile_number=?, candidate_email=? WHERE id=?''', (
+            f.get('registration_number'), f.get('session_date'), f.get('start_time'),
+            f.get('end_time'), f.get('duration_minutes'),
+            f.get('amount_paid') or 0, f.get('payment_status'),
+            f.get('candidate_attendance'), f.get('additional_notes'),
+            f.get('session_confirmation'), f.get('program_provider'),
+            f.get('mentor_attendance'), f.get('mobile_number'),
+            f.get('candidate_email'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Mentorship session updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
+    conn.close()
+    return render_template('ops_mentorship_form.html', record=record,
+                           payment_statuses=MENTORSHIP_PAYMENT_STATUSES,
+                           attendance_options=MENTORSHIP_ATTENDANCE,
+                           confirmation_options=MENTORSHIP_CONFIRMATION, pre_reg='')
+
+
+@app.route('/operations/mentorship/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_mentorship_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_mentorship WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Mentorship session deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – UK Cab Bookings
+# ─────────────────────────────────────────────────────────
+
+@app.route('/operations/uk-cab-bookings')
+@admin_required
+def ops_cab_list():
+    conn = get_db()
+    search = request.args.get('q', '')
+    try:
+        sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_uk_cab_bookings c
+                 LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
+                 WHERE 1=1'''
+        params = []
+        if search:
+            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.vendor ILIKE ?)'
+            params.extend([f'%{search}%'] * 3)
+        sql += ' ORDER BY c.created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_cab_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_cab_list.html', records=records, search=search)
+
+
+@app.route('/operations/uk-cab-bookings/add', methods=['GET', 'POST'])
+@admin_required
+def ops_cab_add():
+    conn = get_db()
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''INSERT INTO ops_uk_cab_bookings (
+            registration_number, candidate_email, contact_number, whatsapp_number,
+            whatsapp_number_2, vendor, booking_date, invoice_number,
+            pick_up_date, pick_up_location, drop_location, additional_notes, created_by
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+            f.get('registration_number'), f.get('candidate_email'), f.get('contact_number'),
+            f.get('whatsapp_number'), f.get('whatsapp_number_2'), f.get('vendor'),
+            f.get('booking_date'), f.get('invoice_number'), f.get('pick_up_date'),
+            f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'),
+            session.get('user_id', 0)
+        ))
+        conn.commit(); conn.close()
+        flash('Cab booking added', 'success')
+        return redirect(request.args.get('next') or url_for('ops_cab_list'))
+    conn.close()
+    pre_reg = request.args.get('client', '')
+    return render_template('ops_cab_form.html', record=None,
+                           cab_vendors=CAB_VENDORS, pre_reg=pre_reg)
+
+
+@app.route('/operations/uk-cab-bookings/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_cab_edit(rid):
+    conn = get_db()
+    record = conn.execute("SELECT c.*, p.first_name, p.last_name, p.prefix FROM ops_uk_cab_bookings c LEFT JOIN plab_clients p ON c.registration_number=p.registration_number WHERE c.id=?", (rid,)).fetchone()
+    if not record:
+        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_cab_list'))
+    if request.method == 'POST':
+        f = request.form
+        conn.execute('''UPDATE ops_uk_cab_bookings SET
+            registration_number=?, candidate_email=?, contact_number=?, whatsapp_number=?,
+            whatsapp_number_2=?, vendor=?, booking_date=?, invoice_number=?,
+            pick_up_date=?, pick_up_location=?, drop_location=?, additional_notes=? WHERE id=?''', (
+            f.get('registration_number'), f.get('candidate_email'), f.get('contact_number'),
+            f.get('whatsapp_number'), f.get('whatsapp_number_2'), f.get('vendor'),
+            f.get('booking_date'), f.get('invoice_number'), f.get('pick_up_date'),
+            f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'), rid
+        ))
+        conn.commit(); conn.close()
+        flash('Cab booking updated', 'success')
+        return redirect(request.args.get('next') or url_for('ops_cab_list'))
+    conn.close()
+    return render_template('ops_cab_form.html', record=record,
+                           cab_vendors=CAB_VENDORS, pre_reg='')
+
+
+@app.route('/operations/uk-cab-bookings/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_cab_delete(rid):
+    conn = get_db(); conn.execute("DELETE FROM ops_uk_cab_bookings WHERE id=?", (rid,)); conn.commit(); conn.close()
+    flash('Cab booking deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_cab_list'))
 
 
 # ── EPIC + GMC CSV Import (Zoho export) ─────────────────────────────

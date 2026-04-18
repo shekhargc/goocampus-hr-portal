@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+  <div class="mb-8">
+    <a href="/operations/research-publication" class="text-orange font-600 hover:underline">&larr; Back to Research & Publication</a>
+  </div>
+
+  <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-200 max-w-2xl">
+    <h1 class="text-3xl font-bold text-navy mb-8">Add/Edit Research & Publication</h1>
+
+    <form method="POST" id="researchForm">
+      <div class="space-y-6">
+        <!-- Client Search -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Client *</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="clientSearch" placeholder="Search by name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <input type="hidden" id="registration_number" name="registration_number" required>
+            <div id="clientSuggestions" class="suggestions-dropdown"></div>
+          </div>
+          <small class="text-gray-500 mt-1 block">Type at least 2 characters to search</small>
+        </div>
+
+        <!-- Research Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research Status *</label>
+          <select name="research_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <option value="">Select Status</option>
+            <option value="Pending">Pending</option>
+            <option value="In Progress">In Progress</option>
+            <option value="Completed">Completed</option>
+            <option value="Published">Published</option>
+          </select>
+        </div>
+
+        <!-- Research Topic -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research Topic *</label>
+          <input type="text" name="research_topic" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+        </div>
+
+        <!-- Published Copy -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Published Copy</label>
+          <input type="text" name="published_copy" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Research Start Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research Start Date</label>
+          <input type="date" name="research_start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Research End Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research End Date</label>
+          <input type="date" name="research_end_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Research Provider -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research Provider</label>
+          <input type="text" name="research_provider" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Published Journal Name -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Published Journal Name</label>
+          <input type="text" name="published_journal_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Author Position -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Author Position</label>
+          <select name="author_position" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Position</option>
+            <option value="Lead Author">Lead Author</option>
+            <option value="Co-Author">Co-Author</option>
+            <option value="Contributing Author">Contributing Author</option>
+          </select>
+        </div>
+
+        <!-- Research Batch -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Research Batch</label>
+          <input type="text" name="research_batch" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Mobile Number -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Mobile Number</label>
+          <input type="tel" name="mobile_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Candidate Email -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Candidate Email</label>
+          <input type="email" name="candidate_email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Additional Notes -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Additional Notes</label>
+          <textarea name="additional_notes" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent"></textarea>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-4 pt-4">
+          <button type="submit" class="px-6 py-2 bg-orange text-white rounded-lg font-600 hover:bg-orange-600">Save Research</button>
+          <a href="/operations/research-publication" class="px-6 py-2 bg-gray-200 text-navy rounded-lg font-600 hover:bg-gray-300">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
+<script>
+const clientSearchInput = document.getElementById('clientSearch');
+const suggestionsDiv = document.getElementById('clientSuggestions');
+const registrationInput = document.getElementById('registration_number');
+
+clientSearchInput.addEventListener('input', function(e) {
+  const query = e.target.value.trim();
+
+  if (query.length < 2) {
+    suggestionsDiv.classList.remove('visible');
+    return;
+  }
+
+  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(data => {
+      suggestionsDiv.innerHTML = data.map(client => `
+        <div class="suggestion-item" onclick="selectClient('${client.name}', '${client.registration_number}')">
+          <span class="suggestion-name">${client.name}</span>
+          <span class="suggestion-reg">${client.registration_number}</span>
+        </div>
+      `).join('');
+      if (data.length > 0) {
+        suggestionsDiv.classList.add('visible');
+      }
+    })
+    .catch(err => console.error('Error fetching clients:', err));
+});
+
+function selectClient(name, registrationNumber) {
+  clientSearchInput.value = name;
+  registrationInput.value = registrationNumber;
+  suggestionsDiv.classList.remove('visible');
+}
+
+document.getElementById('researchForm').addEventListener('submit', function(e) {
+  if (!registrationInput.value) {
+    e.preventDefault();
+    alert('Please select a client from the list');
+  }
+});
+</script>
+{% endblock %}

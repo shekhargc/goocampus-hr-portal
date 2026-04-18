@@ -1,0 +1,410 @@
+{% extends "base.html" %}
+
+{% block title %}Add/Edit UK Cab Booking - HR Portal{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --navy: #0F1B33;
+    --gray-50: #F9FAFB;
+    --gray-100: #F3F4F6;
+    --gray-200: #E5E7EB;
+    --gray-500: #6B7280;
+    --orange: #F97316;
+    --border-radius: 12px;
+  }
+
+  body {
+    background: var(--gray-50);
+  }
+
+  .header-section {
+    background: white;
+    border-bottom: 1px solid var(--gray-200);
+    padding: 24px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+  }
+
+  .back-btn {
+    background: none;
+    border: none;
+    font-size: 24px;
+    color: var(--navy);
+    cursor: pointer;
+    padding: 0;
+  }
+
+  .back-btn:hover {
+    color: var(--orange);
+  }
+
+  .header-section h1 {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0;
+  }
+
+  .form-wrapper {
+    max-width: 900px;
+    margin: 24px auto;
+    padding: 0 24px;
+  }
+
+  .form-card {
+    background: white;
+    border-radius: var(--border-radius);
+    padding: 32px;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+
+  .form-section {
+    margin-bottom: 32px;
+  }
+
+  .form-section h2 {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--navy);
+    margin: 0 0 20px 0;
+    padding-bottom: 12px;
+    border-bottom: 2px solid var(--gray-100);
+  }
+
+  .form-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-bottom: 24px;
+  }
+
+  .form-row.full {
+    grid-template-columns: 1fr;
+  }
+
+  .form-group {
+    display: flex;
+    flex-direction: column;
+  }
+
+  .form-group label {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--navy);
+    margin-bottom: 8px;
+  }
+
+  .form-group.required label::after {
+    content: ' *';
+    color: #EF4444;
+  }
+
+  .form-group input,
+  .form-group select,
+  .form-group textarea {
+    padding: 10px 12px;
+    border: 1px solid var(--gray-200);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    color: var(--navy);
+    transition: border-color 0.2s;
+  }
+
+  .form-group input::placeholder,
+  .form-group select::placeholder,
+  .form-group textarea::placeholder {
+    color: var(--gray-500);
+  }
+
+  .form-group input:focus,
+  .form-group select:focus,
+  .form-group textarea:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
+  }
+
+  .form-group textarea {
+    resize: vertical;
+    min-height: 100px;
+  }
+
+  .autocomplete-wrap {
+    position: relative;
+  }
+
+  .suggestions-dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid var(--gray-200);
+    border-top: none;
+    border-radius: 0 0 6px 6px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  .suggestions-dropdown.visible {
+    display: block;
+  }
+
+  .form-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-start;
+    margin-top: 32px;
+  }
+
+  .btn {
+    padding: 10px 24px;
+    border-radius: 6px;
+    font-weight: 600;
+    font-size: 14px;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s;
+    text-decoration: none;
+    display: inline-block;
+  }
+
+  .btn-primary {
+    background: var(--orange);
+    color: white;
+  }
+
+  .btn-primary:hover {
+    background: #EA5E0B;
+  }
+
+  .btn-secondary {
+    background: var(--gray-100);
+    color: var(--navy);
+  }
+
+  .btn-secondary:hover {
+    background: var(--gray-200);
+  }
+
+  .help-text {
+    font-size: 12px;
+    color: var(--gray-500);
+    margin-top: 4px;
+  }
+</style>
+
+<div class="header-section">
+  <button class="back-btn" onclick="goBack()">←</button>
+  <h1>Add/Edit UK Cab Booking</h1>
+</div>
+
+<div class="form-wrapper">
+  <div class="form-card">
+    <form id="cabForm" method="POST">
+      <div class="form-section">
+        <h2>Booking Information</h2>
+
+        <div class="form-row">
+          <div class="form-group required autocomplete-wrap">
+            <label for="client_search">Client</label>
+            <input
+              type="text"
+              id="client_search"
+              placeholder="Search client..."
+              autocomplete="off"
+            />
+            <input type="hidden" id="reg_number_val" name="client_reg" />
+            <div class="suggestions-dropdown" id="client_suggestions"></div>
+            <p class="help-text">Search by client name or registration number</p>
+          </div>
+          <div class="form-group required">
+            <label for="vendor">Vendor</label>
+            <select id="vendor" name="vendor" required>
+              <option value="">Select Vendor</option>
+              <option value="Black Cab Services">Black Cab Services</option>
+              <option value="Executive Cabs">Executive Cabs</option>
+              <option value="Metro Transport">Metro Transport</option>
+              <option value="City Rides">City Rides</option>
+              <option value="Royal Taxi">Royal Taxi</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="booking_date">Booking Date</label>
+            <input type="date" id="booking_date" name="booking_date" required />
+          </div>
+          <div class="form-group">
+            <label for="invoice_number">Invoice Number</label>
+            <input
+              type="text"
+              id="invoice_number"
+              name="invoice_number"
+              placeholder="e.g., INV-2024-001"
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="pickup_date">Pick Up Date</label>
+            <input type="date" id="pickup_date" name="pickup_date" required />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group required">
+            <label for="pickup_location">Pick Up Location</label>
+            <input
+              type="text"
+              id="pickup_location"
+              name="pickup_location"
+              placeholder="e.g., Heathrow Airport"
+              required
+            />
+          </div>
+          <div class="form-group required">
+            <label for="drop_location">Drop Location</label>
+            <input
+              type="text"
+              id="drop_location"
+              name="drop_location"
+              placeholder="e.g., London Office"
+              required
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group full">
+            <label for="additional_notes">Additional Notes</label>
+            <textarea
+              id="additional_notes"
+              name="additional_notes"
+              placeholder="Add any special requirements or notes..."
+            ></textarea>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-section">
+        <h2>Contact Information</h2>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="candidate_email">Candidate Email</label>
+            <input
+              type="email"
+              id="candidate_email"
+              name="candidate_email"
+              placeholder="candidate@example.com"
+            />
+          </div>
+          <div class="form-group">
+            <label for="contact_number">Contact Number</label>
+            <input
+              type="tel"
+              id="contact_number"
+              name="contact_number"
+              placeholder="+44 7700 900000"
+            />
+          </div>
+        </div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label for="whatsapp_number">WhatsApp Number</label>
+            <input
+              type="tel"
+              id="whatsapp_number"
+              name="whatsapp_number"
+              placeholder="+44 7700 900001"
+            />
+          </div>
+          <div class="form-group">
+            <label for="whatsapp_number_2">WhatsApp Number 2</label>
+            <input
+              type="tel"
+              id="whatsapp_number_2"
+              name="whatsapp_number_2"
+              placeholder="+44 7700 900002"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div class="form-actions">
+        <button type="submit" class="btn btn-primary">Save Booking</button>
+        <button type="button" class="btn btn-secondary" onclick="goBack()">Cancel</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+  (function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+    searchInput.addEventListener('input', function() {
+      clearTimeout(debounceTimer);
+      hiddenInput.value = '';
+      const q = this.value.trim();
+      if (q.length < 2) { hide(); return; }
+      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+    searchInput.addEventListener('keydown', function(e) {
+      if (!dropdown.style.display || dropdown.style.display === 'none') return;
+      if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+      else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+      else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+      else if (e.key === 'Escape') { hide(); }
+    });
+    document.addEventListener('click', function(e) {
+      if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+    searchInput.closest('form').addEventListener('submit', function(e) {
+      if (!hiddenInput.value) { e.preventDefault(); searchInput.style.borderColor = '#EF4444'; searchInput.focus(); alert('Please select a client from the suggestions.'); }
+    });
+    function fetchSuggestions(q) {
+      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+        .then(r => r.json()).then(data => {
+          items = data; highlightIdx = -1;
+          if (!data.length) { hide(); return; }
+          dropdown.innerHTML = data.map((d, i) =>
+            '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+            '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+            '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+          ).join('');
+          dropdown.querySelectorAll('[data-idx]').forEach(el => {
+            el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+          });
+          dropdown.style.display = 'block';
+        }).catch(() => hide());
+    }
+    function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+  })();
+
+  function goBack() {
+    window.location.href = '/operations/uk-cab-bookings';
+  }
+
+  document.getElementById('cabForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+    alert('Cab booking saved successfully!');
+  });
+</script>
+{% endblock %}

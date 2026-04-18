@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+  <div class="mb-8">
+    <a href="/operations/uk-visa-travel" class="text-orange font-600 hover:underline">&larr; Back to UK Visa & Travel</a>
+  </div>
+
+  <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-200 max-w-2xl">
+    <h1 class="text-3xl font-bold text-navy mb-8">Add/Edit UK Visa & Travel</h1>
+
+    <form method="POST" id="visaForm">
+      <div class="space-y-6">
+        <!-- Client Search -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Client *</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="clientSearch" placeholder="Search by name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <input type="hidden" id="registration_number" name="registration_number" required>
+            <div id="clientSuggestions" class="suggestions-dropdown"></div>
+          </div>
+          <small class="text-gray-500 mt-1 block">Type at least 2 characters to search</small>
+        </div>
+
+        <!-- Visa Application Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Application Status</label>
+          <select name="visa_application_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Not Started">Not Started</option>
+            <option value="Applied">Applied</option>
+            <option value="Pending">Pending</option>
+            <option value="Approved">Approved</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+
+        <!-- Documents Collected -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Documents Collected</label>
+          <select name="documents_collected" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Option</option>
+            <option value="All">All</option>
+            <option value="Partial">Partial</option>
+            <option value="None">None</option>
+          </select>
+        </div>
+
+        <!-- Note on Documents -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Note on Documents</label>
+          <input type="text" name="note_on_documents" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Documents Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Documents Status</label>
+          <select name="documents_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Submitted">Submitted</option>
+            <option value="Verified">Verified</option>
+            <option value="Pending">Pending</option>
+            <option value="Rejected">Rejected</option>
+          </select>
+        </div>
+
+        <!-- Visa Interview Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Interview Date</label>
+          <input type="date" name="visa_interview_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Visa Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Status</label>
+          <select name="visa_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Approved">Approved</option>
+            <option value="Pending">Pending</option>
+            <option value="Rejected">Rejected</option>
+            <option value="Expired">Expired</option>
+          </select>
+        </div>
+
+        <!-- Note on Visa Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Note on Visa Status</label>
+          <input type="text" name="note_on_visa_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Visa Issued Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Issued Date</label>
+          <input type="date" name="visa_issued_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Visa Period -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Period</label>
+          <select name="visa_period" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Period</option>
+            <option value="3 months">3 months</option>
+            <option value="6 months">6 months</option>
+            <option value="1 year">1 year</option>
+            <option value="2 years">2 years</option>
+            <option value="5 years">5 years</option>
+            <option value="10 years">10 years</option>
+          </select>
+        </div>
+
+        <!-- Visa Expiry Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Expiry Date</label>
+          <input type="date" name="visa_expiry_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Visa Type -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Type</label>
+          <select name="visa_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Type</option>
+            <option value="Student">Student</option>
+            <option value="Work">Work</option>
+            <option value="Visit">Visit</option>
+            <option value="Settlement">Settlement</option>
+          </select>
+        </div>
+
+        <!-- Departure Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Departure Date</label>
+          <input type="date" name="departure_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Quarantine -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine</label>
+          <input type="text" name="quarantine" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Quarantine Days -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine Days</label>
+          <input type="number" name="quarantine_days" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Quarantine Hotel Name -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine Hotel Name</label>
+          <input type="text" name="quarantine_hotel_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Lodging Name -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Lodging Name</label>
+          <input type="text" name="lodging_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Check In Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Check In Date</label>
+          <input type="date" name="check_in_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Check Out Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Check Out Date</label>
+          <input type="date" name="check_out_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Lodging Type -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Lodging Type</label>
+          <select name="lodging_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Type</option>
+            <option value="Hotel">Hotel</option>
+            <option value="Apartment">Apartment</option>
+            <option value="Host Family">Host Family</option>
+            <option value="University">University</option>
+          </select>
+        </div>
+
+        <!-- Note -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Note</label>
+          <textarea name="note" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent"></textarea>
+        </div>
+
+        <!-- Arrival Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Arrival Date</label>
+          <input type="date" name="arrival_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- UK Phone Number -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">UK Phone Number</label>
+          <input type="tel" name="uk_phone_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Mobile Number -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Mobile Number</label>
+          <input type="tel" name="mobile_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Candidate Email -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Candidate Email</label>
+          <input type="email" name="candidate_email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-4 pt-4">
+          <button type="submit" class="px-6 py-2 bg-orange text-white rounded-lg font-600 hover:bg-orange-600">Save Visa</button>
+          <a href="/operations/uk-visa-travel" class="px-6 py-2 bg-gray-200 text-navy rounded-lg font-600 hover:bg-gray-300">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
+<script>
+const clientSearchInput = document.getElementById('clientSearch');
+const suggestionsDiv = document.getElementById('clientSuggestions');
+const registrationInput = document.getElementById('registration_number');
+
+clientSearchInput.addEventListener('input', function(e) {
+  const query = e.target.value.trim();
+
+  if (query.length < 2) {
+    suggestionsDiv.classList.remove('visible');
+    return;
+  }
+
+  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(data => {
+      suggestionsDiv.innerHTML = data.map(client => `
+        <div class="suggestion-item" onclick="selectClient('${client.name}', '${client.registration_number}')">
+          <span class="suggestion-name">${client.name}</span>
+          <span class="suggestion-reg">${client.registration_number}</span>
+        </div>
+      `).join('');
+      if (data.length > 0) {
+        suggestionsDiv.classList.add('visible');
+      }
+    })
+    .catch(err => console.error('Error fetching clients:', err));
+});
+
+function selectClient(name, registrationNumber) {
+  clientSearchInput.value = name;
+  registrationInput.value = registrationNumber;
+  suggestionsDiv.classList.remove('visible');
+}
+
+document.getElementById('visaForm').addEventListener('submit', function(e) {
+  if (!registrationInput.value) {
+    e.preventDefault();
+    alert('Please select a client from the list');
+  }
+});
+</script>
+{% endblock %}

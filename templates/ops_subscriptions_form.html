@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+  <div class="mb-8">
+    <a href="/operations/online-subscriptions" class="text-orange font-600 hover:underline">&larr; Back to Online Subscriptions</a>
+  </div>
+
+  <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-200 max-w-2xl">
+    <h1 class="text-3xl font-bold text-navy mb-8">Add/Edit Online Subscription</h1>
+
+    <form method="POST" id="subscriptionForm">
+      <div class="space-y-6">
+        <!-- Client Search -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Client *</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="clientSearch" placeholder="Search by name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <input type="hidden" id="registration_number" name="registration_number" required>
+            <div id="clientSuggestions" class="suggestions-dropdown"></div>
+          </div>
+          <small class="text-gray-500 mt-1 block">Type at least 2 characters to search</small>
+        </div>
+
+        <!-- Online Subscription -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Online Subscription *</label>
+          <select name="online_subscription" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <option value="">Select Subscription</option>
+            <option value="Medscape">Medscape</option>
+            <option value="UpToDate">UpToDate</option>
+            <option value="NEJM">NEJM</option>
+            <option value="JAMA Network">JAMA Network</option>
+            <option value="Elsevier">Elsevier</option>
+          </select>
+        </div>
+
+        <!-- Issued Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Issued Date</label>
+          <input type="date" name="issued_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Activation Type -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Activation Type</label>
+          <select name="activation_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Type</option>
+            <option value="Manual">Manual</option>
+            <option value="Automatic">Automatic</option>
+            <option value="License">License</option>
+          </select>
+        </div>
+
+        <!-- Notes -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Notes</label>
+          <textarea name="notes" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent"></textarea>
+        </div>
+
+        <!-- Client Email -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Client Email</label>
+          <input type="email" name="client_email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Login ID -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Login ID</label>
+          <input type="text" name="login_id" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Password -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Password</label>
+          <input type="password" name="password" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Booked By -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Booked By</label>
+          <select name="booked_by" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Staff</option>
+            <option value="Operations Team">Operations Team</option>
+            <option value="Admin">Admin</option>
+            <option value="HR">HR</option>
+          </select>
+        </div>
+
+        <!-- Mobile Number -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Mobile Number</label>
+          <input type="tel" name="mobile_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Candidate Email -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Candidate Email</label>
+          <input type="email" name="candidate_email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-4 pt-4">
+          <button type="submit" class="px-6 py-2 bg-orange text-white rounded-lg font-600 hover:bg-orange-600">Save Subscription</button>
+          <a href="/operations/online-subscriptions" class="px-6 py-2 bg-gray-200 text-navy rounded-lg font-600 hover:bg-gray-300">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
+<script>
+const clientSearchInput = document.getElementById('clientSearch');
+const suggestionsDiv = document.getElementById('clientSuggestions');
+const registrationInput = document.getElementById('registration_number');
+
+clientSearchInput.addEventListener('input', function(e) {
+  const query = e.target.value.trim();
+
+  if (query.length < 2) {
+    suggestionsDiv.classList.remove('visible');
+    return;
+  }
+
+  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(data => {
+      suggestionsDiv.innerHTML = data.map(client => `
+        <div class="suggestion-item" onclick="selectClient('${client.name}', '${client.registration_number}')">
+          <span class="suggestion-name">${client.name}</span>
+          <span class="suggestion-reg">${client.registration_number}</span>
+        </div>
+      `).join('');
+      if (data.length > 0) {
+        suggestionsDiv.classList.add('visible');
+      }
+    })
+    .catch(err => console.error('Error fetching clients:', err));
+});
+
+function selectClient(name, registrationNumber) {
+  clientSearchInput.value = name;
+  registrationInput.value = registrationNumber;
+  suggestionsDiv.classList.remove('visible');
+}
+
+document.getElementById('subscriptionForm').addEventListener('submit', function(e) {
+  if (!registrationInput.value) {
+    e.preventDefault();
+    alert('Please select a client from the list');
+  }
+});
+</script>
+{% endblock %}

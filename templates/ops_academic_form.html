@@ -1,0 +1,243 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container mx-auto px-6 py-8">
+  <div class="mb-8">
+    <a href="/operations/academic-details" class="text-orange font-600 hover:underline">&larr; Back to Academic Details</a>
+  </div>
+
+  <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-200 max-w-2xl">
+    <h1 class="text-3xl font-bold text-navy mb-8">Add/Edit Academic Details</h1>
+
+    <form method="POST" id="academicForm">
+      <div class="space-y-6">
+        <!-- Client Search -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Client *</label>
+          <div class="autocomplete-wrap">
+            <input type="text" id="clientSearch" placeholder="Search by name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
+            <input type="hidden" id="registration_number" name="registration_number" required>
+            <div id="clientSuggestions" class="suggestions-dropdown"></div>
+          </div>
+          <small class="text-gray-500 mt-1 block">Type at least 2 characters to search</small>
+        </div>
+
+        <!-- IMG/FMG -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">IMG/FMG</label>
+          <select name="img_fmg" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Type</option>
+            <option value="IMG">IMG (International Medical Graduate)</option>
+            <option value="FMG">FMG (Foreign Medical Graduate)</option>
+          </select>
+        </div>
+
+        <!-- IMG Medical College -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">IMG Medical College</label>
+          <input type="text" name="img_medical_college" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- FMG Medical College -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">FMG Medical College</label>
+          <input type="text" name="fmg_medical_college" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Country -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Country</label>
+          <input type="text" name="country" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- MBBS Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">MBBS Status</label>
+          <select name="mbbs_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Pursuing">Pursuing</option>
+            <option value="Completed">Completed</option>
+            <option value="Not Started">Not Started</option>
+          </select>
+        </div>
+
+        <!-- MBBS Start Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">MBBS Start Date</label>
+          <input type="date" name="mbbs_start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- MBBS End Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">MBBS End Date</label>
+          <input type="date" name="mbbs_end_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Speciality Interest 1 -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Speciality Interest 1</label>
+          <input type="text" name="speciality_interest_1" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Speciality Interest 2 -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Speciality Interest 2</label>
+          <input type="text" name="speciality_interest_2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Status</label>
+          <select name="internship_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Completed">Completed</option>
+            <option value="Ongoing">Ongoing</option>
+            <option value="Not Started">Not Started</option>
+          </select>
+        </div>
+
+        <!-- Internship Hospital -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Hospital</label>
+          <input type="text" name="internship_hospital" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Location -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Location</label>
+          <input type="text" name="internship_location" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Hospital 2 -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Hospital 2</label>
+          <input type="text" name="internship_hospital_2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Location 2 -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Location 2</label>
+          <input type="text" name="internship_location_2" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Start Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Start Date</label>
+          <input type="date" name="internship_start_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship End Date -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship End Date</label>
+          <input type="date" name="internship_end_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Internship Gap -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Internship Gap</label>
+          <select name="internship_gap" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Gap Status</option>
+            <option value="Yes">Yes</option>
+            <option value="No">No</option>
+          </select>
+        </div>
+
+        <!-- Gap in Months -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Gap in Months</label>
+          <input type="number" name="gap_in_months" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Gap Reason -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Gap Reason</label>
+          <input type="text" name="gap_reason" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Working Status -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Working Status</label>
+          <select name="working_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+            <option value="">Select Status</option>
+            <option value="Working">Working</option>
+            <option value="Not Working">Not Working</option>
+            <option value="Seeking">Seeking</option>
+          </select>
+        </div>
+
+        <!-- Working Hospital Name -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Working Hospital Name</label>
+          <input type="text" name="working_hospital_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
+        </div>
+
+        <!-- Additional Info -->
+        <div>
+          <label class="block text-sm font-600 text-gray-700 mb-2">Additional Info</label>
+          <textarea name="additional_info" rows="4" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent"></textarea>
+        </div>
+
+        <!-- Submit -->
+        <div class="flex gap-4 pt-4">
+          <button type="submit" class="px-6 py-2 bg-orange text-white rounded-lg font-600 hover:bg-orange-600">Save Details</button>
+          <a href="/operations/academic-details" class="px-6 py-2 bg-gray-200 text-navy rounded-lg font-600 hover:bg-gray-300">Cancel</a>
+        </div>
+      </div>
+    </form>
+  </div>
+</div>
+
+<style>
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
+<script>
+const clientSearchInput = document.getElementById('clientSearch');
+const suggestionsDiv = document.getElementById('clientSuggestions');
+const registrationInput = document.getElementById('registration_number');
+
+clientSearchInput.addEventListener('input', function(e) {
+  const query = e.target.value.trim();
+
+  if (query.length < 2) {
+    suggestionsDiv.classList.remove('visible');
+    return;
+  }
+
+  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
+    .then(r => r.json())
+    .then(data => {
+      suggestionsDiv.innerHTML = data.map(client => `
+        <div class="suggestion-item" onclick="selectClient('${client.name}', '${client.registration_number}')">
+          <span class="suggestion-name">${client.name}</span>
+          <span class="suggestion-reg">${client.registration_number}</span>
+        </div>
+      `).join('');
+      if (data.length > 0) {
+        suggestionsDiv.classList.add('visible');
+      }
+    })
+    .catch(err => console.error('Error fetching clients:', err));
+});
+
+function selectClient(name, registrationNumber) {
+  clientSearchInput.value = name;
+  registrationInput.value = registrationNumber;
+  suggestionsDiv.classList.remove('visible');
+}
+
+document.getElementById('academicForm').addEventListener('submit', function(e) {
+  if (!registrationInput.value) {
+    e.preventDefault();
+    alert('Please select a client from the list');
+  }
+});
+</script>
+{% endblock %}
