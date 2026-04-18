@@ -4,87 +4,6 @@
 
 {% block extra_css %}
 <style>
-  .payments-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1.5rem;
-  }
-
-  .payments-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-
-  .payments-header h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
-
-  .payments-header-actions {
-    display: flex;
-    gap: 0.8rem;
-    flex-wrap: wrap;
-  }
-
-  .btn-primary {
-    padding: 0.55rem 1.2rem;
-    background: var(--navy);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .btn-primary:hover {
-    background: #0F1B33;
-  }
-
-  .stat-card-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .stat-card {
-    background: white;
-    border-radius: 0.85rem;
-    border: 1px solid var(--gray-200);
-    padding: 1.2rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  }
-
-  .stat-label {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .stat-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin-top: 0.3rem;
-  }
-
-  .filter-section {
-    background: white;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-    padding: 1.2rem;
-    margin-bottom: 1.5rem;
-  }
 
   .filter-form {
     display: flex;
@@ -127,52 +46,6 @@
     outline: none;
     border-color: var(--navy);
     box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
-  }
-
-  .filter-button {
-    padding: 0.6rem 1.2rem;
-    background: var(--navy);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-    white-space: nowrap;
-  }
-
-  .filter-button:hover {
-    background: #0F1B33;
-  }
-
-  .reset-button {
-    padding: 0.6rem 1.2rem;
-    background: white;
-    color: var(--gray-600);
-    border: 1px solid var(--gray-300);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    text-decoration: none;
-    white-space: nowrap;
-    display: inline-flex;
-    align-items: center;
-    transition: all 0.2s;
-  }
-
-  .reset-button:hover {
-    background: var(--gray-100);
-    border-color: var(--gray-400);
-    color: var(--gray-700);
-  }
-
-  .table-wrapper {
-    background: white;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-    overflow: hidden;
   }
 
   .data-table {
@@ -255,39 +128,6 @@
     margin: 0;
   }
 
-  .pagination {
-    display: flex;
-    justify-content: center;
-    gap: 0.5rem;
-    margin-top: 1.5rem;
-    padding: 1rem;
-  }
-
-  .pagination a,
-  .pagination span {
-    padding: 0.5rem 0.8rem;
-    border-radius: 4px;
-    border: 1px solid var(--gray-200);
-    font-size: 0.85rem;
-    text-decoration: none;
-    color: var(--navy);
-  }
-
-  .pagination a:hover {
-    background: var(--gray-50);
-  }
-
-  .pagination .active {
-    background: var(--navy);
-    color: white;
-    border-color: var(--navy);
-  }
-
-  .pagination .disabled {
-    color: var(--gray-300);
-    cursor: not-allowed;
-  }
-
   .autocomplete-wrap {
     position: relative;
   }
@@ -368,34 +208,11 @@
   tr.clickable-row.active-row{background:#FFF7ED!important}
 
   @media (max-width: 768px) {
-    .payments-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .payments-header-actions {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .btn-primary {
-      width: 100%;
-      text-align: center;
-    }
-
-    .stat-card-grid {
-      grid-template-columns: 1fr;
-    }
-
     .filter-form {
       flex-direction: column;
     }
 
     .filter-form .form-group {
-      width: 100%;
-    }
-
-    .filter-button {
       width: 100%;
     }
 
@@ -416,37 +233,36 @@
 {% endblock %}
 
 {% block content %}
-<div class="payments-content">
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Header -->
-  <div class="payments-header">
-    <div style="width: 100%;">
-      <h1>All Payments</h1>
-      <p style="margin:4px 0 0;font-size:0.85rem;color:var(--gray-500);">Click a row to view details</p>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+    <div>
+      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">All Payments</h1>
+      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Payment records &middot; Click a row to view details</p>
     </div>
-    <div class="payments-header-actions">
-      <a href="/operations/payments/add" class="btn-primary">+ Add Payment</a>
-    </div>
+    <div style="display:flex;gap:10px;">
+      <a href="/operations/payments/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Payment</a>
     </div>
   </div>
 
   <!-- Stats Cards -->
-  <div class="stat-card-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Payments</div>
-      <div class="stat-value">{{ stats.total }}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Payments</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ stats.total }}</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Amount Collected</div>
-      <div class="stat-value" id="total-collected">₹{{ "{:,.2f}".format(stats.total_collected or 0) }}</div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Amount Collected</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;" id="total-collected">₹{{ "{:,.2f}".format(stats.total_collected or 0) }}</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Total GST Collected</div>
-      <div class="stat-value" id="total-gst">₹{{ "{:,.2f}".format(stats.total_gst or 0) }}</div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total GST Collected</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;" id="total-gst">₹{{ "{:,.2f}".format(stats.total_gst or 0) }}</div>
     </div>
   </div>
 
   <!-- Filter Section -->
-  <div class="filter-section">
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <form method="GET" class="filter-form">
       <div class="form-group autocomplete-wrap">
         <label for="client_name">Client Name</label>
@@ -489,9 +305,9 @@
         </select>
       </div>
       <div style="display: flex; gap: 0.5rem;">
-        <button type="submit" class="filter-button">🔍 Filter</button>
+        <button type="submit" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Apply Filters</button>
         {% if has_filters %}
-          <a href="/operations/payments" class="reset-button">Reset</a>
+          <a href="/operations/payments" style="padding:10px 20px;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">Reset</a>
         {% endif %}
       </div>
     </form>
@@ -499,7 +315,7 @@
 
   <!-- Table -->
   {% if records %}
-  <div class="table-wrapper">
+  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
     <table class="data-table">
       <thead>
         <tr>

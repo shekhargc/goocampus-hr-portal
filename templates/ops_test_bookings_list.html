@@ -4,189 +4,6 @@
 
 {% block extra_css %}
 <style>
-  .plab-content {
-    max-width: 1200px;
-    margin: 0 auto;
-    padding: 1.5rem;
-  }
-
-  .plab-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 1.5rem;
-    flex-wrap: wrap;
-    gap: 1rem;
-  }
-
-  .plab-header h1 {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
-
-  .plab-header-actions {
-    display: flex;
-    gap: 0.8rem;
-    flex-wrap: wrap;
-  }
-
-  .btn-primary {
-    padding: 0.55rem 1.2rem;
-    background: var(--navy);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-    transition: background 0.2s;
-  }
-
-  .btn-primary:hover {
-    background: #0F1B33;
-  }
-
-  .btn-secondary {
-    padding: 0.55rem 1.2rem;
-    background: var(--gray-100);
-    color: var(--navy);
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    text-decoration: none;
-    cursor: pointer;
-    transition: all 0.2s;
-  }
-
-  .btn-secondary:hover {
-    background: var(--gray-200);
-    border-color: var(--gray-300);
-  }
-
-  .client-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background: var(--navy);
-    color: white;
-    padding: 0.3rem 0.8rem;
-    border-radius: 12px;
-    font-size: 0.75rem;
-    font-weight: 600;
-  }
-
-  .stat-card-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-    gap: 1rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .stat-card {
-    background: white;
-    border-radius: 0.85rem;
-    border: 1px solid var(--gray-200);
-    padding: 1.2rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
-  }
-
-  .stat-label {
-    font-size: 0.75rem;
-    color: var(--gray-500);
-    font-weight: 600;
-    text-transform: uppercase;
-  }
-
-  .stat-value {
-    font-size: 1.6rem;
-    font-weight: 700;
-    color: var(--navy);
-    margin-top: 0.3rem;
-  }
-
-  .filter-section {
-    background: white;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-    padding: 1.2rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .filter-form {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-    gap: 1rem;
-    align-items: flex-end;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--gray-600);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-  }
-
-  .form-group input,
-  .form-group select {
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: white;
-    color: var(--gray-700);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
-  }
-
-  .filter-button {
-    padding: 0.6rem 1.2rem;
-    background: var(--navy);
-    color: white;
-    border: none;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-weight: 600;
-    cursor: pointer;
-    transition: background 0.2s;
-    align-self: flex-end;
-  }
-
-  .filter-button:hover {
-    background: #0F1B33;
-  }
-
-  .filter-banner {
-    background: #EFF6FF;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    padding: 0.8rem 1rem;
-    margin-bottom: 1.5rem;
-    font-size: 0.85rem;
-    color: var(--gray-700);
-  }
-
-  .table-wrapper {
-    background: white;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-    overflow: hidden;
-  }
 
   .data-table {
     width: 100%;
@@ -297,29 +114,6 @@
     color: #EF4444;
   }
 
-  .empty-state {
-    text-align: center;
-    padding: 3rem 2rem;
-    color: var(--gray-600);
-  }
-
-  .empty-state-icon {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  .empty-state p {
-    font-size: 1rem;
-    margin: 0;
-  }
-
-  .plab-subtitle {
-    font-size: 0.9rem;
-    color: var(--gray-500);
-    margin-top: -0.5rem;
-    margin-bottom: 1.5rem;
-  }
 
   /* ============ Slide-out Detail Drawer ============ */
   .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
@@ -357,34 +151,6 @@
   .suggestion-reg{color:var(--gray-500);font-size:0.75rem}
 
   @media (max-width: 768px) {
-    .plab-header {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .plab-header-actions {
-      width: 100%;
-      flex-direction: column;
-    }
-
-    .btn-primary,
-    .btn-secondary {
-      width: 100%;
-      text-align: center;
-    }
-
-    .stat-card-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .filter-form {
-      grid-template-columns: 1fr;
-    }
-
-    .filter-button {
-      width: 100%;
-    }
-
     .data-table {
       font-size: 0.8rem;
     }
@@ -406,48 +172,42 @@
 {% endblock %}
 
 {% block content %}
-<div class="plab-content">
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Header -->
-  <div class="plab-header">
-    <div style="display: flex; align-items: center; gap: 1rem;">
-      <h1>Test Bookings</h1>
-      <span class="client-badge">
-        <span style="font-size: 1rem;">📝</span>
-        {{ records|length }} Bookings
-      </span>
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+    <div>
+      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Test Bookings</h1>
+      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage test booking records &middot; Click a row to view details</p>
     </div>
-    <div class="plab-header-actions">
-      <a href="/operations/test-bookings/add" class="btn-primary">+ Add Booking</a>
-      <a href="/operations/clients" class="btn-secondary">← Back to Clients</a>
+    <div style="display:flex;gap:10px;">
+      <a href="/operations/test-bookings/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Booking</a>
+      <a href="/operations/clients" style="padding:10px 20px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">← Back to Clients</a>
     </div>
   </div>
 
-  <!-- Subtitle -->
-  <p class="plab-subtitle">Click a row to view details</p>
-
   <!-- Stats Cards -->
-  <div class="stat-card-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Bookings</div>
-      <div class="stat-value">{{ records|length }}</div>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Bookings</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ records|length }}</div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Booked</div>
-      <div class="stat-value">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Booked</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
         {% set booked = records|selectattr('exam_status', 'equalto', 'Booked')|list %}
         {{ booked|length }}
       </div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Passed</div>
-      <div class="stat-value">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Passed</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
         {% set passed = records|selectattr('exam_result', 'equalto', 'Passed')|list %}
         {{ passed|length }}
       </div>
     </div>
-    <div class="stat-card">
-      <div class="stat-label">Failed</div>
-      <div class="stat-value">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Failed</div>
+      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
         {% set failed = records|selectattr('exam_result', 'equalto', 'Failed')|list %}
         {{ failed|length }}
       </div>
@@ -456,16 +216,16 @@
 
   <!-- Client Filter Banner -->
   {% if client_reg %}
-  <div class="filter-banner">
+  <div style="background:#EFF6FF;border:1px solid var(--gray-200);border-radius:6px;padding:0.8rem 1rem;margin-bottom:24px;font-size:0.85rem;color:var(--gray-700);">
     Viewing records for: <strong>{{ client_reg }}</strong>
   </div>
   {% endif %}
 
   <!-- Filter Section -->
-  <div class="filter-section">
-    <form method="GET" class="filter-form">
-      <div class="form-group autocomplete-wrap">
-        <label for="tbSearch">Search</label>
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <form method="GET" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:flex-end;">
+      <div class="autocomplete-wrap" style="display:flex;flex-direction:column;">
+        <label for="tbSearch" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Search</label>
         <input
           type="text"
           id="tbSearch"
@@ -473,12 +233,13 @@
           placeholder="Type candidate name..."
           value="{{ search or '' }}"
           autocomplete="off"
+          style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);"
         />
         <div id="tbSuggestions" class="suggestions-dropdown"></div>
       </div>
-      <div class="form-group">
-        <label for="exam">Exam</label>
-        <select id="exam" name="exam">
+      <div style="display:flex;flex-direction:column;">
+        <label for="exam" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Exam</label>
+        <select id="exam" name="exam" style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);">
           <option value="">All Exams</option>
           {% for exam_name in exam_names %}
           <option value="{{ exam_name }}" {% if exam_name == exam_filter %}selected{% endif %}>
@@ -487,9 +248,9 @@
           {% endfor %}
         </select>
       </div>
-      <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status" name="status">
+      <div style="display:flex;flex-direction:column;">
+        <label for="status" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Status</label>
+        <select id="status" name="status" style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);">
           <option value="">All Statuses</option>
           {% for status in exam_statuses %}
           <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
@@ -498,13 +259,13 @@
           {% endfor %}
         </select>
       </div>
-      <button type="submit" class="filter-button">🔍 Filter</button>
+      <button type="submit" style="padding:0.6rem 1.2rem;background:var(--orange);color:white;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background 0.2s;align-self:flex-end;">🔍 Filter</button>
     </form>
   </div>
 
   <!-- Table -->
   {% if records %}
-  <div class="table-wrapper">
+  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
     <table class="data-table">
       <thead>
         <tr>
@@ -577,10 +338,10 @@
     </table>
   </div>
   {% else %}
-  <div class="empty-state">
-    <div class="empty-state-icon">📭</div>
-    <p>No test bookings found</p>
-    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
+  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;padding:3rem 2rem;color:var(--gray-600);">
+    <div style="font-size:2.5rem;margin-bottom:1rem;opacity:0.5;">📭</div>
+    <p style="font-size:1rem;margin:0;">No test bookings found</p>
+    <p style="font-size:0.9rem;margin-top:0.5rem;color:var(--gray-500);">
       {% if search or exam_filter or status_filter %}
       Try adjusting your search or filter criteria
       {% else %}
