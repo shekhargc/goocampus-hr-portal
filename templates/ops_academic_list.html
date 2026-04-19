@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-
+{% block title %}Academic Details{% endblock %}
 {% block content %}
 <style>
 .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
@@ -24,7 +24,9 @@
 .drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
 .drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
 .badge-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600}
-.badge-green{background:#ECFDF5;color:#065F46}.badge-yellow{background:#FEF3C7;color:#92400E}.badge-gray{background:#F3F4F6;color:#374151}
+.badge-green{background:#ECFDF5;color:#065F46}
+.badge-yellow{background:#FEF3C7;color:#92400E}
+.badge-gray{background:#F3F4F6;color:#374151}
 tr.clickable-row{cursor:pointer;transition:background .15s}
 tr.clickable-row:hover{background:var(--gray-50)!important}
 tr.clickable-row.active-row{background:#FFF7ED!important}
@@ -38,302 +40,261 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 .suggestion-reg{color:var(--gray-500);font-size:0.75rem}
 </style>
 
-<div class="container mx-auto px-6 py-8">
-  <div class="flex items-center justify-between mb-8">
-    <h1 class="text-3xl font-bold text-navy">Academic Details</h1>
-    <a href="/operations/academic-details/add" class="px-4 py-2 bg-orange text-white rounded-lg font-600">+ Add Details</a>
-  </div>
-
-  <div class="bg-white rounded-xl p-6 mb-6 shadow-sm border border-gray-200">
-    <div class="flex gap-6">
-      <div class="flex-1">
-        <label class="block text-sm font-600 text-gray-700 mb-2">Search Candidate</label>
-        <div class="autocomplete-wrap">
-          <input type="text" id="academicSearch" placeholder="Type name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-          <div id="academicSuggestions" class="suggestions-dropdown"></div>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Academic Details</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage academic details records &middot; Click a row to view details</p>
         </div>
-      </div>
+        <a href="/operations/academic-details/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Record
+        </a>
     </div>
-  </div>
 
-  <div class="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-    <table class="w-full">
-      <thead>
-        <tr class="border-b border-gray-200 bg-gray-50">
-          <th class="px-6 py-4 text-left text-sm font-600 text-gray-700">Candidate Name</th>
-          <th class="px-6 py-4 text-left text-sm font-600 text-gray-700">IMG/FMG</th>
-          <th class="px-6 py-4 text-left text-sm font-600 text-gray-700">Medical College</th>
-          <th class="px-6 py-4 text-left text-sm font-600 text-gray-700">MBBS Status</th>
-          <th class="px-6 py-4 text-left text-sm font-600 text-gray-700">Country</th>
-        </tr>
-      </thead>
-      <tbody id="academicTableBody">
-        <tr><td colspan="5" class="text-center py-8 text-gray-500">Loading...</td></tr>
-      </tbody>
-    </table>
-  </div>
+    <!-- Filters Card -->
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="q" id="academicSearch" placeholder="Type candidate name..." value="{{ search or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="academicSuggestions" class="suggestions-dropdown"></div>
+            </div>
+            
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/academic-details" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Records Table -->
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">IMG/FMG</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Medical College</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">MBBS Status</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Internship Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openAcademicDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.img_fmg or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.img_medical_college or record.fmg_medical_college or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.mbbs_status or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.internship_status or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No academic details records found.</p>
+            <a href="/operations/academic-details/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
-<div class="drawer-backdrop" id="drawerBackdrop"></div>
-<div class="drawer" id="academicDrawer">
-  <div class="drawer-head">
-    <h3>Academic Details</h3>
-    <button class="drawer-close" id="drawerCloseBtn">&times;</button>
-  </div>
-  <div class="drawer-body">
-    <div class="drawer-emp">
-      <div class="emp-avatar-lg-ph" id="drawerAvatar">A</div>
-      <div>
-        <p class="name" id="drawerName">Name</p>
-        <p class="meta" id="drawerMeta">Registration</p>
-      </div>
+<!-- Slide-out Detail Drawer -->
+<div class="drawer-backdrop" id="academicBackdrop" onclick="closeAcademicDetail()"></div>
+<aside class="drawer" id="academicDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Academic Details Details</h3>
+        <button class="drawer-close" type="button" onclick="closeAcademicDetail()" aria-label="Close">&times;</button>
     </div>
-    <div class="drawer-grid">
-      <div class="drawer-field">
-        <div class="label">IMG/FMG</div>
-        <div class="value" id="drawerIMGFMG">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Country</div>
-        <div class="value" id="drawerCountry">-</div>
-      </div>
-      <div class="drawer-field full">
-        <div class="label">IMG Medical College</div>
-        <div class="value" id="drawerIMGCollege">-</div>
-      </div>
-      <div class="drawer-field full">
-        <div class="label">FMG Medical College</div>
-        <div class="value" id="drawerFMGCollege">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">MBBS Status</div>
-        <div class="value" id="drawerMBBSStatus">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">MBBS Start Date</div>
-        <div class="value" id="drawerMBBSStart">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">MBBS End Date</div>
-        <div class="value" id="drawerMBBSEnd">-</div>
-      </div>
-      <div class="drawer-section">
-        <h4>Speciality Interests</h4>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Speciality 1</div>
-        <div class="value" id="drawerSpec1">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Speciality 2</div>
-        <div class="value" id="drawerSpec2">-</div>
-      </div>
-      <div class="drawer-section">
-        <h4>Internship Details</h4>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Internship Status</div>
-        <div class="value" id="drawerInternStatus">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Internship Hospital</div>
-        <div class="value" id="drawerInternHosp">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Location</div>
-        <div class="value" id="drawerInternLoc">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Hospital 2</div>
-        <div class="value" id="drawerInternHosp2">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Location 2</div>
-        <div class="value" id="drawerInternLoc2">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Start Date</div>
-        <div class="value" id="drawerInternStart">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">End Date</div>
-        <div class="value" id="drawerInternEnd">-</div>
-      </div>
-      <div class="drawer-section">
-        <h4>Employment Details</h4>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Working Status</div>
-        <div class="value" id="drawerWorkStatus">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Hospital Name</div>
-        <div class="value" id="drawerWorkHosp">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Gap Status</div>
-        <div class="value" id="drawerGapStatus">-</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Gap in Months</div>
-        <div class="value" id="drawerGapMonths">-</div>
-      </div>
-      <div class="drawer-field full">
-        <div class="label">Gap Reason</div>
-        <div class="value" id="drawerGapReason">-</div>
-      </div>
-      <div class="drawer-field full">
-        <div class="label">Additional Info</div>
-        <div class="value" id="drawerAdditionalInfo">-</div>
-      </div>
-    </div>
-  </div>
-  <div class="drawer-actions">
-    <a href="#" id="drawerEditBtn" class="bg-orange text-white">Edit</a>
-    <a href="#" id="drawerDeleteBtn" class="bg-gray-200 text-navy">Delete</a>
-  </div>
-</div>
+    <div class="drawer-body" id="academicDrawerBody"></div>
+    <div class="drawer-actions" id="academicDrawerActions"></div>
+</aside>
 
 <script>
-let academicData = [];
-let filteredData = [];
-let currentRecord = null;
+const RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        img_fmg: {{ (record.img_fmg or '')|tojson }},
+        img_medical_college: {{ (record.img_medical_college or '')|tojson }},
+        fmg_medical_college: {{ (record.fmg_medical_college or '')|tojson }},
+        country: {{ (record.country or '')|tojson }},
+        mbbs_status: {{ (record.mbbs_status or '')|tojson }},
+        mbbs_start_date: {{ (record.mbbs_start_date or '')|tojson }},
+        mbbs_end_date: {{ (record.mbbs_end_date or '')|tojson }},
+        speciality_interest_1: {{ (record.speciality_interest_1 or '')|tojson }},
+        speciality_interest_2: {{ (record.speciality_interest_2 or '')|tojson }},
+        internship_status: {{ (record.internship_status or '')|tojson }},
+        internship_hospital: {{ (record.internship_hospital or '')|tojson }},
+        internship_location: {{ (record.internship_location or '')|tojson }},
+        internship_hospital_2: {{ (record.internship_hospital_2 or '')|tojson }},
+        internship_location_2: {{ (record.internship_location_2 or '')|tojson }},
+        internship_start_date: {{ (record.internship_start_date or '')|tojson }},
+        internship_end_date: {{ (record.internship_end_date or '')|tojson }},
+        internship_gap: {{ (record.internship_gap or '')|tojson }},
+        gap_in_months: {{ (record.gap_in_months or '')|tojson }},
+        gap_reason: {{ (record.gap_reason or '')|tojson }},
+        working_status: {{ (record.working_status or '')|tojson }},
+        working_hospital_name: {{ (record.working_hospital_name or '')|tojson }},
+        additional_info: {{ (record.additional_info or '')|tojson }},
+    },
+    {% endfor %}
+};
 
-document.addEventListener('DOMContentLoaded', function() {
-  loadAcademicData();
-  setupEventListeners();
-});
+let activeRowId = null;
 
-function setupEventListeners() {
-  const searchInput = document.getElementById('academicSearch');
-  const backdrop = document.getElementById('drawerBackdrop');
-  const closeBtn = document.getElementById('drawerCloseBtn');
-
-  searchInput.addEventListener('input', handleSearchInput);
-  backdrop.addEventListener('click', closeDrawer);
-  closeBtn.addEventListener('click', closeDrawer);
-  document.getElementById('drawerEditBtn').addEventListener('click', editRecord);
-  document.getElementById('drawerDeleteBtn').addEventListener('click', deleteRecord);
+function badgeHtml(val) {
+    if (!val) return '<span style="color:var(--gray-400);">—</span>';
+    let cls = 'badge-gray';
+    if (['Completed','Published','Approved','Paid'].includes(val)) cls = 'badge-green';
+    else if (['In Progress','Started','Pending','In Process'].includes(val)) cls = 'badge-yellow';
+    return `<span class="badge-pill ${cls}">${val}</span>`;
 }
 
-function handleSearchInput(e) {
-  const query = e.target.value.trim();
-  const suggestionsDiv = document.getElementById('academicSuggestions');
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
 
-  if (query.length < 2) {
-    suggestionsDiv.classList.remove('visible');
-    return;
-  }
+function openAcademicDetail(id) {
+    const r = RECORDS[id];
+    if (!r) return;
 
-  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
-    .then(r => r.json())
-    .then(data => {
-      suggestionsDiv.innerHTML = data.map(client => `
-        <div class="suggestion-item" onclick="selectClient('${client.name}')">
-          <span class="suggestion-name">${client.name}</span>
-          <span class="suggestion-reg">${client.registration_number}</span>
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
         </div>
-      `).join('');
-      suggestionsDiv.classList.add('visible');
-    });
-}
+    </div>
+    <div class="drawer-grid">
+            ${field('IMG/FMG', r.img_fmg)}
+            ${field('IMG Medical College', r.img_medical_college)}
+            ${field('FMG Medical College', r.fmg_medical_college)}
+            ${field('Country', r.country)}
+            ${field('MBBS Status', r.mbbs_status)}
+            ${field('MBBS Start Date', r.mbbs_start_date)}
+            ${field('MBBS End Date', r.mbbs_end_date)}
+            ${field('Speciality Interest 1', r.speciality_interest_1)}
+            ${field('Speciality Interest 2', r.speciality_interest_2)}
+            ${field('Internship Status', r.internship_status)}
+            ${field('Internship Hospital', r.internship_hospital)}
+            ${field('Internship Location', r.internship_location)}
+            ${field('Internship Hospital 2', r.internship_hospital_2)}
+            ${field('Internship Location 2', r.internship_location_2)}
+            ${field('Internship Start Date', r.internship_start_date)}
+            ${field('Internship End Date', r.internship_end_date)}
+            ${field('Internship Gap', r.internship_gap)}
+            ${field('Gap in Months', r.gap_in_months)}
+            ${field('Gap Reason', r.gap_reason)}
+            ${field('Working Status', r.working_status)}
+            ${field('Working Hospital', r.working_hospital_name)}
+            ${field('Additional Info', r.additional_info)}
+    </div>`;
 
-function selectClient(name) {
-  document.getElementById('academicSearch').value = name;
-  document.getElementById('academicSuggestions').classList.remove('visible');
-  window.location.href = `/operations/academic-details?q=${encodeURIComponent(name)}`;
-}
-
-function loadAcademicData() {
-  fetch('/operations/api/academic-details')
-    .then(r => r.json())
-    .then(data => {
-      academicData = data;
-      filteredData = data;
-      renderTable();
-    })
-    .catch(err => {
-      console.error('Error loading data:', err);
-      document.getElementById('academicTableBody').innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-500">Error loading data</td></tr>';
-    });
-}
-
-function renderTable() {
-  const tbody = document.getElementById('academicTableBody');
-  if (filteredData.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="5" class="text-center py-8 text-gray-500">No records found</td></tr>';
-    return;
-  }
-
-  tbody.innerHTML = filteredData.map(item => {
-    return `
-      <tr class="clickable-row border-b border-gray-200 hover:bg-gray-50" onclick="openDrawer(${item.id})">
-        <td class="px-6 py-4 text-sm text-navy font-500">${item.candidate_name || '-'}</td>
-        <td class="px-6 py-4 text-sm text-gray-700">${item.img_fmg || '-'}</td>
-        <td class="px-6 py-4 text-sm text-gray-700">${item.medical_college || '-'}</td>
-        <td class="px-6 py-4 text-sm text-gray-700">${item.mbbs_status || '-'}</td>
-        <td class="px-6 py-4 text-sm text-gray-700">${item.country || '-'}</td>
-      </tr>
+    document.getElementById('academicDrawerBody').innerHTML = html;
+    document.getElementById('academicDrawerActions').innerHTML = `
+        <a href="/operations/academic-details/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
     `;
-  }).join('');
+
+    document.getElementById('academicDrawer').classList.add('open');
+    document.getElementById('academicDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('academicBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
 }
 
-function openDrawer(id) {
-  currentRecord = academicData.find(item => item.id === id);
-  if (!currentRecord) return;
-
-  const initials = (currentRecord.candidate_name || 'A').split(' ').map(n => n[0]).join('').toUpperCase();
-  document.getElementById('drawerAvatar').textContent = initials;
-  document.getElementById('drawerName').textContent = currentRecord.candidate_name || '-';
-  document.getElementById('drawerMeta').textContent = `ID: ${currentRecord.registration_number || '-'}`;
-  document.getElementById('drawerIMGFMG').textContent = currentRecord.img_fmg || '-';
-  document.getElementById('drawerCountry').textContent = currentRecord.country || '-';
-  document.getElementById('drawerIMGCollege').textContent = currentRecord.img_medical_college || '-';
-  document.getElementById('drawerFMGCollege').textContent = currentRecord.fmg_medical_college || '-';
-  document.getElementById('drawerMBBSStatus').textContent = currentRecord.mbbs_status || '-';
-  document.getElementById('drawerMBBSStart').textContent = currentRecord.mbbs_start_date || '-';
-  document.getElementById('drawerMBBSEnd').textContent = currentRecord.mbbs_end_date || '-';
-  document.getElementById('drawerSpec1').textContent = currentRecord.speciality_interest_1 || '-';
-  document.getElementById('drawerSpec2').textContent = currentRecord.speciality_interest_2 || '-';
-  document.getElementById('drawerInternStatus').textContent = currentRecord.internship_status || '-';
-  document.getElementById('drawerInternHosp').textContent = currentRecord.internship_hospital || '-';
-  document.getElementById('drawerInternLoc').textContent = currentRecord.internship_location || '-';
-  document.getElementById('drawerInternHosp2').textContent = currentRecord.internship_hospital_2 || '-';
-  document.getElementById('drawerInternLoc2').textContent = currentRecord.internship_location_2 || '-';
-  document.getElementById('drawerInternStart').textContent = currentRecord.internship_start_date || '-';
-  document.getElementById('drawerInternEnd').textContent = currentRecord.internship_end_date || '-';
-  document.getElementById('drawerWorkStatus').textContent = currentRecord.working_status || '-';
-  document.getElementById('drawerWorkHosp').textContent = currentRecord.working_hospital_name || '-';
-  document.getElementById('drawerGapStatus').textContent = currentRecord.internship_gap || '-';
-  document.getElementById('drawerGapMonths').textContent = currentRecord.gap_in_months || '-';
-  document.getElementById('drawerGapReason').textContent = currentRecord.gap_reason || '-';
-  document.getElementById('drawerAdditionalInfo').textContent = currentRecord.additional_info || '-';
-
-  document.getElementById('drawerEditBtn').href = `/operations/academic-details/${currentRecord.id}/edit`;
-  document.getElementById('drawerDeleteBtn').href = `/operations/academic-details/${currentRecord.id}/delete`;
-
-  document.getElementById('drawerBackdrop').classList.add('open');
-  document.getElementById('academicDrawer').classList.add('open');
+function closeAcademicDetail() {
+    document.getElementById('academicDrawer').classList.remove('open');
+    document.getElementById('academicDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('academicBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
 }
 
-function closeDrawer() {
-  document.getElementById('drawerBackdrop').classList.remove('open');
-  document.getElementById('academicDrawer').classList.remove('open');
-  currentRecord = null;
-}
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeAcademicDetail(); });
 
-function editRecord(e) {
-  e.preventDefault();
-  if (currentRecord) {
-    window.location.href = `/operations/academic-details/${currentRecord.id}/edit`;
-  }
-}
 
-function deleteRecord(e) {
-  e.preventDefault();
-  if (currentRecord && confirm('Are you sure you want to delete this record?')) {
-    window.location.href = `/operations/academic-details/${currentRecord.id}/delete`;
-  }
-}
+/* ============ Autocomplete Search ============ */
+(function() {
+    const input = document.getElementById('academicSearch');
+    const dropdown = document.getElementById('academicSuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) {
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
+    }
+
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
 {% endblock %}
