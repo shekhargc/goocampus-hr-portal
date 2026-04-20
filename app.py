@@ -12772,7 +12772,7 @@ def sales_leads_add():
                         cl_cost = 0.0
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
+                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
                     cl_product_name = ''
                     cl_project_id = None
                     if product_id:
@@ -12794,7 +12794,7 @@ def sales_leads_add():
                             cl_project_id,
                             company_new or lead_name_new,
                             cl_revenue, cl_cost, cl_margin, cl_currency, cl_close_date,
-                            f'Auto-created from hot lead: {lead_name_new}',
+                            f'Auto-closure: {lead_name_new}',
                             user['id']
                         )
                     )
@@ -12911,7 +12911,7 @@ def sales_leads_edit(lead_id):
                         cl_cost = 0.0
                     cl_margin = cl_revenue - cl_cost
                     cl_currency = (request.form.get('closure_currency') or 'INR').upper()
-                    cl_close_date = ecd or datetime.now().strftime('%Y-%m-%d')
+                    cl_close_date = datetime.now().strftime('%Y-%m-%d')
                     # Resolve product name and project
                     cl_product_name = ''
                     cl_project_id = None
@@ -12934,7 +12934,7 @@ def sales_leads_edit(lead_id):
                             cl_project_id,
                             company_new or lead_name_new,
                             cl_revenue, cl_cost, cl_margin, cl_currency, cl_close_date,
-                            f'Auto-created from hot lead: {lead_name_new}',
+                            f'Auto-closure: {lead_name_new}',
                             user['id']
                         )
                     )
