@@ -9498,7 +9498,11 @@ def ops_plab_pathway_dashboard():
         total_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
         active_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process'").fetchone()['c']
 
-        # ── Stage breakdown ──
+        # ── Account status breakdown (matches client profile on PLAB Pathway page) ──
+        status_rows = conn.execute("SELECT account_status, COUNT(*) as c FROM plab_clients GROUP BY account_status").fetchall()
+        status_counts = {r['account_status']: r['c'] for r in status_rows}
+
+        # ── Current stage breakdown (for active clients) ──
         stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process' GROUP BY current_stage").fetchall()
         stage_counts = {r['current_stage']: r['c'] for r in stage_rows}
 
@@ -9556,7 +9560,7 @@ def ops_plab_pathway_dashboard():
         conn.close()
         flash(f'Error loading dashboard: {e}', 'error')
         return render_template('ops_plab_pathway_dashboard.html',
-                               total_clients=0, active_clients=0, stage_counts={},
+                               total_clients=0, active_clients=0, status_counts={}, stage_counts={},
                                coaching_total=0, coaching_ongoing=0,
                                test_total=0, upcoming_tests=0, plab1_upcoming=0, plab2_upcoming=0,
                                awaiting_results=0, recent_passes=0,
@@ -9569,7 +9573,7 @@ def ops_plab_pathway_dashboard():
     conn.close()
     return render_template('ops_plab_pathway_dashboard.html',
                            total_clients=total_clients, active_clients=active_clients,
-                           stage_counts=stage_counts,
+                           status_counts=status_counts, stage_counts=stage_counts,
                            coaching_total=coaching_total, coaching_ongoing=coaching_ongoing,
                            test_total=test_total, upcoming_tests=upcoming_tests,
                            plab1_upcoming=plab1_upcoming, plab2_upcoming=plab2_upcoming,

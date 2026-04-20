@@ -410,10 +410,41 @@
     </div>
 </div>
 
-<!-- ── Pipeline stages ── -->
+<!-- ── Client Status Pipeline (matches client profile on PLAB Pathway page) ── -->
+{% set total_status = (status_counts.values()|list|sum) or 1 %}
+<div class="pipeline-strip">
+    <h3>Client Status Overview</h3>
+    <div class="pipeline-bar">
+        {% set statuses = [
+            ('In Process', 'seg-english', status_counts.get('In Process', 0)),
+            ('Switched Program', 'seg-plab1', status_counts.get('Switched Program', 0)),
+            ('On Hold', 'seg-plab2', status_counts.get('On Hold', 0)),
+            ('Dropped and Refunded', 'seg-job', status_counts.get('Dropped and Refunded', 0)),
+            ('Dropped Out', 'seg-gmc', status_counts.get('Dropped Out', 0)),
+            ('Completed', 'seg-done', status_counts.get('Completed', 0))
+        ] %}
+        {% for label, cls, count in statuses %}
+            {% if count > 0 %}
+            <div class="pipeline-seg {{ cls }}" style="flex: {{ count }}" title="{{ label }}: {{ count }}">
+                {{ count }}
+            </div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <div class="pipeline-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#6366F1"></span> In Process ({{ status_counts.get('In Process', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> Switched Program ({{ status_counts.get('Switched Program', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#F97316"></span> On Hold ({{ status_counts.get('On Hold', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#0EA5E9"></span> Dropped & Refunded ({{ status_counts.get('Dropped and Refunded', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#10B981"></span> Dropped Out ({{ status_counts.get('Dropped Out', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--navy)"></span> Completed ({{ status_counts.get('Completed', 0) }})</span>
+    </div>
+</div>
+
+<!-- ── Active Client Stage Breakdown ── -->
 {% set total_pipeline = (stage_counts.values()|list|sum) or 1 %}
 <div class="pipeline-strip">
-    <h3>Active Client Pipeline</h3>
+    <h3>Active Clients — Current Stage</h3>
     <div class="pipeline-bar">
         {% set stages = [
             ('English Stage', 'seg-english', stage_counts.get('English Stage', 0)),
