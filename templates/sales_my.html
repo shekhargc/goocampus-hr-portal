@@ -131,7 +131,7 @@
                             <td style="padding:0.6rem 0.6rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--navy);font-weight:600;">
                                 {% if l.expected_value %}₹{{ '{:,.0f}'.format(l.expected_value) }}{% else %}<span style="color:var(--gray-400);">—</span>{% endif %}
                             </td>
-                            <td style="padding:0.6rem 0.9rem 0.6rem 0.6rem;text-align:right;color:var(--gray-600);font-size:0.8rem;">{{ l.expected_close_date or '—' }}</td>
+                            <td style="padding:0.6rem 0.9rem 0.6rem 0.6rem;text-align:right;color:var(--gray-600);font-size:0.8rem;">{{ l.expected_close_date|format_date }}</td>
                         </tr>
                         {% endfor %}
                     </tbody>
@@ -157,7 +157,7 @@
                         <div style="min-width:0;flex:1;">
                             <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">{{ c.client_name or c.product_name or 'Closure' }}</div>
                             <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">
-                                {% if c.product_name and c.client_name %}{{ c.product_name }} &middot; {% endif %}{{ c.close_date }}
+                                {% if c.product_name and c.client_name %}{{ c.product_name }} &middot; {% endif %}{{ c.close_date|format_date }}
                             </div>
                         </div>
                         <div style="text-align:right;">
@@ -185,7 +185,7 @@
             <div style="padding:0.75rem 0;border-top:1px solid var(--gray-100);">
                 <div style="font-weight:600;color:var(--navy);font-size:0.92rem;">{{ n.title }}</div>
                 {% if n.content %}<div style="font-size:0.82rem;color:var(--gray-600);margin-top:0.2rem;line-height:1.5;">{{ n.content[:220] }}{% if n.content|length > 220 %}…{% endif %}</div>{% endif %}
-                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">{{ n.posted_by_name }} &middot; {{ n.created_at.strftime('%d %b %Y') if n.created_at and n.created_at.strftime is defined else n.created_at }}</div>
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.3rem;">{{ n.posted_by_name }} &middot; {{ n.created_at|format_date }}</div>
             </div>
             {% endfor %}
         </div>

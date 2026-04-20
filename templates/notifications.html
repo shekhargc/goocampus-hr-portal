@@ -114,7 +114,7 @@
         {% if notifications %}
             {% set current_date = namespace(val='') %}
             {% for n in notifications %}
-                {% set notif_date = n.created_at.strftime('%B %d, %Y') if n.created_at is not string else n.created_at[:10] %}
+                {% set notif_date = n.created_at|format_date %}
                 {% if notif_date != current_date.val %}
                     {% set current_date.val = notif_date %}
                     <div class="notif-date-group">{{ notif_date }}</div>
@@ -129,7 +129,7 @@
                             <span class="notif-row-type {{ n.type }}">{{ n.type | replace('_', ' ') }}</span>
                         </div>
                         <div class="notif-row-msg">{{ n.message }}</div>
-                        <div class="notif-row-time">{{ n.created_at.strftime('%B %d, %Y at %I:%M %p') if n.created_at is not string else n.created_at }}</div>
+                        <div class="notif-row-time">{{ n.created_at|format_date }}</div>
                     </div>
                 </div>
             {% endfor %}

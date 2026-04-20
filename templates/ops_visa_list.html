@@ -104,7 +104,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{% if record.visa_application_status %}<span class="badge-pill {% if record.visa_application_status == 'Approved' %}badge-green{% elif record.visa_application_status == 'Rejected' %}badge-gray{% elif record.visa_application_status == 'In Progress' %}badge-yellow{% elif record.visa_application_status == 'Pending' %}badge-yellow{% else %}badge-gray{% endif %}">{{ record.visa_application_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.visa_status or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.visa_type or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.departure_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.departure_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -141,22 +141,22 @@ const RECORDS = {
         documents_collected: {{ (record.documents_collected or '')|tojson }},
         documents_status: {{ (record.documents_status or '')|tojson }},
         note_on_documents: {{ (record.note_on_documents or '')|tojson }},
-        visa_interview_date: {{ (record.visa_interview_date or '')|tojson }},
+        visa_interview_date: {{ (record.visa_interview_date or '')|format_date|tojson }},
         visa_status: {{ (record.visa_status or '')|tojson }},
         note_on_visa_status: {{ (record.note_on_visa_status or '')|tojson }},
-        visa_issued_date: {{ (record.visa_issued_date or '')|tojson }},
+        visa_issued_date: {{ (record.visa_issued_date or '')|format_date|tojson }},
         visa_period: {{ (record.visa_period or '')|tojson }},
-        visa_expiry_date: {{ (record.visa_expiry_date or '')|tojson }},
+        visa_expiry_date: {{ (record.visa_expiry_date or '')|format_date|tojson }},
         visa_type: {{ (record.visa_type or '')|tojson }},
-        departure_date: {{ (record.departure_date or '')|tojson }},
+        departure_date: {{ (record.departure_date or '')|format_date|tojson }},
         quarantine: {{ (record.quarantine or '')|tojson }},
         quarantine_days: {{ (record.quarantine_days or '')|tojson }},
         quarantine_hotel_name: {{ (record.quarantine_hotel_name or '')|tojson }},
         lodging_name: {{ (record.lodging_name or '')|tojson }},
-        check_in_date: {{ (record.check_in_date or '')|tojson }},
-        check_out_date: {{ (record.check_out_date or '')|tojson }},
+        check_in_date: {{ (record.check_in_date or '')|format_date|tojson }},
+        check_out_date: {{ (record.check_out_date or '')|format_date|tojson }},
         lodging_type: {{ (record.lodging_type or '')|tojson }},
-        arrival_date: {{ (record.arrival_date or '')|tojson }},
+        arrival_date: {{ (record.arrival_date or '')|format_date|tojson }},
         uk_phone_number: {{ (record.uk_phone_number or '')|tojson }},
         mobile_number: {{ (record.mobile_number or '')|tojson }},
         candidate_email: {{ (record.candidate_email or '')|tojson }},

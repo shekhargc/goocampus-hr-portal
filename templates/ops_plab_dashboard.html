@@ -736,7 +736,7 @@
             <td style="padding:8px;color:var(--gray-700);">{{ r.epic_registration or '—' }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.epic_status or '—' }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.notary_camp or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date|format_date }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.documents_stage or '—' }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.document_stage_status or '—' }}</td>
             <td style="padding:8px;text-align:center;">
@@ -781,9 +781,9 @@
           <tr style="border-bottom:1px solid var(--gray-200);">
             <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_reference_number or '—' }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_setup or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date|format_date }}</td>
             <td style="padding:8px;color:var(--gray-700);">{{ r.license or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.license_received_date or '—' }}</td>
+            <td style="padding:8px;color:var(--gray-700);">{{ r.license_received_date|format_date }}</td>
             <td style="padding:8px;text-align:center;">
               <a href="/operations/gmc/{{ r.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
             </td>
@@ -809,7 +809,7 @@
       {% if client.created_at %}
       <div>
         <p style="margin:0 0 4px 0;font-weight:600;color:var(--gray-700);">Created At</p>
-        <p style="margin:0;">{{ client.created_at or '—' }}</p>
+        <p style="margin:0;">{{ client.created_at|format_date }}</p>
       </div>
       {% endif %}
       <div>

@@ -95,7 +95,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{{ record.hospital_name or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.hospital_location or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.speciality or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.start_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.start_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -130,8 +130,8 @@ const RECORDS = {
         registration_number: {{ (record.registration_number or '')|tojson }},
         hospital_name: {{ (record.hospital_name or '')|tojson }},
         hospital_location: {{ (record.hospital_location or '')|tojson }},
-        start_date: {{ (record.start_date or '')|tojson }},
-        end_date: {{ (record.end_date or '')|tojson }},
+        start_date: {{ (record.start_date or '')|format_date|tojson }},
+        end_date: {{ (record.end_date or '')|format_date|tojson }},
         speciality: {{ (record.speciality or '')|tojson }},
         payment: {{ (record.payment or '')|tojson }},
         mobile_number: {{ (record.mobile_number or '')|tojson }},

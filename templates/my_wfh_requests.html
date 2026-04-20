@@ -111,10 +111,10 @@
             {% for req in requests %}
             <tr>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ req.from_date }}
+                    {{ req.from_date|format_date }}
                 </td>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ req.to_date }}
+                    {{ req.to_date|format_date }}
                 </td>
                 <td class="reason-cell">
                     <div class="reason-text" title="{{ req.reason }}">{{ req.reason }}</div>
@@ -132,7 +132,7 @@
                     {{ req.approver_name or '—' }}
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
-                    {{ req.created_at.split(' ')[0] if req.created_at is string else (req.created_at.strftime('%Y-%m-%d') if req.created_at else '—') }}
+                    {{ req.created_at|format_date }}
                 </td>
             </tr>
             {% endfor %}

@@ -68,7 +68,7 @@
                 <tbody>
                     {% for c in closures %}
                     <tr class="cls-row" data-cid="{{ c.id }}" onclick="openClsDrawer({{ c.id }}, event)" style="border-top:1px solid var(--gray-100);">
-                        <td style="padding:0.65rem 1rem;color:var(--gray-700);">{{ c.close_date }}</td>
+                        <td style="padding:0.65rem 1rem;color:var(--gray-700);">{{ c.close_date|format_date }}</td>
                         <td style="padding:0.65rem 0.5rem;">
                             <div style="font-weight:600;color:var(--navy);">{{ c.display_name }}</div>
                             <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.1rem;">{{ c.client_name or '—' }}</div>
@@ -172,6 +172,13 @@ function fmtNum(v) {
     return Math.round(parseFloat(v)).toLocaleString('en-IN');
 }
 function txt(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
+function fmtDate(v) {
+    if (!v) return '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const d = new Date(v + 'T00:00:00');
+    if (isNaN(d)) return v;
+    return String(d.getDate()).padStart(2,'0') + '-' + months[d.getMonth()] + '-' + d.getFullYear();
+}
 
 function openClsDrawer(id, evt) {
     if (evt) {
@@ -182,7 +189,7 @@ function openClsDrawer(id, evt) {
     if (!c) return;
     document.getElementById('cdName').textContent = c.display_name || '—';
     document.getElementById('cdClient').textContent = c.client_name || '';
-    document.getElementById('cdDate').textContent = txt(c.close_date);
+    document.getElementById('cdDate').textContent = fmtDate(c.close_date);
     document.getElementById('cdOwner').textContent = txt(c.employee_name);
     document.getElementById('cdProject').textContent = txt(c.project_name);
     const cur = c.currency || 'INR';

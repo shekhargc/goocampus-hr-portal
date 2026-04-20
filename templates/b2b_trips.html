@@ -240,8 +240,8 @@
               <span class="badge badge-city">City</span>
             {% endif %}
           </td>
-          <td>{{ trip.from_date.strftime('%b %d, %Y') }}</td>
-          <td>{{ trip.to_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ trip.from_date|format_date }}</td>
+          <td>{{ trip.to_date|format_date }}</td>
           <td>{{ trip.project_name }}</td>
           <td>{{ trip.meeting_count }}</td>
           <td>

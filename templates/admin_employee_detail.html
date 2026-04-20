@@ -86,7 +86,7 @@
             <tbody>
                 {% for leave in leaves[:10] %}
                 <tr>
-                    <td>{{ leave.leave_date }}</td>
+                    <td>{{ leave.leave_date|format_date }}</td>
                     <td>{{ leave.leave_type.capitalize() }}</td>
                     <td>
                         {% if leave.day_portion == 'first_half' %}First Half

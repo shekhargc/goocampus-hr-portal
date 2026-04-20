@@ -421,7 +421,7 @@
         <div class="featured-title">{{ news_items[0].title }}</div>
         <div class="featured-content">{{ news_items[0].content }}</div>
         <div class="featured-meta">
-            Posted by {{ news_items[0].posted_by_name }} &middot; {{ news_items[0].created_at.strftime('%B %d, %Y') }}
+            Posted by {{ news_items[0].posted_by_name }} &middot; {{ news_items[0].created_at|format_date }}
         </div>
     </div>
     {% endif %}
@@ -446,7 +446,7 @@
                         {% endif %}
                         {{ item.category }}
                     </span>
-                    <span class="card-date">{{ item.created_at.strftime('%b %d') }}</span>
+                    <span class="card-date">{{ item.created_at|format_date }}</span>
                 </div>
                 <h3 class="card-title">{{ item.title }}</h3>
                 <p class="card-excerpt">{{ item.content }}</p>

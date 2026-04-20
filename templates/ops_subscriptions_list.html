@@ -94,7 +94,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.online_subscription or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.activation_type or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.issued_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.issued_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.booked_by or '—' }}</td>
                     </tr>
                     {% endfor %}
@@ -129,7 +129,7 @@ const RECORDS = {
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
         online_subscription: {{ (record.online_subscription or '')|tojson }},
-        issued_date: {{ (record.issued_date or '')|tojson }},
+        issued_date: {{ (record.issued_date or '')|format_date|tojson }},
         activation_type: {{ (record.activation_type or '')|tojson }},
         booked_by: {{ (record.booked_by or '')|tojson }},
         client_email: {{ (record.client_email or '')|tojson }},

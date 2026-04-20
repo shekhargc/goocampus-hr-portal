@@ -102,8 +102,8 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{{ record.course_type or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.coaching_method or '—' }}</td>
                         <td style="padding:12px 16px;">{% if record.coaching_status %}<span class="badge-pill {% if record.coaching_status == 'On Going' or record.coaching_status == 'In Progress' %}badge-yellow{% elif record.coaching_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.coaching_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
-                        <td style="padding:12px 16px;">{{ record.start_date or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.end_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.start_date|format_date }}</td>
+                        <td style="padding:12px 16px;">{{ record.end_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -140,8 +140,8 @@ const COACHING_RECORDS = {
         coaching_status: {{ (record.coaching_status or '')|tojson }},
         batch_month: {{ (record.batch_month or '')|tojson }},
         batch_year: {{ (record.batch_year or '')|tojson }},
-        start_date: {{ (record.start_date or '')|tojson }},
-        end_date: {{ (record.end_date or '')|tojson }},
+        start_date: {{ (record.start_date or '')|format_date|tojson }},
+        end_date: {{ (record.end_date or '')|format_date|tojson }},
         english_training: {{ (record.english_training or '')|tojson }},
         blueprint_stage: {{ (record.blueprint_stage or '')|tojson }},
         attendance: {{ (record.attendance or '')|tojson }},

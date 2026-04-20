@@ -186,7 +186,7 @@
             {% for leave in leaves %}
             <tr{% if leave.is_late %} class="late-row"{% endif %}{% if leave.status == 'retrieved' %} style="opacity: 0.55;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.45;"{% endif %}>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date }}
+                    {{ leave.leave_date|format_date }}
                     {% if leave.is_late %}
                     <br><span class="late-badge">Late</span>
                     {% endif %}
@@ -228,7 +228,7 @@
                     {% endif %}
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
-                    {{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '—' }}
+                    {{ leave.created_at|format_date }}
                 </td>
                 <td style="white-space: nowrap;">
                     {% if leave.status not in ('retrieved', 'modified') %}

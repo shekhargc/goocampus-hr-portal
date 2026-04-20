@@ -93,7 +93,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.vendor or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.booking_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.booking_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.pick_up_location or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.drop_location or '—' }}</td>
                     </tr>
@@ -129,9 +129,9 @@ const RECORDS = {
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
         vendor: {{ (record.vendor or '')|tojson }},
-        booking_date: {{ (record.booking_date or '')|tojson }},
+        booking_date: {{ (record.booking_date or '')|format_date|tojson }},
         invoice_number: {{ (record.invoice_number or '')|tojson }},
-        pick_up_date: {{ (record.pick_up_date or '')|tojson }},
+        pick_up_date: {{ (record.pick_up_date or '')|format_date|tojson }},
         pick_up_location: {{ (record.pick_up_location or '')|tojson }},
         drop_location: {{ (record.drop_location or '')|tojson }},
         contact_number: {{ (record.contact_number or '')|tojson }},

@@ -73,7 +73,7 @@
                     <tbody>
                         {% for ml in my_logs %}
                         <tr style="border-top:1px solid var(--gray-100);">
-                            <td style="padding:0.45rem 0;color:var(--navy);font-weight:600;">{{ ml.log_date }}</td>
+                            <td style="padding:0.45rem 0;color:var(--navy);font-weight:600;">{{ ml.log_date|format_date }}</td>
                             <td style="padding:0.45rem 0;text-align:right;font-variant-numeric:tabular-nums;">{{ ml.num_calls }}</td>
                             <td style="padding:0.45rem 0;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-600);">{{ ml.talk_time_minutes }}</td>
                         </tr>

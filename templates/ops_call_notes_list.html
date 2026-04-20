@@ -100,7 +100,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCnDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.call_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.call_date|format_date }}</td>
                         <td style="padding:12px 16px;color:var(--gray-600);font-size:13px;">{{ (record.call_note or '')[:80] }}{% if (record.call_note or '')|length > 80 %}...{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.added_by or '—' }}</td>
                     </tr>
@@ -146,7 +146,7 @@ const CN_RECORDS = {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
-        call_date: {{ (record.call_date or '')|tojson }},
+        call_date: {{ (record.call_date or '')|format_date|tojson }},
         call_note: {{ (record.call_note or '')|tojson }},
         added_by: {{ (record.added_by or '')|tojson }}
     },

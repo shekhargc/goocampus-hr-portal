@@ -806,7 +806,7 @@ const PRODUCTS_DATA = {
         revenue_inr: {{ (p.revenue_inr or 0)|tojson }},
         margin_inr: {{ (p.margin_inr or 0)|tojson }},
         created_by_name: {{ (p.created_by_name or '')|tojson }},
-        created_at: {{ (p.created_at.strftime('%d %b %Y, %I:%M %p') if p.created_at else '')|tojson }}
+        created_at: {{ (p.created_at|format_date)|tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 };

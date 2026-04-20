@@ -90,7 +90,7 @@
                     <span class="ann-badge-inactive">Hidden</span>
                     {% endif %}
                 </div>
-                <div class="ann-entry-meta">Posted by {{ ann.posted_by_name }} · {{ ann.created_at.strftime('%Y-%m-%d %H:%M') if ann.created_at is not string else ann.created_at[:16] }}</div>
+                <div class="ann-entry-meta">Posted by {{ ann.posted_by_name }} · {{ ann.created_at|format_date }}</div>
                 <div class="ann-entry-msg">{{ ann.message }}</div>
             </div>
             {% if ann.is_active == 1 %}

@@ -1155,7 +1155,7 @@
           {% endif %}
           <div style="flex: 1; min-width: 0;">
             <div style="font-weight: 600; font-size: 0.88rem; color: var(--navy);">{{ emp.name }}</div>
-            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • Joined {{ emp.joining_date }}</div>
+            <div style="font-size: 0.75rem; color: var(--gray-500);">{{ emp.department or '' }} • Joined {{ emp.joining_date|format_date }}</div>
           </div>
         </div>
         {% endfor %}
@@ -1206,7 +1206,7 @@
                 <span style="font-weight: 600; color: var(--navy);">{{ leave.name }}</span>
               </div>
             </td>
-            <td style="padding: 0.6rem 0.75rem; color: var(--gray-600);">{{ leave.leave_date }}</td>
+            <td style="padding: 0.6rem 0.75rem; color: var(--gray-600);">{{ leave.leave_date|format_date }}</td>
             <td style="padding: 0.6rem 0.75rem;"><span style="font-weight: 600; color: var(--orange);">{{ leave.leave_type|capitalize }}</span></td>
             <td style="padding: 0.6rem 0.75rem; color: var(--gray-600);">{% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</td>
             <td style="padding: 0.6rem 0.75rem;">
@@ -1238,7 +1238,7 @@
     <div style="display: flex; flex-wrap: wrap; gap: 0.75rem;">
       {% for leave in my_pending_leaves[:4] %}
       <div style="flex: 1; min-width: 200px; padding: 0.75rem 1rem; border-radius: 0.5rem; background: #FFFBEB; border: 1px solid #FDE68A;">
-        <div style="font-weight: 700; color: var(--navy); font-size: 0.9rem;">{{ leave.leave_date }}</div>
+        <div style="font-weight: 700; color: var(--navy); font-size: 0.9rem;">{{ leave.leave_date|format_date }}</div>
         <div style="font-size: 0.82rem; color: var(--gray-600); margin-top: 0.2rem;">{{ leave.leave_type|capitalize }} Leave • {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}</div>
         <span class="badge badge-pending" style="margin-top: 0.4rem; font-size: 0.72rem;">Pending</span>
       </div>
@@ -1474,7 +1474,7 @@
               <h4 class="announcement-title">{{ announcement.title }}</h4>
               <p class="announcement-message">{{ announcement.message }}</p>
               <div class="announcement-meta">
-                {{ announcement.posted_by_name }} • {{ announcement.created_at }}
+                {{ announcement.posted_by_name }} • {{ announcement.created_at|format_date }}
               </div>
             </div>
             {% endfor %}

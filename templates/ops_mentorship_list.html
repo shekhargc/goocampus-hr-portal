@@ -92,7 +92,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openMentorshipDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.session_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.session_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.program_provider or '—' }}</td>
                         <td style="padding:12px 16px;">{% if record.payment_status %}<span class="badge-pill {% if record.payment_status == 'Paid' %}badge-green{% elif record.payment_status == 'Pending' %}badge-yellow{% elif record.payment_status == 'Unpaid' %}badge-gray{% else %}badge-gray{% endif %}">{{ record.payment_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.candidate_attendance or '—' }}</td>
@@ -128,7 +128,7 @@ const RECORDS = {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
-        session_date: {{ (record.session_date or '')|tojson }},
+        session_date: {{ (record.session_date or '')|format_date|tojson }},
         start_time: {{ (record.start_time or '')|tojson }},
         end_time: {{ (record.end_time or '')|tojson }},
         duration_minutes: {{ (record.duration_minutes or '')|tojson }},

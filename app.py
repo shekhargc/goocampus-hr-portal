@@ -15,6 +15,31 @@ app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
 app.config['DEBUG'] = False
 
+
+# ─── Global Jinja2 date filter: DD-Mon-YYYY (e.g. 15-Apr-2026) ───
+@app.template_filter('format_date')
+def format_date_filter(value):
+    """Convert a date string or date object to DD-Mon-YYYY format."""
+    if not value:
+        return '—'
+    if isinstance(value, str):
+        value = value.strip()
+        if not value:
+            return '—'
+        for fmt in ('%Y-%m-%d', '%Y-%m-%dT%H:%M:%S', '%Y-%m-%d %H:%M:%S',
+                    '%d-%b-%Y', '%d/%m/%Y', '%d-%m-%Y'):
+            try:
+                value = datetime.strptime(value, fmt)
+                break
+            except ValueError:
+                continue
+        else:
+            return value  # return as-is if no format matched
+    try:
+        return value.strftime('%d-%b-%Y')
+    except (AttributeError, ValueError):
+        return value
+
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}

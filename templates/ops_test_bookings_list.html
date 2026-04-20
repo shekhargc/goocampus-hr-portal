@@ -109,7 +109,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.exam or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.exam_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.exam_date|format_date }}</td>
                         <td style="padding:12px 16px;">{% if record.exam_status %}<span class="badge-pill {% if record.exam_status == 'Booked' or record.exam_status == 'Confirmed' %}badge-yellow{% elif record.exam_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.exam_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{% if record.exam_result %}<span class="badge-pill {% if record.exam_result == 'Passed' %}badge-green{% elif record.exam_result == 'Failed' %}badge-red{% else %}badge-gray{% endif %}">{{ record.exam_result }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.score or '—' }}</td>
@@ -146,18 +146,18 @@ const TB_RECORDS = {
         registration_number: {{ (record.registration_number or '')|tojson }},
         exam: {{ (record.exam or '')|tojson }},
         exam_type: {{ (record.exam_type or '')|tojson }},
-        booking_date: {{ (record.booking_date or '')|tojson }},
-        exam_date: {{ (record.exam_date or '')|tojson }},
+        booking_date: {{ (record.booking_date or '')|format_date|tojson }},
+        exam_date: {{ (record.exam_date or '')|format_date|tojson }},
         exam_status: {{ (record.exam_status or '')|tojson }},
         exam_result: {{ (record.exam_result or '')|tojson }},
-        exam_result_date: {{ (record.exam_result_date or '')|tojson }},
+        exam_result_date: {{ (record.exam_result_date or '')|format_date|tojson }},
         score: {{ (record.score or '')|tojson }},
         test_center: {{ (record.test_center or '')|tojson }},
         city_state: {{ (record.city_state or '')|tojson }},
         country: {{ (record.country or '')|tojson }},
         booked_by: {{ (record.booked_by or '')|tojson }},
         revaluation: {{ (record.revaluation or '')|tojson }},
-        reval_applied_date: {{ (record.reval_applied_date or '')|tojson }},
+        reval_applied_date: {{ (record.reval_applied_date or '')|format_date|tojson }},
         reval_result: {{ (record.reval_result or '')|tojson }},
         reval_score: {{ (record.reval_score or '')|tojson }},
         notes: {{ (record.notes or '')|tojson }}

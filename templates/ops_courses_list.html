@@ -104,7 +104,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{{ record.courses_name or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.course_type or '—' }}</td>
                         <td style="padding:12px 16px;">{% if record.course_status %}<span class="badge-pill {% if record.course_status == 'Completed' %}badge-green{% elif record.course_status == 'In Progress' %}badge-yellow{% elif record.course_status == 'Not Started' %}badge-gray{% else %}badge-gray{% endif %}">{{ record.course_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
-                        <td style="padding:12px 16px;">{{ record.start_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.start_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -140,8 +140,8 @@ const RECORDS = {
         courses_name: {{ (record.courses_name or '')|tojson }},
         course_type: {{ (record.course_type or '')|tojson }},
         course_status: {{ (record.course_status or '')|tojson }},
-        start_date: {{ (record.start_date or '')|tojson }},
-        end_date: {{ (record.end_date or '')|tojson }},
+        start_date: {{ (record.start_date or '')|format_date|tojson }},
+        end_date: {{ (record.end_date or '')|format_date|tojson }},
         validity_months: {{ (record.validity_months or '')|tojson }},
         course_provider: {{ (record.course_provider or '')|tojson }},
         certification_body: {{ (record.certification_body or '')|tojson }},

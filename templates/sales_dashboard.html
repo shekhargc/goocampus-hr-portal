@@ -385,7 +385,7 @@
                 <div class="trip-info">
                     <div class="trip-name">{{ trip.employee_name }}</div>
                     <div class="trip-detail">
-                        {{ trip.from_date }} to {{ trip.to_date }} &middot;
+                        {{ trip.from_date|format_date }} to {{ trip.to_date|format_date }} &middot;
                         {{ trip.project_name or 'No project' }} &middot;
                         {{ trip.meeting_count }} meeting{{ 's' if trip.meeting_count != 1 }}
                     </div>

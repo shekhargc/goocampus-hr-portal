@@ -80,7 +80,7 @@
                     </td>
                     <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ l.product_name or '—' }}</td>
                     <td style="padding:0.7rem 0.6rem;text-align:right;font-weight:600;color:var(--navy);font-variant-numeric:tabular-nums;">{% if l.expected_value %}₹{{ '{:,.0f}'.format(l.expected_value) }}{% else %}—{% endif %}</td>
-                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ l.expected_close_date or '—' }}</td>
+                    <td style="padding:0.7rem 0.6rem;color:var(--gray-700);">{{ l.expected_close_date|format_date }}</td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -151,6 +151,13 @@ function fmtMoney(v) {
     return '₹' + Math.round(parseFloat(v)).toLocaleString('en-IN');
 }
 function txt(v) { return (v === null || v === undefined || v === '') ? '—' : v; }
+function fmtDate(v) {
+    if (!v) return '—';
+    const months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+    const d = new Date(v + 'T00:00:00');
+    if (isNaN(d)) return v;
+    return String(d.getDate()).padStart(2,'0') + '-' + months[d.getMonth()] + '-' + d.getFullYear();
+}
 
 function openLeadDrawer(id, evt) {
     if (evt) {
@@ -170,7 +177,7 @@ function openLeadDrawer(id, evt) {
     document.getElementById('ldProduct').textContent = txt(l.product_name);
     document.getElementById('ldProject').textContent = txt(l.project_name);
     document.getElementById('ldValue').textContent = fmtMoney(l.expected_value);
-    document.getElementById('ldClose').textContent = txt(l.expected_close_date);
+    document.getElementById('ldClose').textContent = fmtDate(l.expected_close_date);
     document.getElementById('ldNotes').textContent = l.notes || '—';
     const ldEditBtn = document.getElementById('ldEditBtn');
     if (ldEditBtn) ldEditBtn.href = '/sales/leads/' + id + '/edit';

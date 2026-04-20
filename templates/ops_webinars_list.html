@@ -103,7 +103,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.event_type or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.event_name or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.start_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.start_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.cpd_points or '—' }}</td>
                     </tr>
                     {% endfor %}
@@ -139,8 +139,8 @@ const RECORDS = {
         registration_number: {{ (record.registration_number or '')|tojson }},
         event_type: {{ (record.event_type or '')|tojson }},
         event_name: {{ (record.event_name or '')|tojson }},
-        start_date: {{ (record.start_date or '')|tojson }},
-        end_date: {{ (record.end_date or '')|tojson }},
+        start_date: {{ (record.start_date or '')|format_date|tojson }},
+        end_date: {{ (record.end_date or '')|format_date|tojson }},
         duration_days: {{ (record.duration_days or '')|tojson }},
         event_value: {{ (record.event_value or '')|tojson }},
         cpd_points: {{ (record.cpd_points or '')|tojson }},

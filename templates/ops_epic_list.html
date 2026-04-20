@@ -125,7 +125,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         </td>
                         <td style="padding:12px 16px;">{{ record.epic_status or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.notary_camp or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.registration_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.registration_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.documents_stage or '—' }}</td>
                     </tr>
                     {% endfor %}
@@ -162,7 +162,7 @@ const EPIC_RECORDS = {
         epic_registration: {{ (record.epic_registration or '')|tojson }},
         epic_status: {{ (record.epic_status or '')|tojson }},
         notary_camp: {{ (record.notary_camp or '')|tojson }},
-        registration_date: {{ (record.registration_date or '')|tojson }},
+        registration_date: {{ (record.registration_date or '')|format_date|tojson }},
         documents_stage: {{ (record.documents_stage or '')|tojson }},
         document_stage_status: {{ (record.document_stage_status or '')|tojson }},
         login_id: {{ (record.login_id or '')|tojson }},

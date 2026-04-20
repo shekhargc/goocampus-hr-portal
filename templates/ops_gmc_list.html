@@ -123,9 +123,9 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                             <span style="color:var(--gray-500);">—</span>
                             {% endif %}
                         </td>
-                        <td style="padding:12px 16px;">{{ record.registration_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.registration_date|format_date }}</td>
                         <td style="padding:12px 16px;">{{ record.license or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.license_received_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.license_received_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -160,12 +160,12 @@ const GMC_RECORDS = {
         registration_number: {{ (record.registration_number or '')|tojson }},
         gmc_reference_number: {{ (record.gmc_reference_number or '')|tojson }},
         gmc_setup: {{ (record.gmc_setup or '')|tojson }},
-        registration_date: {{ (record.registration_date or '')|tojson }},
+        registration_date: {{ (record.registration_date or '')|format_date|tojson }},
         english_exam: {{ (record.english_exam or '')|tojson }},
-        exam_date: {{ (record.exam_date or '')|tojson }},
-        english_result_expiry_date: {{ (record.english_result_expiry_date or '')|tojson }},
+        exam_date: {{ (record.exam_date or '')|format_date|tojson }},
+        english_result_expiry_date: {{ (record.english_result_expiry_date or '')|format_date|tojson }},
         license: {{ (record.license or '')|tojson }},
-        license_received_date: {{ (record.license_received_date or '')|tojson }},
+        license_received_date: {{ (record.license_received_date or '')|format_date|tojson }},
         login_pwd: {{ (record.login_pwd or '')|tojson }},
         secret_question: {{ (record.secret_question or '')|tojson }},
         secret_answer: {{ (record.secret_answer or '')|tojson }},

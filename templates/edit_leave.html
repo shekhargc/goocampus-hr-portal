@@ -55,7 +55,7 @@
 </div>
 
 <div class="edit-card">
-    <h2>Leave on {{ leave.leave_date }}</h2>
+    <h2>Leave on {{ leave.leave_date|format_date }}</h2>
     <p class="sub">You can change the leave type, duration, and reason. The leave date cannot be changed — use Modify if you need a different date.</p>
 
     <div class="info-row">
@@ -65,7 +65,7 @@
         </div>
         <div class="info-item">
             <div class="info-label">Leave Date</div>
-            <div class="info-value">{{ leave.leave_date }}</div>
+            <div class="info-value">{{ leave.leave_date|format_date }}</div>
         </div>
         <div class="info-item">
             <div class="info-label">Status</div>

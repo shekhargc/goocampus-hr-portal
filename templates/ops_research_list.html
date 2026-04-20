@@ -104,7 +104,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;">{% if record.research_status %}<span class="badge-pill {% if record.research_status == 'Started' %}badge-yellow{% elif record.research_status == 'Published' %}badge-green{% elif record.research_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.research_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.research_topic or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.research_provider or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.research_start_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.research_start_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -140,8 +140,8 @@ const RECORDS = {
         research_status: {{ (record.research_status or '')|tojson }},
         research_topic: {{ (record.research_topic or '')|tojson }},
         research_provider: {{ (record.research_provider or '')|tojson }},
-        research_start_date: {{ (record.research_start_date or '')|tojson }},
-        research_end_date: {{ (record.research_end_date or '')|tojson }},
+        research_start_date: {{ (record.research_start_date or '')|format_date|tojson }},
+        research_end_date: {{ (record.research_end_date or '')|format_date|tojson }},
         published_journal_name: {{ (record.published_journal_name or '')|tojson }},
         author_position: {{ (record.author_position or '')|tojson }},
         research_batch: {{ (record.research_batch or '')|tojson }},

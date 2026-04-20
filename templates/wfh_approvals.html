@@ -289,8 +289,8 @@
                     </div>
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-600);">{{ req.department or '—' }}</td>
-                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.from_date }}</td>
-                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.to_date }}</td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.from_date|format_date }}</td>
+                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ req.to_date|format_date }}</td>
                 <td class="reason-cell">
                     <div class="reason-text">{{ req.reason or '—' }}</div>
                 </td>
@@ -343,11 +343,11 @@ const WFH_REQUESTS = {
         email: {{ (req.email or '')|tojson }},
         mobile: {{ (req.mobile or '')|tojson }},
         photo_src: {{ (req.photo_src or '')|tojson }},
-        from_date: {{ (req.from_date|string if req.from_date else '')|tojson }},
-        to_date: {{ (req.to_date|string if req.to_date else '')|tojson }},
+        from_date: {{ (req.from_date|format_date)|tojson }},
+        to_date: {{ (req.to_date|format_date)|tojson }},
         reason: {{ (req.reason or '')|tojson }},
         status: {{ (req.status or '')|tojson }},
-        created_at: {{ (req.created_at|string if req.created_at else '')|tojson }},
+        created_at: {{ (req.created_at|format_date)|tojson }},
         approver_name: {{ (req.approver_name or '')|tojson }},
         approved_at: {{ (req.approved_at|string if req.approved_at else '')|tojson }},
         rejection_reason: {{ (req.rejection_reason or '')|tojson }}
@@ -400,7 +400,7 @@ function openWfhDetail(reqId) {
             </div>
             <div class="drawer-field">
                 <div class="label">Applied On</div>
-                <div class="value">${escapeHtml((r.created_at || '').split(' ')[0] || '—')}</div>
+                <div class="value">${escapeHtml(r.created_at || '—')}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">From Date</div>

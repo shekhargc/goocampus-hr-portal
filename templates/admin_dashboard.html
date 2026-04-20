@@ -263,7 +263,7 @@
                 {% endif %}
                 <div class="leave-info">
                     <div class="leave-name">{{ leave.name }}</div>
-                    <div class="leave-detail">{{ leave.leave_date }} &middot; {{ leave.leave_type | capitalize }} &middot;
+                    <div class="leave-detail">{{ leave.leave_date|format_date }} &middot; {{ leave.leave_type | capitalize }} &middot;
                         {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}
                     </div>
                 </div>
@@ -435,7 +435,7 @@
             {% for ann in announcements %}
             <div class="ann-item">
                 <div class="ann-title">{{ ann.title }}</div>
-                <div class="ann-meta">By {{ ann.posted_by_name }} · {{ ann.created_at.strftime('%Y-%m-%d') if ann.created_at is not string else ann.created_at[:10] }}</div>
+                <div class="ann-meta">By {{ ann.posted_by_name }} · {{ ann.created_at|format_date }}</div>
                 <div class="ann-msg">{{ ann.message[:150] }}{% if ann.message | length > 150 %}...{% endif %}</div>
             </div>
             {% endfor %}

@@ -236,7 +236,7 @@
             {% for leave in all_leaves %}
             <tr{% if leave.status == 'retrieved' %} style="opacity: 0.6;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.5;"{% endif %}>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date }}
+                    {{ leave.leave_date|format_date }}
                     {% if leave.original_id %}
                     <div style="font-size: 0.72rem; color: #3B82F6; margin-top: 0.2rem;">Modified leave</div>
                     {% endif %}

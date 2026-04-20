@@ -220,7 +220,7 @@
         <tbody>
             {% for leave in month_leaves %}
             <tr>
-                <td style="font-weight: 600; color: var(--navy);">{{ leave.leave_date }}</td>
+                <td style="font-weight: 600; color: var(--navy);">{{ leave.leave_date|format_date }}</td>
                 <td style="color: var(--gray-500);">{{ leave.day_name }}</td>
                 <td>
                     {% if leave.leave_type == 'annual' %}<span style="color: var(--blue); font-weight: 600;">Annual</span>

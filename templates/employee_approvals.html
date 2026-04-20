@@ -115,7 +115,7 @@
                     {% endif %}
                 </td>
                 <td style="color: var(--navy);">{{ leave.department }}</td>
-                <td style="color: var(--navy);">{{ leave.leave_date }}</td>
+                <td style="color: var(--navy);">{{ leave.leave_date|format_date }}</td>
                 <td style="color: var(--navy);">{{ leave.leave_type.capitalize() }}</td>
                 <td style="color: var(--navy);">
                     {% if leave.day_portion == 'first_half' %}First Half
@@ -141,7 +141,7 @@
                     </div>
                     {% endif %}
                 </td>
-                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.created_at.split(' ')[0] if leave.created_at is string else leave.created_at.strftime('%Y-%m-%d') if leave.created_at else '-' }}</td>
+                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.created_at|format_date }}</td>
                 <td>
                     {% if leave.employee_id == user.id %}
                     <span style="color: var(--gray-400); font-size: 0.82rem; font-style: italic;">Own request</span>
@@ -189,7 +189,7 @@
                     <span class="late-badge" style="margin-left: 0.5rem;">Late</span>
                     {% endif %}
                 </td>
-                <td style="color: var(--navy);">{{ leave.leave_date }}</td>
+                <td style="color: var(--navy);">{{ leave.leave_date|format_date }}</td>
                 <td style="color: var(--navy);">{{ leave.leave_type.capitalize() }}</td>
                 <td style="color: var(--navy);">
                     {% if leave.day_portion == 'first_half' %}First Half
@@ -204,7 +204,7 @@
                     <span class="badge badge-rejected">Rejected</span>
                     {% endif %}
                 </td>
-                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.approved_at.split(' ')[0] if leave.approved_at is string else leave.approved_at.strftime('%Y-%m-%d') if leave.approved_at else '-' }}</td>
+                <td style="font-size: 0.85rem; color: var(--gray-500);">{{ leave.approved_at|format_date }}</td>
             </tr>
             {% endfor %}
         </tbody>

@@ -299,17 +299,17 @@
 
     <div class="detail-item">
       <div class="detail-label">From Date</div>
-      <div class="detail-value">{{ trip.from_date.strftime('%B %d, %Y') }}</div>
+      <div class="detail-value">{{ trip.from_date|format_date }}</div>
     </div>
 
     <div class="detail-item">
       <div class="detail-label">To Date</div>
-      <div class="detail-value">{{ trip.to_date.strftime('%B %d, %Y') }}</div>
+      <div class="detail-value">{{ trip.to_date|format_date }}</div>
     </div>
 
     <div class="detail-item">
       <div class="detail-label">Travel Date</div>
-      <div class="detail-value">{{ trip.travel_date.strftime('%B %d, %Y') }}</div>
+      <div class="detail-value">{{ trip.travel_date|format_date }}</div>
     </div>
 
     <div class="detail-item">
@@ -344,7 +344,7 @@
     <tbody>
       {% for meeting in trip.meetings %}
         <tr>
-          <td>{{ meeting.meeting_date.strftime('%b %d, %Y') }}</td>
+          <td>{{ meeting.meeting_date|format_date }}</td>
           <td>{{ meeting.meeting_type_name }}</td>
           <td>{{ meeting.meeting_with }}</td>
           <td>{{ meeting.meeting_location }}</td>

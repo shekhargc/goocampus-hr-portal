@@ -148,7 +148,7 @@
             </div>
             <div class="emp-details">
                 {% if emp.email %}<div class="emp-tag">{{ emp.email }}</div>{% endif %}
-                {% if emp.joining_date %}<div class="emp-tag">Joined {{ emp.joining_date }}</div>{% endif %}
+                {% if emp.joining_date %}<div class="emp-tag">Joined {{ emp.joining_date|format_date }}</div>{% endif %}
                 {% if not emp.is_active %}<div class="emp-tag" style="background: var(--danger-light); color: #991B1B;">Inactive</div>{% endif %}
             </div>
         </div>

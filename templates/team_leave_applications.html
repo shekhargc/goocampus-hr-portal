@@ -285,7 +285,7 @@
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date }}
+                    {{ leave.leave_date|format_date }}
                     {% if leave.is_late %}<br><span class="late-badge">Late</span>{% endif %}
                     {% if leave.original_id %}<br><span class="modified-badge">Re-applied</span>{% endif %}
                 </td>
@@ -337,7 +337,7 @@ const LEAVE_REQUESTS = {
         mobile: {{ (leave.mobile or '')|tojson }},
         photo_src: {{ (leave.photo_src or '')|tojson }},
         leave_type: {{ (leave.leave_type or '')|tojson }},
-        leave_date: {{ (leave.leave_date|string if leave.leave_date else '')|tojson }},
+        leave_date: {{ (leave.leave_date|format_date)|tojson }},
         days: {{ (leave.days or 0)|tojson }},
         day_portion: {{ (leave.day_portion or 'full')|tojson }},
         reason: {{ (leave.reason_main or '')|tojson }},
@@ -348,8 +348,8 @@ const LEAVE_REQUESTS = {
         modification_reason: {{ (leave.modification_reason or '')|tojson }},
         original_reason: {{ (leave.original_reason or '')|tojson }},
         approver_name: {{ (leave.approver_name or '')|tojson }},
-        approved_at: {{ (leave.approved_at|string if leave.approved_at else '')|tojson }},
-        created_at: {{ (leave.created_at|string if leave.created_at else '')|tojson }}
+        approved_at: {{ (leave.approved_at|format_date)|tojson }},
+        created_at: {{ (leave.created_at|format_date)|tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
 };
@@ -397,7 +397,7 @@ function openLeaveDetail(reqId) {
             </div>
             <div class="drawer-field">
                 <div class="label">Applied On</div>
-                <div class="value">${escapeHtml((r.created_at || '').split(' ')[0] || '—')}</div>
+                <div class="value">${escapeHtml(r.created_at || '—')}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">Email</div>
