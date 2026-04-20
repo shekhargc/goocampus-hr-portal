@@ -1,410 +1,143 @@
 {% extends "base.html" %}
-
-{% block title %}All Payments - Operations{% endblock %}
-
-{% block extra_css %}
-<style>
-
-  .filter-form {
-    display: flex;
-    gap: 1rem;
-    align-items: flex-end;
-    flex-wrap: wrap;
-  }
-
-  .filter-form .form-group {
-    flex: 1;
-    min-width: 150px;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--gray-600);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-  }
-
-  .form-group input,
-  .form-group select {
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: white;
-    color: var(--gray-700);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
-  }
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-  }
-
-  .data-table thead {
-    background: var(--gray-50);
-    border-bottom: 1px solid var(--gray-200);
-  }
-
-  .data-table th {
-    padding: 0.7rem 1rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--gray-500);
-    font-weight: 600;
-    text-align: left;
-  }
-
-  .data-table td {
-    padding: 0.7rem 1rem;
-    font-size: 0.85rem;
-    border-top: 1px solid var(--gray-100);
-    color: var(--gray-700);
-  }
-
-  .data-table tbody tr:hover {
-    background: var(--gray-50);
-  }
-
-  .row-link {
-    color: var(--navy);
-    text-decoration: none;
-    font-weight: 600;
-    transition: color 0.2s;
-  }
-
-  .row-link:hover {
-    color: #F58220;
-  }
-
-  .row-actions {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .row-actions a {
-    padding: 0.3rem 0.6rem;
-    background: var(--gray-50);
-    color: var(--navy);
-    border-radius: 4px;
-    text-decoration: none;
-    font-size: 0.75rem;
-    font-weight: 600;
-    transition: background 0.2s;
-  }
-
-  .row-actions a:hover {
-    background: var(--orange);
-    color: white;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem 2rem;
-    color: var(--gray-600);
-  }
-
-  .empty-state-icon {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  .empty-state p {
-    font-size: 1rem;
-    margin: 0;
-  }
-
-  .autocomplete-wrap {
-    position: relative;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .suggestion-item {
-    padding: 0.6rem 0.8rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    border-bottom: 1px solid var(--gray-100);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .suggestion-item:last-child {
-    border-bottom: none;
-  }
-
-  .suggestion-item:hover,
-  .suggestion-item.highlighted {
-    background: var(--gray-50);
-  }
-
-  .suggestion-name {
-    color: var(--gray-700);
-    font-weight: 500;
-  }
-
-  .suggestion-reg {
-    color: var(--gray-500);
-    font-size: 0.75rem;
-  }
-
-  /* ============ Slide-out Detail Drawer ============ */
-  .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
-  .drawer-backdrop.open{opacity:1;visibility:visible}
-  .drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
-  .drawer.open{transform:translateX(0)}
-  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
-  .drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
-  .drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
-  .drawer-close:hover{color:var(--navy)}
-  .drawer-body{flex:1;overflow-y:auto;padding:24px}
-  .drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
-  .emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
-  .drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
-  .drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
-  .drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
-  .drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
-  .drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
-  .drawer-field.full{grid-column:1/-1}
-  .drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
-  .drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
-  .drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
-  .drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
-  tr.clickable-row{cursor:pointer;transition:background .15s}
-  tr.clickable-row:hover{background:var(--gray-50)!important}
-  tr.clickable-row.active-row{background:#FFF7ED!important}
-
-  @media (max-width: 768px) {
-    .filter-form {
-      flex-direction: column;
-    }
-
-    .filter-form .form-group {
-      width: 100%;
-    }
-
-    .data-table {
-      font-size: 0.8rem;
-    }
-
-    .data-table th,
-    .data-table td {
-      padding: 0.5rem 0.7rem;
-    }
-
-    .row-actions {
-      flex-direction: column;
-    }
-  }
-</style>
-{% endblock %}
-
+{% block title %}Payments{% endblock %}
 {% block content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+.pagination{display:flex;justify-content:center;gap:10px;padding:20px;align-items:center}
+.pagination a{padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;color:var(--navy);font-weight:600;font-size:14px}
+.pagination a:hover{background:var(--gray-50)}
+.pagination span{padding:8px 12px;color:var(--gray-600);font-size:14px}
+</style>
+
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
-    <div>
-      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">All Payments</h1>
-      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Payment records &middot; Click a row to view details</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Payments</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage payment records and transactions &middot; Click a row to view details</p>
+        </div>
+        <a href="/operations/payments/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Payment
+        </a>
     </div>
-    <div style="display:flex;gap:10px;">
-      <a href="/operations/payments/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Payment</a>
-    </div>
-  </div>
 
-  <!-- Stats Cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Payments</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ stats.total }}</div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Amount Collected</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;" id="total-collected">₹{{ "{:,.2f}".format(stats.total_collected or 0) }}</div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total GST Collected</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;" id="total-gst">₹{{ "{:,.2f}".format(stats.total_gst or 0) }}</div>
-    </div>
-  </div>
-
-  <!-- Filter Section -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <form method="GET" class="filter-form">
-      <div class="form-group autocomplete-wrap">
-        <label for="client_name">Client Name</label>
-        <input
-          type="text"
-          id="client_name"
-          name="client_name"
-          placeholder="Search client..."
-          value="{{ client_name or '' }}"
-          autocomplete="off"
-        />
-        <div id="client-suggestions" class="suggestions-dropdown"></div>
-      </div>
-      <div class="form-group">
-        <label for="reg">Registration #</label>
-        <input
-          type="text"
-          id="reg"
-          name="reg"
-          placeholder="Reg #..."
-          value="{{ reg or '' }}"
-        />
-      </div>
-      <div class="form-group">
-        <label for="payment_method">Payment Method</label>
-        <select id="payment_method" name="payment_method">
-          <option value="">All Methods</option>
-          {% for method in payment_methods %}
-          <option value="{{ method }}" {% if method == payment_method %}selected{% endif %}>{{ method }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="instalment">Instalment</label>
-        <select id="instalment" name="instalment">
-          <option value="">All Instalments</option>
-          {% for inst in instalment_options %}
-          <option value="{{ inst }}" {% if inst == instalment %}selected{% endif %}>{{ inst }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div style="display: flex; gap: 0.5rem;">
-        <button type="submit" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Apply Filters</button>
-        {% if has_filters %}
-          <a href="/operations/payments" style="padding:10px 20px;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">Reset</a>
-        {% endif %}
-      </div>
-    </form>
-  </div>
-
-  <!-- Table -->
-  {% if records %}
-  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Date</th>
-          <th>Reg #</th>
-          <th>Client Name</th>
-          <th>Instalment</th>
-          <th style="text-align: right;">Amount (₹)</th>
-          <th style="text-align: right;">GST (₹)</th>
-          <th style="text-align: right;">Total (₹)</th>
-          <th>Method</th>
-          <th>Notes</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in records %}
-        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openPayDetail({{ record.id }})">
-          <td>{{ record.payment_date or '–' }}</td>
-          <td>{{ record.registration_number or '–' }}</td>
-          <td>
-            {% if record.first_name or record.last_name %}
-              {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
-            {% else %}
-              –
-            {% endif %}
-          </td>
-          <td>{{ record.instalment or '–' }}</td>
-          <td style="text-align: right;">
-            <span class="amount-paid">₹{{ "{:,.2f}".format(record.amount_paid or 0) }}</span>
-          </td>
-          <td style="text-align: right;">
-            <span class="amount-gst">₹{{ "{:,.2f}".format(record.gst_paid or 0) }}</span>
-          </td>
-          <td style="text-align: right;">
-            <span class="amount-total">₹{{ "{:,.2f}".format(record.total_amount_paid or 0) }}</span>
-          </td>
-          <td>{{ record.payment_method or '–' }}</td>
-          <td>{{ (record.notes or '')[:50] }}{% if record.notes and record.notes|length > 50 %}...{% endif %}</td>
-          <td>
-            <div class="row-actions">
-              <a href="/operations/payments/{{ record.id }}/edit">Edit</a>
-              <form method="POST" action="/operations/payments/{{ record.id }}/delete" style="display:inline; margin:0;">
-                <button type="submit" style="padding:0.3rem 0.6rem;background:var(--gray-50);color:var(--navy);border:none;border-radius:4px;font-size:0.75rem;font-weight:600;cursor:pointer;transition:background 0.2s;" onclick="return confirm('Delete this payment?')">Delete</button>
-              </form>
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="client_name" id="paySearch" placeholder="Type candidate name..." value="{{ client_name or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="paySuggestions" class="suggestions-dropdown"></div>
             </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Payment Method</label>
+                <select name="payment_method" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Methods</option>
+                    {% for opt in payment_methods %}
+                    <option value="{{ opt }}" {% if payment_method == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Instalment</label>
+                <select name="instalment" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All</option>
+                    {% for opt in instalment_options %}
+                    <option value="{{ opt }}" {% if instalment == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/payments" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
 
-  <!-- Pagination -->
-  {% if total_pages > 1 %}
-  <div class="pagination">
-    {% if page > 1 %}
-      <a href="/operations/payments?page=1{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">First</a>
-      <a href="/operations/payments?page={{ page - 1 }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Previous</a>
-    {% else %}
-      <span class="disabled">First</span>
-      <span class="disabled">Previous</span>
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Instalment</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Amount (₹)</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">GST (₹)</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Total (₹)</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Method</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openPayDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;">{{ record.payment_date or '—' }}</td>
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.instalment or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.amount_paid or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.gst_paid or '—' }}</td>
+                        <td style="padding:12px 16px;font-weight:500;">{{ record.total_amount_paid or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.payment_method or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No payment records found.</p>
+            <a href="/operations/payments/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/operations/payments?page={{ page - 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/operations/payments?page={{ page + 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Next</a>
+        {% endif %}
+    </div>
     {% endif %}
-
-    <span style="align-self: center; padding: 0;">Page {{ page }} of {{ total_pages }}</span>
-
-    {% if page < total_pages %}
-      <a href="/operations/payments?page={{ page + 1 }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Next</a>
-      <a href="/operations/payments?page={{ total_pages }}{% if reg %}&reg={{ reg }}{% endif %}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if payment_method %}&payment_method={{ payment_method }}{% endif %}{% if instalment %}&instalment={{ instalment }}{% endif %}">Last</a>
-    {% else %}
-      <span class="disabled">Next</span>
-      <span class="disabled">Last</span>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  {% else %}
-  <div class="empty-state">
-    <div class="empty-state-icon">💳</div>
-    <p>No payments found</p>
-    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
-      {% if has_filters %}
-      Try adjusting your filters
-      {% else %}
-      Start adding payment records
-      {% endif %}
-    </p>
-  </div>
-  {% endif %}
 </div>
 
 <div class="drawer-backdrop" id="payBackdrop" onclick="closePayDetail()"></div>
@@ -417,35 +150,35 @@
     <div class="drawer-actions" id="payDrawerActions"></div>
 </aside>
 
-<!-- JavaScript for Indian number formatting and autocomplete -->
 <script>
-  const PAY_RECORDS = {
+const PAY_RECORDS = {
     {% for record in records %}
     {{ record.id }}: {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
         payment_date: {{ (record.payment_date or '')|tojson }},
-        amount_paid: {{ record.amount_paid or 0 }},
-        gst_paid: {{ record.gst_paid or 0 }},
-        total_amount_paid: {{ record.total_amount_paid or 0 }},
+        amount_paid: {{ (record.amount_paid or '')|tojson }},
+        gst_paid: {{ (record.gst_paid or '')|tojson }},
+        total_amount_paid: {{ (record.total_amount_paid or '')|tojson }},
         instalment: {{ (record.instalment or '')|tojson }},
         payment_method: {{ (record.payment_method or '')|tojson }},
-        total_package: {{ record.total_package or 0 }},
+        total_package: {{ (record.total_package or '')|tojson }},
         notes: {{ (record.notes or '')|tojson }}
     },
     {% endfor %}
-  };
+};
 
-  let activeRowId = null;
+let activeRowId = null;
 
-  function field(label, value) {
-    return '<div class="drawer-field"><div class="label">' + label + '</div><div class="value">' + (value || '<span style="color:var(--gray-400);">—</span>') + '</div></div>';
-  }
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
 
-  function openPayDetail(id) {
+function openPayDetail(id) {
     const r = PAY_RECORDS[id];
     if (!r) return;
+
     if (activeRowId) {
         const prev = document.getElementById('row-' + activeRowId);
         if (prev) prev.classList.remove('active-row');
@@ -453,40 +186,45 @@
     activeRowId = id;
     const row = document.getElementById('row-' + id);
     if (row) row.classList.add('active-row');
+
     const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
-    let html = '<div class="drawer-emp">' +
-        '<div class="emp-avatar-lg-ph">' + initials + '</div>' +
-        '<div><p class="name">' + r.name + '</p>' +
-        '<div class="meta">' + r.registration_number + '</div></div></div>' +
-        '<div class="drawer-grid">' +
-        field('Payment Date', r.payment_date) +
-        field('Instalment', r.instalment) +
-        field('Amount Paid', '₹' + r.amount_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
-        field('GST Paid', '₹' + r.gst_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
-        field('Total Amount', '₹' + r.total_amount_paid.toLocaleString('en-IN', {minimumFractionDigits:2})) +
-        field('Payment Method', r.payment_method) +
-        '</div>';
-    if (r.total_package) {
-        html += '<div class="drawer-section"><h4>Package Info</h4><div class="drawer-grid">' +
-            field('Total Package', '₹' + r.total_package.toLocaleString('en-IN', {minimumFractionDigits:2})) +
-            '</div></div>';
-    }
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        ${field('Payment Date', r.payment_date)}
+        ${field('Instalment', r.instalment)}
+        ${field('Amount Paid', r.amount_paid)}
+        ${field('GST Paid', r.gst_paid)}
+        ${field('Total Amount', r.total_amount_paid)}
+        ${field('Payment Method', r.payment_method)}
+        ${field('Total Package', r.total_package)}
+    </div>`;
+
     if (r.notes) {
-        html += '<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">' + r.notes + '</p></div>';
+        html += `<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">${r.notes}</p></div>`;
     }
 
     document.getElementById('payDrawerBody').innerHTML = html;
-    document.getElementById('payDrawerActions').innerHTML =
-        '<a href="/operations/payments/' + r.id + '/edit" style="background:var(--orange);color:white;">Edit Payment</a>' +
-        '<a href="/operations/plab/dashboard/' + encodeURIComponent(r.registration_number) + '" style="background:var(--navy);color:white;">View PLAB Profile</a>';
+    document.getElementById('payDrawerActions').innerHTML = `
+        <a href="/operations/payments/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
     document.getElementById('payDrawer').classList.add('open');
     document.getElementById('payDrawer').setAttribute('aria-hidden', 'false');
     document.getElementById('payBackdrop').classList.add('open');
     document.body.style.overflow = 'hidden';
-  }
+}
 
-  function closePayDetail() {
+function closePayDetail() {
     document.getElementById('payDrawer').classList.remove('open');
     document.getElementById('payDrawer').setAttribute('aria-hidden', 'true');
     document.getElementById('payBackdrop').classList.remove('open');
@@ -496,165 +234,62 @@
         if (row) row.classList.remove('active-row');
         activeRowId = null;
     }
-  }
+}
 
-  document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePayDetail(); });
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePayDetail(); });
 
-  function formatIndianCurrency(amount) {
-    if (!amount || amount === 0) return '₹0';
-
-    // Convert to string and remove decimals for formatting
-    let numStr = Math.abs(amount).toFixed(2);
-    let parts = numStr.split('.');
-    let intPart = parts[0];
-    let decPart = parts[1];
-
-    // Add commas in Indian format: XX,XX,XXX
-    let lastThree = intPart.substring(intPart.length - 3);
-    let remaining = intPart.substring(0, intPart.length - 3);
-
-    if (remaining !== '') {
-      intPart = remaining.replace(/\B(?=(\d{2})+(?!\d))/g, ',') + ',' + lastThree;
-    } else {
-      intPart = lastThree;
-    }
-
-    return '₹' + intPart + '.' + decPart;
-  }
-
-  // Format all currency values on page load
-  document.addEventListener('DOMContentLoaded', function() {
-    // Format summary stat cards
-    const totalCollElem = document.getElementById('total-collected');
-    const totalGstElem = document.getElementById('total-gst');
-
-    if (totalCollElem && totalCollElem.textContent) {
-      const totalCollValue = parseFloat(
-        totalCollElem.textContent.replace(/₹/g, '').replace(/,/g, '')
-      );
-      if (!isNaN(totalCollValue)) {
-        totalCollElem.textContent = formatIndianCurrency(totalCollValue);
-      }
-    }
-
-    if (totalGstElem && totalGstElem.textContent) {
-      const totalGstValue = parseFloat(
-        totalGstElem.textContent.replace(/₹/g, '').replace(/,/g, '')
-      );
-      if (!isNaN(totalGstValue)) {
-        totalGstElem.textContent = formatIndianCurrency(totalGstValue);
-      }
-    }
-
-    // Format table currency values
-    document.querySelectorAll('.amount-paid').forEach(elem => {
-      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
-      if (!isNaN(value)) {
-        elem.textContent = formatIndianCurrency(value);
-      }
-    });
-
-    document.querySelectorAll('.amount-gst').forEach(elem => {
-      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
-      if (!isNaN(value)) {
-        elem.textContent = formatIndianCurrency(value);
-      }
-    });
-
-    document.querySelectorAll('.amount-total').forEach(elem => {
-      const value = parseFloat(elem.textContent.replace(/₹/g, '').replace(/,/g, ''));
-      if (!isNaN(value)) {
-        elem.textContent = formatIndianCurrency(value);
-      }
-    });
-  });
-
-  // Client name autocomplete on search field
-  (function() {
-    const input = document.getElementById('client_name');
-    const dropdown = document.getElementById('client-suggestions');
-    let debounceTimer = null;
-    let highlightIdx = -1;
-    let items = [];
+(function() {
+    const input = document.getElementById('paySearch');
+    const dropdown = document.getElementById('paySuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
 
     input.addEventListener('input', function() {
-      clearTimeout(debounceTimer);
-      const q = this.value.trim();
-      if (q.length < 2) { hide(); return; }
-      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
 
     input.addEventListener('keydown', function(e) {
-      if (!dropdown.classList.contains('visible')) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
-        updateHighlight();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        highlightIdx = Math.max(highlightIdx - 1, 0);
-        updateHighlight();
-      } else if (e.key === 'Enter' && highlightIdx >= 0) {
-        e.preventDefault();
-        selectItem(items[highlightIdx]);
-      } else if (e.key === 'Escape') {
-        hide();
-      }
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
     });
 
     document.addEventListener('click', function(e) {
-      if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
 
     function fetchSuggestions(q) {
-      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(data => {
-          items = data;
-          highlightIdx = -1;
-          if (data.length === 0) { hide(); return; }
-          dropdown.innerHTML = data.map((d, i) =>
-            '<div class="suggestion-item" data-idx="' + i + '">' +
-              '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-              '<span class="suggestion-reg">' + esc(d.reg) + '</span>' +
-            '</div>'
-          ).join('');
-          dropdown.querySelectorAll('.suggestion-item').forEach(el => {
-            el.addEventListener('mousedown', function(e) {
-              e.preventDefault();
-              selectItem(items[parseInt(this.dataset.idx)]);
-            });
-          });
-          dropdown.classList.add('visible');
-        })
-        .catch(() => hide());
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
     }
 
     function selectItem(item) {
-      input.value = item.name;
-      hide();
-      // Auto-submit the filter form
-      input.closest('form').submit();
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
     }
 
-    function hide() {
-      dropdown.classList.remove('visible');
-      dropdown.innerHTML = '';
-      highlightIdx = -1;
-      items = [];
-    }
-
-    function updateHighlight() {
-      dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => {
-        el.classList.toggle('highlighted', i === highlightIdx);
-      });
-    }
-
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s;
-      return d.innerHTML;
-    }
-  })();
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
 {% endblock %}

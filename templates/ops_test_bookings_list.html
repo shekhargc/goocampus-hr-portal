@@ -1,358 +1,132 @@
 {% extends "base.html" %}
-
-{% block title %}Test Bookings - Operations{% endblock %}
-
-{% block extra_css %}
-<style>
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-  }
-
-  .data-table thead {
-    background: var(--gray-50);
-    border-bottom: 1px solid var(--gray-200);
-  }
-
-  .data-table th {
-    padding: 0.7rem 1rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--gray-500);
-    font-weight: 600;
-    text-align: left;
-  }
-
-  .data-table td {
-    padding: 0.7rem 1rem;
-    font-size: 0.85rem;
-    border-top: 1px solid var(--gray-100);
-    color: var(--gray-700);
-  }
-
-  .data-table tbody tr:hover {
-    background: var(--gray-50);
-  }
-
-  .row-link {
-    color: var(--navy);
-    text-decoration: none;
-    font-weight: 600;
-    transition: color 0.2s;
-  }
-
-  .row-link:hover {
-    color: #F58220;
-  }
-
-  .badge-pill {
-    display: inline-block;
-    padding: 0.3rem 0.7rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
-  .badge-booked {
-    background: #EFF6FF;
-    color: #0d6efd;
-  }
-
-  .badge-attended {
-    background: #ECFDF5;
-    color: #10B981;
-  }
-
-  .badge-cancelled {
-    background: #FEF2F2;
-    color: #EF4444;
-  }
-
-  .badge-missed {
-    background: #FEF2F2;
-    color: #EF4444;
-  }
-
-  .badge-rescheduled {
-    background: #FEF3C7;
-    color: #F59E0B;
-  }
-
-  .badge-passed {
-    background: #ECFDF5;
-    color: #10B981;
-  }
-
-  .badge-failed {
-    background: #FEF2F2;
-    color: #EF4444;
-  }
-
-  .action-links {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .action-links a {
-    color: var(--navy);
-    text-decoration: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
-    transition: all 0.2s;
-  }
-
-  .action-links a:hover {
-    background: var(--gray-100);
-  }
-
-  .action-links a.delete:hover {
-    color: #EF4444;
-  }
-
-
-  /* ============ Slide-out Detail Drawer ============ */
-  .drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
-  .drawer-backdrop.open{opacity:1;visibility:visible}
-  .drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
-  .drawer.open{transform:translateX(0)}
-  .drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
-  .drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
-  .drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
-  .drawer-close:hover{color:var(--navy)}
-  .drawer-body{flex:1;overflow-y:auto;padding:24px}
-  .drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
-  .emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
-  .drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
-  .drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
-  .drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
-  .drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
-  .drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
-  .drawer-field.full{grid-column:1/-1}
-  .drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
-  .drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
-  .drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
-  .drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
-  tr.clickable-row{cursor:pointer;transition:background .15s}
-  tr.clickable-row:hover{background:var(--gray-50)!important}
-  tr.clickable-row.active-row{background:#FFF7ED!important}
-  /* ============ Autocomplete Search ============ */
-  .autocomplete-wrap{position:relative}
-  .suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
-  .suggestions-dropdown.visible{display:block}
-  .suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
-  .suggestion-item:last-child{border-bottom:none}
-  .suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
-  .suggestion-name{color:var(--gray-700);font-weight:500}
-  .suggestion-reg{color:var(--gray-500);font-size:0.75rem}
-
-  @media (max-width: 768px) {
-    .data-table {
-      font-size: 0.8rem;
-    }
-
-    .data-table th,
-    .data-table td {
-      padding: 0.5rem 0.7rem;
-    }
-
-    .action-links {
-      flex-direction: column;
-    }
-
-    .drawer {
-      width: 100%;
-    }
-  }
-</style>
-{% endblock %}
-
+{% block title %}Test Bookings{% endblock %}
 {% block content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+.badge-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-green{background:#ECFDF5;color:#065F46}
+.badge-yellow{background:#FEF3C7;color:#92400E}
+.badge-gray{background:#F3F4F6;color:#374151}
+.badge-red{background:#FEF2F2;color:#991B1B}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
-    <div>
-      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Test Bookings</h1>
-      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage test booking records &middot; Click a row to view details</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Test Bookings</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage exam and test bookings &middot; Click a row to view details</p>
+        </div>
+        <a href="/operations/test-bookings/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Test Booking
+        </a>
     </div>
-    <div style="display:flex;gap:10px;">
-      <a href="/operations/test-bookings/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Booking</a>
-      <a href="/operations/clients" style="padding:10px 20px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">← Back to Clients</a>
-    </div>
-  </div>
 
-  <!-- Stats Cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Bookings</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ records|length }}</div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Booked</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
-        {% set booked = records|selectattr('exam_status', 'equalto', 'Booked')|list %}
-        {{ booked|length }}
-      </div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Passed</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
-        {% set passed = records|selectattr('exam_result', 'equalto', 'Passed')|list %}
-        {{ passed|length }}
-      </div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Failed</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
-        {% set failed = records|selectattr('exam_result', 'equalto', 'Failed')|list %}
-        {{ failed|length }}
-      </div>
-    </div>
-  </div>
-
-  <!-- Client Filter Banner -->
-  {% if client_reg %}
-  <div style="background:#EFF6FF;border:1px solid var(--gray-200);border-radius:6px;padding:0.8rem 1rem;margin-bottom:24px;font-size:0.85rem;color:var(--gray-700);">
-    Viewing records for: <strong>{{ client_reg }}</strong>
-  </div>
-  {% endif %}
-
-  <!-- Filter Section -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <form method="GET" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:flex-end;">
-      <div class="autocomplete-wrap" style="display:flex;flex-direction:column;">
-        <label for="tbSearch" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Search</label>
-        <input
-          type="text"
-          id="tbSearch"
-          name="q"
-          placeholder="Type candidate name..."
-          value="{{ search or '' }}"
-          autocomplete="off"
-          style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);"
-        />
-        <div id="tbSuggestions" class="suggestions-dropdown"></div>
-      </div>
-      <div style="display:flex;flex-direction:column;">
-        <label for="exam" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Exam</label>
-        <select id="exam" name="exam" style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);">
-          <option value="">All Exams</option>
-          {% for exam_name in exam_names %}
-          <option value="{{ exam_name }}" {% if exam_name == exam_filter %}selected{% endif %}>
-            {{ exam_name }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <div style="display:flex;flex-direction:column;">
-        <label for="status" style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:0.5rem;text-transform:uppercase;">Status</label>
-        <select id="status" name="status" style="padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;font-family:inherit;background:white;color:var(--gray-700);">
-          <option value="">All Statuses</option>
-          {% for status in exam_statuses %}
-          <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
-            {{ status }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" style="padding:0.6rem 1.2rem;background:var(--orange);color:white;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background 0.2s;align-self:flex-end;">🔍 Filter</button>
-    </form>
-  </div>
-
-  <!-- Table -->
-  {% if records %}
-  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Client Name</th>
-          <th>Reg#</th>
-          <th>Exam</th>
-          <th>Exam Date</th>
-          <th>Status</th>
-          <th>Result</th>
-          <th>Score</th>
-          <th>Test Center</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in records %}
-        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openTbDetail({{ record.id }})">
-          <td style="font-weight:600;color:var(--navy);">{{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}</td>
-          <td>{{ record.registration_number }}</td>
-          <td>{{ record.exam or '–' }}</td>
-          <td>
-            {% if record.exam_date %}
-              {{ record.exam_date|strftime('%d %b %Y') if record.exam_date is not string else record.exam_date }}
-            {% else %}
-              –
-            {% endif %}
-          </td>
-          <td>
-            {% set status = record.exam_status %}
-            {% if status == 'Booked' %}
-              <span class="badge-pill badge-booked">{{ status }}</span>
-            {% elif status == 'Attended' %}
-              <span class="badge-pill badge-attended">{{ status }}</span>
-            {% elif status == 'Cancelled' %}
-              <span class="badge-pill badge-cancelled">{{ status }}</span>
-            {% elif status == 'Missed' %}
-              <span class="badge-pill badge-missed">{{ status }}</span>
-            {% elif status == 'Rescheduled' %}
-              <span class="badge-pill badge-rescheduled">{{ status }}</span>
-            {% else %}
-              <span class="badge-pill" style="background: #F3F4F6; color: #64748B;">{{ status }}</span>
-            {% endif %}
-          </td>
-          <td>
-            {% set result = record.exam_result %}
-            {% if result == 'Passed' %}
-              <span class="badge-pill badge-passed">{{ result }}</span>
-            {% elif result == 'Failed' %}
-              <span class="badge-pill badge-failed">{{ result }}</span>
-            {% else %}
-              –
-            {% endif %}
-          </td>
-          <td>{{ record.score or '–' }}</td>
-          <td>
-            {{ record.test_center or '–' }}
-            {% if record.notes %}
-              <div style="font-size: 0.75rem; color: var(--gray-500); margin-top: 0.2rem;">{{ record.notes }}</div>
-            {% endif %}
-          </td>
-          <td>
-            <div class="action-links">
-              <a href="/operations/test-bookings/{{ record.id }}/edit">Edit</a>
-              <a href="/operations/test-bookings/{{ record.id }}/delete" class="delete" onclick="return confirm('Are you sure?');">Delete</a>
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="q" id="tbSearch" placeholder="Type candidate name..." value="{{ search or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="tbSuggestions" class="suggestions-dropdown"></div>
             </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;padding:3rem 2rem;color:var(--gray-600);">
-    <div style="font-size:2.5rem;margin-bottom:1rem;opacity:0.5;">📭</div>
-    <p style="font-size:1rem;margin:0;">No test bookings found</p>
-    <p style="font-size:0.9rem;margin-top:0.5rem;color:var(--gray-500);">
-      {% if search or exam_filter or status_filter %}
-      Try adjusting your search or filter criteria
-      {% else %}
-      Create your first booking to get started
-      {% endif %}
-    </p>
-  </div>
-  {% endif %}
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Filter by Exam</label>
+                <select name="exam" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Exams</option>
+                    {% for exam in exam_names %}
+                    <option value="{{ exam }}" {% if exam_filter == exam %}selected{% endif %}>{{ exam }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Filter by Status</label>
+                <select name="status" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Statuses</option>
+                    {% for status in exam_statuses %}
+                    <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/test-bookings" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Exam</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Exam Date</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Status</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Result</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Score</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openTbDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.exam or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.exam_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{% if record.exam_status %}<span class="badge-pill {% if record.exam_status == 'Booked' or record.exam_status == 'Confirmed' %}badge-yellow{% elif record.exam_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.exam_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
+                        <td style="padding:12px 16px;">{% if record.exam_result %}<span class="badge-pill {% if record.exam_result == 'Passed' %}badge-green{% elif record.exam_result == 'Failed' %}badge-red{% else %}badge-gray{% endif %}">{{ record.exam_result }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
+                        <td style="padding:12px 16px;">{{ record.score or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No test bookings found.</p>
+            <a href="/operations/test-bookings/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
-<!-- Detail Drawer -->
 <div class="drawer-backdrop" id="tbBackdrop" onclick="closeTbDetail()"></div>
 <aside class="drawer" id="tbDrawer" aria-hidden="true">
     <div class="drawer-head">
@@ -383,6 +157,9 @@ const TB_RECORDS = {
         country: {{ (record.country or '')|tojson }},
         booked_by: {{ (record.booked_by or '')|tojson }},
         revaluation: {{ (record.revaluation or '')|tojson }},
+        reval_applied_date: {{ (record.reval_applied_date or '')|tojson }},
+        reval_result: {{ (record.reval_result or '')|tojson }},
+        reval_score: {{ (record.reval_score or '')|tojson }},
         notes: {{ (record.notes or '')|tojson }}
     },
     {% endfor %}
@@ -390,17 +167,17 @@ const TB_RECORDS = {
 
 let activeRowId = null;
 
-function statusBadge(val) {
+function badgeHtml(val, type) {
     if (!val) return '<span style="color:var(--gray-400);">—</span>';
-    const map = {Booked:'badge-booked',Attended:'badge-attended',Cancelled:'badge-cancelled',Missed:'badge-missed',Rescheduled:'badge-rescheduled'};
-    return `<span class="badge-pill ${map[val]||''}" style="${map[val]?'':'background:#F3F4F6;color:#64748B;'}">${val}</span>`;
-}
-
-function resultBadge(val) {
-    if (!val) return '<span style="color:var(--gray-400);">—</span>';
-    if (val === 'Passed') return '<span class="badge-pill badge-passed">' + val + '</span>';
-    if (val === 'Failed') return '<span class="badge-pill badge-failed">' + val + '</span>';
-    return val;
+    let cls = 'badge-gray';
+    if (type === 'status') {
+        if (val === 'Booked' || val === 'Confirmed') cls = 'badge-yellow';
+        else if (val === 'Completed') cls = 'badge-green';
+    } else if (type === 'result') {
+        if (val === 'Passed') cls = 'badge-green';
+        else if (val === 'Failed') cls = 'badge-red';
+    }
+    return `<span class="badge-pill ${cls}">${val}</span>`;
 }
 
 function field(label, value) {
@@ -410,6 +187,7 @@ function field(label, value) {
 function openTbDetail(id) {
     const r = TB_RECORDS[id];
     if (!r) return;
+
     if (activeRowId) {
         const prev = document.getElementById('row-' + activeRowId);
         if (prev) prev.classList.remove('active-row');
@@ -417,6 +195,7 @@ function openTbDetail(id) {
     activeRowId = id;
     const row = document.getElementById('row-' + id);
     if (row) row.classList.add('active-row');
+
     const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
 
     let html = `
@@ -427,16 +206,18 @@ function openTbDetail(id) {
             <div class="meta">${r.registration_number}</div>
         </div>
     </div>
+
     <div class="drawer-grid">
         ${field('Exam', r.exam)}
         ${field('Exam Type', r.exam_type)}
         ${field('Booking Date', r.booking_date)}
         ${field('Exam Date', r.exam_date)}
-        ${field('Status', statusBadge(r.exam_status))}
-        ${field('Result', resultBadge(r.exam_result))}
+        ${field('Status', badgeHtml(r.exam_status, 'status'))}
+        ${field('Result', badgeHtml(r.exam_result, 'result'))}
         ${field('Result Date', r.exam_result_date)}
         ${field('Score', r.score)}
     </div>
+
     <div class="drawer-section">
         <h4>Location & Details</h4>
         <div class="drawer-grid">
@@ -444,9 +225,21 @@ function openTbDetail(id) {
             ${field('City/State', r.city_state)}
             ${field('Country', r.country)}
             ${field('Booked By', r.booked_by)}
-            ${field('Revaluation', r.revaluation)}
         </div>
     </div>`;
+
+    if (r.revaluation) {
+        html += `<div class="drawer-section">
+            <h4>Revaluation</h4>
+            <div class="drawer-grid">
+                ${field('Revaluation', r.revaluation)}
+                ${field('Applied Date', r.reval_applied_date)}
+                ${field('Result', r.reval_result)}
+                ${field('Score', r.reval_score)}
+            </div>
+        </div>`;
+    }
+
     if (r.notes) {
         html += `<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">${r.notes}</p></div>`;
     }
@@ -456,6 +249,7 @@ function openTbDetail(id) {
         <a href="/operations/test-bookings/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
         <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
     `;
+
     document.getElementById('tbDrawer').classList.add('open');
     document.getElementById('tbDrawer').setAttribute('aria-hidden', 'false');
     document.getElementById('tbBackdrop').classList.add('open');
@@ -476,18 +270,19 @@ function closeTbDetail() {
 
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeTbDetail(); });
 
-/* Autocomplete */
 (function() {
     const input = document.getElementById('tbSearch');
     const dropdown = document.getElementById('tbSuggestions');
     if (!input || !dropdown) return;
     let debounceTimer = null, highlightIdx = -1, items = [];
+
     input.addEventListener('input', function() {
         clearTimeout(debounceTimer);
         const q = this.value.trim();
         if (q.length < 2) { hide(); return; }
         debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
+
     input.addEventListener('keydown', function(e) {
         if (!dropdown.classList.contains('visible')) return;
         if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
@@ -495,9 +290,11 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
         else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
         else if (e.key === 'Escape') { hide(); }
     });
+
     document.addEventListener('click', function(e) {
         if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
+
     function fetchSuggestions(q) {
         fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
             .then(r => r.json())
@@ -515,11 +312,13 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
                 dropdown.classList.add('visible');
             }).catch(() => hide());
     }
+
     function selectItem(item) {
         input.value = item.name;
         hide();
         input.closest('form').submit();
     }
+
     function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
     function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }

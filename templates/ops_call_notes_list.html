@@ -1,685 +1,275 @@
 {% extends "base.html" %}
-
-{% block title %}Call Notes - Operations{% endblock %}
-
-{% block extra_css %}
-<style>
-
-  .filter-title {
-    font-size: 0.85rem;
-    font-weight: 700;
-    color: var(--gray-700);
-    margin-bottom: 1rem;
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-  }
-
-  .filter-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 1rem;
-    margin-bottom: 1rem;
-  }
-
-  .filter-actions {
-    display: flex;
-    gap: 0.75rem;
-    align-items: center;
-    padding-top: 0.5rem;
-  }
-
-  .form-group {
-    min-width: 0;
-  }
-
-  .form-label {
-    display: block;
-    font-size: 0.78rem;
-    font-weight: 600;
-    color: var(--gray-600);
-    margin-bottom: 0.4rem;
-    text-transform: uppercase;
-  }
-
-  .form-input,
-  .form-select {
-    width: 100%;
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: white;
-    box-sizing: border-box;
-  }
-
-  .form-input:focus,
-  .form-select:focus {
-    outline: none;
-    border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(30, 58, 95, 0.1);
-  }
-
-  .active-filters {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 0.5rem;
-    margin-bottom: 1.5rem;
-  }
-
-  .filter-tag {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.4rem;
-    padding: 0.3rem 0.7rem;
-    background: var(--navy);
-    color: white;
-    border-radius: 16px;
-    font-size: 0.75rem;
-    font-weight: 500;
-  }
-
-  .filter-tag-label {
-    opacity: 0.75;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    z-index: 100;
-    max-height: 220px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .suggestion-item {
-    padding: 0.6rem 0.8rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    border-bottom: 1px solid var(--gray-100);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .suggestion-item:last-child {
-    border-bottom: none;
-  }
-
-  .suggestion-item:hover,
-  .suggestion-item.highlighted {
-    background: var(--gray-50);
-  }
-
-  .suggestion-name {
-    color: var(--gray-700);
-    font-weight: 500;
-  }
-
-  .suggestion-reg {
-    color: var(--gray-500);
-    font-size: 0.75rem;
-  }
-
-  .notes-info {
-    background: var(--gray-50);
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    padding: 0.9rem 1.2rem;
-    margin-bottom: 2rem;
-    font-size: 0.9rem;
-    color: var(--gray-600);
-  }
-
-  .notes-info p {
-    margin: 0;
-  }
-
-  .notes-container {
-    display: flex;
-    flex-direction: column;
-    gap: 1.2rem;
-  }
-
-  .note-card {
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-left: 3px solid var(--orange);
-    border-radius: 12px;
-    padding: 1.5rem;
-    transition: all 0.15s ease;
-  }
-
-  .note-card:hover {
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-  }
-
-  .note-top {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-  }
-
-  .note-client-info {
-    flex: 1;
-  }
-
-  .note-client-name {
-    font-size: 1.05rem;
-    font-weight: 600;
-    color: var(--navy);
-    margin: 0 0 0.3rem 0;
-  }
-
-  .note-reg-number {
-    font-size: 0.8rem;
-    color: var(--gray-600);
-  }
-
-  .note-date {
-    font-size: 0.9rem;
-    color: var(--gray-500);
-    white-space: nowrap;
-    text-align: right;
-  }
-
-  .note-body {
-    margin-bottom: 1.2rem;
-  }
-
-  .note-text {
-    font-size: 0.9rem;
-    line-height: 1.5;
-    color: var(--gray-700);
-    margin: 0 0 0.5rem 0;
-    overflow: hidden;
-    display: -webkit-box;
-    -webkit-line-clamp: 3;
-    -webkit-box-orient: vertical;
-    word-break: break-word;
-  }
-
-  .note-text.expanded {
-    -webkit-line-clamp: unset;
-  }
-
-  .btn-expand-note {
-    background: none;
-    border: none;
-    color: var(--navy);
-    font-size: 0.8rem;
-    font-weight: 500;
-    cursor: pointer;
-    padding: 0;
-    text-decoration: underline;
-  }
-
-  .btn-expand-note:hover {
-    color: var(--orange);
-  }
-
-  .note-footer {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding-top: 1rem;
-    border-top: 1px solid var(--gray-100);
-    gap: 1rem;
-  }
-
-  .note-added-by {
-    font-size: 0.8rem;
-    color: var(--gray-600);
-    font-style: italic;
-  }
-
-  .note-actions {
-    display: flex;
-    gap: 0.75rem;
-  }
-
-  .btn-sm {
-    padding: 0.4rem 0.8rem;
-    font-size: 0.75rem;
-    border-radius: 4px;
-    text-decoration: none;
-    cursor: pointer;
-    border: none;
-    font-weight: 500;
-    display: inline-block;
-  }
-
-  .btn-edit {
-    background: var(--navy);
-    color: white;
-  }
-
-  .btn-edit:hover {
-    background: #152847;
-  }
-
-  .btn-delete {
-    background: #ef4444;
-    color: white;
-  }
-
-  .btn-delete:hover {
-    background: #dc2626;
-  }
-
-  .empty-state {
-    text-align: center;
-    padding: 3rem 1.5rem;
-    background: white;
-    border-radius: 8px;
-    border: 1px solid var(--gray-200);
-  }
-
-  .empty-state-icon {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-  }
-
-  .empty-state-title {
-    font-size: 1.1rem;
-    font-weight: 600;
-    color: var(--gray-700);
-    margin-bottom: 0.5rem;
-  }
-
-  .empty-state-text {
-    color: var(--gray-500);
-    font-size: 0.9rem;
-  }
-
-  .empty-state-text a {
-    color: var(--navy);
-    text-decoration: none;
-    font-weight: 600;
-  }
-
-  .empty-state-text a:hover {
-    text-decoration: underline;
-  }
-
-  .pagination-controls {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    gap: 0.5rem;
-    margin-top: 2rem;
-    flex-wrap: wrap;
-  }
-
-  .pagination-btn {
-    padding: 0.5rem 0.8rem;
-    border: 1px solid var(--gray-300);
-    border-radius: 4px;
-    background: white;
-    color: var(--navy);
-    text-decoration: none;
-    font-size: 0.85rem;
-    font-weight: 500;
-    cursor: pointer;
-    transition: all 0.2s;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    min-width: 36px;
-    min-height: 36px;
-  }
-
-  .pagination-btn:hover {
-    background: var(--gray-100);
-    border-color: var(--gray-400);
-  }
-
-  .pagination-btn.active {
-    background: var(--navy);
-    color: white;
-    border-color: var(--navy);
-  }
-
-  .pagination-btn.disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-    pointer-events: none;
-  }
-
-  .pagination-dots {
-    color: var(--gray-500);
-    padding: 0 0.25rem;
-  }
-
-  @media (max-width: 768px) {
-    .filter-grid {
-      grid-template-columns: 1fr;
-    }
-
-    .note-top {
-      flex-direction: column;
-      gap: 0.5rem;
-    }
-
-    .note-date {
-      text-align: left;
-    }
-
-    .note-footer {
-      flex-direction: column;
-      align-items: flex-start;
-    }
-
-    .note-actions {
-      width: 100%;
-    }
-
-    .note-actions .btn-sm {
-      flex: 1;
-      text-align: center;
-    }
-
-    .active-filters {
-      flex-wrap: wrap;
-    }
-  }
-</style>
-{% endblock %}
-
+{% block title %}Call Notes{% endblock %}
 {% block content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+.pagination{display:flex;justify-content:center;gap:10px;padding:20px;align-items:center}
+.pagination a{padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;color:var(--navy);font-weight:600;font-size:14px}
+.pagination a:hover{background:var(--gray-50)}
+.pagination span{padding:8px 12px;color:var(--gray-600);font-size:14px}
+</style>
+
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
-    <div>
-      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Call Notes</h1>
-      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage call note records &middot; {{ total_count }} notes</p>
-    </div>
-    <div style="display:flex;gap:10px;">
-      <a href="/operations/call-notes/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Note</a>
-      <a href="/operations/plab" style="padding:10px 20px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">← Back to Clients</a>
-    </div>
-  </div>
-
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">{% if has_filters %}Matching Notes{% else %}Total Notes{% endif %}</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ total_count }}</div>
-    </div>
-  </div>
-
-  {% if has_filters %}
-  <div class="active-filters">
-    {% if reg %}
-      <span class="filter-tag"><span class="filter-tag-label">Reg#:</span> {{ reg }}</span>
-    {% endif %}
-    {% if client_name %}
-      <span class="filter-tag"><span class="filter-tag-label">Client:</span> {{ client_name }}</span>
-    {% endif %}
-    {% if added_by_filter %}
-      <span class="filter-tag"><span class="filter-tag-label">Added by:</span> {{ added_by_filter }}</span>
-    {% endif %}
-    {% if note_search %}
-      <span class="filter-tag"><span class="filter-tag-label">Notes:</span> {{ note_search }}</span>
-    {% endif %}
-  </div>
-  {% endif %}
-
-  <form method="get" style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div class="filter-title">Filter Call Notes</div>
-    <div class="filter-grid">
-      <div class="form-group">
-        <label for="reg" class="form-label">Registration Number</label>
-        <input type="text" id="reg" name="reg" class="form-input"
-          placeholder="e.g. GCUKIP/24-25/001"
-          value="{{ reg or '' }}">
-      </div>
-      <div class="form-group" style="position:relative;">
-        <label for="client_name" class="form-label">Client Name</label>
-        <input type="text" id="client_name" name="client_name" class="form-input"
-          placeholder="Start typing a name..."
-          value="{{ client_name or '' }}"
-          autocomplete="off">
-        <div id="name-suggestions" class="suggestions-dropdown"></div>
-      </div>
-      <div class="form-group">
-        <label for="added_by" class="form-label">Added By</label>
-        <select id="added_by" name="added_by" class="form-select">
-          <option value="">All Team Members</option>
-          {% for person in added_by_options %}
-            <option value="{{ person }}" {% if added_by_filter == person %}selected{% endif %}>{{ person }}</option>
-          {% endfor %}
-        </select>
-      </div>
-      <div class="form-group">
-        <label for="note_search" class="form-label">Search in Notes</label>
-        <input type="text" id="note_search" name="note_search" class="form-input"
-          placeholder="Search note content..."
-          value="{{ note_search or '' }}">
-      </div>
-    </div>
-    <div class="filter-actions">
-      <button type="submit" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Apply Filters</button>
-      {% if has_filters %}
-        <a href="/operations/call-notes" style="padding:10px 20px;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">Clear All Filters</a>
-      {% endif %}
-    </div>
-  </form>
-
-  {% if total_count > 0 %}
-  <div class="pagination-info">
-    <p>Showing page {{ page }} of {{ total_pages }} ({{ total_count }} total notes)</p>
-  </div>
-  {% endif %}
-
-  {% if records %}
-    <div class="notes-container">
-      {% for record in records %}
-        <div class="note-card" data-note-id="{{ record.id }}">
-          <div class="note-top">
-            <div class="note-client-info">
-              <h3 class="note-client-name">
-                {% if record.prefix %}{{ record.prefix }} {% endif %}{{ record.first_name }} {{ record.last_name }}
-              </h3>
-              <span class="note-reg-number">{{ record.registration_number or 'N/A' }}</span>
-            </div>
-            <div class="note-date">{{ record.call_date or 'N/A' }}</div>
-          </div>
-
-          <div class="note-body">
-            <p class="note-text" id="note-text-{{ record.id }}">{{ record.call_note or '(No note text)' }}</p>
-            {% if record.call_note and record.call_note|length > 200 %}
-              <button type="button" class="btn-expand-note" onclick="toggleNoteExpand({{ record.id }})">Show more</button>
-            {% endif %}
-          </div>
-
-          <div class="note-footer">
-            <span class="note-added-by">Added by {{ record.added_by or 'System' }}</span>
-            <div class="note-actions">
-              <a href="/operations/call-notes/{{ record.id }}/edit" class="btn-sm btn-edit">Edit</a>
-              <form method="POST" action="/operations/call-notes/{{ record.id }}/delete" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this note?');">
-                <button type="submit" class="btn-sm btn-delete">Delete</button>
-              </form>
-            </div>
-          </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Call Notes</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage call notes and communications &middot; Click a row to view details</p>
         </div>
-      {% endfor %}
+        <a href="/operations/call-notes/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Call Note
+        </a>
     </div>
 
-    {# Build filter query string for pagination links #}
-    {% set fq = '' %}
-    {% if reg %}{% set fq = fq ~ '&reg=' ~ reg %}{% endif %}
-    {% if client_name %}{% set fq = fq ~ '&client_name=' ~ client_name %}{% endif %}
-    {% if added_by_filter %}{% set fq = fq ~ '&added_by=' ~ added_by_filter %}{% endif %}
-    {% if note_search %}{% set fq = fq ~ '&note_search=' ~ note_search %}{% endif %}
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="q" id="cnSearch" placeholder="Type candidate name..." value="{{ search or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="cnSuggestions" class="suggestions-dropdown"></div>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Added By</label>
+                <select name="added_by" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Users</option>
+                    {% for opt in added_by_options %}
+                    <option value="{{ opt }}" {% if added_by_filter == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search Notes</label>
+                <input type="text" name="note_search" placeholder="Search within notes..." value="{{ note_search or '' }}" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/call-notes" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Call Date</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Call Note</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Added By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCnDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.call_date or '—' }}</td>
+                        <td style="padding:12px 16px;color:var(--gray-600);font-size:13px;">{{ (record.call_note or '')[:80] }}{% if (record.call_note or '')|length > 80 %}...{% endif %}</td>
+                        <td style="padding:12px 16px;">{{ record.added_by or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No call notes found.</p>
+            <a href="/operations/call-notes/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
 
     {% if total_pages > 1 %}
-    <div class="pagination-controls">
-      {% if page > 1 %}
-        <a href="?page=1{{ fq }}" class="pagination-btn">« First</a>
-        <a href="?page={{ page - 1 }}{{ fq }}" class="pagination-btn">‹ Previous</a>
-      {% else %}
-        <span class="pagination-btn disabled">« First</span>
-        <span class="pagination-btn disabled">‹ Previous</span>
-      {% endif %}
-
-      {% set start_page = [page - 2, 1]|max %}
-      {% set end_page = [page + 2, total_pages]|min %}
-
-      {% if start_page > 1 %}
-        <a href="?page=1{{ fq }}" class="pagination-btn">1</a>
-        {% if start_page > 2 %}
-          <span class="pagination-dots">…</span>
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/operations/call-notes?page={{ page - 1 }}{% if search %}&q={{ search }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Previous</a>
         {% endif %}
-      {% endif %}
-
-      {% for p in range(start_page, end_page + 1) %}
-        {% if p == page %}
-          <span class="pagination-btn active">{{ p }}</span>
-        {% else %}
-          <a href="?page={{ p }}{{ fq }}" class="pagination-btn">{{ p }}</a>
+        <span>Page {{ page }} of {{ total_pages }}</span>
+        {% if page < total_pages %}
+        <a href="/operations/call-notes?page={{ page + 1 }}{% if search %}&q={{ search }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Next</a>
         {% endif %}
-      {% endfor %}
-
-      {% if end_page < total_pages %}
-        {% if end_page < total_pages - 1 %}
-          <span class="pagination-dots">…</span>
-        {% endif %}
-        <a href="?page={{ total_pages }}{{ fq }}" class="pagination-btn">{{ total_pages }}</a>
-      {% endif %}
-
-      {% if page < total_pages %}
-        <a href="?page={{ page + 1 }}{{ fq }}" class="pagination-btn">Next ›</a>
-        <a href="?page={{ total_pages }}{{ fq }}" class="pagination-btn">Last »</a>
-      {% else %}
-        <span class="pagination-btn disabled">Next ›</span>
-        <span class="pagination-btn disabled">Last »</span>
-      {% endif %}
     </div>
     {% endif %}
-  {% else %}
-    <div class="empty-state">
-      <div class="empty-state-icon">📝</div>
-      <div class="empty-state-title">No Call Notes Found</div>
-      <div class="empty-state-text">
-        {% if has_filters %}
-          No notes match your filters. Try adjusting your search criteria.
-        {% else %}
-          No call notes have been added yet. <a href="/operations/call-notes/add">Add the first one</a>.
-        {% endif %}
-      </div>
-    </div>
-  {% endif %}
 </div>
 
-<script>
-  function toggleNoteExpand(noteId) {
-    const noteText = document.getElementById(`note-text-${noteId}`);
-    const button = event.target;
-    if (noteText.classList.contains('expanded')) {
-      noteText.classList.remove('expanded');
-      button.textContent = 'Show more';
-    } else {
-      noteText.classList.add('expanded');
-      button.textContent = 'Show less';
-    }
-  }
+<div class="drawer-backdrop" id="cnBackdrop" onclick="closeCnDetail()"></div>
+<aside class="drawer" id="cnDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Call Note Details</h3>
+        <button class="drawer-close" type="button" onclick="closeCnDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="cnDrawerBody"></div>
+    <div class="drawer-actions" id="cnDrawerActions"></div>
+</aside>
 
-  // Client name autocomplete
-  (function() {
-    const input = document.getElementById('client_name');
-    const dropdown = document.getElementById('name-suggestions');
-    let debounceTimer = null;
-    let highlightIdx = -1;
-    let items = [];
+<script>
+const CN_RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        call_date: {{ (record.call_date or '')|tojson }},
+        call_note: {{ (record.call_note or '')|tojson }},
+        added_by: {{ (record.added_by or '')|tojson }}
+    },
+    {% endfor %}
+};
+
+let activeRowId = null;
+
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
+
+function openCnDetail(id) {
+    const r = CN_RECORDS[id];
+    if (!r) return;
+
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        ${field('Call Date', r.call_date)}
+        ${field('Added By', r.added_by)}
+    </div>
+
+    <div class="drawer-field full" style="margin-top:24px;">
+        <div class="label">Call Note</div>
+        <div class="value" style="white-space:pre-wrap;word-break:break-word;">${r.call_note || '<span style="color:var(--gray-400);">—</span>'}</div>
+    </div>`;
+
+    document.getElementById('cnDrawerBody').innerHTML = html;
+    document.getElementById('cnDrawerActions').innerHTML = `
+        <a href="/operations/call-notes/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
+    document.getElementById('cnDrawer').classList.add('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('cnBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCnDetail() {
+    document.getElementById('cnDrawer').classList.remove('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('cnBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCnDetail(); });
+
+(function() {
+    const input = document.getElementById('cnSearch');
+    const dropdown = document.getElementById('cnSuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
 
     input.addEventListener('input', function() {
-      clearTimeout(debounceTimer);
-      const q = this.value.trim();
-      if (q.length < 2) { hide(); return; }
-      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
 
     input.addEventListener('keydown', function(e) {
-      if (!dropdown.classList.contains('visible')) return;
-      if (e.key === 'ArrowDown') {
-        e.preventDefault();
-        highlightIdx = Math.min(highlightIdx + 1, items.length - 1);
-        updateHighlight();
-      } else if (e.key === 'ArrowUp') {
-        e.preventDefault();
-        highlightIdx = Math.max(highlightIdx - 1, 0);
-        updateHighlight();
-      } else if (e.key === 'Enter' && highlightIdx >= 0) {
-        e.preventDefault();
-        selectItem(items[highlightIdx]);
-      } else if (e.key === 'Escape') {
-        hide();
-      }
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
     });
 
     document.addEventListener('click', function(e) {
-      if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
 
     function fetchSuggestions(q) {
-      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
-        .then(r => r.json())
-        .then(data => {
-          items = data;
-          highlightIdx = -1;
-          if (data.length === 0) { hide(); return; }
-          dropdown.innerHTML = data.map((d, i) =>
-            '<div class="suggestion-item" data-idx="' + i + '">' +
-              '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-              '<span class="suggestion-reg">' + esc(d.reg) + '</span>' +
-            '</div>'
-          ).join('');
-          dropdown.querySelectorAll('.suggestion-item').forEach(el => {
-            el.addEventListener('mousedown', function(e) {
-              e.preventDefault();
-              selectItem(items[parseInt(this.dataset.idx)]);
-            });
-          });
-          dropdown.classList.add('visible');
-        })
-        .catch(() => hide());
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
     }
 
     function selectItem(item) {
-      input.value = item.name;
-      hide();
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
     }
 
-    function hide() {
-      dropdown.classList.remove('visible');
-      dropdown.innerHTML = '';
-      highlightIdx = -1;
-      items = [];
-    }
-
-    function updateHighlight() {
-      dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => {
-        el.classList.toggle('highlighted', i === highlightIdx);
-      });
-    }
-
-    function esc(s) {
-      const d = document.createElement('div');
-      d.textContent = s;
-      return d.innerHTML;
-    }
-  })();
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
 {% endblock %}

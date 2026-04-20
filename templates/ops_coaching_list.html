@@ -1,567 +1,135 @@
 {% extends "base.html" %}
-
-{% block title %}Coaching & Training - Operations{% endblock %}
-
-{% block extra_css %}
-<style>
-  .form-group label {
-    font-size: 0.8rem;
-    font-weight: 600;
-    color: var(--gray-600);
-    margin-bottom: 0.5rem;
-    text-transform: uppercase;
-  }
-
-  .form-group input,
-  .form-group select {
-    padding: 0.6rem 0.8rem;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 0.85rem;
-    font-family: inherit;
-    background: white;
-    color: var(--gray-700);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus {
-    outline: none;
-    border-color: var(--navy);
-    box-shadow: 0 0 0 3px rgba(27, 42, 74, 0.1);
-  }
-
-  .data-table {
-    width: 100%;
-    border-collapse: collapse;
-    background: white;
-  }
-
-  .data-table thead {
-    background: var(--gray-50);
-    border-bottom: 1px solid var(--gray-200);
-  }
-
-  .data-table th {
-    padding: 0.7rem 1rem;
-    font-size: 0.75rem;
-    text-transform: uppercase;
-    color: var(--gray-500);
-    font-weight: 600;
-    text-align: left;
-  }
-
-  .data-table td {
-    padding: 0.7rem 1rem;
-    font-size: 0.85rem;
-    border-top: 1px solid var(--gray-100);
-    color: var(--gray-700);
-  }
-
-  .data-table tbody tr:hover {
-    background: var(--gray-50);
-  }
-
-  .row-link {
-    color: var(--navy);
-    text-decoration: none;
-    font-weight: 600;
-    transition: color 0.2s;
-  }
-
-  .row-link:hover {
-    color: #F58220;
-  }
-
-  .badge-pill {
-    display: inline-block;
-    padding: 0.3rem 0.7rem;
-    border-radius: 12px;
-    font-size: 0.7rem;
-    font-weight: 600;
-    white-space: nowrap;
-  }
-
-  .badge-on-going {
-    background: #ECFDF5;
-    color: #10B981;
-  }
-
-  .badge-completed {
-    background: #EFF6FF;
-    color: #3B82F6;
-  }
-
-  .badge-pending {
-    background: #FEF3C7;
-    color: #F59E0B;
-  }
-
-  .badge-cancelled {
-    background: #FEF2F2;
-    color: #EF4444;
-  }
-
-  .action-links {
-    display: flex;
-    gap: 0.5rem;
-  }
-
-  .action-links a {
-    color: var(--navy);
-    text-decoration: none;
-    font-size: 0.8rem;
-    font-weight: 600;
-    padding: 0.3rem 0.6rem;
-    border-radius: 4px;
-    transition: all 0.2s;
-  }
-
-  .action-links a:hover {
-    background: var(--gray-100);
-  }
-
-  .action-links a.delete:hover {
-    color: #EF4444;
-  }
-
-  .empty-state-icon {
-    font-size: 2.5rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  .empty-state p {
-    font-size: 1rem;
-    margin: 0;
-  }
-
-  /* ============ Slide-out Detail Drawer ============ */
-  .drawer-backdrop {
-    position: fixed;
-    inset: 0;
-    background: rgba(15, 27, 51, 0.35);
-    opacity: 0;
-    visibility: hidden;
-    transition: opacity 0.25s, visibility 0.25s;
-    z-index: 900;
-  }
-
-  .drawer-backdrop.open {
-    opacity: 1;
-    visibility: visible;
-  }
-
-  .drawer {
-    position: fixed;
-    top: 0;
-    right: 0;
-    bottom: 0;
-    width: 520px;
-    max-width: 100%;
-    background: white;
-    box-shadow: -8px 0 30px rgba(15, 27, 51, 0.15);
-    transform: translateX(100%);
-    transition: transform 0.3s ease;
-    z-index: 950;
-    display: flex;
-    flex-direction: column;
-    overflow: hidden;
-  }
-
-  .drawer.open {
-    transform: translateX(0);
-  }
-
-  .drawer-head {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 20px 24px;
-    border-bottom: 1px solid var(--gray-200);
-    background: var(--gray-50);
-  }
-
-  .drawer-head h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 700;
-    color: var(--navy);
-  }
-
-  .drawer-close {
-    background: none;
-    border: none;
-    font-size: 28px;
-    color: var(--gray-500);
-    cursor: pointer;
-    padding: 0;
-    line-height: 1;
-  }
-
-  .drawer-close:hover {
-    color: var(--navy);
-  }
-
-  .drawer-body {
-    flex: 1;
-    overflow-y: auto;
-    padding: 24px;
-  }
-
-  .drawer-emp {
-    display: flex;
-    align-items: center;
-    gap: 14px;
-    margin-bottom: 24px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid var(--gray-200);
-  }
-
-  .emp-avatar-lg-ph {
-    width: 56px;
-    height: 56px;
-    border-radius: 50%;
-    background: var(--orange);
-    color: white;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 20px;
-    font-weight: 700;
-    flex-shrink: 0;
-  }
-
-  .drawer-emp .name {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
-
-  .drawer-emp .meta {
-    font-size: 13px;
-    color: var(--gray-500);
-    margin-top: 2px;
-  }
-
-  .drawer-grid {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 16px 24px;
-  }
-
-  .drawer-field .label {
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--gray-500);
-    margin-bottom: 4px;
-  }
-
-  .drawer-field .value {
-    font-size: 14px;
-    color: var(--navy);
-    font-weight: 500;
-  }
-
-  .drawer-field.full {
-    grid-column: 1 / -1;
-  }
-
-  .drawer-section {
-    margin-top: 24px;
-    padding-top: 20px;
-    border-top: 1px solid var(--gray-200);
-  }
-
-  .drawer-section h4 {
-    font-size: 13px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    color: var(--gray-500);
-    margin: 0 0 14px 0;
-  }
-
-  .drawer-actions {
-    padding: 16px 24px;
-    border-top: 1px solid var(--gray-200);
-    display: flex;
-    gap: 10px;
-  }
-
-  .drawer-actions a {
-    flex: 1;
-    text-align: center;
-    padding: 10px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 14px;
-    text-decoration: none;
-    background: var(--navy);
-    color: white;
-    transition: background 0.2s;
-  }
-
-  .drawer-actions a:hover {
-    background: #0F1B33;
-  }
-
-  tr.clickable-row {
-    cursor: pointer;
-    transition: background 0.15s;
-  }
-
-  tr.clickable-row:hover {
-    background: var(--gray-50) !important;
-  }
-
-  tr.clickable-row.active-row {
-    background: #FFF7ED !important;
-  }
-
-  /* ============ Autocomplete Search ============ */
-  .autocomplete-wrap {
-    position: relative;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .suggestion-item {
-    padding: 0.6rem 0.8rem;
-    cursor: pointer;
-    font-size: 0.85rem;
-    border-bottom: 1px solid var(--gray-100);
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-  }
-
-  .suggestion-item:last-child {
-    border-bottom: none;
-  }
-
-  .suggestion-item:hover,
-  .suggestion-item.highlighted {
-    background: var(--gray-50);
-  }
-
-  .suggestion-name {
-    color: var(--gray-700);
-    font-weight: 500;
-  }
-
-  .suggestion-reg {
-    color: var(--gray-500);
-    font-size: 0.75rem;
-  }
-
-  @media (max-width: 768px) {
-    .data-table {
-      font-size: 0.8rem;
-    }
-
-    .data-table th,
-    .data-table td {
-      padding: 0.5rem 0.7rem;
-    }
-
-    .action-links {
-      flex-direction: column;
-    }
-
-    .drawer {
-      width: 100%;
-    }
-  }
-</style>
-{% endblock %}
-
+{% block title %}Coaching & Training{% endblock %}
 {% block content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin-bottom:4px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:500}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+.badge-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-green{background:#ECFDF5;color:#065F46}
+.badge-yellow{background:#FEF3C7;color:#92400E}
+.badge-gray{background:#F3F4F6;color:#374151}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+</style>
+
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
-  <!-- Header -->
-  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
-    <div>
-      <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Coaching & Training</h1>
-      <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage coaching records &middot; Click a row to view details</p>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Coaching & Training</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage coaching and training records for PLAB clients &middot; Click a row to view details</p>
+        </div>
+        <a href="/operations/coaching/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Coaching Record
+        </a>
     </div>
-    <div style="display:flex;gap:10px;">
-      <a href="/operations/coaching/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">+ Add Training</a>
-      <a href="/operations/clients" style="padding:10px 20px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">← Back to Clients</a>
-    </div>
-  </div>
 
-  <!-- Stats Cards -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;margin-bottom:24px;">
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Total Records</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">{{ records|length }}</div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Active Training</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
-        {% set active = records|selectattr('coaching_status', 'equalto', 'On Going')|list %}
-        {{ active|length }}
-      </div>
-    </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <div style="font-size:0.75rem;color:var(--gray-500);font-weight:600;text-transform:uppercase;">Completed</div>
-      <div style="font-size:1.6rem;font-weight:700;color:var(--navy);margin-top:0.3rem;">
-        {% set completed = records|selectattr('coaching_status', 'equalto', 'Completed')|list %}
-        {{ completed|length }}
-      </div>
-    </div>
-  </div>
-
-  <!-- Client Filter Banner -->
-  {% if client_reg %}
-  <div class="filter-banner">
-    Viewing records for: <strong>{{ client_reg }}</strong>
-  </div>
-  {% endif %}
-
-  <!-- Filter Section -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <form method="GET" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:1rem;align-items:flex-end;">
-      <div class="form-group autocomplete-wrap">
-        <label for="coachSearch">Search</label>
-        <input
-          type="text"
-          id="coachSearch"
-          name="q"
-          placeholder="Type candidate name..."
-          value="{{ search or '' }}"
-          autocomplete="off"
-        />
-        <div id="coachSuggestions" class="suggestions-dropdown"></div>
-      </div>
-      <div class="form-group">
-        <label for="status">Status</label>
-        <select id="status" name="status">
-          <option value="">All Statuses</option>
-          {% for status in coaching_statuses %}
-          <option value="{{ status }}" {% if status == status_filter %}selected{% endif %}>
-            {{ status }}
-          </option>
-          {% endfor %}
-        </select>
-      </div>
-      <button type="submit" style="padding:0.6rem 1.2rem;background:var(--orange);color:white;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;transition:background 0.2s;align-self:flex-end;">🔍 Filter</button>
-    </form>
-  </div>
-
-  <!-- Table -->
-  {% if records %}
-  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
-    <table class="data-table">
-      <thead>
-        <tr>
-          <th>Client Name</th>
-          <th>Reg#</th>
-          <th>Course Type</th>
-          <th>Method</th>
-          <th>Status</th>
-          <th>Batch</th>
-          <th>Start Date</th>
-          <th>End Date</th>
-          <th>Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for record in records %}
-        <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCoachDetail({{ record.id }})">
-          <td>
-            {{ record.prefix or '' }} {{ record.first_name }} {{ record.last_name }}
-          </td>
-          <td>
-            {{ record.registration_number }}
-          </td>
-          <td>{{ record.course_type or '–' }}</td>
-          <td>{{ record.coaching_method or '–' }}</td>
-          <td>
-            {% set status = record.coaching_status %}
-            {% if status == 'On Going' %}
-              <span class="badge-pill badge-on-going">{{ status }}</span>
-            {% elif status == 'Completed' %}
-              <span class="badge-pill badge-completed">{{ status }}</span>
-            {% elif status == 'Pending' %}
-              <span class="badge-pill badge-pending">{{ status }}</span>
-            {% elif status == 'Cancelled' %}
-              <span class="badge-pill badge-cancelled">{{ status }}</span>
-            {% else %}
-              <span class="badge-pill" style="background: #F3F4F6; color: #64748B;">{{ status }}</span>
-            {% endif %}
-          </td>
-          <td>
-            {% if record.batch_month and record.batch_year %}
-              {{ record.batch_month }}/{{ record.batch_year }}
-            {% else %}
-              –
-            {% endif %}
-          </td>
-          <td>{{ record.start_date or '–' }}</td>
-          <td>{{ record.end_date or '–' }}</td>
-          <td>
-            <div class="action-links">
-              <a href="/operations/coaching/{{ record.id }}/edit" onclick="event.stopPropagation();">Edit</a>
-              <a href="/operations/coaching/{{ record.id }}/delete" class="delete" onclick="event.stopPropagation(); return confirm('Are you sure?');">Delete</a>
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="q" id="coachingSearch" placeholder="Type candidate name..." value="{{ search or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="coachingSuggestions" class="suggestions-dropdown"></div>
             </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-  </div>
-  {% else %}
-  <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);text-align:center;padding:3rem 2rem;color:var(--gray-600);">
-    <div class="empty-state-icon">📭</div>
-    <p>No coaching records found</p>
-    <p style="font-size: 0.9rem; margin-top: 0.5rem; color: var(--gray-500);">
-      {% if search or status_filter %}
-      Try adjusting your search or filter criteria
-      {% else %}
-      Add your first training record to get started
-      {% endif %}
-    </p>
-  </div>
-  {% endif %}
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Filter by Status</label>
+                <select name="status" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Statuses</option>
+                    {% for status in coaching_statuses %}
+                    <option value="{{ status }}" {% if status_filter == status %}selected{% endif %}>{{ status }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div></div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/coaching" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Course Type</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Method</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Status</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Start Date</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">End Date</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCoachingDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.course_type or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.coaching_method or '—' }}</td>
+                        <td style="padding:12px 16px;">{% if record.coaching_status %}<span class="badge-pill {% if record.coaching_status == 'On Going' or record.coaching_status == 'In Progress' %}badge-yellow{% elif record.coaching_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.coaching_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
+                        <td style="padding:12px 16px;">{{ record.start_date or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.end_date or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No coaching records found.</p>
+            <a href="/operations/coaching/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
 </div>
 
-<!-- Drawer Backdrop -->
-<div class="drawer-backdrop" id="coachBackdrop" onclick="closeCoachDetail()"></div>
-
-<!-- Detail Drawer -->
-<aside class="drawer" id="coachDrawer" aria-hidden="true">
-  <div class="drawer-head">
-    <h3>Coaching & Training Details</h3>
-    <button class="drawer-close" type="button" onclick="closeCoachDetail()" aria-label="Close">&times;</button>
-  </div>
-  <div class="drawer-body" id="coachDrawerBody"></div>
-  <div class="drawer-actions" id="coachDrawerActions"></div>
+<div class="drawer-backdrop" id="coachingBackdrop" onclick="closeCoachingDetail()"></div>
+<aside class="drawer" id="coachingDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Coaching & Training Details</h3>
+        <button class="drawer-close" type="button" onclick="closeCoachingDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="coachingDrawerBody"></div>
+    <div class="drawer-actions" id="coachingDrawerActions"></div>
 </aside>
 
 <script>
-// Data object with all coaching records
-const COACH_RECORDS = {
+const COACHING_RECORDS = {
     {% for record in records %}
     {{ record.id }}: {
         id: {{ record.id }},
@@ -574,239 +142,162 @@ const COACH_RECORDS = {
         batch_year: {{ (record.batch_year or '')|tojson }},
         start_date: {{ (record.start_date or '')|tojson }},
         end_date: {{ (record.end_date or '')|tojson }},
-        notes: {{ (record.notes or '')|tojson }}
+        english_training: {{ (record.english_training or '')|tojson }},
+        blueprint_stage: {{ (record.blueprint_stage or '')|tojson }},
+        attendance: {{ (record.attendance or '')|tojson }},
+        ielts_vendor: {{ (record.ielts_vendor or '')|tojson }},
+        oet_vendor: {{ (record.oet_vendor or '')|tojson }},
+        other_vendor: {{ (record.other_vendor or '')|tojson }},
+        plab1_partner: {{ (record.plab1_partner or '')|tojson }},
+        plab2_vendor: {{ (record.plab2_vendor or '')|tojson }}
     },
     {% endfor %}
 };
 
-// Open drawer with record details
-function openCoachDetail(recordId) {
-  const record = COACH_RECORDS[recordId];
-  if (!record) return;
+let activeRowId = null;
 
-  const drawer = document.getElementById('coachDrawer');
-  const backdrop = document.getElementById('coachBackdrop');
-  const body = document.getElementById('coachDrawerBody');
-  const actionsDiv = document.getElementById('coachDrawerActions');
+function badgeHtml(val) {
+    if (!val) return '<span style="color:var(--gray-400);">—</span>';
+    let cls = 'badge-gray';
+    if (val === 'Completed') cls = 'badge-green';
+    else if (val === 'On Going' || val === 'In Progress') cls = 'badge-yellow';
+    return `<span class="badge-pill ${cls}">${val}</span>`;
+}
 
-  // Get initials for avatar
-  const initials = record.name
-    .split(' ')
-    .filter(n => n.length > 0)
-    .map(n => n[0].toUpperCase())
-    .slice(0, 2)
-    .join('');
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
 
-  // Build status badge
-  let statusBadgeClass = 'badge-on-going';
-  if (record.coaching_status === 'Completed') {
-    statusBadgeClass = 'badge-completed';
-  } else if (record.coaching_status === 'Pending') {
-    statusBadgeClass = 'badge-pending';
-  } else if (record.coaching_status === 'Cancelled') {
-    statusBadgeClass = 'badge-cancelled';
-  }
+function openCoachingDetail(id) {
+    const r = COACHING_RECORDS[id];
+    if (!r) return;
 
-  // Build batch display
-  const batchDisplay = record.batch_month && record.batch_year
-    ? `${record.batch_month}/${record.batch_year}`
-    : '–';
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
 
-  // Build drawer content
-  let html = `
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
     <div class="drawer-emp">
-      <div class="emp-avatar-lg-ph">${initials || '?'}</div>
-      <div>
-        <p class="name">${record.name}</p>
-        <p class="meta">Reg# ${record.registration_number || '–'}</p>
-      </div>
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.registration_number}</div>
+        </div>
     </div>
 
     <div class="drawer-grid">
-      <div class="drawer-field">
-        <div class="label">Course Type</div>
-        <div class="value">${record.course_type || '–'}</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Coaching Method</div>
-        <div class="value">${record.coaching_method || '–'}</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Status</div>
-        <div class="value"><span class="badge-pill ${statusBadgeClass}">${record.coaching_status || '–'}</span></div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Batch</div>
-        <div class="value">${batchDisplay}</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">Start Date</div>
-        <div class="value">${record.start_date || '–'}</div>
-      </div>
-      <div class="drawer-field">
-        <div class="label">End Date</div>
-        <div class="value">${record.end_date || '–'}</div>
-      </div>
-  `;
+        ${field('Course Type', r.course_type)}
+        ${field('Method', r.coaching_method)}
+        ${field('Status', badgeHtml(r.coaching_status))}
+        ${field('Batch', (r.batch_month ? r.batch_month + ' ' + (r.batch_year || '') : ''))}
+        ${field('Start Date', r.start_date)}
+        ${field('End Date', r.end_date)}
+    </div>
 
-  // Add notes section if present
-  if (record.notes) {
-    html += `
-      <div class="drawer-section" style="grid-column: 1 / -1;">
-        <h4>Notes</h4>
-        <div class="value">${record.notes}</div>
-      </div>
+    <div class="drawer-section">
+        <h4>Training Details</h4>
+        <div class="drawer-grid">
+            ${field('English Training', r.english_training)}
+            ${field('Blueprint Stage', r.blueprint_stage)}
+            ${field('Attendance', r.attendance)}
+        </div>
+    </div>
+
+    <div class="drawer-section">
+        <h4>Vendors</h4>
+        <div class="drawer-grid">
+            ${field('IELTS Vendor', r.ielts_vendor)}
+            ${field('OET Vendor', r.oet_vendor)}
+            ${field('Other Vendor', r.other_vendor)}
+            ${field('PLAB1 Partner', r.plab1_partner)}
+            ${field('PLAB2 Vendor', r.plab2_vendor)}
+        </div>
+    </div>`;
+
+    document.getElementById('coachingDrawerBody').innerHTML = html;
+    document.getElementById('coachingDrawerActions').innerHTML = `
+        <a href="/operations/coaching/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
     `;
-  }
 
-  html += `</div>`;
-
-  body.innerHTML = html;
-
-  // Build actions
-  actionsDiv.innerHTML = `
-    <a href="/operations/coaching/${recordId}/edit">Edit Record</a>
-    <a href="/operations/clients/${recordId}">View PLAB Profile</a>
-  `;
-
-  // Show drawer
-  drawer.classList.add('open');
-  backdrop.classList.add('open');
-  drawer.setAttribute('aria-hidden', 'false');
+    document.getElementById('coachingDrawer').classList.add('open');
+    document.getElementById('coachingDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('coachingBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
 }
 
-// Close drawer
-function closeCoachDetail() {
-  const drawer = document.getElementById('coachDrawer');
-  const backdrop = document.getElementById('coachBackdrop');
-
-  drawer.classList.remove('open');
-  backdrop.classList.remove('open');
-  drawer.setAttribute('aria-hidden', 'true');
+function closeCoachingDetail() {
+    document.getElementById('coachingDrawer').classList.remove('open');
+    document.getElementById('coachingDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('coachingBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
 }
 
-// Close drawer on Escape key
-document.addEventListener('keydown', function(event) {
-  if (event.key === 'Escape') {
-    closeCoachDetail();
-  }
-});
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCoachingDetail(); });
 
-// ============ Autocomplete Search ============
-let coachSearchTimeout;
-let coachHighlightedIndex = -1;
+(function() {
+    const input = document.getElementById('coachingSearch');
+    const dropdown = document.getElementById('coachingSuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
 
-document.addEventListener('DOMContentLoaded', function() {
-  const searchInput = document.getElementById('coachSearch');
-  const suggestionsDiv = document.getElementById('coachSuggestions');
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
 
-  if (!searchInput) return;
+    input.addEventListener('keydown', function(e) {
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
 
-  // Input event for autocomplete
-  searchInput.addEventListener('input', function(e) {
-    clearTimeout(coachSearchTimeout);
-    const query = e.target.value.trim();
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
 
-    if (query.length < 2) {
-      suggestionsDiv.classList.remove('visible');
-      suggestionsDiv.innerHTML = '';
-      return;
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
     }
 
-    coachSearchTimeout = setTimeout(() => {
-      fetchCoachSuggestions(query);
-    }, 250);
-  });
-
-  // Keyboard navigation
-  searchInput.addEventListener('keydown', function(e) {
-    const items = suggestionsDiv.querySelectorAll('.suggestion-item');
-    const itemCount = items.length;
-
-    if (e.key === 'ArrowDown') {
-      e.preventDefault();
-      coachHighlightedIndex = Math.min(coachHighlightedIndex + 1, itemCount - 1);
-      updateCoachHighlight(items);
-    } else if (e.key === 'ArrowUp') {
-      e.preventDefault();
-      coachHighlightedIndex = Math.max(coachHighlightedIndex - 1, -1);
-      updateCoachHighlight(items);
-    } else if (e.key === 'Enter') {
-      e.preventDefault();
-      if (coachHighlightedIndex >= 0 && items[coachHighlightedIndex]) {
-        const recordId = items[coachHighlightedIndex].dataset.recordId;
-        selectCoachSuggestion(recordId, items[coachHighlightedIndex].dataset.name);
-      }
-    } else if (e.key === 'Escape') {
-      suggestionsDiv.classList.remove('visible');
-      coachHighlightedIndex = -1;
+    function selectItem(item) {
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
     }
-  });
 
-  // Close suggestions when clicking outside
-  document.addEventListener('click', function(e) {
-    if (e.target !== searchInput && !suggestionsDiv.contains(e.target)) {
-      suggestionsDiv.classList.remove('visible');
-    }
-  });
-});
-
-function fetchCoachSuggestions(query) {
-  const suggestionsDiv = document.getElementById('coachSuggestions');
-  const allRecords = Object.values(COACH_RECORDS);
-
-  // Filter records based on name or registration number
-  const filtered = allRecords.filter(record => {
-    const name = (record.name || '').toLowerCase();
-    const reg = (record.registration_number || '').toLowerCase();
-    const q = query.toLowerCase();
-    return name.includes(q) || reg.includes(q);
-  });
-
-  if (filtered.length === 0) {
-    suggestionsDiv.innerHTML = '<div style="padding: 0.8rem; text-align: center; color: var(--gray-500); font-size: 0.85rem;">No results found</div>';
-    suggestionsDiv.classList.add('visible');
-    coachHighlightedIndex = -1;
-    return;
-  }
-
-  // Build suggestions HTML
-  let html = '';
-  filtered.slice(0, 10).forEach((record, index) => {
-    html += `
-      <div class="suggestion-item" data-record-id="${record.id}" data-name="${record.name}" onclick="selectCoachSuggestion(${record.id}, '${record.name}')">
-        <span class="suggestion-name">${record.name}</span>
-        <span class="suggestion-reg">${record.registration_number || ''}</span>
-      </div>
-    `;
-  });
-
-  suggestionsDiv.innerHTML = html;
-  suggestionsDiv.classList.add('visible');
-  coachHighlightedIndex = -1;
-}
-
-function updateCoachHighlight(items) {
-  items.forEach((item, index) => {
-    if (index === coachHighlightedIndex) {
-      item.classList.add('highlighted');
-    } else {
-      item.classList.remove('highlighted');
-    }
-  });
-}
-
-function selectCoachSuggestion(recordId, name) {
-  const searchInput = document.getElementById('coachSearch');
-  const suggestionsDiv = document.getElementById('coachSuggestions');
-
-  searchInput.value = name;
-  suggestionsDiv.classList.remove('visible');
-  coachHighlightedIndex = -1;
-
-  // Optionally open the detail drawer
-  openCoachDetail(recordId);
-}
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
-
 {% endblock %}
