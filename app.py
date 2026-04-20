@@ -12714,9 +12714,11 @@ def sales_leads_add():
     visible_ids = get_visible_sales_employee_ids(user)
     conn = get_db()
     if request.method == 'POST':
-        owner = request.form.get('owner_employee_id')
-        owner_id = int(owner) if owner and owner.isdigit() else user['id']
-        if owner_id not in visible_ids and role != 'admin':
+        # Non-admin users always own their own leads; only admin can assign to others
+        if role == 'admin':
+            owner = request.form.get('owner_employee_id')
+            owner_id = int(owner) if owner and owner.isdigit() else user['id']
+        else:
             owner_id = user['id']
         product_id = request.form.get('product_id')
         product_id = int(product_id) if product_id and product_id.isdigit() else None
@@ -12841,9 +12843,11 @@ def sales_leads_edit(lead_id):
         flash('Access denied', 'error')
         return redirect(url_for('sales_leads_list'))
     if request.method == 'POST':
-        owner = request.form.get('owner_employee_id')
-        owner_id = int(owner) if owner and owner.isdigit() else lead['owner_employee_id']
-        if owner_id not in visible_ids and role != 'admin':
+        # Non-admin users keep the existing owner; only admin can reassign
+        if role == 'admin':
+            owner = request.form.get('owner_employee_id')
+            owner_id = int(owner) if owner and owner.isdigit() else lead['owner_employee_id']
+        else:
             owner_id = lead['owner_employee_id']
         product_id = request.form.get('product_id')
         product_id = int(product_id) if product_id and product_id.isdigit() else None

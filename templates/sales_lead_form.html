@@ -24,35 +24,25 @@
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Company</label>
-                    <input type="text" name="company" maxlength="120" value="{{ lead.company if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                </div>
-                <div>
                     <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Source</label>
                     <input type="text" name="source" maxlength="60" value="{{ lead.source if lead else '' }}" placeholder="e.g. Website, Referral, Cold call" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
                 </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Phone</label>
-                    <input type="tel" name="phone" maxlength="40" value="{{ lead.phone if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Email</label>
-                    <input type="email" name="email" maxlength="120" value="{{ lead.email if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Owner *</label>
+                    {% if role == 'admin' %}
                     <select name="owner_employee_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
                         {% for o in owners %}
                         <option value="{{ o.id }}" {% if lead and lead.owner_employee_id == o.id %}selected{% elif not lead and o.id == user.id %}selected{% endif %}>{{ o.name }}</option>
                         {% endfor %}
                     </select>
+                    {% else %}
+                    <input type="hidden" name="owner_employee_id" value="{{ user.id }}" />
+                    <input type="text" disabled value="{{ user.name }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% endif %}
                 </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Stage</label>
                     <select name="stage_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
