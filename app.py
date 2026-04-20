@@ -9502,8 +9502,8 @@ def ops_plab_pathway_dashboard():
         status_rows = conn.execute("SELECT account_status, COUNT(*) as c FROM plab_clients GROUP BY account_status").fetchall()
         status_counts = {r['account_status']: r['c'] for r in status_rows}
 
-        # ── Current stage breakdown (for active clients) ──
-        stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process' GROUP BY current_stage").fetchall()
+        # ── Current stage breakdown (all clients with a stage set) ──
+        stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE current_stage IS NOT NULL AND current_stage != '' GROUP BY current_stage").fetchall()
         stage_counts = {r['current_stage']: r['c'] for r in stage_rows}
 
         # ── Coaching ──
