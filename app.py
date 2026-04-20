@@ -9924,8 +9924,10 @@ def ops_coaching_list():
             sql += ' AND c.coaching_status = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.course_type ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.course_type ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY c.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10032,8 +10034,9 @@ def ops_english_logins_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 4)
         sql += ' ORDER BY e.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10140,8 +10143,10 @@ def ops_test_bookings_list():
             sql += ' AND t.exam_status = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR t.test_center ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR t.test_center ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10273,8 +10278,11 @@ def ops_call_notes_list():
             sql_base += ' AND n.registration_number ILIKE ?'
             params.append(f'%{reg}%')
         if client_name:
-            sql_base += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR (p.first_name || \' \' || p.last_name) ILIKE ?)'
-            params.extend([f'%{client_name}%'] * 3)
+            sql_base += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ?
+                OR (p.first_name || ' ' || p.last_name) ILIKE ?
+                OR n.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{client_name}%'] * 5)
         if added_by_filter:
             sql_base += ' AND n.added_by = ?'
             params.append(added_by_filter)
@@ -10436,8 +10444,9 @@ def ops_payments_list():
         if client_name:
             sql_base += """ AND (c.first_name ILIKE ? OR c.last_name ILIKE ?
                 OR (c.first_name || ' ' || COALESCE(c.last_name,'')) ILIKE ?
-                OR (COALESCE(c.prefix,'') || ' ' || c.first_name || ' ' || COALESCE(c.last_name,'')) ILIKE ?)"""
-            params.extend([f'%{client_name}%'] * 4)
+                OR (COALESCE(c.prefix,'') || ' ' || c.first_name || ' ' || COALESCE(c.last_name,'')) ILIKE ?
+                OR p.registration_number ILIKE ?)"""
+            params.extend([f'%{client_name}%'] * 5)
         if payment_method:
             sql_base += ' AND p.payment_method = ?'
             params.append(payment_method)
@@ -10611,8 +10620,9 @@ def ops_epic_list():
             sql += ' AND e.epic_registration = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 4)
         sql += ' ORDER BY e.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10743,8 +10753,9 @@ def ops_gmc_list():
             sql += ' AND g.gmc_setup = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR g.registration_number ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR g.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 4)
         sql += ' ORDER BY g.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10858,8 +10869,10 @@ def ops_research_list():
             sql += ' AND r.research_status = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR r.research_topic ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR r.research_topic ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY r.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -10949,8 +10962,10 @@ def ops_subscriptions_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR s.online_subscription ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR s.online_subscription ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY s.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11042,8 +11057,10 @@ def ops_webinars_list():
             sql += ' AND w.event_type = ?'
             params.append(type_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR w.event_name ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR w.event_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY w.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11136,8 +11153,10 @@ def ops_visa_list():
             sql += ' AND v.visa_application_status = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ?)'
-            params.extend([f'%{search}%'] * 2)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 4)
         sql += ' ORDER BY v.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11247,8 +11266,10 @@ def ops_academic_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR a.img_medical_college ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR a.img_medical_college ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY a.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11361,8 +11382,10 @@ def ops_courses_list():
             sql += ' AND c.course_status = ?'
             params.append(status_filter)
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.courses_name ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.courses_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY c.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11455,8 +11478,10 @@ def ops_observerships_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR o.hospital_name ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR o.hospital_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY o.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11538,8 +11563,10 @@ def ops_ngo_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.ngo_vendor_name ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.ngo_vendor_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY n.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11618,8 +11645,10 @@ def ops_mentorship_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR m.program_provider ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR m.program_provider ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY m.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
@@ -11716,8 +11745,10 @@ def ops_cab_list():
                  WHERE 1=1'''
         params = []
         if search:
-            sql += ' AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.vendor ILIKE ?)'
-            params.extend([f'%{search}%'] * 3)
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.vendor ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 5)
         sql += ' ORDER BY c.created_at DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
