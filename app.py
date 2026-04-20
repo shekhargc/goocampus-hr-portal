@@ -9485,6 +9485,102 @@ def _next_registration_number(conn):
     return f"{prefix}{last_num + 1:03d}"
 
 
+@app.route('/operations/plab-pathway-dashboard')
+@admin_required
+def ops_plab_pathway_dashboard():
+    """PLAB Pathway Dashboard — overview stats across core operations sections."""
+    conn = get_db()
+    try:
+        from datetime import date, timedelta
+        today = date.today().isoformat()
+
+        # ── Total clients ──
+        total_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
+        active_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process'").fetchone()['c']
+
+        # ── Stage breakdown ──
+        stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process' GROUP BY current_stage").fetchall()
+        stage_counts = {r['current_stage']: r['c'] for r in stage_rows}
+
+        # ── Coaching ──
+        coaching_total = conn.execute("SELECT COUNT(*) as c FROM ops_coaching").fetchone()['c']
+        coaching_ongoing = conn.execute("SELECT COUNT(*) as c FROM ops_coaching WHERE coaching_status = 'On Going'").fetchone()['c']
+
+        # ── Test Bookings ──
+        test_total = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings").fetchone()['c']
+        upcoming_tests = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked'", (today,)).fetchone()['c']
+        # PLAB 1 upcoming
+        plab1_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 1'", (today,)).fetchone()['c']
+        # PLAB 2 upcoming
+        plab2_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 2'", (today,)).fetchone()['c']
+        # Awaiting results (attended but no result)
+        awaiting_results = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')").fetchone()['c']
+        # Recent passes (last 30 days)
+        thirty_ago = (date.today() - timedelta(days=30)).isoformat()
+        recent_passes = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_result = 'Passed' AND exam_result_date >= ?", (thirty_ago,)).fetchone()['c']
+
+        # ── EPIC Registration ──
+        epic_total = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration").fetchone()['c']
+        epic_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'In Process'").fetchone()['c']
+        epic_sent_gmc = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'Sent to GMC'").fetchone()['c']
+
+        # ── GMC Registration ──
+        gmc_total = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration").fetchone()['c']
+        gmc_completed = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE gmc_setup = 'Completed'").fetchone()['c']
+        gmc_license_received = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE license = 'Received'").fetchone()['c']
+
+        # ── Research & Publication ──
+        research_total = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication").fetchone()['c']
+        research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Published'").fetchone()['c']
+        research_in_progress = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'In Progress'").fetchone()['c']
+
+        # ── UK Visa & Travel ──
+        visa_total = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel").fetchone()['c']
+        visa_accepted = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'Accepted'").fetchone()['c']
+        visa_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'In Process'").fetchone()['c']
+
+        # ── Academic Details ──
+        academic_total = conn.execute("SELECT COUNT(*) as c FROM ops_academic_details").fetchone()['c']
+
+        # ── Upcoming exams list (next 5) ──
+        upcoming_exams = conn.execute("""
+            SELECT t.*, p.prefix, p.first_name, p.last_name
+            FROM ops_test_bookings t
+            JOIN plab_clients p ON p.registration_number = t.registration_number
+            WHERE t.exam_date >= ? AND t.exam_status = 'Booked'
+            ORDER BY t.exam_date ASC LIMIT 5
+        """, (today,)).fetchall()
+
+    except Exception as e:
+        logging.error(f"plab_pathway_dashboard error: {e}")
+        conn.close()
+        flash(f'Error loading dashboard: {e}', 'error')
+        return render_template('ops_plab_pathway_dashboard.html',
+                               total_clients=0, active_clients=0, stage_counts={},
+                               coaching_total=0, coaching_ongoing=0,
+                               test_total=0, upcoming_tests=0, plab1_upcoming=0, plab2_upcoming=0,
+                               awaiting_results=0, recent_passes=0,
+                               epic_total=0, epic_in_process=0, epic_sent_gmc=0,
+                               gmc_total=0, gmc_completed=0, gmc_license_received=0,
+                               research_total=0, research_published=0, research_in_progress=0,
+                               visa_total=0, visa_accepted=0, visa_in_process=0,
+                               academic_total=0, upcoming_exams=[])
+
+    conn.close()
+    return render_template('ops_plab_pathway_dashboard.html',
+                           total_clients=total_clients, active_clients=active_clients,
+                           stage_counts=stage_counts,
+                           coaching_total=coaching_total, coaching_ongoing=coaching_ongoing,
+                           test_total=test_total, upcoming_tests=upcoming_tests,
+                           plab1_upcoming=plab1_upcoming, plab2_upcoming=plab2_upcoming,
+                           awaiting_results=awaiting_results, recent_passes=recent_passes,
+                           epic_total=epic_total, epic_in_process=epic_in_process, epic_sent_gmc=epic_sent_gmc,
+                           gmc_total=gmc_total, gmc_completed=gmc_completed, gmc_license_received=gmc_license_received,
+                           research_total=research_total, research_published=research_published, research_in_progress=research_in_progress,
+                           visa_total=visa_total, visa_accepted=visa_accepted, visa_in_process=visa_in_process,
+                           academic_total=academic_total, upcoming_exams=upcoming_exams)
+
+
 @app.route('/operations/plab')
 @admin_required
 def ops_plab_list():
