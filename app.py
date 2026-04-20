@@ -13086,91 +13086,6 @@ def sales_closures_list():
                            f_owner=f_owner, f_product=f_product, role=role)
 
 
-@app.route('/sales/closures/add', methods=['GET', 'POST'])
-@login_required
-@sales_write_required
-def sales_closures_add():
-    user = get_user()
-    role = get_sales_role(user)
-    visible_ids = get_visible_sales_employee_ids(user)
-    conn = get_db()
-    if request.method == 'POST':
-        owner = request.form.get('employee_id')
-        owner_id = int(owner) if owner and owner.isdigit() else user['id']
-        if owner_id not in visible_ids and role != 'admin':
-            owner_id = user['id']
-        product_id = request.form.get('product_id')
-        product_id = int(product_id) if product_id and product_id.isdigit() else None
-        product_name = (request.form.get('product_name') or '').strip()
-        project_id = None
-        if product_id:
-            row = conn.execute('SELECT name, project_id FROM products_services WHERE id = ?', (product_id,)).fetchone()
-            if row:
-                if not product_name:
-                    product_name = row['name']
-                project_id = row['project_id']
-        try:
-            revenue = float(request.form.get('revenue') or 0)
-        except ValueError:
-            revenue = 0.0
-        try:
-            cost = float(request.form.get('cost') or 0)
-        except ValueError:
-            cost = 0.0
-        margin = revenue - cost
-        currency = (request.form.get('currency') or 'INR').upper()
-        close_date = request.form.get('close_date') or datetime.now().strftime('%Y-%m-%d')
-        lead_id_raw = request.form.get('lead_id')
-        lead_id = int(lead_id_raw) if lead_id_raw and lead_id_raw.isdigit() else None
-        conn.execute(
-            '''INSERT INTO sales_closures
-               (lead_id, employee_id, product_id, product_name, project_id, client_name,
-                revenue, cost, margin, currency, close_date, notes, created_by)
-               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-            (
-                lead_id, owner_id, product_id, product_name or None, project_id,
-                (request.form.get('client_name') or '').strip(),
-                revenue, cost, margin, currency, close_date,
-                (request.form.get('notes') or '').strip(),
-                user['id']
-            )
-        )
-        # If linked to a lead, mark it as won (find a stage with is_won=1)
-        if lead_id:
-            won = conn.execute(
-                'SELECT id FROM sales_lead_stages WHERE is_won = 1 AND is_active = 1 ORDER BY sort_order LIMIT 1'
-            ).fetchone()
-            if won:
-                conn.execute('UPDATE sales_leads SET stage_id = ? WHERE id = ?', (won['id'], lead_id))
-        conn.commit()
-        conn.close()
-        flash('Closure recorded', 'success')
-        return redirect(url_for('sales_closures_list'))
-
-    products = conn.execute(
-        "SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name"
-    ).fetchall()
-    if visible_ids:
-        ph = ','.join(['?'] * len(visible_ids))
-        owners = conn.execute(
-            f'SELECT id, name FROM employees WHERE id IN ({ph}) ORDER BY name',
-            visible_ids
-        ).fetchall()
-        leads = conn.execute(
-            f'''SELECT sl.id, sl.lead_name, sl.company, e.name AS owner_name
-                FROM sales_leads sl LEFT JOIN employees e ON sl.owner_employee_id = e.id
-                WHERE sl.owner_employee_id IN ({ph})
-                ORDER BY sl.created_at DESC LIMIT 200''',
-            visible_ids
-        ).fetchall()
-    else:
-        owners = []
-        leads = []
-    conn.close()
-    return render_template('sales_closure_form.html', user=user, mode='add', closure=None,
-                           products=products, owners=owners, leads=leads, role=role)
-
-
 @app.route('/sales/closures/<int:cid>/edit', methods=['GET', 'POST'])
 @login_required
 @sales_write_required
@@ -13189,19 +13104,20 @@ def sales_closures_edit(cid):
         flash('Access denied', 'error')
         return redirect(url_for('sales_closures_list'))
     if request.method == 'POST':
-        owner = request.form.get('employee_id')
-        owner_id = int(owner) if owner and owner.isdigit() else closure['employee_id']
-        if owner_id not in visible_ids and role != 'admin':
+        # Non-admin users keep the existing owner; only admin can reassign
+        if role == 'admin':
+            owner = request.form.get('employee_id')
+            owner_id = int(owner) if owner and owner.isdigit() else closure['employee_id']
+        else:
             owner_id = closure['employee_id']
         product_id = request.form.get('product_id')
         product_id = int(product_id) if product_id and product_id.isdigit() else None
-        product_name = (request.form.get('product_name') or '').strip() or closure['product_name']
+        product_name = ''
         project_id = closure['project_id']
         if product_id:
             row = conn.execute('SELECT name, project_id FROM products_services WHERE id = ?', (product_id,)).fetchone()
             if row:
-                if not product_name:
-                    product_name = row['name']
+                product_name = row['name']
                 project_id = row['project_id']
         try:
             revenue = float(request.form.get('revenue') or 0)

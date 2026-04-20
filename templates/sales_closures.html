@@ -28,7 +28,7 @@
             <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Sales Closures</h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ total_deals }} deal{{ '' if total_deals == 1 else 's' }} &middot; ₹{{ '{:,.0f}'.format(total_revenue) }} revenue &middot; ₹{{ '{:,.0f}'.format(total_margin) }} margin</p>
         </div>
-        {% if role != 'viewer' %}<a href="/sales/closures/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Record Closure</a>{% else %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
+        {% if role == 'viewer' %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
     </div>
 
     <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
@@ -86,7 +86,7 @@
                 </tbody>
             </table>
             {% else %}
-            <div style="padding:2.5rem;text-align:center;color:var(--gray-500);">No closures in this period.{% if role != 'viewer' %} <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a>{% endif %}</div>
+            <div style="padding:2.5rem;text-align:center;color:var(--gray-500);">No closures in this period. Closures are auto-created when a lead is marked as Won.</div>
             {% endif %}
         </div>
 

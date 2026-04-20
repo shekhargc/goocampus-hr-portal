@@ -129,7 +129,6 @@
     <div class="lead-drawer-foot">
         {% if role != 'viewer' %}
         <a href="#" id="ldEditBtn" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Edit</a>
-        <a href="#" id="ldCloseDealBtn" style="background:var(--orange);color:white;padding:0.55rem 1rem;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Record Closure</a>
         {% endif %}
         {% if role == 'admin' %}
         <form method="POST" id="ldDelForm" style="display:inline;" onsubmit="return confirm('Delete this lead?');">
@@ -175,8 +174,6 @@ function openLeadDrawer(id, evt) {
     document.getElementById('ldNotes').textContent = l.notes || '—';
     const ldEditBtn = document.getElementById('ldEditBtn');
     if (ldEditBtn) ldEditBtn.href = '/sales/leads/' + id + '/edit';
-    const ldCloseDealBtn = document.getElementById('ldCloseDealBtn');
-    if (ldCloseDealBtn) ldCloseDealBtn.href = '/sales/closures/add?lead_id=' + id;
     const delForm = document.getElementById('ldDelForm');
     if (delForm) delForm.action = '/sales/leads/' + id + '/delete';
     document.getElementById('leadOverlay').classList.add('open');

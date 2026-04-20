@@ -30,7 +30,6 @@
         {% if viewing == 'self' and role != 'viewer' %}
         <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
             <a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">+ Add Lead</a>
-            <a href="/sales/closures/add" style="background:var(--navy);color:white;padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">+ Record Closure</a>
             <a href="/sales/calls" style="background:white;color:var(--navy);border:1px solid var(--gray-300);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-size:0.85rem;font-weight:600;">Log Calls</a>
         </div>
         {% endif %}
@@ -169,7 +168,7 @@
                 </div>
                 {% endfor %}
                 {% else %}
-                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No closures yet this year.{% if viewing == 'self' and role != 'viewer' %} <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a>{% endif %}</div>
+                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No closures yet this year. Closures are auto-created when a lead is marked as Won.</div>
                 {% endif %}
             </div>
         </div>

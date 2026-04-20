@@ -161,7 +161,7 @@
                     </tbody>
                 </table>
                 {% else %}
-                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No closures recorded for {{ month_label }} yet.{% if role != 'viewer' %} <a href="/sales/closures/add" style="color:var(--orange);font-weight:600;">Record one &rarr;</a>{% endif %}</div>
+                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No closures recorded for {{ month_label }} yet. Closures are auto-created when a lead is marked as Won.</div>
                 {% endif %}
             </div>
         </div>
