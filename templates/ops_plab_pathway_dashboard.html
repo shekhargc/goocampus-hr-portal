@@ -120,12 +120,21 @@
         transition: flex 0.4s ease;
         min-width: 0;
     }
+    /* Account status colors */
     .pipeline-seg.seg-english { background: #6366F1; }
     .pipeline-seg.seg-plab1   { background: var(--orange); }
     .pipeline-seg.seg-plab2   { background: #F97316; }
     .pipeline-seg.seg-gmc     { background: #10B981; }
     .pipeline-seg.seg-job     { background: #0EA5E9; }
     .pipeline-seg.seg-done    { background: var(--navy); }
+
+    /* Active stage colors (distinct palette) */
+    .pipeline-seg.stg-english { background: #8B5CF6; }
+    .pipeline-seg.stg-plab1   { background: #EC4899; }
+    .pipeline-seg.stg-plab2   { background: #F59E0B; }
+    .pipeline-seg.stg-gmc     { background: #14B8A6; }
+    .pipeline-seg.stg-job     { background: #3B82F6; }
+    .pipeline-seg.stg-done    { background: #64748B; }
 
     .pipeline-legend {
         display: flex;
@@ -447,12 +456,12 @@
     <h3>Active Clients — Current Stage</h3>
     <div class="pipeline-bar">
         {% set stages = [
-            ('English Stage', 'seg-english', stage_counts.get('English Stage', 0)),
-            ('PLAB 1 Stage', 'seg-plab1', stage_counts.get('PLAB 1 Stage', 0)),
-            ('PLAB 2 Stage', 'seg-plab2', stage_counts.get('PLAB 2 Stage', 0)),
-            ('GMC Stage', 'seg-gmc', stage_counts.get('GMC Stage', 0)),
-            ('Job Hunt Stage', 'seg-job', stage_counts.get('Job Hunt Stage', 0)),
-            ('Completed', 'seg-done', stage_counts.get('Completed', 0))
+            ('English Stage', 'stg-english', stage_counts.get('English Stage', 0)),
+            ('PLAB 1 Stage', 'stg-plab1', stage_counts.get('PLAB 1 Stage', 0)),
+            ('PLAB 2 Stage', 'stg-plab2', stage_counts.get('PLAB 2 Stage', 0)),
+            ('GMC Stage', 'stg-gmc', stage_counts.get('GMC Stage', 0)),
+            ('Job Hunt Stage', 'stg-job', stage_counts.get('Job Hunt Stage', 0)),
+            ('Completed', 'stg-done', stage_counts.get('Completed', 0))
         ] %}
         {% for label, cls, count in stages %}
             {% if count > 0 %}
@@ -463,12 +472,12 @@
         {% endfor %}
     </div>
     <div class="pipeline-legend">
-        <span class="legend-item"><span class="legend-dot" style="background:#6366F1"></span> English ({{ stage_counts.get('English Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> PLAB 1 ({{ stage_counts.get('PLAB 1 Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#F97316"></span> PLAB 2 ({{ stage_counts.get('PLAB 2 Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#10B981"></span> GMC ({{ stage_counts.get('GMC Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#0EA5E9"></span> Job Hunt ({{ stage_counts.get('Job Hunt Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:var(--navy)"></span> Completed ({{ stage_counts.get('Completed', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#8B5CF6"></span> English ({{ stage_counts.get('English Stage', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#EC4899"></span> PLAB 1 ({{ stage_counts.get('PLAB 1 Stage', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#F59E0B"></span> PLAB 2 ({{ stage_counts.get('PLAB 2 Stage', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#14B8A6"></span> GMC ({{ stage_counts.get('GMC Stage', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#3B82F6"></span> Job Hunt ({{ stage_counts.get('Job Hunt Stage', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#64748B"></span> Completed ({{ stage_counts.get('Completed', 0) }})</span>
     </div>
 </div>
 
