@@ -9374,7 +9374,7 @@ def ensure_ops_tables():
 
 
 # ── Stages & statuses for dropdowns ──
-PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage', 'Job Stage', 'Job by GC', 'Job by Own', 'Completed']
+PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own']
 ACCOUNT_STATUSES = ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
 PLAN_TYPES = [
     'Full Spon', 'Integrated Consulting',

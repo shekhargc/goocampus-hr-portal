@@ -461,11 +461,9 @@
             ('English Stage', 'stg-english', stage_counts.get('English Stage', 0)),
             ('PLAB 1 Stage', 'stg-plab1', stage_counts.get('PLAB 1 Stage', 0)),
             ('PLAB 2 Stage', 'stg-plab2', stage_counts.get('PLAB 2 Stage', 0)),
-            ('GMC Stage', 'stg-gmc', stage_counts.get('GMC Stage', 0)),
             ('Job Stage', 'stg-job', stage_counts.get('Job Stage', 0)),
             ('Job by GC', 'stg-jobgc', stage_counts.get('Job by GC', 0)),
-            ('Job by Own', 'stg-jobown', stage_counts.get('Job by Own', 0)),
-            ('Completed', 'stg-done', stage_counts.get('Completed', 0))
+            ('Job by Own', 'stg-jobown', stage_counts.get('Job by Own', 0))
         ] %}
         {% for label, cls, count in stages %}
             {% if count > 0 %}
@@ -479,11 +477,9 @@
         <span class="legend-item"><span class="legend-dot" style="background:#8B5CF6"></span> English ({{ stage_counts.get('English Stage', 0) }})</span>
         <span class="legend-item"><span class="legend-dot" style="background:#EC4899"></span> PLAB 1 ({{ stage_counts.get('PLAB 1 Stage', 0) }})</span>
         <span class="legend-item"><span class="legend-dot" style="background:#F59E0B"></span> PLAB 2 ({{ stage_counts.get('PLAB 2 Stage', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#14B8A6"></span> GMC ({{ stage_counts.get('GMC Stage', 0) }})</span>
         <span class="legend-item"><span class="legend-dot" style="background:#3B82F6"></span> Job Stage ({{ stage_counts.get('Job Stage', 0) }})</span>
         <span class="legend-item"><span class="legend-dot" style="background:#0D9488"></span> Job by GC ({{ stage_counts.get('Job by GC', 0) }})</span>
         <span class="legend-item"><span class="legend-dot" style="background:#7C3AED"></span> Job by Own ({{ stage_counts.get('Job by Own', 0) }})</span>
-        <span class="legend-item"><span class="legend-dot" style="background:#64748B"></span> Completed ({{ stage_counts.get('Completed', 0) }})</span>
     </div>
 </div>
 
