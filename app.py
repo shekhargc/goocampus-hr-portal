@@ -9374,7 +9374,7 @@ def ensure_ops_tables():
 
 
 # ── Stages & statuses for dropdowns ──
-PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage', 'Job Hunt Stage', 'Completed']
+PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage', 'Job Stage', 'Job by GC', 'Job by Own', 'Completed']
 ACCOUNT_STATUSES = ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
 PLAN_TYPES = [
     'Full Spon', 'Integrated Consulting',
@@ -9918,11 +9918,92 @@ def ops_plab_import():
             conn = get_db()
             imported = 0
             skipped = 0
+
+            # Zoho CSV column → internal field name mapping
+            COL_MAP = {
+                'Customer ID': 'customer_id',
+                'Registration Number': 'registration_number',
+                'Registration Date (Payment Date)': 'registration_date',
+                'Plan Type': 'plan_type',
+                'Joined Stage': 'joined_stage',
+                'PLAB Stage (Current Status)': 'current_stage',
+                'Candidate Name': 'candidate_name',
+                'Candidate Email': 'email',
+                'Mobile Number': 'mobile',
+                'Whats App Number': 'whatsapp1',
+                'Whats App Number 2': 'whatsapp2',
+                'D.O.B': 'dob',
+                'CITY': 'city',
+                'STATE': 'state',
+                'Account Status': 'account_status',
+                'Switched Program': 'switched_program',
+                'Counsellor': 'counsellor',
+                'Additional Notes (Discount Given, Package reduced reason)': 'additional_package_notes',
+                'Package (Mention Plab Actual Package)': 'package_amount',
+                'Discount Allowed (Discount Offer + Stage Discount)': 'discount_allowed',
+                'Final Package': 'final_package',
+                'Upgraded To': 'upgraded_to',
+                'Mothers Name': 'mother_name',
+                'Instagram Name': 'instagram',
+                'Facebook Name': 'facebook',
+                'LinkedIn Name': 'linkedin',
+                'Fathers Name': 'father_name',
+                'Fathers Mobile Number': 'father_phone',
+                'Mothers Mobile Number': 'mother_phone',
+                'Parents Email ID': 'parents_email',
+                'Dropped Out / Switched Program Date': 'dropped_date',
+                'Counsellor Email': 'counsellor_email',
+                'Counsellor Number': 'counsellor_number',
+                'Lead Source': 'lead_source',
+                'UK Client Referral': 'referral_type',
+                'Operations Team Referral': 'operations_referral',
+                'Finalised Package': 'finalised_package',
+                '1st Installment': 'inst1_amount',
+                '1st Instalment Date': 'inst1_date',
+                'Ist Installment Note': 'inst1_note',
+                '2nd Installment': 'inst2_amount',
+                '2nd Instalment Date': 'inst2_date',
+                '2nd Installment Note': 'inst2_note',
+                '3rd Installment': 'inst3_amount',
+                '3rd Instalment Date': 'inst3_date',
+                '3rd Installment Note': 'inst3_note',
+                '4th Installment': 'inst4_amount',
+                '4th Instalment Date': 'inst4_date',
+                '4th Installment Note': 'inst4_note',
+                'Additional Notes': 'additional_notes',
+            }
             # Status normalization map (fix Zoho typos)
             status_fix = {'Oh Hold': 'On Hold'}
+
+            def g(row, key, default=''):
+                """Get value from row using either mapped Zoho name or internal key."""
+                val = row.get(key, '')
+                if not val:
+                    # Try reverse lookup: find Zoho column that maps to this key
+                    for zoho_col, internal in COL_MAP.items():
+                        if internal == key:
+                            val = row.get(zoho_col, '')
+                            break
+                return (val or default).strip() if isinstance(val, str) else val
+
             for row in reader:
-                reg_num = row.get('registration_number', '').strip()
-                first_name = row.get('first_name', '').strip()
+                reg_num = g(row, 'registration_number')
+                # Parse candidate name: "Dr. Ashwin Rahul" → prefix, first, last
+                candidate_name = g(row, 'candidate_name')
+                first_name = g(row, 'first_name')
+                last_name = g(row, 'last_name')
+                prefix = g(row, 'prefix', 'Dr.')
+                if candidate_name and not first_name:
+                    parts = candidate_name.strip().split()
+                    if parts and parts[0].rstrip('.') in ('Dr', 'Mr', 'Mrs', 'Ms', 'Prof'):
+                        prefix = parts[0]
+                        parts = parts[1:]
+                    if len(parts) >= 2:
+                        first_name = parts[0]
+                        last_name = ' '.join(parts[1:])
+                    elif parts:
+                        first_name = parts[0]
+
                 if not first_name and not reg_num:
                     skipped += 1
                     continue
@@ -9933,15 +10014,15 @@ def ops_plab_import():
                         skipped += 1
                         continue
 
-                pkg = _safe_float(row.get('package_amount', '0'))
-                disc = _safe_float(row.get('discount_allowed', '0'))
-                final = _safe_float(row.get('final_package', '0')) or (pkg - disc)
-                i1 = _safe_float(row.get('inst1_amount', '0'))
-                i2 = _safe_float(row.get('inst2_amount', '0'))
-                i3 = _safe_float(row.get('inst3_amount', '0'))
-                i4 = _safe_float(row.get('inst4_amount', '0'))
+                pkg = _safe_float(g(row, 'package_amount', '0'))
+                disc = _safe_float(g(row, 'discount_allowed', '0'))
+                final = _safe_float(g(row, 'finalised_package', '0') or g(row, 'final_package', '0')) or (pkg - disc)
+                i1 = _safe_float(g(row, 'inst1_amount', '0'))
+                i2 = _safe_float(g(row, 'inst2_amount', '0'))
+                i3 = _safe_float(g(row, 'inst3_amount', '0'))
+                i4 = _safe_float(g(row, 'inst4_amount', '0'))
                 total_paid = i1 + i2 + i3 + i4
-                raw_status = row.get('account_status', 'In Process').strip()
+                raw_status = g(row, 'account_status', 'In Process')
                 account_status = status_fix.get(raw_status, raw_status)
 
                 conn.execute('''INSERT INTO plab_clients (
@@ -9961,45 +10042,29 @@ def ops_plab_import():
                     inst3_amount, inst3_date, inst3_note,
                     inst4_amount, inst4_date, inst4_note,
                     dropped_date, upgraded_to,
-                    welcome_mail, welcome_call_by, welcome_call_date,
-                    english_book, english_book_date,
-                    oxford_book, oxford_book_date,
-                    plab_brochure, ceo_letter, refund_policy, service_agreement,
-                    goodie_pen, goodie_diary, goodie_laptop_bag, goodie_stickers,
                     additional_notes, created_by
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                     reg_num or _next_registration_number(conn),
-                    row.get('registration_date', ''),
-                    row.get('customer_id', ''),
-                    row.get('prefix', 'Dr.'), first_name, row.get('last_name', ''),
-                    row.get('mobile', ''), row.get('whatsapp1', ''), row.get('whatsapp2', ''),
-                    row.get('email', ''), row.get('dob', ''), row.get('city', ''), row.get('state', ''),
-                    row.get('instagram', ''), row.get('facebook', ''), row.get('linkedin', ''),
-                    row.get('father_name', ''), row.get('father_phone', ''),
-                    row.get('mother_name', ''), row.get('mother_phone', ''), row.get('parents_email', ''),
-                    row.get('joined_stage', ''), row.get('plan_type', ''), row.get('english_training', ''),
-                    account_status, row.get('current_stage', ''),
-                    row.get('counsellor', ''), row.get('counsellor_email', ''), row.get('counsellor_number', ''),
-                    row.get('lead_source', ''), row.get('referral_type', ''), row.get('operations_referral', ''),
-                    pkg, disc, row.get('additional_package_notes', ''),
+                    g(row, 'registration_date'),
+                    g(row, 'customer_id'),
+                    prefix, first_name, last_name,
+                    g(row, 'mobile'), g(row, 'whatsapp1'), g(row, 'whatsapp2'),
+                    g(row, 'email'), g(row, 'dob'), g(row, 'city'), g(row, 'state'),
+                    g(row, 'instagram'), g(row, 'facebook'), g(row, 'linkedin'),
+                    g(row, 'father_name'), g(row, 'father_phone'),
+                    g(row, 'mother_name'), g(row, 'mother_phone'), g(row, 'parents_email'),
+                    g(row, 'joined_stage'), g(row, 'plan_type'), g(row, 'english_training'),
+                    account_status, g(row, 'current_stage'),
+                    g(row, 'counsellor'), g(row, 'counsellor_email'), g(row, 'counsellor_number'),
+                    g(row, 'lead_source'), g(row, 'referral_type'), g(row, 'operations_referral'),
+                    pkg, disc, g(row, 'additional_package_notes'),
                     final, total_paid,
-                    i1, row.get('inst1_date', ''), row.get('inst1_note', ''),
-                    i2, row.get('inst2_date', ''), row.get('inst2_note', ''),
-                    i3, row.get('inst3_date', ''), row.get('inst3_note', ''),
-                    i4, row.get('inst4_date', ''), row.get('inst4_note', ''),
-                    row.get('dropped_date', ''), row.get('upgraded_to', ''),
-                    row.get('welcome_mail', ''), row.get('welcome_call_by', ''), row.get('welcome_call_date', ''),
-                    row.get('english_book', ''), row.get('english_book_date', ''),
-                    row.get('oxford_book', ''), row.get('oxford_book_date', ''),
-                    int(row.get('plab_brochure', 0) or 0),
-                    int(row.get('ceo_letter', 0) or 0),
-                    int(row.get('refund_policy', 0) or 0),
-                    int(row.get('service_agreement', 0) or 0),
-                    int(row.get('goodie_pen', 0) or 0),
-                    int(row.get('goodie_diary', 0) or 0),
-                    int(row.get('goodie_laptop_bag', 0) or 0),
-                    int(row.get('goodie_stickers', 0) or 0),
-                    row.get('additional_notes', ''),
+                    i1, g(row, 'inst1_date'), g(row, 'inst1_note'),
+                    i2, g(row, 'inst2_date'), g(row, 'inst2_note'),
+                    i3, g(row, 'inst3_date'), g(row, 'inst3_note'),
+                    i4, g(row, 'inst4_date'), g(row, 'inst4_note'),
+                    g(row, 'dropped_date'), g(row, 'upgraded_to'),
+                    g(row, 'additional_notes'),
                     session['user_id']
                 ))
                 imported += 1
