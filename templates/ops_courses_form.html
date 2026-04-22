@@ -1,440 +1,208 @@
 {% extends "base.html" %}
 
-{% block title %}Add/Edit Online Course - HR Portal{% endblock %}
+{% block title %}{% if record %}Edit Course{% else %}Add Course{% endif %} - Operations{% endblock %}
 
 {% block content %}
-<style>
-  :root {
-    --navy: #0F1B33;
-    --gray-50: #F9FAFB;
-    --gray-100: #F3F4F6;
-    --gray-200: #E5E7EB;
-    --gray-500: #6B7280;
-    --orange: #F97316;
-    --border-radius: 12px;
-  }
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/online-courses" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Online Courses</a>
+    </div>
 
-  body {
-    background: var(--gray-50);
-  }
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit Online Course{% else %}Add Online Course{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}Update course details.{% else %}Add a new course record.{% endif %}
+        </p>
 
-  .header-section {
-    background: white;
-    border-bottom: 1px solid var(--gray-200);
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
+        <form method="POST">
 
-  .back-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: var(--navy);
-    cursor: pointer;
-    padding: 0;
-  }
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <div style="position:relative;">
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
+                    <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
+                        value="{% if record %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% endif %}"
+                        required
+                        style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                </div>
+            </div>
 
-  .back-btn:hover {
-    color: var(--orange);
-  }
+            <!-- ===== COURSE DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Course Details</h3>
 
-  .header-section h1 {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Name *</label>
+                    <select name="courses_name" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Course</option>
+                        {% for c in course_names %}
+                        <option value="{{ c }}" {% if record and record.courses_name == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type *</label>
+                    <select name="course_type" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Type</option>
+                        {% for t in course_types %}
+                        <option value="{{ t }}" {% if record and record.course_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-  .form-wrapper {
-    max-width: 900px;
-    margin: 24px auto;
-    padding: 0 24px;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Status *</label>
+                    <select name="course_status" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Status</option>
+                        {% for s in course_statuses %}
+                        <option value="{{ s }}" {% if record and record.course_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Validity (Months)</label>
+                    <input type="number" name="validity_months" value="{{ record.validity_months or '' if record else '' }}" min="0" placeholder="0" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-card {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 32px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Start Date</label>
+                    <input type="date" name="start_date" value="{{ record.start_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">End Date</label>
+                    <input type="date" name="end_date" value="{{ record.end_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-section {
-    margin-bottom: 32px;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Provider</label>
+                    <input type="text" name="course_provider" value="{{ record.course_provider or '' if record else '' }}" placeholder="e.g., Coursera, Udemy" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Certification Body</label>
+                    <input type="text" name="certification_body" value="{{ record.certification_body or '' if record else '' }}" placeholder="Certification body" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-section h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0 0 20px 0;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--gray-100);
-  }
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Subject Name</label>
+                <input type="text" name="subject_name" value="{{ record.subject_name or '' if record else '' }}" placeholder="Subject name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
 
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" rows="3" placeholder="Additional notes..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.notes or '' if record else '' }}</textarea>
+            </div>
 
-  .form-row.full {
-    grid-template-columns: 1fr;
-  }
+            <!-- ===== CONTACT & BOOKING ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact & Booking</h3>
 
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Client Email</label>
+                    <input type="email" name="client_email" value="{{ record.client_email or '' if record else '' }}" placeholder="client@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Booked By</label>
+                    <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for b in booked_by_options %}
+                        <option value="{{ b }}" {% if record and record.booked_by == b %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-  .form-group label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--navy);
-    margin-bottom: 8px;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile Number</label>
+                    <input type="tel" name="mobile_number" value="{{ record.mobile_number or '' if record else '' }}" placeholder="+91 XXXXX XXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Email</label>
+                    <input type="email" name="candidate_email" value="{{ record.candidate_email or '' if record else '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-group.required label::after {
-    content: ' *';
-    color: #EF4444;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    padding: 10px 12px;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--navy);
-    transition: border-color 0.2s;
-  }
-
-  .form-group input::placeholder,
-  .form-group select::placeholder,
-  .form-group textarea::placeholder {
-    color: var(--gray-500);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus,
-  .form-group textarea:focus {
-    outline: none;
-    border-color: var(--orange);
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-
-  .form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-  }
-
-  .autocomplete-wrap {
-    position: relative;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-start;
-    margin-top: 32px;
-  }
-
-  .btn {
-    padding: 10px 24px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
-    text-decoration: none;
-    display: inline-block;
-  }
-
-  .btn-primary {
-    background: var(--orange);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #EA5E0B;
-  }
-
-  .btn-secondary {
-    background: var(--gray-100);
-    color: var(--navy);
-  }
-
-  .btn-secondary:hover {
-    background: var(--gray-200);
-  }
-
-  .help-text {
-    font-size: 12px;
-    color: var(--gray-500);
-    margin-top: 4px;
-  }
-</style>
-
-<div class="header-section">
-  <button class="back-btn" onclick="goBack()">←</button>
-  <h1>Add/Edit Online Course</h1>
-</div>
-
-<div class="form-wrapper">
-  <div class="form-card">
-    <form id="courseForm" method="POST">
-      <div class="form-section">
-        <h2>Course Information</h2>
-
-        <div class="form-row">
-          <div class="form-group required autocomplete-wrap">
-            <label for="client_search">Client</label>
-            <input
-              type="text"
-              id="client_search"
-              placeholder="Search client..."
-              autocomplete="off"
-            />
-            <input type="hidden" id="reg_number_val" name="client_reg" />
-            <div class="suggestions-dropdown" id="client_suggestions"></div>
-            <p class="help-text">Search by client name or registration number</p>
-          </div>
-          <div class="form-group required">
-            <label for="course_name">Course Name</label>
-            <select id="course_name" name="course_name" required>
-              <option value="">Select Course Name</option>
-              <option value="Advanced Python Programming">Advanced Python Programming</option>
-              <option value="Data Science Fundamentals">Data Science Fundamentals</option>
-              <option value="Project Management Essentials">Project Management Essentials</option>
-              <option value="Cloud Computing Basics">Cloud Computing Basics</option>
-              <option value="Web Development Masterclass">Web Development Masterclass</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="course_type">Course Type</label>
-            <select id="course_type" name="course_type" required>
-              <option value="">Select Course Type</option>
-              <option value="Professional Development">Professional Development</option>
-              <option value="Technical Skills">Technical Skills</option>
-              <option value="Management">Management</option>
-              <option value="Soft Skills">Soft Skills</option>
-              <option value="Certification">Certification</option>
-            </select>
-          </div>
-          <div class="form-group required">
-            <label for="course_status">Course Status</label>
-            <select id="course_status" name="course_status" required>
-              <option value="">Select Status</option>
-              <option value="Not Started">Not Started</option>
-              <option value="In Progress">In Progress</option>
-              <option value="Completed">Completed</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="start_date">Start Date</label>
-            <input type="date" id="start_date" name="start_date" required />
-          </div>
-          <div class="form-group required">
-            <label for="end_date">End Date</label>
-            <input type="date" id="end_date" name="end_date" required />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="validity_months">Validity (Months)</label>
-            <input type="number" id="validity_months" name="validity_months" min="0" />
-          </div>
-          <div class="form-group">
-            <label for="course_provider">Course Provider</label>
-            <input
-              type="text"
-              id="course_provider"
-              name="course_provider"
-              placeholder="e.g., Coursera, Udemy"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group full">
-            <label for="certification_body">Certification Body</label>
-            <input
-              type="text"
-              id="certification_body"
-              name="certification_body"
-              placeholder="Enter certification body"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group full">
-            <label for="subject_name">Subject Name</label>
-            <input
-              type="text"
-              id="subject_name"
-              name="subject_name"
-              placeholder="Enter subject name"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group full">
-            <label for="notes">Notes</label>
-            <textarea
-              id="notes"
-              name="notes"
-              placeholder="Add any additional notes..."
-            ></textarea>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-section">
-        <h2>Contact & Booking Details</h2>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="client_email">Client Email</label>
-            <input
-              type="email"
-              id="client_email"
-              name="client_email"
-              placeholder="client@example.com"
-            />
-          </div>
-          <div class="form-group">
-            <label for="booked_by">Booked By</label>
-            <select id="booked_by" name="booked_by">
-              <option value="">Select Person</option>
-              <option value="HR Team">HR Team</option>
-              <option value="Manager">Manager</option>
-              <option value="Self">Self</option>
-              <option value="Trainer">Trainer</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="mobile_number">Mobile Number</label>
-            <input
-              type="tel"
-              id="mobile_number"
-              name="mobile_number"
-              placeholder="+44 7700 900000"
-            />
-          </div>
-          <div class="form-group">
-            <label for="candidate_email">Candidate Email</label>
-            <input
-              type="email"
-              id="candidate_email"
-              name="candidate_email"
-              placeholder="candidate@example.com"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Course</button>
-        <button type="button" class="btn btn-secondary" onclick="goBack()">Cancel</button>
-      </div>
-    </form>
-  </div>
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Course{% else %}Add Course{% endif %}
+                </button>
+                <a href="/operations/online-courses" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
-  (function() {
+(function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
     const dropdown = document.getElementById('client_suggestions');
     if (!searchInput) return;
     let debounceTimer = null, highlightIdx = -1, items = [];
+
     searchInput.addEventListener('input', function() {
-      clearTimeout(debounceTimer);
-      hiddenInput.value = '';
-      const q = this.value.trim();
-      if (q.length < 2) { hide(); return; }
-      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
+
     searchInput.addEventListener('keydown', function(e) {
-      if (!dropdown.style.display || dropdown.style.display === 'none') return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
-      else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
-      else if (e.key === 'Escape') { hide(); }
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
     });
+
     document.addEventListener('click', function(e) {
-      if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
+
     searchInput.closest('form').addEventListener('submit', function(e) {
-      if (!hiddenInput.value) { e.preventDefault(); searchInput.style.borderColor = '#EF4444'; searchInput.focus(); alert('Please select a client from the suggestions.'); }
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
     });
+
     function fetchSuggestions(q) {
-      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
-        .then(r => r.json()).then(data => {
-          items = data; highlightIdx = -1;
-          if (!data.length) { hide(); return; }
-          dropdown.innerHTML = data.map((d, i) =>
-            '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
-            '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
-            '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
-          ).join('');
-          dropdown.querySelectorAll('[data-idx]').forEach(el => {
-            el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
-          });
-          dropdown.style.display = 'block';
-        }).catch(() => hide());
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
     }
+
     function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
     function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
     function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-  })();
-
-  function goBack() {
-    window.location.href = '/operations/online-courses';
-  }
-
-  document.getElementById('courseForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    alert('Course saved successfully!');
-  });
+})();
 </script>
+
 {% endblock %}

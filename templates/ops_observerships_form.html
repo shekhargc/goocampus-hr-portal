@@ -1,377 +1,161 @@
 {% extends "base.html" %}
 
-{% block title %}Add/Edit UK Observership - HR Portal{% endblock %}
+{% block title %}{% if record %}Edit Observership{% else %}Add Observership{% endif %} - Operations{% endblock %}
 
 {% block content %}
-<style>
-  :root {
-    --navy: #0F1B33;
-    --gray-50: #F9FAFB;
-    --gray-100: #F3F4F6;
-    --gray-200: #E5E7EB;
-    --gray-500: #6B7280;
-    --orange: #F97316;
-    --border-radius: 12px;
-  }
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/uk-observerships" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to UK Observerships</a>
+    </div>
 
-  body {
-    background: var(--gray-50);
-  }
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit UK Observership{% else %}Add UK Observership{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}Update observership details.{% else %}Add a new observership record.{% endif %}
+        </p>
 
-  .header-section {
-    background: white;
-    border-bottom: 1px solid var(--gray-200);
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
+        <form method="POST">
 
-  .back-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: var(--navy);
-    cursor: pointer;
-    padding: 0;
-  }
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <div style="position:relative;">
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
+                    <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
+                        value="{% if record %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% endif %}"
+                        required
+                        style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                </div>
+            </div>
 
-  .back-btn:hover {
-    color: var(--orange);
-  }
+            <!-- ===== OBSERVERSHIP DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Observership Details</h3>
 
-  .header-section h1 {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Hospital Name *</label>
+                    <input type="text" name="hospital_name" value="{{ record.hospital_name or '' if record else '' }}" required placeholder="Hospital name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Hospital Location *</label>
+                    <input type="text" name="hospital_location" value="{{ record.hospital_location or '' if record else '' }}" required placeholder="e.g., London" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-wrapper {
-    max-width: 900px;
-    margin: 24px auto;
-    padding: 0 24px;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Speciality</label>
+                    <input type="text" name="speciality" value="{{ record.speciality or '' if record else '' }}" placeholder="e.g., Cardiology" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment</label>
+                    <select name="payment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Status</option>
+                        {% for p in observership_payments %}
+                        <option value="{{ p }}" {% if record and record.payment == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-  .form-card {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 32px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Start Date</label>
+                    <input type="date" name="start_date" value="{{ record.start_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">End Date</label>
+                    <input type="date" name="end_date" value="{{ record.end_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-section {
-    margin-bottom: 32px;
-  }
+            <!-- ===== CONTACT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact Information</h3>
 
-  .form-section h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0 0 20px 0;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--gray-100);
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile Number</label>
+                    <input type="tel" name="mobile_number" value="{{ record.mobile_number or '' if record else '' }}" placeholder="+91 XXXXX XXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Email</label>
+                    <input type="email" name="candidate_email" value="{{ record.candidate_email or '' if record else '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-
-  .form-row.full {
-    grid-template-columns: 1fr;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--navy);
-    margin-bottom: 8px;
-  }
-
-  .form-group.required label::after {
-    content: ' *';
-    color: #EF4444;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    padding: 10px 12px;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--navy);
-    transition: border-color 0.2s;
-  }
-
-  .form-group input::placeholder,
-  .form-group select::placeholder,
-  .form-group textarea::placeholder {
-    color: var(--gray-500);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus,
-  .form-group textarea:focus {
-    outline: none;
-    border-color: var(--orange);
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-
-  .form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-  }
-
-  .autocomplete-wrap {
-    position: relative;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-start;
-    margin-top: 32px;
-  }
-
-  .btn {
-    padding: 10px 24px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
-    text-decoration: none;
-    display: inline-block;
-  }
-
-  .btn-primary {
-    background: var(--orange);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #EA5E0B;
-  }
-
-  .btn-secondary {
-    background: var(--gray-100);
-    color: var(--navy);
-  }
-
-  .btn-secondary:hover {
-    background: var(--gray-200);
-  }
-
-  .help-text {
-    font-size: 12px;
-    color: var(--gray-500);
-    margin-top: 4px;
-  }
-</style>
-
-<div class="header-section">
-  <button class="back-btn" onclick="goBack()">←</button>
-  <h1>Add/Edit UK Observership</h1>
-</div>
-
-<div class="form-wrapper">
-  <div class="form-card">
-    <form id="observershipForm" method="POST">
-      <div class="form-section">
-        <h2>Observership Details</h2>
-
-        <div class="form-row">
-          <div class="form-group required autocomplete-wrap">
-            <label for="client_search">Client</label>
-            <input
-              type="text"
-              id="client_search"
-              placeholder="Search client..."
-              autocomplete="off"
-            />
-            <input type="hidden" id="reg_number_val" name="client_reg" />
-            <div class="suggestions-dropdown" id="client_suggestions"></div>
-            <p class="help-text">Search by client name or registration number</p>
-          </div>
-          <div class="form-group required">
-            <label for="hospital_name">Hospital Name</label>
-            <input
-              type="text"
-              id="hospital_name"
-              name="hospital_name"
-              placeholder="Enter hospital name"
-              required
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="hospital_location">Hospital Location</label>
-            <input
-              type="text"
-              id="hospital_location"
-              name="hospital_location"
-              placeholder="e.g., London, Manchester"
-              required
-            />
-          </div>
-          <div class="form-group">
-            <label for="speciality">Speciality</label>
-            <input
-              type="text"
-              id="speciality"
-              name="speciality"
-              placeholder="e.g., Cardiology, Surgery"
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="start_date">Start Date</label>
-            <input type="date" id="start_date" name="start_date" required />
-          </div>
-          <div class="form-group required">
-            <label for="end_date">End Date</label>
-            <input type="date" id="end_date" name="end_date" required />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="payment_status">Payment Status</label>
-            <select id="payment_status" name="payment_status">
-              <option value="">Select Payment Status</option>
-              <option value="Paid">Paid</option>
-              <option value="Pending">Pending</option>
-              <option value="Overdue">Overdue</option>
-              <option value="Cancelled">Cancelled</option>
-            </select>
-          </div>
-        </div>
-      </div>
-
-      <div class="form-section">
-        <h2>Contact Information</h2>
-
-        <div class="form-row">
-          <div class="form-group">
-            <label for="mobile_number">Mobile Number</label>
-            <input
-              type="tel"
-              id="mobile_number"
-              name="mobile_number"
-              placeholder="+44 7700 900000"
-            />
-          </div>
-          <div class="form-group">
-            <label for="candidate_email">Candidate Email</label>
-            <input
-              type="email"
-              id="candidate_email"
-              name="candidate_email"
-              placeholder="candidate@example.com"
-            />
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Observership</button>
-        <button type="button" class="btn btn-secondary" onclick="goBack()">Cancel</button>
-      </div>
-    </form>
-  </div>
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Observership{% else %}Add Observership{% endif %}
+                </button>
+                <a href="/operations/uk-observerships" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
-  (function() {
+(function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
     const dropdown = document.getElementById('client_suggestions');
     if (!searchInput) return;
     let debounceTimer = null, highlightIdx = -1, items = [];
+
     searchInput.addEventListener('input', function() {
-      clearTimeout(debounceTimer);
-      hiddenInput.value = '';
-      const q = this.value.trim();
-      if (q.length < 2) { hide(); return; }
-      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
+
     searchInput.addEventListener('keydown', function(e) {
-      if (!dropdown.style.display || dropdown.style.display === 'none') return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
-      else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
-      else if (e.key === 'Escape') { hide(); }
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
     });
+
     document.addEventListener('click', function(e) {
-      if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
+
     searchInput.closest('form').addEventListener('submit', function(e) {
-      if (!hiddenInput.value) { e.preventDefault(); searchInput.style.borderColor = '#EF4444'; searchInput.focus(); alert('Please select a client from the suggestions.'); }
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
     });
+
     function fetchSuggestions(q) {
-      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
-        .then(r => r.json()).then(data => {
-          items = data; highlightIdx = -1;
-          if (!data.length) { hide(); return; }
-          dropdown.innerHTML = data.map((d, i) =>
-            '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
-            '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
-            '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
-          ).join('');
-          dropdown.querySelectorAll('[data-idx]').forEach(el => {
-            el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
-          });
-          dropdown.style.display = 'block';
-        }).catch(() => hide());
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
     }
+
     function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
     function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
     function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-  })();
-
-  function goBack() {
-    window.location.href = '/operations/uk-observerships';
-  }
-
-  document.getElementById('observershipForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    alert('Observership saved successfully!');
-  });
+})();
 </script>
+
 {% endblock %}

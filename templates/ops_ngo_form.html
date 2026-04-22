@@ -1,338 +1,141 @@
 {% extends "base.html" %}
 
-{% block title %}Add/Edit NGO Activity - HR Portal{% endblock %}
+{% block title %}{% if record %}Edit NGO Activity{% else %}Add NGO Activity{% endif %} - Operations{% endblock %}
 
 {% block content %}
-<style>
-  :root {
-    --navy: #0F1B33;
-    --gray-50: #F9FAFB;
-    --gray-100: #F3F4F6;
-    --gray-200: #E5E7EB;
-    --gray-500: #6B7280;
-    --orange: #F97316;
-    --border-radius: 12px;
-  }
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/ngo-activities" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to NGO Activities</a>
+    </div>
 
-  body {
-    background: var(--gray-50);
-  }
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit NGO Activity{% else %}Add NGO Activity{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}Update activity details.{% else %}Add a new NGO activity record.{% endif %}
+        </p>
 
-  .header-section {
-    background: white;
-    border-bottom: 1px solid var(--gray-200);
-    padding: 24px;
-    display: flex;
-    align-items: center;
-    gap: 16px;
-  }
+        <form method="POST">
 
-  .back-btn {
-    background: none;
-    border: none;
-    font-size: 24px;
-    color: var(--navy);
-    cursor: pointer;
-    padding: 0;
-  }
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <div style="position:relative;">
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
+                    <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
+                        value="{% if record %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% endif %}"
+                        required
+                        style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                </div>
+            </div>
 
-  .back-btn:hover {
-    color: var(--orange);
-  }
+            <!-- ===== ACTIVITY DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Activity Details</h3>
 
-  .header-section h1 {
-    font-size: 28px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">NGO Vendor Name *</label>
+                    <select name="ngo_vendor_name" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in ngo_vendors %}
+                        <option value="{{ v }}" {% if record and record.ngo_vendor_name == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Activity Type *</label>
+                    <select name="activity_type" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Type</option>
+                        {% for t in activity_types %}
+                        <option value="{{ t }}" {% if record and record.activity_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-  .form-wrapper {
-    max-width: 900px;
-    margin: 24px auto;
-    padding: 0 24px;
-  }
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Name/No *</label>
+                    <input type="text" name="batch_name_no" value="{{ record.batch_name_no or '' if record else '' }}" required placeholder="e.g., Batch-2024-01" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Activity Start Date *</label>
+                    <input type="date" name="activity_start_date" value="{{ record.activity_start_date or '' if record else '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-  .form-card {
-    background: white;
-    border-radius: var(--border-radius);
-    padding: 32px;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  }
-
-  .form-section {
-    margin-bottom: 32px;
-  }
-
-  .form-section h2 {
-    font-size: 16px;
-    font-weight: 700;
-    color: var(--navy);
-    margin: 0 0 20px 0;
-    padding-bottom: 12px;
-    border-bottom: 2px solid var(--gray-100);
-  }
-
-  .form-row {
-    display: grid;
-    grid-template-columns: 1fr 1fr;
-    gap: 24px;
-    margin-bottom: 24px;
-  }
-
-  .form-row.full {
-    grid-template-columns: 1fr;
-  }
-
-  .form-group {
-    display: flex;
-    flex-direction: column;
-  }
-
-  .form-group label {
-    font-size: 14px;
-    font-weight: 600;
-    color: var(--navy);
-    margin-bottom: 8px;
-  }
-
-  .form-group.required label::after {
-    content: ' *';
-    color: #EF4444;
-  }
-
-  .form-group input,
-  .form-group select,
-  .form-group textarea {
-    padding: 10px 12px;
-    border: 1px solid var(--gray-200);
-    border-radius: 6px;
-    font-size: 14px;
-    font-family: inherit;
-    color: var(--navy);
-    transition: border-color 0.2s;
-  }
-
-  .form-group input::placeholder,
-  .form-group select::placeholder,
-  .form-group textarea::placeholder {
-    color: var(--gray-500);
-  }
-
-  .form-group input:focus,
-  .form-group select:focus,
-  .form-group textarea:focus {
-    outline: none;
-    border-color: var(--orange);
-    box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.1);
-  }
-
-  .form-group textarea {
-    resize: vertical;
-    min-height: 100px;
-  }
-
-  .autocomplete-wrap {
-    position: relative;
-  }
-
-  .suggestions-dropdown {
-    display: none;
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: white;
-    border: 1px solid var(--gray-200);
-    border-top: none;
-    border-radius: 0 0 6px 6px;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-  }
-
-  .suggestions-dropdown.visible {
-    display: block;
-  }
-
-  .form-actions {
-    display: flex;
-    gap: 12px;
-    justify-content: flex-start;
-    margin-top: 32px;
-  }
-
-  .btn {
-    padding: 10px 24px;
-    border-radius: 6px;
-    font-weight: 600;
-    font-size: 14px;
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
-    text-decoration: none;
-    display: inline-block;
-  }
-
-  .btn-primary {
-    background: var(--orange);
-    color: white;
-  }
-
-  .btn-primary:hover {
-    background: #EA5E0B;
-  }
-
-  .btn-secondary {
-    background: var(--gray-100);
-    color: var(--navy);
-  }
-
-  .btn-secondary:hover {
-    background: var(--gray-200);
-  }
-
-  .help-text {
-    font-size: 12px;
-    color: var(--gray-500);
-    margin-top: 4px;
-  }
-</style>
-
-<div class="header-section">
-  <button class="back-btn" onclick="goBack()">←</button>
-  <h1>Add/Edit NGO Activity</h1>
-</div>
-
-<div class="form-wrapper">
-  <div class="form-card">
-    <form id="ngoForm" method="POST">
-      <div class="form-section">
-        <h2>Activity Details</h2>
-
-        <div class="form-row">
-          <div class="form-group required autocomplete-wrap">
-            <label for="client_search">Client</label>
-            <input
-              type="text"
-              id="client_search"
-              placeholder="Search client..."
-              autocomplete="off"
-            />
-            <input type="hidden" id="reg_number_val" name="client_reg" />
-            <div class="suggestions-dropdown" id="client_suggestions"></div>
-            <p class="help-text">Search by client name or registration number</p>
-          </div>
-          <div class="form-group required">
-            <label for="ngo_vendor">NGO Vendor Name</label>
-            <select id="ngo_vendor" name="ngo_vendor" required>
-              <option value="">Select NGO Vendor</option>
-              <option value="Help India Foundation">Help India Foundation</option>
-              <option value="Global Education Initiative">Global Education Initiative</option>
-              <option value="Tech for Good">Tech for Good</option>
-              <option value="Community Care Network">Community Care Network</option>
-              <option value="Environmental Action Group">Environmental Action Group</option>
-            </select>
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="activity_type">Activity Type</label>
-            <select id="activity_type" name="activity_type" required>
-              <option value="">Select Activity Type</option>
-              <option value="Community Service">Community Service</option>
-              <option value="Volunteering">Volunteering</option>
-              <option value="Training">Training</option>
-              <option value="Mentoring">Mentoring</option>
-              <option value="Environmental Work">Environmental Work</option>
-            </select>
-          </div>
-          <div class="form-group required">
-            <label for="batch_name">Batch Name/No</label>
-            <input
-              type="text"
-              id="batch_name"
-              name="batch_name"
-              placeholder="e.g., Batch-2024-01"
-              required
-            />
-          </div>
-        </div>
-
-        <div class="form-row">
-          <div class="form-group required">
-            <label for="start_date">Activity Start Date</label>
-            <input type="date" id="start_date" name="start_date" required />
-          </div>
-        </div>
-      </div>
-
-      <div class="form-actions">
-        <button type="submit" class="btn btn-primary">Save Activity</button>
-        <button type="button" class="btn btn-secondary" onclick="goBack()">Cancel</button>
-      </div>
-    </form>
-  </div>
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Activity{% else %}Add Activity{% endif %}
+                </button>
+                <a href="/operations/ngo-activities" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
 </div>
 
 <script>
-  (function() {
+(function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
     const dropdown = document.getElementById('client_suggestions');
     if (!searchInput) return;
     let debounceTimer = null, highlightIdx = -1, items = [];
+
     searchInput.addEventListener('input', function() {
-      clearTimeout(debounceTimer);
-      hiddenInput.value = '';
-      const q = this.value.trim();
-      if (q.length < 2) { hide(); return; }
-      debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
     });
+
     searchInput.addEventListener('keydown', function(e) {
-      if (!dropdown.style.display || dropdown.style.display === 'none') return;
-      if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
-      else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
-      else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
-      else if (e.key === 'Escape') { hide(); }
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
     });
+
     document.addEventListener('click', function(e) {
-      if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
     });
+
     searchInput.closest('form').addEventListener('submit', function(e) {
-      if (!hiddenInput.value) { e.preventDefault(); searchInput.style.borderColor = '#EF4444'; searchInput.focus(); alert('Please select a client from the suggestions.'); }
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
     });
+
     function fetchSuggestions(q) {
-      fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
-        .then(r => r.json()).then(data => {
-          items = data; highlightIdx = -1;
-          if (!data.length) { hide(); return; }
-          dropdown.innerHTML = data.map((d, i) =>
-            '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
-            '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
-            '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
-          ).join('');
-          dropdown.querySelectorAll('[data-idx]').forEach(el => {
-            el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
-          });
-          dropdown.style.display = 'block';
-        }).catch(() => hide());
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
     }
+
     function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
     function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
     function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
-  })();
-
-  function goBack() {
-    window.location.href = '/operations/ngo-activities';
-  }
-
-  document.getElementById('ngoForm').addEventListener('submit', function(e) {
-    e.preventDefault();
-    alert('Activity saved successfully!');
-  });
+})();
 </script>
+
 {% endblock %}

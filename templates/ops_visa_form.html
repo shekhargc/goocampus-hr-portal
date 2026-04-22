@@ -1,276 +1,284 @@
 {% extends "base.html" %}
 
+{% block title %}{% if record %}Edit Visa{% else %}Add Visa{% endif %} - Operations{% endblock %}
+
 {% block content %}
-<div class="container mx-auto px-6 py-8">
-  <div class="mb-8">
-    <a href="/operations/uk-visa-travel" class="text-orange font-600 hover:underline">&larr; Back to UK Visa & Travel</a>
-  </div>
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/uk-visa-travel" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to UK Visa & Travel</a>
+    </div>
 
-  <div class="bg-white rounded-xl p-8 shadow-sm border border-gray-200 max-w-2xl">
-    <h1 class="text-3xl font-bold text-navy mb-8">Add/Edit UK Visa & Travel</h1>
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit UK Visa & Travel{% else %}Add UK Visa & Travel{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}Update visa and travel details.{% else %}Add a new visa & travel record.{% endif %}
+        </p>
 
-    <form method="POST" id="visaForm">
-      <div class="space-y-6">
-        <!-- Client Search -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Client *</label>
-          <div class="autocomplete-wrap">
-            <input type="text" id="clientSearch" placeholder="Search by name or registration..." class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent" required>
-            <input type="hidden" id="registration_number" name="registration_number" required>
-            <div id="clientSuggestions" class="suggestions-dropdown"></div>
-          </div>
-          <small class="text-gray-500 mt-1 block">Type at least 2 characters to search</small>
-        </div>
+        <form method="POST">
 
-        <!-- Visa Application Status -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Application Status</label>
-          <select name="visa_application_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Status</option>
-            <option value="Not Started">Not Started</option>
-            <option value="Applied">Applied</option>
-            <option value="Pending">Pending</option>
-            <option value="Approved">Approved</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-        </div>
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <div style="position:relative;">
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
+                    <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
+                        value="{% if record %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% endif %}"
+                        required
+                        style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                </div>
+            </div>
 
-        <!-- Documents Collected -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Documents Collected</label>
-          <select name="documents_collected" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Option</option>
-            <option value="All">All</option>
-            <option value="Partial">Partial</option>
-            <option value="None">None</option>
-          </select>
-        </div>
+            <!-- ===== VISA APPLICATION ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Visa Application</h3>
 
-        <!-- Note on Documents -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Note on Documents</label>
-          <input type="text" name="note_on_documents" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Application Status</label>
+                    <select name="visa_application_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Status</option>
+                        {% for s in visa_app_statuses %}
+                        <option value="{{ s }}" {% if record and record.visa_application_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Documents Collected</label>
+                    <select name="documents_collected" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for d in visa_doc_collected %}
+                        <option value="{{ d }}" {% if record and record.documents_collected == d %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-        <!-- Documents Status -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Documents Status</label>
-          <select name="documents_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Status</option>
-            <option value="Submitted">Submitted</option>
-            <option value="Verified">Verified</option>
-            <option value="Pending">Pending</option>
-            <option value="Rejected">Rejected</option>
-          </select>
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Documents Status</label>
+                    <select name="documents_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Status</option>
+                        {% for s in visa_doc_statuses %}
+                        <option value="{{ s }}" {% if record and record.documents_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note on Documents</label>
+                    <input type="text" name="note_on_documents" value="{{ record.note_on_documents or '' if record else '' }}" placeholder="Notes" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Visa Interview Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Interview Date</label>
-          <input type="date" name="visa_interview_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <!-- ===== VISA DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Visa Details</h3>
 
-        <!-- Visa Status -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Status</label>
-          <select name="visa_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Status</option>
-            <option value="Approved">Approved</option>
-            <option value="Pending">Pending</option>
-            <option value="Rejected">Rejected</option>
-            <option value="Expired">Expired</option>
-          </select>
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Interview Date</label>
+                    <input type="date" name="visa_interview_date" value="{{ record.visa_interview_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Status</label>
+                    <select name="visa_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Status</option>
+                        {% for s in visa_statuses %}
+                        <option value="{{ s }}" {% if record and record.visa_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-        <!-- Note on Visa Status -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Note on Visa Status</label>
-          <input type="text" name="note_on_visa_status" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note on Visa Status</label>
+                <input type="text" name="note_on_visa_status" value="{{ record.note_on_visa_status or '' if record else '' }}" placeholder="Notes" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
 
-        <!-- Visa Issued Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Issued Date</label>
-          <input type="date" name="visa_issued_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Type</label>
+                    <select name="visa_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Type</option>
+                        {% for t in visa_types %}
+                        <option value="{{ t }}" {% if record and record.visa_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Period</label>
+                    <select name="visa_period" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Period</option>
+                        {% for p in visa_periods %}
+                        <option value="{{ p }}" {% if record and record.visa_period == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Issued Date</label>
+                    <input type="date" name="visa_issued_date" value="{{ record.visa_issued_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Visa Period -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Period</label>
-          <select name="visa_period" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Period</option>
-            <option value="3 months">3 months</option>
-            <option value="6 months">6 months</option>
-            <option value="1 year">1 year</option>
-            <option value="2 years">2 years</option>
-            <option value="5 years">5 years</option>
-            <option value="10 years">10 years</option>
-          </select>
-        </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Visa Expiry Date</label>
+                <input type="date" name="visa_expiry_date" value="{{ record.visa_expiry_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
 
-        <!-- Visa Expiry Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Expiry Date</label>
-          <input type="date" name="visa_expiry_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <!-- ===== TRAVEL ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Travel Details</h3>
 
-        <!-- Visa Type -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Visa Type</label>
-          <select name="visa_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Type</option>
-            <option value="Student">Student</option>
-            <option value="Work">Work</option>
-            <option value="Visit">Visit</option>
-            <option value="Settlement">Settlement</option>
-          </select>
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Departure Date</label>
+                    <input type="date" name="departure_date" value="{{ record.departure_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Arrival Date</label>
+                    <input type="date" name="arrival_date" value="{{ record.arrival_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Departure Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Departure Date</label>
-          <input type="date" name="departure_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <!-- ===== QUARANTINE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Quarantine & Lodging</h3>
 
-        <!-- Quarantine -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine</label>
-          <input type="text" name="quarantine" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Quarantine</label>
+                    <input type="text" name="quarantine" value="{{ record.quarantine or '' if record else '' }}" placeholder="e.g., Yes/No" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Quarantine Days</label>
+                    <input type="number" name="quarantine_days" value="{{ record.quarantine_days or '' if record else '' }}" placeholder="0" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Quarantine Days -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine Days</label>
-          <input type="number" name="quarantine_days" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Quarantine Hotel Name</label>
+                <input type="text" name="quarantine_hotel_name" value="{{ record.quarantine_hotel_name or '' if record else '' }}" placeholder="Hotel name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
 
-        <!-- Quarantine Hotel Name -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Quarantine Hotel Name</label>
-          <input type="text" name="quarantine_hotel_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lodging Name</label>
+                    <input type="text" name="lodging_name" value="{{ record.lodging_name or '' if record else '' }}" placeholder="Lodging name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lodging Type</label>
+                    <select name="lodging_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Type</option>
+                        {% for t in lodging_types %}
+                        <option value="{{ t }}" {% if record and record.lodging_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
 
-        <!-- Lodging Name -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Lodging Name</label>
-          <input type="text" name="lodging_name" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Check In Date</label>
+                    <input type="date" name="check_in_date" value="{{ record.check_in_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Check Out Date</label>
+                    <input type="date" name="check_out_date" value="{{ record.check_out_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Check In Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Check In Date</label>
-          <input type="date" name="check_in_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note</label>
+                <textarea name="note" rows="3" placeholder="Additional notes..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.note or '' if record else '' }}</textarea>
+            </div>
 
-        <!-- Check Out Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Check Out Date</label>
-          <input type="date" name="check_out_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
+            <!-- ===== CONTACT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact Information</h3>
 
-        <!-- Lodging Type -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Lodging Type</label>
-          <select name="lodging_type" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-            <option value="">Select Type</option>
-            <option value="Hotel">Hotel</option>
-            <option value="Apartment">Apartment</option>
-            <option value="Host Family">Host Family</option>
-            <option value="University">University</option>
-          </select>
-        </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">UK Phone Number</label>
+                    <input type="tel" name="uk_phone_number" value="{{ record.uk_phone_number or '' if record else '' }}" placeholder="+44 XXXX XXXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile Number</label>
+                    <input type="tel" name="mobile_number" value="{{ record.mobile_number or '' if record else '' }}" placeholder="+91 XXXXX XXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
 
-        <!-- Note -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Note</label>
-          <textarea name="note" rows="3" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent"></textarea>
-        </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Email</label>
+                <input type="email" name="candidate_email" value="{{ record.candidate_email or '' if record else '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
 
-        <!-- Arrival Date -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Arrival Date</label>
-          <input type="date" name="arrival_date" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
-
-        <!-- UK Phone Number -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">UK Phone Number</label>
-          <input type="tel" name="uk_phone_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
-
-        <!-- Mobile Number -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Mobile Number</label>
-          <input type="tel" name="mobile_number" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
-
-        <!-- Candidate Email -->
-        <div>
-          <label class="block text-sm font-600 text-gray-700 mb-2">Candidate Email</label>
-          <input type="email" name="candidate_email" class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-orange focus:border-transparent">
-        </div>
-
-        <!-- Submit -->
-        <div class="flex gap-4 pt-4">
-          <button type="submit" class="px-6 py-2 bg-orange text-white rounded-lg font-600 hover:bg-orange-600">Save Visa</button>
-          <a href="/operations/uk-visa-travel" class="px-6 py-2 bg-gray-200 text-navy rounded-lg font-600 hover:bg-gray-300">Cancel</a>
-        </div>
-      </div>
-    </form>
-  </div>
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Visa & Travel{% else %}Add Visa & Travel{% endif %}
+                </button>
+                <a href="/operations/uk-visa-travel" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
 </div>
 
-<style>
-.autocomplete-wrap{position:relative}
-.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
-.suggestions-dropdown.visible{display:block}
-.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
-.suggestion-item:last-child{border-bottom:none}
-.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
-.suggestion-name{color:var(--gray-700);font-weight:500}
-.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
-</style>
-
 <script>
-const clientSearchInput = document.getElementById('clientSearch');
-const suggestionsDiv = document.getElementById('clientSuggestions');
-const registrationInput = document.getElementById('registration_number');
+(function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
 
-clientSearchInput.addEventListener('input', function(e) {
-  const query = e.target.value.trim();
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
 
-  if (query.length < 2) {
-    suggestionsDiv.classList.remove('visible');
-    return;
-  }
+    searchInput.addEventListener('keydown', function(e) {
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
 
-  fetch(`/operations/api/client-search?q=${encodeURIComponent(query)}`)
-    .then(r => r.json())
-    .then(data => {
-      suggestionsDiv.innerHTML = data.map(client => `
-        <div class="suggestion-item" onclick="selectClient('${client.name}', '${client.registration_number}')">
-          <span class="suggestion-name">${client.name}</span>
-          <span class="suggestion-reg">${client.registration_number}</span>
-        </div>
-      `).join('');
-      if (data.length > 0) {
-        suggestionsDiv.classList.add('visible');
-      }
-    })
-    .catch(err => console.error('Error fetching clients:', err));
-});
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
 
-function selectClient(name, registrationNumber) {
-  clientSearchInput.value = name;
-  registrationInput.value = registrationNumber;
-  suggestionsDiv.classList.remove('visible');
-}
+    searchInput.closest('form').addEventListener('submit', function(e) {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
+    });
 
-document.getElementById('visaForm').addEventListener('submit', function(e) {
-  if (!registrationInput.value) {
-    e.preventDefault();
-    alert('Please select a client from the list');
-  }
-});
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) { searchInput.value = item.name; hiddenInput.value = item.reg; searchInput.style.borderColor = '#10B981'; hide(); }
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
+
 {% endblock %}
