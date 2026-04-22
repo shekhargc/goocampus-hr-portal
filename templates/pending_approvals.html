@@ -1,9 +1,34 @@
 {% extends "base.html" %}
 
-{% block title %}Pending Approvals - GooCampus HR Portal{% endblock %}
+{% block title %}Leave Approvals - GooCampus HR Portal{% endblock %}
 
 {% block extra_css %}
 <style>
+    /* ── Tabs ── */
+    .tab-bar {
+        display: flex; gap: 0; margin-bottom: 1.5rem;
+        border-bottom: 2px solid var(--gray-200);
+    }
+    .tab-btn {
+        padding: 0.75rem 1.5rem; font-size: 0.88rem; font-weight: 600;
+        color: var(--gray-500); background: none; border: none; cursor: pointer;
+        border-bottom: 2px solid transparent; margin-bottom: -2px;
+        transition: color 0.2s, border-color 0.2s;
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .tab-btn:hover { color: var(--navy); }
+    .tab-btn.active { color: var(--orange); border-bottom-color: var(--orange); }
+    .tab-btn .badge {
+        display: inline-flex; align-items: center; justify-content: center;
+        min-width: 22px; height: 22px; border-radius: 9999px;
+        font-size: 0.72rem; font-weight: 700; padding: 0 0.4rem;
+    }
+    .tab-btn.active .badge { background: var(--orange-light); color: var(--orange-dark); }
+    .tab-btn:not(.active) .badge { background: var(--gray-100); color: var(--gray-500); }
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    /* ── Filter bar ── */
     .filter-bar {
         display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
         background: white; padding: 1.25rem; border-radius: 0.75rem;
@@ -32,6 +57,7 @@
     .btn-filter-clear { background: var(--gray-200); color: var(--gray-600); }
     .btn-filter-clear:hover { background: var(--gray-300); }
 
+    /* ── Stat pills ── */
     .stat-pills { display: flex; gap: 0.75rem; margin-bottom: 1.5rem; flex-wrap: wrap; }
     .stat-pill {
         display: flex; align-items: center; gap: 0.5rem;
@@ -43,7 +69,10 @@
     .stat-pill.total .count { color: var(--navy); }
     .stat-pill.late .count { color: #D97706; }
     .stat-pill.reapproval .count { color: #1E40AF; }
+    .stat-pill.approved .count { color: #166534; }
+    .stat-pill.rejected .count { color: #991B1B; }
 
+    /* ── Data table ── */
     .data-table { width: 100%; border-collapse: separate; border-spacing: 0; }
     .data-table th {
         background: var(--navy); color: white; padding: 0.75rem 1rem;
@@ -62,6 +91,7 @@
     .data-table tbody tr.is-late { background: #FFFBEB; }
     .data-table tbody tr.is-late:hover { background: #FEF3C7; }
 
+    /* ── Employee cell ── */
     .emp-cell { display: flex; align-items: center; gap: 0.6rem; }
     .emp-avatar {
         width: 36px; height: 36px; border-radius: 50%; object-fit: cover;
@@ -76,6 +106,7 @@
     .emp-name { font-weight: 600; color: var(--navy); font-size: 0.9rem; }
     .emp-code { font-size: 0.72rem; color: var(--gray-400); }
 
+    /* ── Badges ── */
     .late-badge, .modified-badge {
         display: inline-flex; align-items: center; gap: 0.3rem;
         font-size: 0.68rem; font-weight: 700;
@@ -84,6 +115,12 @@
     }
     .late-badge { background: #FEF3C7; color: #92400E; border: 1px solid #FCD34D; }
     .modified-badge { background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD; }
+    .status-badge-sm {
+        display: inline-block; padding: 0.2rem 0.65rem; border-radius: 9999px;
+        font-size: 0.72rem; font-weight: 700; text-transform: capitalize;
+    }
+    .status-badge-sm.approved { background: var(--success-light); color: #166534; }
+    .status-badge-sm.rejected { background: var(--danger-light); color: #991B1B; }
 
     .late-count-chip {
         display: inline-flex; align-items: center; gap: 0.35rem;
@@ -115,7 +152,7 @@
     .empty-state { text-align: center; padding: 4rem 2rem; color: var(--gray-400); }
     .empty-state svg { margin-bottom: 1rem; opacity: 0.3; }
 
-    /* ============ Slide-out Detail Drawer ============ */
+    /* ── Slide-out Detail Drawer ── */
     .drawer-backdrop {
         position: fixed; inset: 0; background: rgba(15, 27, 51, 0.35);
         opacity: 0; visibility: hidden; transition: opacity 0.25s, visibility 0.25s;
@@ -204,14 +241,15 @@
         .filter-group input, .filter-group select { min-width: 100%; }
         .drawer { width: 100%; }
         .drawer-grid { grid-template-columns: 1fr; }
+        .tab-btn { padding: 0.6rem 1rem; font-size: 0.82rem; }
     }
 </style>
 {% endblock %}
 
 {% block content %}
 <div class="page-header">
-    <h1>Pending Leave Approvals</h1>
-    <p>Review and approve pending leave requests from your team</p>
+    <h1>Leave Approvals</h1>
+    <p>Review pending requests and view approved / rejected leaves</p>
 </div>
 
 {% if late_leave_summary %}
@@ -232,7 +270,8 @@
 {% endif %}
 
 <!-- Filter Bar -->
-<form method="GET" class="filter-bar">
+<form method="GET" class="filter-bar" id="filterForm">
+    <input type="hidden" name="tab" id="hiddenTab" value="{{ active_tab }}">
     <div class="filter-group">
         <label>Employee</label>
         <input type="text" name="employee" value="{{ f_employee }}" placeholder="Name or code...">
@@ -258,76 +297,160 @@
     </div>
 </form>
 
-<!-- Summary Pills -->
-<div class="stat-pills">
-    <div class="stat-pill total"><span class="count">{{ total_count or 0 }}</span> Pending</div>
-    <div class="stat-pill late"><span class="count">{{ late_count or 0 }}</span> Late Leaves</div>
-    <div class="stat-pill reapproval"><span class="count">{{ reapproval_count or 0 }}</span> Re-approval</div>
+<!-- Tabs -->
+<div class="tab-bar">
+    <button class="tab-btn {% if active_tab == 'pending' %}active{% endif %}" onclick="switchTab('pending')" type="button">
+        Pending <span class="badge">{{ total_count or 0 }}</span>
+    </button>
+    <button class="tab-btn {% if active_tab == 'approved' %}active{% endif %}" onclick="switchTab('approved')" type="button">
+        Approved / Rejected <span class="badge">{{ (approved_count or 0) + (rejected_count or 0) }}</span>
+    </button>
 </div>
 
-<!-- Pending Leaves Table -->
-<div class="card" style="padding: 0; overflow: hidden;">
-    {% if pending_leaves %}
-    <div style="overflow-x: auto;">
-    <table class="data-table">
-        <thead>
-            <tr>
-                <th>Employee</th>
-                <th>Department</th>
-                <th>Date</th>
-                <th>Type</th>
-                <th>Duration</th>
-                <th>Reason</th>
-                <th>Flags</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for leave in pending_leaves %}
-            <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
-                <td>
-                    <div class="emp-cell">
-                        {% if leave.photo_src %}
-                        <img src="{{ leave.photo_src }}" class="emp-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
-                        <div class="emp-avatar-placeholder" style="display:none;">{{ (leave.employee_name or '?')[0]|upper }}</div>
-                        {% else %}
-                        <div class="emp-avatar-placeholder">{{ (leave.employee_name or '?')[0]|upper }}</div>
-                        {% endif %}
-                        <div>
-                            <div class="emp-name">{{ leave.employee_name or '—' }}</div>
-                            <div class="emp-code">{{ leave.emp_code or '' }}</div>
+<!-- ═══════ PENDING TAB ═══════ -->
+<div class="tab-panel {% if active_tab == 'pending' %}active{% endif %}" id="tab-pending">
+
+    <div class="stat-pills">
+        <div class="stat-pill total"><span class="count">{{ total_count or 0 }}</span> Pending</div>
+        <div class="stat-pill late"><span class="count">{{ late_count or 0 }}</span> Late Leaves</div>
+        <div class="stat-pill reapproval"><span class="count">{{ reapproval_count or 0 }}</span> Re-approval</div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        {% if pending_leaves %}
+        <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Duration</th>
+                    <th>Reason</th>
+                    <th>Flags</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in pending_leaves %}
+                <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
+                    <td>
+                        <div class="emp-cell">
+                            {% if leave.photo_src %}
+                            <img src="{{ leave.photo_src }}" class="emp-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                            <div class="emp-avatar-placeholder" style="display:none;">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                            {% else %}
+                            <div class="emp-avatar-placeholder">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                            {% endif %}
+                            <div>
+                                <div class="emp-name">{{ leave.employee_name or '—' }}</div>
+                                <div class="emp-code">{{ leave.emp_code or '' }}</div>
+                            </div>
                         </div>
-                    </div>
-                </td>
-                <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
-                <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date|format_date }}</td>
-                <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
-                <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
-                    {% if leave.day_portion == 'first_half' %}First Half
-                    {% elif leave.day_portion == 'second_half' %}Second Half
-                    {% else %}Full Day
-                    {% endif %}
-                </td>
-                <td class="reason-cell">
-                    <div class="reason-text">{{ leave.reason_main or '—' }}</div>
-                </td>
-                <td>
-                    {% if leave.is_late %}<span class="late-badge">Late</span>{% endif %}
-                    {% if leave.original_id %}<span class="modified-badge" style="margin-left:0.25rem;">Re-approval</span>{% endif %}
-                </td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
+                    </td>
+                    <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
+                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date|format_date }}</td>
+                    <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
+                    <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
+                        {% if leave.day_portion == 'first_half' %}First Half
+                        {% elif leave.day_portion == 'second_half' %}Second Half
+                        {% else %}Full Day
+                        {% endif %}
+                    </td>
+                    <td class="reason-cell">
+                        <div class="reason-text">{{ leave.reason_main or '—' }}</div>
+                    </td>
+                    <td>
+                        {% if leave.is_late %}<span class="late-badge">Late</span>{% endif %}
+                        {% if leave.original_id %}<span class="modified-badge" style="margin-left:0.25rem;">Re-approval</span>{% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
+            <p>No pending leave requests. All caught up!</p>
+        </div>
+        {% endif %}
     </div>
-    {% else %}
-    <div class="empty-state">
-        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><path d="M9 12l2 2 4-4"/></svg>
-        <p>No pending leave requests. All caught up!</p>
-    </div>
-    {% endif %}
 </div>
 
-<!-- ============ Slide-out Detail Drawer ============ -->
+<!-- ═══════ APPROVED / REJECTED TAB ═══════ -->
+<div class="tab-panel {% if active_tab == 'approved' %}active{% endif %}" id="tab-approved">
+
+    <div class="stat-pills">
+        <div class="stat-pill approved"><span class="count">{{ approved_count or 0 }}</span> Approved</div>
+        <div class="stat-pill rejected"><span class="count">{{ rejected_count or 0 }}</span> Rejected</div>
+    </div>
+
+    <div class="card" style="padding: 0; overflow: hidden;">
+        {% if approved_leaves %}
+        <div style="overflow-x: auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Employee</th>
+                    <th>Department</th>
+                    <th>Date</th>
+                    <th>Type</th>
+                    <th>Duration</th>
+                    <th>Status</th>
+                    <th>Approved By</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for leave in approved_leaves %}
+                <tr onclick="openLeaveDetail({{ leave.id }})">
+                    <td>
+                        <div class="emp-cell">
+                            {% if leave.photo_src %}
+                            <img src="{{ leave.photo_src }}" class="emp-avatar" alt="" onerror="this.style.display='none';this.nextElementSibling.style.display='flex';">
+                            <div class="emp-avatar-placeholder" style="display:none;">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                            {% else %}
+                            <div class="emp-avatar-placeholder">{{ (leave.employee_name or '?')[0]|upper }}</div>
+                            {% endif %}
+                            <div>
+                                <div class="emp-name">{{ leave.employee_name or '—' }}</div>
+                                <div class="emp-code">{{ leave.emp_code or '' }}</div>
+                            </div>
+                        </div>
+                    </td>
+                    <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
+                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date|format_date }}</td>
+                    <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
+                    <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
+                        {% if leave.day_portion == 'first_half' %}First Half
+                        {% elif leave.day_portion == 'second_half' %}Second Half
+                        {% else %}Full Day
+                        {% endif %}
+                    </td>
+                    <td>
+                        <span class="status-badge-sm {{ leave.status }}">{{ leave.status }}</span>
+                    </td>
+                    <td style="font-size: 0.82rem; color: var(--gray-600);">
+                        {{ leave.approver_name or '—' }}
+                        {% if leave.approved_at %}
+                        <div style="font-size:0.72rem; color:var(--gray-400);">{{ leave.approved_at|format_date }}</div>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        </div>
+        {% else %}
+        <div class="empty-state">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <p>No approved or rejected leaves found</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- ═══════ Slide-out Detail Drawer ═══════ -->
 <div class="drawer-backdrop" id="leaveBackdrop" onclick="closeLeaveDetail()"></div>
 <aside class="drawer" id="leaveDrawer" aria-hidden="true">
     <div class="drawer-head">
@@ -339,6 +462,7 @@
 </aside>
 
 <script>
+/* ── All leave records (pending + approved/rejected) ── */
 const LEAVE_REQUESTS = {
     {% for leave in pending_leaves %}
     "{{ leave.id }}": {
@@ -362,6 +486,37 @@ const LEAVE_REQUESTS = {
         original_id: {{ (leave.original_id or 0)|tojson }},
         modification_reason: {{ (leave.modification_reason or '')|tojson }},
         original_reason: {{ (leave.original_reason or '')|tojson }},
+        status: 'pending',
+        approver_name: '',
+        approved_at: '',
+        created_at: {{ (leave.created_at|format_date)|tojson }}
+    },
+    {% endfor %}
+    {% for leave in approved_leaves %}
+    "{{ leave.id }}": {
+        id: {{ leave.id }},
+        employee_id: {{ leave.employee_id }},
+        own: {{ 'true' if leave.employee_id == user.id else 'false' }},
+        name: {{ (leave.employee_name or '')|tojson }},
+        emp_code: {{ (leave.emp_code or '')|tojson }},
+        department: {{ (leave.department or '')|tojson }},
+        designation: {{ (leave.designation or '')|tojson }},
+        email: {{ (leave.email or '')|tojson }},
+        mobile: {{ (leave.mobile or '')|tojson }},
+        photo_src: {{ (leave.photo_src or '')|tojson }},
+        leave_type: {{ (leave.leave_type or '')|tojson }},
+        leave_date: {{ (leave.leave_date|format_date)|tojson }},
+        days: {{ (leave.days or 0)|tojson }},
+        day_portion: {{ (leave.day_portion or 'full')|tojson }},
+        reason: {{ (leave.reason_main or '')|tojson }},
+        late_reason: {{ (leave.late_reason or '')|tojson }},
+        is_late: {{ 'true' if leave.is_late else 'false' }},
+        original_id: {{ (leave.original_id or 0)|tojson }},
+        modification_reason: {{ (leave.modification_reason or '')|tojson }},
+        original_reason: {{ (leave.original_reason or '')|tojson }},
+        status: {{ (leave.status or '')|tojson }},
+        approver_name: {{ (leave.approver_name or '')|tojson }},
+        approved_at: {{ (leave.approved_at|format_date)|tojson }},
         created_at: {{ (leave.created_at|format_date)|tojson }}
     }{% if not loop.last %},{% endif %}
     {% endfor %}
@@ -374,6 +529,22 @@ function escapeHtml(s) {
 function initials(name) { return (name || '?').trim().charAt(0).toUpperCase(); }
 function dayPortionLabel(p) { if (p === 'first_half') return 'First Half'; if (p === 'second_half') return 'Second Half'; return 'Full Day'; }
 
+/* ── Tab switching ── */
+function switchTab(tab) {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('hiddenTab').value = tab;
+    // Highlight active tab button
+    document.querySelectorAll('.tab-btn').forEach(b => {
+        if ((tab === 'pending' && b.textContent.includes('Pending')) ||
+            (tab === 'approved' && b.textContent.includes('Approved'))) {
+            b.classList.add('active');
+        }
+    });
+}
+
+/* ── Drawer ── */
 function openLeaveDetail(reqId) {
     const r = LEAVE_REQUESTS[reqId];
     if (!r) return;
@@ -383,6 +554,11 @@ function openLeaveDetail(reqId) {
     const avatar = r.photo_src
         ? `<img src="${escapeHtml(r.photo_src)}" class="emp-avatar-lg" alt="" onerror="this.outerHTML='<div class=\\'emp-avatar-lg-ph\\'>${initials(r.name)}</div>'">`
         : `<div class="emp-avatar-lg-ph">${initials(r.name)}</div>`;
+
+    let statusHtml = '';
+    if (r.status === 'approved') statusHtml = '<span class="status-badge-sm approved">Approved</span>';
+    else if (r.status === 'rejected') statusHtml = '<span class="status-badge-sm rejected">Rejected</span>';
+    else statusHtml = '<span class="status-badge-sm" style="background:#FEF3C7;color:#92400E;">Pending</span>';
 
     let html = `
         <div class="drawer-emp">
@@ -400,6 +576,10 @@ function openLeaveDetail(reqId) {
                 <div class="value"><span class="type-badge">${escapeHtml((r.leave_type || '').replace(/^./, c => c.toUpperCase()))}</span></div>
             </div>
             <div class="drawer-field">
+                <div class="label">Status</div>
+                <div class="value">${statusHtml}</div>
+            </div>
+            <div class="drawer-field">
                 <div class="label">Applied On</div>
                 <div class="value">${escapeHtml(r.created_at || '—')}</div>
             </div>
@@ -415,10 +595,18 @@ function openLeaveDetail(reqId) {
                 <div class="label">Email</div>
                 <div class="value">${escapeHtml(r.email || '—')}</div>
             </div>
+    `;
+
+    if (r.approver_name) {
+        html += `
             <div class="drawer-field">
-                <div class="label">Mobile</div>
-                <div class="value">${escapeHtml(r.mobile || '—')}</div>
+                <div class="label">${r.status === 'rejected' ? 'Rejected By' : 'Approved By'}</div>
+                <div class="value">${escapeHtml(r.approver_name)}${r.approved_at ? '<div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.15rem;">' + escapeHtml(r.approved_at) + '</div>' : ''}</div>
             </div>
+        `;
+    }
+
+    html += `
             <div class="drawer-field full">
                 <div class="label">Reason</div>
                 <div class="drawer-reason">${escapeHtml(r.reason || '—')}</div>
@@ -458,19 +646,25 @@ function openLeaveDetail(reqId) {
     html += `</div>`;
     body.innerHTML = html;
 
-    if (r.own) {
-        actions.style.display = 'flex';
-        actions.innerHTML = `<div style="flex:1; text-align:center; color: var(--gray-400); font-style: italic; font-size: 0.85rem;">You cannot approve your own request</div>`;
+    // Actions: only show approve/reject for pending leaves that aren't own
+    if (r.status === 'pending') {
+        if (r.own) {
+            actions.style.display = 'flex';
+            actions.innerHTML = `<div style="flex:1; text-align:center; color: var(--gray-400); font-style: italic; font-size: 0.85rem;">You cannot approve your own request</div>`;
+        } else {
+            actions.style.display = 'flex';
+            actions.innerHTML = `
+                <form method="POST" action="/admin/approve-leave/${r.id}" style="flex:1;">
+                    <button type="submit" class="btn-action btn-approve" style="width:100%;">Approve</button>
+                </form>
+                <form method="POST" action="/admin/reject-leave/${r.id}" style="flex:1;">
+                    <button type="submit" class="btn-action btn-reject" style="width:100%;">Reject</button>
+                </form>
+            `;
+        }
     } else {
-        actions.style.display = 'flex';
-        actions.innerHTML = `
-            <form method="POST" action="/admin/approve-leave/${r.id}" style="flex:1;">
-                <button type="submit" class="btn-action btn-approve" style="width:100%;">Approve</button>
-            </form>
-            <form method="POST" action="/admin/reject-leave/${r.id}" style="flex:1;">
-                <button type="submit" class="btn-action btn-reject" style="width:100%;">Reject</button>
-            </form>
-        `;
+        actions.style.display = 'none';
+        actions.innerHTML = '';
     }
 
     document.getElementById('leaveDrawer').classList.add('open');

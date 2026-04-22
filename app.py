@@ -2458,6 +2458,7 @@ def pending_approvals():
     f_employee = (request.args.get('employee') or '').strip()
     f_department = (request.args.get('department') or '').strip()
     f_type = (request.args.get('leave_type') or '').strip()
+    active_tab = request.args.get('tab', 'pending')
 
     base_select = '''
         SELECT lr.id, lr.employee_id, lr.leave_type, lr.leave_date, lr.days,
@@ -2471,48 +2472,68 @@ def pending_approvals():
                e.email       AS email,
                e.phone       AS mobile,
                e.photo_url   AS photo_url,
-               e.late_leave_count AS late_leave_count
+               e.late_leave_count AS late_leave_count,
+               COALESCE(approver.name, '') AS approver_name
         FROM leave_records lr
         JOIN employees e ON lr.employee_id = e.id
+        LEFT JOIN employees approver ON lr.approved_by = approver.id
     '''
-    where = ["lr.status = 'pending'"]
-    params = []
 
-    # If admin, show all pending; else only direct reports
-    if not user['is_admin']:
-        where.append('e.reporting_to = ?')
-        params.append(user['id'])
-
-    if f_employee:
-        where.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
-        like = f'%{f_employee.lower()}%'
-        params.extend([like, like])
-    if f_department:
-        where.append('LOWER(e.department) LIKE ?')
-        params.append(f'%{f_department.lower()}%')
-    if f_type:
-        where.append('lr.leave_type = ?')
-        params.append(f_type)
-
-    sql = base_select + ' WHERE ' + ' AND '.join(where) + ' ORDER BY lr.is_late DESC, lr.created_at DESC'
-    pending_rows = conn.execute(sql, tuple(params)).fetchall()
-
-    # Enrich rows: photo_src + parsed reason fields
-    pending = []
-    for r in pending_rows:
-        d = dict(r)
-        p = d.get('photo_url') or ''
-        d['photo_src'] = (p if p.startswith('http') else f'/static/photos/{p}') if p else ''
-        # Split out late reason if embedded
-        raw = d.get('reason') or ''
-        if '[Late Application Reason]:' in raw:
-            parts = raw.split('\n\n[Late Application Reason]:', 1)
-            d['reason_main'] = parts[0].strip()
-            d['late_reason'] = parts[1].strip() if len(parts) > 1 else ''
+    def _build_where(status_filter):
+        where = [status_filter]
+        params = []
+        # Role-based access: admin sees all, manager sees self + reports, employee sees own
+        if user['is_admin']:
+            pass  # no filter
         else:
-            d['reason_main'] = raw
-            d['late_reason'] = ''
-        pending.append(d)
+            # Check if user has any reports
+            has_reports = conn.execute('SELECT 1 FROM employees WHERE reporting_to = ? LIMIT 1', (user['id'],)).fetchone()
+            if has_reports:
+                # Manager: own + direct reports
+                where.append('(e.id = ? OR e.reporting_to = ?)')
+                params.extend([user['id'], user['id']])
+            else:
+                # Employee: own only
+                where.append('e.id = ?')
+                params.append(user['id'])
+        if f_employee:
+            where.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+            like = f'%{f_employee.lower()}%'
+            params.extend([like, like])
+        if f_department:
+            where.append('LOWER(e.department) LIKE ?')
+            params.append(f'%{f_department.lower()}%')
+        if f_type:
+            where.append('lr.leave_type = ?')
+            params.append(f_type)
+        return where, params
+
+    def _enrich(rows):
+        result = []
+        for r in rows:
+            d = dict(r)
+            p = d.get('photo_url') or ''
+            d['photo_src'] = (p if p.startswith('http') else f'/static/photos/{p}') if p else ''
+            raw = d.get('reason') or ''
+            if '[Late Application Reason]:' in raw:
+                parts = raw.split('\n\n[Late Application Reason]:', 1)
+                d['reason_main'] = parts[0].strip()
+                d['late_reason'] = parts[1].strip() if len(parts) > 1 else ''
+            else:
+                d['reason_main'] = raw
+                d['late_reason'] = ''
+            result.append(d)
+        return result
+
+    # Pending leaves
+    pw, pp = _build_where("lr.status = 'pending'")
+    pending_sql = base_select + ' WHERE ' + ' AND '.join(pw) + ' ORDER BY lr.is_late DESC, lr.created_at DESC'
+    pending = _enrich(conn.execute(pending_sql, tuple(pp)).fetchall())
+
+    # Approved / Rejected leaves
+    aw, ap = _build_where("lr.status IN ('approved', 'rejected')")
+    approved_sql = base_select + ' WHERE ' + ' AND '.join(aw) + ' ORDER BY lr.approved_at DESC, lr.created_at DESC'
+    approved = _enrich(conn.execute(approved_sql, tuple(ap)).fetchall())
 
     # Late leave summary
     if user['is_admin']:
@@ -2531,14 +2552,19 @@ def pending_approvals():
     total_count = len(pending)
     late_count = sum(1 for p in pending if p.get('is_late'))
     reapproval_count = sum(1 for p in pending if p.get('original_id'))
+    approved_count = sum(1 for a in approved if a.get('status') == 'approved')
+    rejected_count = sum(1 for a in approved if a.get('status') == 'rejected')
 
     conn.close()
 
-    return render_template('pending_approvals.html', user=user, pending_leaves=pending,
+    return render_template('pending_approvals.html', user=user,
+                         pending_leaves=pending, approved_leaves=approved,
                          late_leave_summary=late_summary,
                          f_employee=f_employee, f_department=f_department, f_type=f_type,
+                         active_tab=active_tab,
                          total_count=total_count, late_count=late_count,
-                         reapproval_count=reapproval_count)
+                         reapproval_count=reapproval_count,
+                         approved_count=approved_count, rejected_count=rejected_count)
 
 @app.route('/admin/approve-leave/<int:leave_id>', methods=['POST'])
 @login_required
