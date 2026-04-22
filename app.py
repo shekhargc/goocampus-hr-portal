@@ -9203,6 +9203,8 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Normalize legacy status value
+        conn.execute("UPDATE ops_research_publication SET research_status = 'Published' WHERE research_status = 'Research Published'")
 
         # ── Online Subscriptions ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_subscriptions (
