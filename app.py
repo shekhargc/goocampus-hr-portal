@@ -9563,6 +9563,7 @@ def ops_plab_pathway_dashboard():
         research_total = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication").fetchone()['c']
         research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Published'").fetchone()['c']
         research_in_progress = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'In Progress'").fetchone()['c']
+        research_started = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Started'").fetchone()['c']
 
         # ── UK Visa & Travel ──
         visa_total = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel").fetchone()['c']
@@ -9592,7 +9593,7 @@ def ops_plab_pathway_dashboard():
                                awaiting_results=0, recent_passes=0,
                                epic_total=0, epic_in_process=0, epic_sent_gmc=0,
                                gmc_total=0, gmc_completed=0, gmc_license_received=0,
-                               research_total=0, research_published=0, research_in_progress=0,
+                               research_total=0, research_published=0, research_in_progress=0, research_started=0,
                                visa_total=0, visa_accepted=0, visa_in_process=0,
                                academic_total=0, upcoming_exams=[])
 
@@ -9606,7 +9607,7 @@ def ops_plab_pathway_dashboard():
                            awaiting_results=awaiting_results, recent_passes=recent_passes,
                            epic_total=epic_total, epic_in_process=epic_in_process, epic_sent_gmc=epic_sent_gmc,
                            gmc_total=gmc_total, gmc_completed=gmc_completed, gmc_license_received=gmc_license_received,
-                           research_total=research_total, research_published=research_published, research_in_progress=research_in_progress,
+                           research_total=research_total, research_published=research_published, research_in_progress=research_in_progress, research_started=research_started,
                            visa_total=visa_total, visa_accepted=visa_accepted, visa_in_process=visa_in_process,
                            academic_total=academic_total, upcoming_exams=upcoming_exams)
 
