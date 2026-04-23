@@ -394,17 +394,19 @@
     <div class="settings-layout">
         <!-- Sidebar with tab groups -->
         <div class="settings-sidebar">
+            {% set first_found = [false] %}
             {% for group_name, categories in category_groups.items() %}
             <div class="tab-group">
                 <div class="tab-group-title">{{ group_name }}</div>
                 {% for category in categories %}
                 {% if grouped_options.get(category) %}
-                <div class="tab-item {% if loop.first and loop.parent.first %}active{% endif %}"
+                <div class="tab-item {% if not first_found[0] %}active{% endif %}"
                      data-group="{{ group_name }}"
                      data-category="{{ category }}"
                      onclick="switchTab(this)">
                     {{ category_labels.get(category, category) }}
                 </div>
+                {% if not first_found[0] %}{% if first_found.append(true) %}{% endif %}{% endif %}
                 {% endif %}
                 {% endfor %}
             </div>
@@ -413,12 +415,14 @@
 
         <!-- Main content area -->
         <div class="settings-main">
+            {% set card_first = [false] %}
             {% for group_name, categories in category_groups.items() %}
                 {% for category in categories %}
                 {% if grouped_options.get(category) %}
-                <div class="category-card {% if loop.parent.first and loop.first %}active{% endif %}"
+                <div class="category-card {% if not card_first[0] %}active{% endif %}"
                      data-group="{{ group_name }}"
                      data-category="{{ category }}">
+                {% if not card_first[0] %}{% if card_first.append(true) %}{% endif %}{% endif %}
 
                     <h3>{{ category_labels.get(category, category) }}</h3>
 

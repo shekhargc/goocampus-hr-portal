@@ -9625,13 +9625,17 @@ CAB_VENDORS = ['Imran', 'Other']
 
 def get_lookup_options(category):
     """Fetch active lookup options for a category from the database."""
-    conn = get_db()
-    rows = conn.execute(
-        "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
-        (category,)
-    ).fetchall()
-    conn.close()
-    return [r['value'] for r in rows]
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
+            (category,)
+        ).fetchall()
+        conn.close()
+        return [r['value'] for r in rows]
+    except Exception as e:
+        logging.error(f"get_lookup_options({category}): {e}")
+        return []
 
 
 def _next_registration_number(conn):
@@ -9858,7 +9862,8 @@ def ops_plab_settings():
     except Exception as e:
         logging.error(f"ops_plab_settings error: {e}")
         conn.close()
-        flash(f'Error loading settings: {e}', 'error')
+        flash(f'Error loading settings. Please try again.', 'error')
+        logging.exception("Full traceback for ops_plab_settings:")
         return redirect(url_for('ops_plab_pathway_dashboard'))
 
 
