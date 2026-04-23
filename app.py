@@ -9446,10 +9446,8 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
-        # ── Seed lookup_options if empty ──
-        count = conn.execute("SELECT COUNT(*) as c FROM lookup_options").fetchone()['c']
-        if count == 0:
-            SEED_DATA = {
+        # ── Seed lookup_options — add any missing categories ──
+        SEED_DATA = {
                 # Client/Pipeline
                 'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own'],
                 'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
@@ -9532,8 +9530,9 @@ def ensure_ops_tables():
                 # Medical specialities (shared)
                 'medical_speciality': ['General Medicine', 'General Surgery', 'Paediatrics', 'Obstetrics & Gynaecology', 'Orthopaedics', 'Cardiology', 'Neurology', 'Dermatology', 'Psychiatry', 'Radiology', 'Anaesthesia', 'Emergency Medicine', 'Ophthalmology', 'ENT', 'Pathology', 'Other'],
             }
-            sort_idx = 0
-            for category, values in SEED_DATA.items():
+        for category, values in SEED_DATA.items():
+            existing = conn.execute("SELECT COUNT(*) as c FROM lookup_options WHERE category = ?", (category,)).fetchone()['c']
+            if existing == 0:
                 for sort_idx, val in enumerate(values, 1):
                     conn.execute(
                         "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
