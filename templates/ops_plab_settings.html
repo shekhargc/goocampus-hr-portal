@@ -49,8 +49,9 @@
     /* ── Layout: Sidebar + Main ── */
     .settings-layout {
         display: grid;
-        grid-template-columns: 280px 1fr;
-        gap: 2rem;
+        grid-template-columns: 260px 1fr;
+        gap: 1.5rem;
+        align-items: start;
     }
 
     /* ── Sidebar tabs ── */
@@ -59,9 +60,10 @@
         border-radius: 0.75rem;
         border: 1px solid var(--gray-200);
         padding: 0;
-        height: fit-content;
         position: sticky;
-        top: 90px;
+        top: 80px;
+        max-height: calc(100vh - 100px);
+        overflow-y: auto;
     }
 
     .tab-group {
@@ -486,6 +488,14 @@
                 card.classList.remove('active');
             }
         });
+
+        // Scroll the main content area into view
+        const activeCard = document.querySelector('.category-card.active');
+        if (activeCard) {
+            activeCard.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            // Offset for sticky header
+            window.scrollBy(0, -90);
+        }
     }
 
     function addOption(inputElement) {
