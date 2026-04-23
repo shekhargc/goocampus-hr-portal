@@ -1,0 +1,671 @@
+{% extends "base.html" %}
+
+{% block title %}PLAB Settings - GooCampus HR Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    /* ── Page container ── */
+    .settings-container {
+        max-width: 1400px;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    /* ── Page header ── */
+    .settings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 2rem;
+        flex-wrap: wrap;
+        gap: 1rem;
+    }
+
+    .settings-header h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: var(--navy);
+        margin: 0;
+    }
+
+    .settings-header-back {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        background: var(--gray-100);
+        color: var(--navy);
+        border-radius: 0.5rem;
+        text-decoration: none;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: background 0.2s;
+    }
+
+    .settings-header-back:hover {
+        background: var(--gray-200);
+    }
+
+    /* ── Layout: Sidebar + Main ── */
+    .settings-layout {
+        display: grid;
+        grid-template-columns: 280px 1fr;
+        gap: 2rem;
+    }
+
+    /* ── Sidebar tabs ── */
+    .settings-sidebar {
+        background: white;
+        border-radius: 0.75rem;
+        border: 1px solid var(--gray-200);
+        padding: 0;
+        height: fit-content;
+        position: sticky;
+        top: 90px;
+    }
+
+    .tab-group {
+        border-bottom: 1px solid var(--gray-200);
+    }
+
+    .tab-group:last-child {
+        border-bottom: none;
+    }
+
+    .tab-group-title {
+        padding: 0.85rem 1.25rem;
+        font-size: 0.75rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        color: var(--gray-500);
+        background: var(--gray-50);
+    }
+
+    .tab-item {
+        display: block;
+        padding: 0.75rem 1.25rem;
+        color: var(--gray-600);
+        text-decoration: none;
+        font-size: 0.9rem;
+        font-weight: 500;
+        border-left: 3px solid transparent;
+        transition: all 0.2s;
+        cursor: pointer;
+        background: white;
+    }
+
+    .tab-item:hover {
+        background: var(--orange-light);
+        color: var(--orange-dark);
+    }
+
+    .tab-item.active {
+        background: var(--orange-light);
+        color: var(--orange);
+        border-left-color: var(--orange);
+    }
+
+    /* ── Main content area ── */
+    .settings-main {
+        display: flex;
+        flex-direction: column;
+        gap: 2rem;
+    }
+
+    /* ── Category card ── */
+    .category-card {
+        background: white;
+        border-radius: 0.75rem;
+        border: 1px solid var(--gray-200);
+        padding: 1.75rem;
+        display: none;
+    }
+
+    .category-card.active {
+        display: block;
+    }
+
+    .category-card h3 {
+        font-size: 1rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin: 0 0 1.25rem;
+        letter-spacing: -0.01em;
+    }
+
+    /* ── Option list ── */
+    .option-list {
+        display: flex;
+        flex-direction: column;
+        gap: 0.75rem;
+        margin-bottom: 1.5rem;
+    }
+
+    .option-item {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 0.85rem 1rem;
+        background: var(--gray-50);
+        border-radius: 0.5rem;
+        border: 1px solid var(--gray-200);
+        font-size: 0.9rem;
+        transition: all 0.2s;
+        gap: 0.75rem;
+    }
+
+    .option-item:hover {
+        border-color: var(--orange);
+        background: white;
+    }
+
+    .option-item.inactive {
+        opacity: 0.6;
+    }
+
+    .option-content {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .option-drag-handle {
+        cursor: grab;
+        color: var(--gray-400);
+        font-weight: 700;
+        flex-shrink: 0;
+    }
+
+    .option-drag-handle:active {
+        cursor: grabbing;
+    }
+
+    .option-value {
+        color: var(--gray-800);
+        font-weight: 500;
+        word-break: break-word;
+    }
+
+    .option-status-badge {
+        display: inline-block;
+        padding: 0.25rem 0.65rem;
+        border-radius: 0.35rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-left: auto;
+        flex-shrink: 0;
+    }
+
+    .option-status-badge.active {
+        background: var(--success-light);
+        color: var(--success);
+    }
+
+    .option-status-badge.inactive {
+        background: var(--danger-light);
+        color: var(--danger);
+    }
+
+    .option-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-shrink: 0;
+    }
+
+    .option-btn {
+        padding: 0.4rem 0.75rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.4rem;
+        background: white;
+        color: var(--gray-600);
+        cursor: pointer;
+        font-size: 0.75rem;
+        font-weight: 600;
+        transition: all 0.2s;
+    }
+
+    .option-btn:hover {
+        border-color: var(--navy);
+        color: var(--navy);
+        background: var(--gray-50);
+    }
+
+    .option-btn.btn-delete:hover {
+        border-color: var(--danger);
+        color: var(--danger);
+    }
+
+    .option-btn.btn-toggle:hover {
+        border-color: var(--success);
+        color: var(--success);
+    }
+
+    /* ── Add new option ── */
+    .add-option-box {
+        border-top: 1px solid var(--gray-200);
+        padding-top: 1.25rem;
+        margin-top: 1.25rem;
+    }
+
+    .add-option-label {
+        display: block;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: var(--gray-600);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 0.75rem;
+    }
+
+    .add-option-form {
+        display: flex;
+        gap: 0.75rem;
+    }
+
+    .add-option-input {
+        flex: 1;
+        padding: 0.65rem 0.85rem;
+        border: 1px solid var(--gray-300);
+        border-radius: 0.4rem;
+        font-family: inherit;
+        font-size: 0.9rem;
+        color: var(--gray-800);
+        transition: border 0.2s;
+    }
+
+    .add-option-input:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px var(--orange-light);
+    }
+
+    .add-option-btn {
+        padding: 0.65rem 1.5rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.4rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+        font-weight: 700;
+        transition: background 0.2s;
+    }
+
+    .add-option-btn:hover {
+        background: var(--navy-light);
+    }
+
+    .add-option-btn:active {
+        background: var(--navy-dark);
+    }
+
+    /* ── Edit mode ── */
+    .option-item.edit-mode {
+        background: var(--orange-light);
+    }
+
+    .edit-input {
+        flex: 1;
+        padding: 0.6rem 0.8rem;
+        border: 1px solid var(--orange);
+        border-radius: 0.4rem;
+        font-family: inherit;
+        font-size: 0.9rem;
+        color: var(--gray-800);
+    }
+
+    .edit-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 3px var(--orange-light);
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+        .settings-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .settings-sidebar {
+            position: static;
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .tab-group {
+            border-bottom: none;
+            border-right: 1px solid var(--gray-200);
+        }
+
+        .tab-group:nth-child(even) {
+            border-right: none;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .settings-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .settings-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .settings-sidebar {
+            display: grid;
+            grid-template-columns: 1fr;
+        }
+
+        .tab-group {
+            border-right: none;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .add-option-form {
+            flex-direction: column;
+        }
+
+        .option-item {
+            flex-wrap: wrap;
+        }
+
+        .option-status-badge {
+            margin-left: 0;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <div>
+            <h1>PLAB <span style="color: var(--orange);">Settings</span></h1>
+        </div>
+        <a href="/operations/plab-dashboard" class="settings-header-back">
+            <span>&larr;</span> Back to Dashboard
+        </a>
+    </div>
+
+    <div class="settings-layout">
+        <!-- Sidebar with tab groups -->
+        <div class="settings-sidebar">
+            {% for group_name, categories in category_groups.items() %}
+            <div class="tab-group">
+                <div class="tab-group-title">{{ group_name }}</div>
+                {% for category in categories %}
+                {% if grouped_options.get(category) %}
+                <div class="tab-item {% if loop.first and loop.parent.first %}active{% endif %}"
+                     data-group="{{ group_name }}"
+                     data-category="{{ category }}"
+                     onclick="switchTab(this)">
+                    {{ category_labels.get(category, category) }}
+                </div>
+                {% endif %}
+                {% endfor %}
+            </div>
+            {% endfor %}
+        </div>
+
+        <!-- Main content area -->
+        <div class="settings-main">
+            {% for group_name, categories in category_groups.items() %}
+                {% for category in categories %}
+                {% if grouped_options.get(category) %}
+                <div class="category-card {% if loop.parent.first and loop.first %}active{% endif %}"
+                     data-group="{{ group_name }}"
+                     data-category="{{ category }}">
+
+                    <h3>{{ category_labels.get(category, category) }}</h3>
+
+                    <div class="option-list" data-category="{{ category }}">
+                        {% for option in grouped_options.get(category, []) %}
+                        <div class="option-item {% if not option.is_active %}inactive{% endif %}"
+                             data-id="{{ option.id }}"
+                             data-active="{{ option.is_active }}">
+                            <div class="option-content">
+                                <span class="option-drag-handle">≡</span>
+                                <span class="option-value">{{ option.value }}</span>
+                            </div>
+                            <span class="option-status-badge {% if option.is_active %}active{% else %}inactive{% endif %}">
+                                {% if option.is_active %}Active{% else %}Inactive{% endif %}
+                            </span>
+                            <div class="option-actions">
+                                <button class="option-btn btn-toggle" onclick="toggleOption({{ option.id }}, this)">
+                                    {% if option.is_active %}Deactivate{% else %}Activate{% endif %}
+                                </button>
+                                <button class="option-btn" onclick="startEditOption({{ option.id }}, this)">Edit</button>
+                                <button class="option-btn btn-delete" onclick="deleteOption({{ option.id }}, this)">Delete</button>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+
+                    <div class="add-option-box">
+                        <label class="add-option-label">Add New Option</label>
+                        <div class="add-option-form">
+                            <input type="text"
+                                   class="add-option-input"
+                                   placeholder="Enter option value..."
+                                   data-category="{{ category }}"
+                                   onkeypress="if (event.key === 'Enter') addOption(this)">
+                            <button class="add-option-btn" onclick="addOption(this.previousElementSibling)">Add</button>
+                        </div>
+                    </div>
+
+                </div>
+                {% endif %}
+                {% endfor %}
+            {% endfor %}
+        </div>
+    </div>
+</div>
+
+<script>
+    function switchTab(element) {
+        const category = element.dataset.category;
+        const group = element.dataset.group;
+
+        // Remove active from all tabs
+        document.querySelectorAll('.tab-item').forEach(t => t.classList.remove('active'));
+        element.classList.add('active');
+
+        // Hide all cards, show matching
+        document.querySelectorAll('.category-card').forEach(card => {
+            if (card.dataset.category === category) {
+                card.classList.add('active');
+            } else {
+                card.classList.remove('active');
+            }
+        });
+    }
+
+    function addOption(inputElement) {
+        const value = inputElement.value.trim();
+        const category = inputElement.dataset.category;
+
+        if (!value) {
+            alert('Please enter a value');
+            return;
+        }
+
+        fetch('/operations/plab-settings/add', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ category, value })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            // Create and insert new option item
+            const optionList = document.querySelector(`[data-category="${category}"]`);
+            if (optionList) {
+                const newItem = document.createElement('div');
+                newItem.className = 'option-item';
+                newItem.dataset.id = data.id;
+                newItem.dataset.active = 'true';
+                newItem.innerHTML = `
+                    <div class="option-content">
+                        <span class="option-drag-handle">≡</span>
+                        <span class="option-value">${value}</span>
+                    </div>
+                    <span class="option-status-badge active">Active</span>
+                    <div class="option-actions">
+                        <button class="option-btn btn-toggle" onclick="toggleOption(${data.id}, this)">Deactivate</button>
+                        <button class="option-btn" onclick="startEditOption(${data.id}, this)">Edit</button>
+                        <button class="option-btn btn-delete" onclick="deleteOption(${data.id}, this)">Delete</button>
+                    </div>
+                `;
+                optionList.insertBefore(newItem, optionList.firstChild);
+            }
+            inputElement.value = '';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function toggleOption(optionId, button) {
+        fetch(`/operations/plab-settings/${optionId}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            const item = document.querySelector(`[data-id="${optionId}"]`);
+            if (item) {
+                const isActive = data.is_active;
+                item.dataset.active = isActive;
+                item.classList.toggle('inactive');
+                const badge = item.querySelector('.option-status-badge');
+                badge.className = `option-status-badge ${isActive ? 'active' : 'inactive'}`;
+                badge.textContent = isActive ? 'Active' : 'Inactive';
+                button.textContent = isActive ? 'Deactivate' : 'Activate';
+                button.classList.toggle('btn-toggle');
+            }
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function startEditOption(optionId, button) {
+        const item = document.querySelector(`[data-id="${optionId}"]`);
+        if (!item) return;
+
+        if (item.classList.contains('edit-mode')) {
+            cancelEditOption(item);
+            return;
+        }
+
+        const valueSpan = item.querySelector('.option-value');
+        const oldValue = valueSpan.textContent;
+
+        item.classList.add('edit-mode');
+        const content = item.querySelector('.option-content');
+        content.innerHTML = `
+            <span class="option-drag-handle">≡</span>
+            <input type="text" class="edit-input" value="${oldValue}" />
+        `;
+
+        const input = content.querySelector('.edit-input');
+        input.focus();
+        input.select();
+
+        button.textContent = 'Save';
+        button.onclick = () => saveEditOption(optionId, input.value, item, oldValue);
+
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') saveEditOption(optionId, input.value, item, oldValue);
+            if (e.key === 'Escape') cancelEditOption(item, oldValue);
+        };
+    }
+
+    function saveEditOption(optionId, newValue, item, oldValue) {
+        if (!newValue.trim()) {
+            alert('Value cannot be empty');
+            return;
+        }
+
+        fetch(`/operations/plab-settings/${optionId}/edit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: newValue.trim() })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            const content = item.querySelector('.option-content');
+            content.innerHTML = `
+                <span class="option-drag-handle">≡</span>
+                <span class="option-value">${newValue.trim()}</span>
+            `;
+            item.classList.remove('edit-mode');
+            const button = item.querySelector('.option-btn:not(.btn-toggle):not(.btn-delete)');
+            if (button) {
+                button.textContent = 'Edit';
+                button.onclick = () => startEditOption(optionId, button);
+            }
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function cancelEditOption(item, oldValue) {
+        item.classList.remove('edit-mode');
+        const content = item.querySelector('.option-content');
+        const optionId = item.dataset.id;
+        content.innerHTML = `
+            <span class="option-drag-handle">≡</span>
+            <span class="option-value">${oldValue}</span>
+        `;
+        const button = item.querySelector('.option-btn:not(.btn-toggle):not(.btn-delete)');
+        if (button) {
+            button.textContent = 'Edit';
+            button.onclick = () => startEditOption(optionId, button);
+        }
+    }
+
+    function deleteOption(optionId, button) {
+        if (!confirm('Are you sure you want to delete this option?')) return;
+
+        fetch(`/operations/plab-settings/${optionId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error: ' + data.error);
+                return;
+            }
+            const item = document.querySelector(`[data-id="${optionId}"]`);
+            if (item) {
+                item.style.opacity = '0';
+                item.style.transform = 'scale(0.95)';
+                setTimeout(() => item.remove(), 200);
+            }
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    // Initialize first tab as active on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const firstTab = document.querySelector('.tab-item');
+        if (firstTab) {
+            firstTab.click();
+        }
+    });
+</script>
+{% endblock %}

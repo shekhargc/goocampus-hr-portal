@@ -9435,6 +9435,98 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Lookup Options (for PLAB Settings) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS lookup_options (
+            id SERIAL PRIMARY KEY,
+            category TEXT NOT NULL,
+            label TEXT NOT NULL,
+            value TEXT NOT NULL,
+            sort_order INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Seed lookup_options if empty ──
+        count = conn.execute("SELECT COUNT(*) as c FROM lookup_options").fetchone()['c']
+        if count == 0:
+            SEED_DATA = {
+                # Client/Pipeline
+                'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own'],
+                'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
+                'plan_type': ['Full Spon', 'Integrated Consulting', '2022 UK - Full Sponsorship', '2022 UK - IC', '2023 UK - PGCP', '2024 UK - PGCP', '2025 UK - PGCP', '2023 UK - PGCP - Dual', '2024 UK - PGCP - Dual', '2025 UK - PGCP - Dual'],
+                'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
+                'english_training': ['IELTS', 'OET'],
+                'lead_source': ['Social Media', 'Website', 'Referral', 'Walk-in', 'Event', 'Other'],
+                # Coaching
+                'coaching_course_type': ['Full Course', 'Crash Course'],
+                'coaching_status': ['On Going', 'Completed'],
+                'coaching_method': ['Online', 'Offline', 'Hybrid'],
+                # Test Bookings
+                'exam_name': ['OET', 'IELTS', 'PLAB 1', 'PLAB 2', 'MRCP', 'MRCS', 'MRCEM'],
+                'exam_status': ['Booked', 'Attended', 'Cancelled by Client', 'Cancelled by Authority', 'Rescheduled', 'Missed'],
+                'exam_result': ['Passed', 'Failed'],
+                # EPIC
+                'epic_reg_status': ['Completed', 'Not Completed', 'In Process'],
+                'epic_status': ['Verification Stage', 'In Process', 'Sent to GMC'],
+                'notary_camp_status': ['Completed', 'Not Completed'],
+                'doc_stage': ['Uploaded', 'Not Uploaded', 'In Process'],
+                'doc_stage_status': ['Accepted', 'In Process', 'Rejected'],
+                # GMC
+                'gmc_setup_status': ['Completed', 'Not Completed', 'In Process'],
+                'gmc_license_status': ['Received', 'Not Received', 'In Process'],
+                # Payment
+                'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque'],
+                'instalment': ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment'],
+                # Research
+                'research_status': ['Started', 'In Progress', 'Completed', 'Published'],
+                'author_position': ['First Author', 'Second Author', 'Third Author', 'Co-Author', 'Corresponding Author'],
+                # Subscriptions
+                'subscription_type': ['Plabable (PLAB)', 'Plab keys (PLAB)', 'Cerebellum', 'Marrow', 'PrepLadder Subscription', 'PassMedicine', 'BMJ OnExamination', 'Other'],
+                'activation_type': ['New Access', 'Renewed'],
+                'subscription_booked_by': ['Booked & Paid by GooCampus', 'Booked & Paid by Candidate', 'Booked by GooCampus Paid by Candidate'],
+                # Webinars
+                'event_type': ['Webinar', 'Conference'],
+                'event_value': ['Paid', 'Free'],
+                'participation_type': ['Attendee', 'Speaker', 'Presenter', 'Panelist', 'Organizer'],
+                # Visa
+                'visa_app_status': ['Not Started', 'In Process', 'Completed'],
+                'visa_doc_collected': ['Collected', 'Not Collected', 'Partial'],
+                'visa_doc_status': ['Accepted', 'In Process', 'Rejected'],
+                'visa_status': ['Accepted', 'Rejected', 'In Process', 'Not Applied'],
+                'visa_period': ['6 Months', '1 Year', '2 Years', '5 Years', '10 Years'],
+                'visa_type': ['Visitor Visas', 'Student Visa', 'Work Visa', 'Skilled Worker Visa', 'Other'],
+                'lodging_type': ['Hotel', 'Hostel', 'Airbnb', 'Shared Accommodation', 'Other'],
+                # Academic
+                'img_fmg': ['IMG', 'FMG'],
+                'mbbs_status': ['Completed', 'In Progress', 'Not Started'],
+                'internship_status': ['Completed', 'In Progress', 'Not Started'],
+                'internship_gap': ['Yes', 'No'],
+                'working_status': ['Working', 'Not Working'],
+                # Courses
+                'course_name': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS', 'Other'],
+                'course_type': ['Online', 'Offline'],
+                'course_status': ['Completed', 'In Progress', 'Not Started', 'Cancelled'],
+                'course_booked_by': ['Booked & Paid by GooCampus', 'Booked & Paid by Candidate', 'Booked by GooCampus Paid by Candidate'],
+                # Observerships
+                'observership_payment': ['Paid by GC', 'Paid by Candidate', 'Free'],
+                # NGO
+                'ngo_vendor': ['Aarogya Seva', 'StepOne', 'Other'],
+                'ngo_activity_type': ['Online', 'Offline'],
+                # Mentorship
+                'mentorship_payment_status': ['Paid', 'Free'],
+                'mentorship_attendance': ['Present', 'Absent'],
+                'mentorship_confirmation': ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled'],
+                # Cab
+                'cab_vendor': ['Imran', 'Other'],
+            }
+            sort_idx = 0
+            for category, values in SEED_DATA.items():
+                for sort_idx, val in enumerate(values, 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        (category, val, val, sort_idx)
+                    )
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -9529,6 +9621,17 @@ MENTORSHIP_CONFIRMATION = ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled']
 
 # ── UK Cab Bookings dropdowns ──
 CAB_VENDORS = ['Imran', 'Other']
+
+
+def get_lookup_options(category):
+    """Fetch active lookup options for a category from the database."""
+    conn = get_db()
+    rows = conn.execute(
+        "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
+        (category,)
+    ).fetchall()
+    conn.close()
+    return [r['value'] for r in rows]
 
 
 def _next_registration_number(conn):
@@ -9654,6 +9757,243 @@ def ops_plab_pathway_dashboard():
                            academic_total=academic_total, upcoming_exams=upcoming_exams)
 
 
+CATEGORY_GROUPS = {
+    'Client & Pipeline': ['plab_stage', 'account_status', 'plan_type', 'joined_stage', 'english_training', 'lead_source'],
+    'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method'],
+    'Test Bookings': ['exam_name', 'exam_status', 'exam_result'],
+    'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_license_status'],
+    'Payments': ['payment_method', 'instalment'],
+    'Research & Publication': ['research_status', 'author_position'],
+    'Subscriptions': ['subscription_type', 'activation_type', 'subscription_booked_by'],
+    'Webinars & Events': ['event_type', 'event_value', 'participation_type'],
+    'UK Visa & Travel': ['visa_app_status', 'visa_doc_collected', 'visa_doc_status', 'visa_status', 'visa_period', 'visa_type', 'lodging_type'],
+    'Academic Details': ['img_fmg', 'mbbs_status', 'internship_status', 'internship_gap', 'working_status'],
+    'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by'],
+    'Observerships': ['observership_payment'],
+    'NGO Activities': ['ngo_vendor', 'ngo_activity_type'],
+    'Mentorship': ['mentorship_payment_status', 'mentorship_attendance', 'mentorship_confirmation'],
+    'Cab Bookings': ['cab_vendor'],
+}
+
+CATEGORY_LABELS = {
+    'plab_stage': 'PLAB Stages',
+    'account_status': 'Account Statuses',
+    'plan_type': 'Plan Types',
+    'joined_stage': 'Joined Stages',
+    'english_training': 'English Training',
+    'lead_source': 'Lead Sources',
+    'coaching_course_type': 'Course Types',
+    'coaching_status': 'Coaching Statuses',
+    'coaching_method': 'Coaching Methods',
+    'exam_name': 'Exam Names',
+    'exam_status': 'Exam Statuses',
+    'exam_result': 'Exam Results',
+    'epic_reg_status': 'EPIC Registration',
+    'epic_status': 'EPIC Statuses',
+    'notary_camp_status': 'Notary Camp',
+    'doc_stage': 'Document Stage',
+    'doc_stage_status': 'Document Status',
+    'gmc_setup_status': 'GMC Setup',
+    'gmc_license_status': 'GMC License',
+    'payment_method': 'Payment Methods',
+    'instalment': 'Instalments',
+    'research_status': 'Research Statuses',
+    'author_position': 'Author Positions',
+    'subscription_type': 'Subscription Types',
+    'activation_type': 'Activation Types',
+    'subscription_booked_by': 'Booked By',
+    'event_type': 'Event Types',
+    'event_value': 'Event Values',
+    'participation_type': 'Participation Types',
+    'visa_app_status': 'Application Status',
+    'visa_doc_collected': 'Documents Collected',
+    'visa_doc_status': 'Document Status',
+    'visa_status': 'Visa Status',
+    'visa_period': 'Visa Period',
+    'visa_type': 'Visa Type',
+    'lodging_type': 'Lodging Type',
+    'img_fmg': 'IMG/FMG',
+    'mbbs_status': 'MBBS Status',
+    'internship_status': 'Internship Status',
+    'internship_gap': 'Internship Gap',
+    'working_status': 'Working Status',
+    'course_name': 'Course Names',
+    'course_type': 'Course Types',
+    'course_status': 'Course Statuses',
+    'course_booked_by': 'Booked By',
+    'observership_payment': 'Payment Options',
+    'ngo_vendor': 'NGO Vendors',
+    'ngo_activity_type': 'Activity Types',
+    'mentorship_payment_status': 'Payment Status',
+    'mentorship_attendance': 'Attendance',
+    'mentorship_confirmation': 'Confirmation',
+    'cab_vendor': 'Cab Vendors',
+}
+
+
+@app.route('/operations/plab-settings')
+@login_required
+def ops_plab_settings():
+    """PLAB Settings admin page - manage lookup options."""
+    conn = get_db()
+    try:
+        # Fetch all lookup options grouped by category
+        all_options = conn.execute(
+            "SELECT * FROM lookup_options ORDER BY category, sort_order, id"
+        ).fetchall()
+
+        # Group by category
+        grouped = {}
+        for opt in all_options:
+            cat = opt['category']
+            if cat not in grouped:
+                grouped[cat] = []
+            grouped[cat].append(opt)
+
+        conn.close()
+        return render_template('ops_plab_settings.html',
+                             grouped_options=grouped,
+                             category_groups=CATEGORY_GROUPS,
+                             category_labels=CATEGORY_LABELS)
+    except Exception as e:
+        logging.error(f"ops_plab_settings error: {e}")
+        conn.close()
+        flash(f'Error loading settings: {e}', 'error')
+        return redirect(url_for('ops_plab_pathway_dashboard'))
+
+
+@app.route('/operations/plab-settings/add', methods=['POST'])
+@login_required
+def ops_plab_settings_add():
+    """Add a new lookup option."""
+    try:
+        category = request.json.get('category', '').strip()
+        value = request.json.get('value', '').strip()
+
+        if not category or not value:
+            return jsonify({'error': 'Category and value required'}), 400
+
+        conn = get_db()
+        # Get max sort_order for this category
+        max_order = conn.execute(
+            "SELECT MAX(sort_order) as m FROM lookup_options WHERE category = ?",
+            (category,)
+        ).fetchone()['m']
+        max_order = (max_order or 0) + 1
+
+        conn.execute(
+            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+            (category, value, value, max_order)
+        )
+        conn.commit()
+        new_id = conn.lastrowid
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'id': new_id,
+            'message': f'Added {value} to {category}'
+        })
+    except Exception as e:
+        logging.error(f"ops_plab_settings_add error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/plab-settings/<int:opt_id>/toggle', methods=['POST'])
+@login_required
+def ops_plab_settings_toggle(opt_id):
+    """Toggle is_active status of a lookup option."""
+    try:
+        conn = get_db()
+        opt = conn.execute("SELECT is_active FROM lookup_options WHERE id = ?", (opt_id,)).fetchone()
+        if not opt:
+            conn.close()
+            return jsonify({'error': 'Option not found'}), 404
+
+        new_status = not opt['is_active']
+        conn.execute("UPDATE lookup_options SET is_active = ? WHERE id = ?", (new_status, opt_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'is_active': new_status,
+            'message': f"Option {'activated' if new_status else 'deactivated'}"
+        })
+    except Exception as e:
+        logging.error(f"ops_plab_settings_toggle error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/plab-settings/<int:opt_id>/edit', methods=['POST'])
+@login_required
+def ops_plab_settings_edit(opt_id):
+    """Update value of a lookup option."""
+    try:
+        value = request.json.get('value', '').strip()
+        if not value:
+            return jsonify({'error': 'Value required'}), 400
+
+        conn = get_db()
+        conn.execute(
+            "UPDATE lookup_options SET value = ?, label = ? WHERE id = ?",
+            (value, value, opt_id)
+        )
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': f'Updated to {value}'
+        })
+    except Exception as e:
+        logging.error(f"ops_plab_settings_edit error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/plab-settings/<int:opt_id>/delete', methods=['POST'])
+@login_required
+def ops_plab_settings_delete(opt_id):
+    """Delete a lookup option."""
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM lookup_options WHERE id = ?", (opt_id,))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Option deleted'
+        })
+    except Exception as e:
+        logging.error(f"ops_plab_settings_delete error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/plab-settings/reorder', methods=['POST'])
+@login_required
+def ops_plab_settings_reorder():
+    """Update sort_order for lookup options."""
+    try:
+        items = request.json.get('items', [])
+        if not items:
+            return jsonify({'error': 'No items provided'}), 400
+
+        conn = get_db()
+        for order, opt_id in enumerate(items, 1):
+            conn.execute("UPDATE lookup_options SET sort_order = ? WHERE id = ?", (order, opt_id))
+        conn.commit()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'message': 'Order updated'
+        })
+    except Exception as e:
+        logging.error(f"ops_plab_settings_reorder error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
 @app.route('/operations/plab')
 @admin_required
 def ops_plab_list():
@@ -9727,14 +10067,14 @@ def ops_plab_list():
                                clients=clients, search=search, status_filter=status_filter,
                                stage_filter=stage_filter, total=total, active_count=active_count,
                                total_package=total_package, total_collected=total_collected,
-                               account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES)
+                               account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'))
 
     conn.close()
     return render_template('ops_plab_list.html',
                            clients=clients, search=search, status_filter=status_filter,
                            stage_filter=stage_filter, total=total, active_count=active_count,
                            total_package=total_package, total_collected=total_collected,
-                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES)
+                           account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'))
 
 
 @app.route('/operations/plab/<int:client_id>')
@@ -9777,7 +10117,7 @@ def ops_plab_dashboard(client_id):
                            amount_paid=amount_paid, gst_paid=gst_paid,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
                            final_pkg=final_pkg, discount=discount,
-                           plab_stages=PLAB_STAGES, account_statuses=ACCOUNT_STATUSES,
+                           plab_stages=get_lookup_options('plab_stage'), account_statuses=get_lookup_options('account_status'),
                            coaching=coaching, english_logins=english_logins,
                            test_bookings=test_bookings, call_notes=call_notes,
                            call_notes_count=call_notes_count, payments=payments,
@@ -9852,10 +10192,10 @@ def ops_plab_add():
 
     conn.close()
     return render_template('ops_plab_form.html', mode='add', item=None,
-                           plan_types=PLAN_TYPES, joined_stages=JOINED_STAGES,
-                           english_options=ENGLISH_TRAINING_OPTIONS,
-                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES,
-                           lead_sources=LEAD_SOURCES)
+                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           english_options=get_lookup_options('english_training'),
+                           account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
+                           lead_sources=get_lookup_options('lead_source'))
 
 
 @app.route('/operations/plab/<int:client_id>/edit', methods=['GET', 'POST'])
@@ -9946,10 +10286,10 @@ def ops_plab_edit(client_id):
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
     return render_template('ops_plab_form.html', mode='edit', item=client,
-                           plan_types=PLAN_TYPES, joined_stages=JOINED_STAGES,
-                           english_options=ENGLISH_TRAINING_OPTIONS,
-                           account_statuses=ACCOUNT_STATUSES, plab_stages=PLAB_STAGES,
-                           lead_sources=LEAD_SOURCES)
+                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           english_options=get_lookup_options('english_training'),
+                           account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
+                           lead_sources=get_lookup_options('lead_source'))
 
 
 @app.route('/operations/plab/<int:client_id>/delete', methods=['POST'])
@@ -10195,7 +10535,7 @@ def ops_coaching_list():
     conn.close()
     return render_template('ops_coaching_list.html', records=records, client_reg=reg,
                            search=search, status_filter=status_filter,
-                           coaching_statuses=COACHING_STATUSES)
+                           coaching_statuses=get_lookup_options('coaching_status'))
 
 
 @app.route('/operations/coaching/add', methods=['GET', 'POST'])
@@ -10226,8 +10566,8 @@ def ops_coaching_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_coaching_form.html', record=None, clients=clients,
-                           course_types=COACHING_COURSE_TYPES, coaching_statuses=COACHING_STATUSES,
-                           coaching_methods=COACHING_METHODS, pre_reg=pre_reg)
+                           course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
+                           coaching_methods=get_lookup_options('coaching_method'), pre_reg=pre_reg)
 
 
 @app.route('/operations/coaching/<int:record_id>/edit', methods=['GET', 'POST'])
@@ -10261,8 +10601,8 @@ def ops_coaching_edit(record_id):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     conn.close()
     return render_template('ops_coaching_form.html', record=record, clients=clients,
-                           course_types=COACHING_COURSE_TYPES, coaching_statuses=COACHING_STATUSES,
-                           coaching_methods=COACHING_METHODS, pre_reg='')
+                           course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
+                           coaching_methods=get_lookup_options('coaching_method'), pre_reg='')
 
 
 @app.route('/operations/coaching/<int:record_id>/delete', methods=['POST'])
@@ -10414,7 +10754,7 @@ def ops_test_bookings_list():
     conn.close()
     return render_template('ops_test_bookings_list.html', records=records, client_reg=reg,
                            search=search, exam_filter=exam_filter, status_filter=status_filter,
-                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES)
+                           exam_names=get_lookup_options('exam_name'), exam_statuses=get_lookup_options('exam_status'))
 
 
 @app.route('/operations/test-bookings/add', methods=['GET', 'POST'])
@@ -10445,8 +10785,8 @@ def ops_test_bookings_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_test_bookings_form.html', record=None, clients=clients,
-                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES,
-                           exam_results=EXAM_RESULTS, pre_reg=pre_reg)
+                           exam_names=get_lookup_options('exam_name'), exam_statuses=get_lookup_options('exam_status'),
+                           exam_results=get_lookup_options('exam_result'), pre_reg=pre_reg)
 
 
 @app.route('/operations/test-bookings/<int:record_id>/edit', methods=['GET', 'POST'])
@@ -10480,8 +10820,8 @@ def ops_test_bookings_edit(record_id):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     conn.close()
     return render_template('ops_test_bookings_form.html', record=record, clients=clients,
-                           exam_names=EXAM_NAMES, exam_statuses=EXAM_STATUSES,
-                           exam_results=EXAM_RESULTS, pre_reg='')
+                           exam_names=get_lookup_options('exam_name'), exam_statuses=get_lookup_options('exam_status'),
+                           exam_results=get_lookup_options('exam_result'), pre_reg='')
 
 
 @app.route('/operations/test-bookings/<int:record_id>/delete', methods=['POST'])
@@ -10747,7 +11087,7 @@ def ops_payments_list():
     return render_template('ops_payments_list.html',
         records=records, reg=reg, client_name=client_name,
         payment_method=payment_method, instalment=instalment,
-        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS,
+        payment_methods=get_lookup_options('payment_method'), instalment_options=get_lookup_options('instalment'),
         has_filters=has_filters, stats=stats,
         page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
 
@@ -10795,7 +11135,7 @@ def ops_payments_add():
 
     return render_template('ops_payments_form.html',
         clients=clients, record=None, pre_reg=pre_reg,
-        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS)
+        payment_methods=get_lookup_options('payment_method'), instalment_options=get_lookup_options('instalment'))
 
 
 @app.route('/operations/payments/<int:record_id>/edit', methods=['GET', 'POST'])
@@ -10844,7 +11184,7 @@ def ops_payments_edit(record_id):
 
     return render_template('ops_payments_form.html',
         clients=clients, record=record, pre_reg=None,
-        payment_methods=PAYMENT_METHODS, instalment_options=INSTALMENT_OPTIONS)
+        payment_methods=get_lookup_options('payment_method'), instalment_options=get_lookup_options('instalment'))
 
 
 @app.route('/operations/payments/<int:record_id>/delete', methods=['POST'])
@@ -10890,8 +11230,8 @@ def ops_epic_list():
     conn.close()
     return render_template('ops_epic_list.html', records=records,
                            search=search, status_filter=status_filter,
-                           epic_reg_statuses=EPIC_REG_STATUSES,
-                           epic_statuses=EPIC_STATUSES)
+                           epic_reg_statuses=get_lookup_options('epic_reg_status'),
+                           epic_statuses=get_lookup_options('epic_status'))
 
 
 @app.route('/operations/epic/add', methods=['GET', 'POST'])
@@ -10928,10 +11268,10 @@ def ops_epic_add():
     conn.close()
     pre_reg = request.args.get('reg', '')
     return render_template('ops_epic_form.html', record=None, clients=clients,
-                           epic_reg_statuses=EPIC_REG_STATUSES, epic_statuses=EPIC_STATUSES,
-                           notary_camp_statuses=NOTARY_CAMP_STATUSES,
-                           doc_stage_options=DOC_STAGE_OPTIONS,
-                           doc_stage_status_options=DOC_STAGE_STATUS_OPTIONS,
+                           epic_reg_statuses=get_lookup_options('epic_reg_status'), epic_statuses=get_lookup_options('epic_status'),
+                           notary_camp_statuses=get_lookup_options('notary_camp_status'),
+                           doc_stage_options=get_lookup_options('doc_stage'),
+                           doc_stage_status_options=get_lookup_options('doc_stage_status'),
                            pre_reg=pre_reg)
 
 
@@ -10973,10 +11313,10 @@ def ops_epic_edit(eid):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     conn.close()
     return render_template('ops_epic_form.html', record=record, clients=clients,
-                           epic_reg_statuses=EPIC_REG_STATUSES, epic_statuses=EPIC_STATUSES,
-                           notary_camp_statuses=NOTARY_CAMP_STATUSES,
-                           doc_stage_options=DOC_STAGE_OPTIONS,
-                           doc_stage_status_options=DOC_STAGE_STATUS_OPTIONS,
+                           epic_reg_statuses=get_lookup_options('epic_reg_status'), epic_statuses=get_lookup_options('epic_status'),
+                           notary_camp_statuses=get_lookup_options('notary_camp_status'),
+                           doc_stage_options=get_lookup_options('doc_stage'),
+                           doc_stage_status_options=get_lookup_options('doc_stage_status'),
                            pre_reg='')
 
 
@@ -11023,8 +11363,8 @@ def ops_gmc_list():
     conn.close()
     return render_template('ops_gmc_list.html', records=records,
                            search=search, status_filter=status_filter,
-                           gmc_setup_statuses=GMC_SETUP_STATUSES,
-                           gmc_license_statuses=GMC_LICENSE_STATUSES)
+                           gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_license_statuses=get_lookup_options('gmc_license_status'))
 
 
 @app.route('/operations/gmc/add', methods=['GET', 'POST'])
@@ -11055,8 +11395,8 @@ def ops_gmc_add():
     conn.close()
     pre_reg = request.args.get('reg', '')
     return render_template('ops_gmc_form.html', record=None, clients=clients,
-                           gmc_setup_statuses=GMC_SETUP_STATUSES,
-                           gmc_license_statuses=GMC_LICENSE_STATUSES,
+                           gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_license_statuses=get_lookup_options('gmc_license_status'),
                            pre_reg=pre_reg)
 
 
@@ -11092,8 +11432,8 @@ def ops_gmc_edit(gid):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     conn.close()
     return render_template('ops_gmc_form.html', record=record, clients=clients,
-                           gmc_setup_statuses=GMC_SETUP_STATUSES,
-                           gmc_license_statuses=GMC_LICENSE_STATUSES,
+                           gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_license_statuses=get_lookup_options('gmc_license_status'),
                            pre_reg='')
 
 
@@ -11139,7 +11479,7 @@ def ops_research_list():
         records = []
     conn.close()
     return render_template('ops_research_list.html', records=records, search=search,
-                           status_filter=status_filter, research_statuses=RESEARCH_STATUSES)
+                           status_filter=status_filter, research_statuses=get_lookup_options('research_status'))
 
 
 @app.route('/operations/research-publication/add', methods=['GET', 'POST'])
@@ -11166,7 +11506,7 @@ def ops_research_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_research_form.html', record=None,
-                           research_statuses=RESEARCH_STATUSES, author_positions=AUTHOR_POSITIONS, pre_reg=pre_reg)
+                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'), pre_reg=pre_reg)
 
 
 @app.route('/operations/research-publication/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11194,7 +11534,7 @@ def ops_research_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_research_list'))
     conn.close()
     return render_template('ops_research_form.html', record=record,
-                           research_statuses=RESEARCH_STATUSES, author_positions=AUTHOR_POSITIONS, pre_reg='')
+                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'), pre_reg='')
 
 
 @app.route('/operations/research-publication/<int:rid>/delete', methods=['POST'])
@@ -11232,7 +11572,7 @@ def ops_subscriptions_list():
         records = []
     conn.close()
     return render_template('ops_subscriptions_list.html', records=records, search=search,
-                           subscription_types=ONLINE_SUBSCRIPTION_TYPES)
+                           subscription_types=get_lookup_options('subscription_type'))
 
 
 @app.route('/operations/online-subscriptions/add', methods=['GET', 'POST'])
@@ -11257,8 +11597,8 @@ def ops_subscriptions_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_subscriptions_form.html', record=None,
-                           subscription_types=ONLINE_SUBSCRIPTION_TYPES, activation_types=ACTIVATION_TYPES,
-                           booked_by_options=SUBSCRIPTION_BOOKED_BY, pre_reg=pre_reg)
+                           subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
+                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg=pre_reg)
 
 
 @app.route('/operations/online-subscriptions/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11284,8 +11624,8 @@ def ops_subscriptions_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
     conn.close()
     return render_template('ops_subscriptions_form.html', record=record,
-                           subscription_types=ONLINE_SUBSCRIPTION_TYPES, activation_types=ACTIVATION_TYPES,
-                           booked_by_options=SUBSCRIPTION_BOOKED_BY, pre_reg='')
+                           subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
+                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg='')
 
 
 @app.route('/operations/online-subscriptions/<int:rid>/delete', methods=['POST'])
@@ -11327,7 +11667,7 @@ def ops_webinars_list():
         records = []
     conn.close()
     return render_template('ops_webinars_list.html', records=records, search=search,
-                           type_filter=type_filter, event_types=EVENT_TYPES)
+                           type_filter=type_filter, event_types=get_lookup_options('event_type'))
 
 
 @app.route('/operations/webinars-conferences/add', methods=['GET', 'POST'])
@@ -11353,8 +11693,8 @@ def ops_webinars_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_webinars_form.html', record=None,
-                           event_types=EVENT_TYPES, event_values=EVENT_VALUES,
-                           participation_types=PARTICIPATION_TYPES, pre_reg=pre_reg)
+                           event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
+                           participation_types=get_lookup_options('participation_type'), pre_reg=pre_reg)
 
 
 @app.route('/operations/webinars-conferences/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11380,8 +11720,8 @@ def ops_webinars_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_webinars_list'))
     conn.close()
     return render_template('ops_webinars_form.html', record=record,
-                           event_types=EVENT_TYPES, event_values=EVENT_VALUES,
-                           participation_types=PARTICIPATION_TYPES, pre_reg='')
+                           event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
+                           participation_types=get_lookup_options('participation_type'), pre_reg='')
 
 
 @app.route('/operations/webinars-conferences/<int:rid>/delete', methods=['POST'])
@@ -11423,7 +11763,7 @@ def ops_visa_list():
         records = []
     conn.close()
     return render_template('ops_visa_list.html', records=records, search=search,
-                           status_filter=status_filter, visa_app_statuses=VISA_APP_STATUSES)
+                           status_filter=status_filter, visa_app_statuses=get_lookup_options('visa_app_status'))
 
 
 @app.route('/operations/uk-visa-travel/add', methods=['GET', 'POST'])
@@ -11457,10 +11797,10 @@ def ops_visa_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_visa_form.html', record=None,
-                           visa_app_statuses=VISA_APP_STATUSES, visa_doc_collected=VISA_DOC_COLLECTED,
-                           visa_doc_statuses=VISA_DOC_STATUSES, visa_statuses=VISA_STATUSES,
-                           visa_periods=VISA_PERIODS, visa_types=VISA_TYPES,
-                           lodging_types=LODGING_TYPES, pre_reg=pre_reg)
+                           visa_app_statuses=get_lookup_options('visa_app_status'), visa_doc_collected=get_lookup_options('visa_doc_collected'),
+                           visa_doc_statuses=get_lookup_options('visa_doc_status'), visa_statuses=get_lookup_options('visa_status'),
+                           visa_periods=get_lookup_options('visa_period'), visa_types=get_lookup_options('visa_type'),
+                           lodging_types=get_lookup_options('lodging_type'), pre_reg=pre_reg)
 
 
 @app.route('/operations/uk-visa-travel/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11495,10 +11835,10 @@ def ops_visa_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_visa_list'))
     conn.close()
     return render_template('ops_visa_form.html', record=record,
-                           visa_app_statuses=VISA_APP_STATUSES, visa_doc_collected=VISA_DOC_COLLECTED,
-                           visa_doc_statuses=VISA_DOC_STATUSES, visa_statuses=VISA_STATUSES,
-                           visa_periods=VISA_PERIODS, visa_types=VISA_TYPES,
-                           lodging_types=LODGING_TYPES, pre_reg='')
+                           visa_app_statuses=get_lookup_options('visa_app_status'), visa_doc_collected=get_lookup_options('visa_doc_collected'),
+                           visa_doc_statuses=get_lookup_options('visa_doc_status'), visa_statuses=get_lookup_options('visa_status'),
+                           visa_periods=get_lookup_options('visa_period'), visa_types=get_lookup_options('visa_type'),
+                           lodging_types=get_lookup_options('lodging_type'), pre_reg='')
 
 
 @app.route('/operations/uk-visa-travel/<int:rid>/delete', methods=['POST'])
@@ -11570,9 +11910,9 @@ def ops_academic_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_academic_form.html', record=None,
-                           img_fmg_options=IMG_FMG_OPTIONS, mbbs_statuses=MBBS_STATUSES,
-                           internship_statuses=INTERNSHIP_STATUSES, internship_gap_options=INTERNSHIP_GAP_OPTIONS,
-                           working_statuses=WORKING_STATUSES, pre_reg=pre_reg)
+                           img_fmg_options=get_lookup_options('img_fmg'), mbbs_statuses=get_lookup_options('mbbs_status'),
+                           internship_statuses=get_lookup_options('internship_status'), internship_gap_options=get_lookup_options('internship_gap'),
+                           working_statuses=get_lookup_options('working_status'), pre_reg=pre_reg)
 
 
 @app.route('/operations/academic-details/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11608,9 +11948,9 @@ def ops_academic_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_academic_list'))
     conn.close()
     return render_template('ops_academic_form.html', record=record,
-                           img_fmg_options=IMG_FMG_OPTIONS, mbbs_statuses=MBBS_STATUSES,
-                           internship_statuses=INTERNSHIP_STATUSES, internship_gap_options=INTERNSHIP_GAP_OPTIONS,
-                           working_statuses=WORKING_STATUSES, pre_reg='')
+                           img_fmg_options=get_lookup_options('img_fmg'), mbbs_statuses=get_lookup_options('mbbs_status'),
+                           internship_statuses=get_lookup_options('internship_status'), internship_gap_options=get_lookup_options('internship_gap'),
+                           working_statuses=get_lookup_options('working_status'), pre_reg='')
 
 
 @app.route('/operations/academic-details/<int:rid>/delete', methods=['POST'])
@@ -11652,7 +11992,7 @@ def ops_courses_list():
         records = []
     conn.close()
     return render_template('ops_courses_list.html', records=records, search=search,
-                           status_filter=status_filter, course_statuses=COURSE_STATUSES)
+                           status_filter=status_filter, course_statuses=get_lookup_options('course_status'))
 
 
 @app.route('/operations/online-courses/add', methods=['GET', 'POST'])
@@ -11680,8 +12020,8 @@ def ops_courses_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_courses_form.html', record=None,
-                           course_names=COURSE_NAMES, course_types=COURSE_TYPES,
-                           course_statuses=COURSE_STATUSES, booked_by_options=COURSE_BOOKED_BY, pre_reg=pre_reg)
+                           course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
+                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'), pre_reg=pre_reg)
 
 
 @app.route('/operations/online-courses/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11709,8 +12049,8 @@ def ops_courses_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_courses_list'))
     conn.close()
     return render_template('ops_courses_form.html', record=record,
-                           course_names=COURSE_NAMES, course_types=COURSE_TYPES,
-                           course_statuses=COURSE_STATUSES, booked_by_options=COURSE_BOOKED_BY, pre_reg='')
+                           course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
+                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'), pre_reg='')
 
 
 @app.route('/operations/online-courses/<int:rid>/delete', methods=['POST'])
@@ -11771,7 +12111,7 @@ def ops_observerships_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_observerships_form.html', record=None,
-                           observership_payments=OBSERVERSHIP_PAYMENTS, pre_reg=pre_reg)
+                           observership_payments=get_lookup_options('observership_payment'), pre_reg=pre_reg)
 
 
 @app.route('/operations/uk-observerships/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11795,7 +12135,7 @@ def ops_observerships_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_observerships_list'))
     conn.close()
     return render_template('ops_observerships_form.html', record=record,
-                           observership_payments=OBSERVERSHIP_PAYMENTS, pre_reg='')
+                           observership_payments=get_lookup_options('observership_payment'), pre_reg='')
 
 
 @app.route('/operations/uk-observerships/<int:rid>/delete', methods=['POST'])
@@ -11854,7 +12194,7 @@ def ops_ngo_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_ngo_form.html', record=None,
-                           ngo_vendors=NGO_VENDOR_NAMES, activity_types=NGO_ACTIVITY_TYPES, pre_reg=pre_reg)
+                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg=pre_reg)
 
 
 @app.route('/operations/ngo-activities/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11877,7 +12217,7 @@ def ops_ngo_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_ngo_list'))
     conn.close()
     return render_template('ops_ngo_form.html', record=record,
-                           ngo_vendors=NGO_VENDOR_NAMES, activity_types=NGO_ACTIVITY_TYPES, pre_reg='')
+                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg='')
 
 
 @app.route('/operations/ngo-activities/<int:rid>/delete', methods=['POST'])
@@ -11943,9 +12283,9 @@ def ops_mentorship_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_mentorship_form.html', record=None,
-                           payment_statuses=MENTORSHIP_PAYMENT_STATUSES,
-                           attendance_options=MENTORSHIP_ATTENDANCE,
-                           confirmation_options=MENTORSHIP_CONFIRMATION, pre_reg=pre_reg)
+                           payment_statuses=get_lookup_options('mentorship_payment_status'),
+                           attendance_options=get_lookup_options('mentorship_attendance'),
+                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg=pre_reg)
 
 
 @app.route('/operations/mentorship/<int:rid>/edit', methods=['GET', 'POST'])
@@ -11975,9 +12315,9 @@ def ops_mentorship_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
     return render_template('ops_mentorship_form.html', record=record,
-                           payment_statuses=MENTORSHIP_PAYMENT_STATUSES,
-                           attendance_options=MENTORSHIP_ATTENDANCE,
-                           confirmation_options=MENTORSHIP_CONFIRMATION, pre_reg='')
+                           payment_statuses=get_lookup_options('mentorship_payment_status'),
+                           attendance_options=get_lookup_options('mentorship_attendance'),
+                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg='')
 
 
 @app.route('/operations/mentorship/<int:rid>/delete', methods=['POST'])
@@ -12040,7 +12380,7 @@ def ops_cab_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_cab_form.html', record=None,
-                           cab_vendors=CAB_VENDORS, pre_reg=pre_reg)
+                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg=pre_reg)
 
 
 @app.route('/operations/uk-cab-bookings/<int:rid>/edit', methods=['GET', 'POST'])
@@ -12066,7 +12406,7 @@ def ops_cab_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_cab_list'))
     conn.close()
     return render_template('ops_cab_form.html', record=record,
-                           cab_vendors=CAB_VENDORS, pre_reg='')
+                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg='')
 
 
 @app.route('/operations/uk-cab-bookings/<int:rid>/delete', methods=['POST'])
