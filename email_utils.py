@@ -346,5 +346,63 @@ def send_happy_birthday_email(
     return send_email([birthday_person_email], subject, html_body)
 
 
+def send_leave_status_email(
+    employee_name: str,
+    employee_email: str,
+    leave_type: str,
+    leave_date: str,
+    status: str,
+    actioned_by: str
+) -> bool:
+    """Send a leave approved/rejected email to the employee."""
+    if not employee_email:
+        logger.error("Cannot send leave status email: no email address")
+        return False
+
+    is_approved = status.lower() == 'approved'
+    status_label = "Approved" if is_approved else "Rejected"
+    status_color = "#22c55e" if is_approved else "#ef4444"
+    status_icon = "&#9989;" if is_approved else "&#10060;"
+    first_name = employee_name.split()[0] if employee_name else employee_name
+
+    subject = f"Leave {status_label} — {leave_type} on {leave_date}"
+
+    html_body = f"""
+    <html>
+        <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 0;">
+            {_get_email_header_html()}
+            <div style="padding: 30px; background-color: white; margin: 0;">
+                <h2 style="color: {BRAND_NAVY}; margin-top: 0;">
+                    {status_icon} Leave {status_label}
+                </h2>
+                <p style="font-size: 16px; margin: 20px 0;">Dear {first_name},</p>
+                <div style="background-color: #f9f9f9; border-left: 4px solid {status_color}; padding: 15px; margin: 20px 0;">
+                    <p style="font-size: 15px; margin: 0;">
+                        Your <strong>{leave_type}</strong> leave on
+                        <strong>{leave_date}</strong> has been
+                        <strong style="color: {status_color};">{status_label.lower()}</strong>
+                        by <strong>{actioned_by}</strong>.
+                    </p>
+                </div>
+                <p style="font-size: 14px; margin: 20px 0; color: #666;">
+                    You can view your leave history on the HR Portal.
+                </p>
+                <p style="font-size: 14px; margin: 20px 0; color: #666;">
+                    Regards,<br>
+                    <strong style="color: {BRAND_NAVY};">GooCampus HR Team</strong>
+                </p>
+            </div>
+            {_get_email_footer_html()}
+        </body>
+    </html>
+    """
+
+    logger.info(
+        f"Sending leave {status_label.lower()} email to {employee_name} "
+        f"({employee_email})"
+    )
+    return send_email([employee_email], subject, html_body)
+
+
 if __name__ == "__main__":
     logger.info("Email utilities module loaded successfully (Resend)")

@@ -9,7 +9,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import calendar
 from db import get_db
-from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email
+from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email, send_leave_status_email
 
 app = Flask(__name__)
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
@@ -1427,6 +1427,11 @@ def employee_approve_leave(leave_id):
     conn.commit()
     conn.close()
 
+    # Send approval email
+    if leave_emp and leave_emp['email']:
+        send_leave_status_email(leave_emp['name'], leave_emp['email'],
+            leave['leave_type'], leave['leave_date'], 'approved', user['name'])
+
     flash('Leave approved', 'success')
     return redirect(url_for('employee_approvals'))
 
@@ -1460,6 +1465,11 @@ def employee_reject_leave(leave_id):
         'danger', '/my-leaves')
     conn.commit()
     conn.close()
+
+    # Send rejection email
+    if leave_emp and leave_emp['email']:
+        send_leave_status_email(leave_emp['name'], leave_emp['email'],
+            leave['leave_type'], leave['leave_date'], 'rejected', user['name'])
 
     flash('Leave rejected', 'success')
     return redirect(url_for('employee_approvals'))
@@ -2598,6 +2608,11 @@ def approve_leave(leave_id):
     conn.commit()
     conn.close()
 
+    # Send approval email
+    if leave_emp and leave_emp['email']:
+        send_leave_status_email(leave_emp['name'], leave_emp['email'],
+            leave['leave_type'], leave['leave_date'], 'approved', user['name'])
+
     flash('Leave approved', 'success')
     return redirect(request.referrer or url_for('pending_approvals'))
 
@@ -2632,6 +2647,11 @@ def reject_leave(leave_id):
         'danger', '/my-leaves')
     conn.commit()
     conn.close()
+
+    # Send rejection email
+    if leave_emp and leave_emp['email']:
+        send_leave_status_email(leave_emp['name'], leave_emp['email'],
+            leave['leave_type'], leave['leave_date'], 'rejected', user['name'])
 
     flash('Leave rejected', 'success')
     return redirect(request.referrer or url_for('pending_approvals'))
