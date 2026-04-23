@@ -9518,6 +9518,19 @@ def ensure_ops_tables():
                 'mentorship_confirmation': ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled'],
                 # Cab
                 'cab_vendor': ['Imran', 'Other'],
+                # Coaching - vendors & extras
+                'coaching_english_training': ['IELTS', 'OET'],
+                'coaching_vendor': ['Ace Academy', 'Mentor Academy', 'British Council', 'IDP', 'Swamy Institute', 'Other'],
+                'coaching_plab_partner': ['Plabable', 'Plab Keys', 'Swamy', 'Other'],
+                'coaching_blueprint_stage': ['Stage 1', 'Stage 2', 'Stage 3', 'Completed'],
+                'coaching_attendance': ['Present', 'Absent', 'Late'],
+                'batch_month': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
+                # Providers (shared across forms)
+                'research_provider': ['Cognibrain', 'The Good Research Project', 'Dr. Jayaraj', 'Other'],
+                'course_provider': ['Coursera', 'Udemy', 'BMJ', 'BMA', 'RCSI', 'Other'],
+                'certification_body': ['Royal College', 'BMA', 'BMJ', 'ALS', 'Other'],
+                # Medical specialities (shared)
+                'medical_speciality': ['General Medicine', 'General Surgery', 'Paediatrics', 'Obstetrics & Gynaecology', 'Orthopaedics', 'Cardiology', 'Neurology', 'Dermatology', 'Psychiatry', 'Radiology', 'Anaesthesia', 'Emergency Medicine', 'Ophthalmology', 'ENT', 'Pathology', 'Other'],
             }
             sort_idx = 0
             for category, values in SEED_DATA.items():
@@ -9763,17 +9776,17 @@ def ops_plab_pathway_dashboard():
 
 CATEGORY_GROUPS = {
     'Client & Pipeline': ['plab_stage', 'account_status', 'plan_type', 'joined_stage', 'english_training', 'lead_source'],
-    'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method'],
+    'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'coaching_english_training', 'coaching_vendor', 'coaching_plab_partner', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_license_status'],
     'Payments': ['payment_method', 'instalment'],
-    'Research & Publication': ['research_status', 'author_position'],
+    'Research & Publication': ['research_status', 'author_position', 'research_provider'],
     'Subscriptions': ['subscription_type', 'activation_type', 'subscription_booked_by'],
     'Webinars & Events': ['event_type', 'event_value', 'participation_type'],
     'UK Visa & Travel': ['visa_app_status', 'visa_doc_collected', 'visa_doc_status', 'visa_status', 'visa_period', 'visa_type', 'lodging_type'],
     'Academic Details': ['img_fmg', 'mbbs_status', 'internship_status', 'internship_gap', 'working_status'],
-    'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by'],
-    'Observerships': ['observership_payment'],
+    'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by', 'course_provider', 'certification_body'],
+    'Observerships': ['observership_payment', 'medical_speciality'],
     'NGO Activities': ['ngo_vendor', 'ngo_activity_type'],
     'Mentorship': ['mentorship_payment_status', 'mentorship_attendance', 'mentorship_confirmation'],
     'Cab Bookings': ['cab_vendor'],
@@ -9832,6 +9845,16 @@ CATEGORY_LABELS = {
     'mentorship_attendance': 'Attendance',
     'mentorship_confirmation': 'Confirmation',
     'cab_vendor': 'Cab Vendors',
+    'coaching_english_training': 'English Training',
+    'coaching_vendor': 'Vendors (IELTS/OET/Other)',
+    'coaching_plab_partner': 'PLAB Partners',
+    'coaching_blueprint_stage': 'Blueprint Stages',
+    'coaching_attendance': 'Attendance',
+    'batch_month': 'Batch Months',
+    'research_provider': 'Research Providers',
+    'course_provider': 'Course Providers',
+    'certification_body': 'Certification Bodies',
+    'medical_speciality': 'Medical Specialities',
 }
 
 
@@ -10572,7 +10595,14 @@ def ops_coaching_add():
     pre_reg = request.args.get('client', '')
     return render_template('ops_coaching_form.html', record=None, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
-                           coaching_methods=get_lookup_options('coaching_method'), pre_reg=pre_reg)
+                           coaching_methods=get_lookup_options('coaching_method'),
+                           english_trainings=get_lookup_options('coaching_english_training'),
+                           coaching_vendors=get_lookup_options('coaching_vendor'),
+                           plab_partners=get_lookup_options('coaching_plab_partner'),
+                           blueprint_stages=get_lookup_options('coaching_blueprint_stage'),
+                           attendance_options=get_lookup_options('coaching_attendance'),
+                           batch_months=get_lookup_options('batch_month'),
+                           pre_reg=pre_reg)
 
 
 @app.route('/operations/coaching/<int:record_id>/edit', methods=['GET', 'POST'])
@@ -11511,7 +11541,8 @@ def ops_research_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_research_form.html', record=None,
-                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'), pre_reg=pre_reg)
+                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
+                           research_providers=get_lookup_options('research_provider'), pre_reg=pre_reg)
 
 
 @app.route('/operations/research-publication/<int:rid>/edit', methods=['GET', 'POST'])
@@ -12026,7 +12057,9 @@ def ops_courses_add():
     pre_reg = request.args.get('client', '')
     return render_template('ops_courses_form.html', record=None,
                            course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
-                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'), pre_reg=pre_reg)
+                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'),
+                           course_providers=get_lookup_options('course_provider'), certification_bodies=get_lookup_options('certification_body'),
+                           pre_reg=pre_reg)
 
 
 @app.route('/operations/online-courses/<int:rid>/edit', methods=['GET', 'POST'])
@@ -12116,7 +12149,8 @@ def ops_observerships_add():
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_observerships_form.html', record=None,
-                           observership_payments=get_lookup_options('observership_payment'), pre_reg=pre_reg)
+                           observership_payments=get_lookup_options('observership_payment'),
+                           specialities=get_lookup_options('medical_speciality'), pre_reg=pre_reg)
 
 
 @app.route('/operations/uk-observerships/<int:rid>/edit', methods=['GET', 'POST'])

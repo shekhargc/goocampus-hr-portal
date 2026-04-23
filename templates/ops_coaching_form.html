@@ -70,7 +70,12 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training</label>
-                    <input type="text" name="english_training" value="{{ record.english_training or '' }}" placeholder="e.g., IELTS, OET" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for et in english_trainings %}
+                        <option value="{{ et }}" {% if record and record.english_training == et %}selected{% endif %}>{{ et }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
@@ -80,7 +85,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Month</label>
-                    <input type="text" name="batch_month" value="{{ record.batch_month or '' }}" placeholder="e.g., January" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="batch_month" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Month</option>
+                        {% for m in batch_months %}
+                        <option value="{{ m }}" {% if record and record.batch_month == m %}selected{% endif %}>{{ m }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Year</label>
@@ -102,11 +112,21 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Blueprint Stage</label>
-                    <input type="text" name="blueprint_stage" value="{{ record.blueprint_stage or '' }}" placeholder="e.g., Stage 1" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="blueprint_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Stage</option>
+                        {% for bs in blueprint_stages %}
+                        <option value="{{ bs }}" {% if record and record.blueprint_stage == bs %}selected{% endif %}>{{ bs }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Attendance</label>
-                    <input type="text" name="attendance" value="{{ record.attendance or '' }}" placeholder="e.g., Present" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="attendance" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for a in attendance_options %}
+                        <option value="{{ a }}" {% if record and record.attendance == a %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
@@ -116,28 +136,53 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">IELTS Vendor</label>
-                    <input type="text" name="ielts_vendor" value="{{ record.ielts_vendor or '' }}" placeholder="Vendor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="ielts_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in coaching_vendors %}
+                        <option value="{{ v }}" {% if record and record.ielts_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">OET Vendor</label>
-                    <input type="text" name="oet_vendor" value="{{ record.oet_vendor or '' }}" placeholder="Vendor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="oet_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in coaching_vendors %}
+                        <option value="{{ v }}" {% if record and record.oet_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Vendor</label>
-                    <input type="text" name="other_vendor" value="{{ record.other_vendor or '' }}" placeholder="Vendor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="other_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in coaching_vendors %}
+                        <option value="{{ v }}" {% if record and record.other_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB1 Partner</label>
-                    <input type="text" name="plab1_partner" value="{{ record.plab1_partner or '' }}" placeholder="Partner name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="plab1_partner" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Partner</option>
+                        {% for p in plab_partners %}
+                        <option value="{{ p }}" {% if record and record.plab1_partner == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB2 Vendor</label>
-                <input type="text" name="plab2_vendor" value="{{ record.plab2_vendor or '' }}" placeholder="Vendor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <select name="plab2_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">Select Vendor</option>
+                    {% for v in coaching_vendors %}
+                    <option value="{{ v }}" {% if record and record.plab2_vendor == v %}selected{% endif %}>{{ v }}</option>
+                    {% endfor %}
+                </select>
             </div>
 
             <!-- ===== ACTIONS ===== -->

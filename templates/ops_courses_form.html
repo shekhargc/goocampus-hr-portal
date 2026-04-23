@@ -84,11 +84,21 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Provider</label>
-                    <input type="text" name="course_provider" value="{{ record.course_provider or '' if record else '' }}" placeholder="e.g., Coursera, Udemy" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="course_provider" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Provider</option>
+                        {% for cp in course_providers %}
+                        <option value="{{ cp }}" {% if record and record.course_provider == cp %}selected{% endif %}>{{ cp }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Certification Body</label>
-                    <input type="text" name="certification_body" value="{{ record.certification_body or '' if record else '' }}" placeholder="Certification body" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="certification_body" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for cb in certification_bodies %}
+                        <option value="{{ cb }}" {% if record and record.certification_body == cb %}selected{% endif %}>{{ cb }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
