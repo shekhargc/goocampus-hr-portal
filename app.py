@@ -1424,13 +1424,18 @@ def employee_approve_leave(leave_id):
         'Leave Approved',
         f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been approved by {user["name"]}.',
         'success', '/my-leaves')
+    # Capture values before closing connection
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    l_type = leave['leave_type']
+    l_date = leave['leave_date']
+    approver = user['name']
     conn.commit()
     conn.close()
 
     # Send approval email
-    if leave_emp and leave_emp['email']:
-        send_leave_status_email(leave_emp['name'], leave_emp['email'],
-            leave['leave_type'], leave['leave_date'], 'approved', user['name'])
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, l_type, l_date, 'approved', approver)
 
     flash('Leave approved', 'success')
     return redirect(url_for('employee_approvals'))
@@ -1463,13 +1468,18 @@ def employee_reject_leave(leave_id):
         'Leave Rejected',
         f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been rejected by {user["name"]}.',
         'danger', '/my-leaves')
+    # Capture values before closing connection
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    l_type = leave['leave_type']
+    l_date = leave['leave_date']
+    rejector = user['name']
     conn.commit()
     conn.close()
 
     # Send rejection email
-    if leave_emp and leave_emp['email']:
-        send_leave_status_email(leave_emp['name'], leave_emp['email'],
-            leave['leave_type'], leave['leave_date'], 'rejected', user['name'])
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, l_type, l_date, 'rejected', rejector)
 
     flash('Leave rejected', 'success')
     return redirect(url_for('employee_approvals'))
@@ -2605,13 +2615,18 @@ def approve_leave(leave_id):
         'Leave Approved',
         f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been approved by {user["name"]}.',
         'success', '/my-leaves')
+    # Capture values before closing connection
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    l_type = leave['leave_type']
+    l_date = leave['leave_date']
+    approver = user['name']
     conn.commit()
     conn.close()
 
     # Send approval email
-    if leave_emp and leave_emp['email']:
-        send_leave_status_email(leave_emp['name'], leave_emp['email'],
-            leave['leave_type'], leave['leave_date'], 'approved', user['name'])
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, l_type, l_date, 'approved', approver)
 
     flash('Leave approved', 'success')
     return redirect(request.referrer or url_for('pending_approvals'))
@@ -2645,13 +2660,18 @@ def reject_leave(leave_id):
         'Leave Rejected',
         f'Your {leave["leave_type"]} leave on {leave["leave_date"]} has been rejected by {user["name"]}.',
         'danger', '/my-leaves')
+    # Capture values before closing connection
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    l_type = leave['leave_type']
+    l_date = leave['leave_date']
+    rejector = user['name']
     conn.commit()
     conn.close()
 
     # Send rejection email
-    if leave_emp and leave_emp['email']:
-        send_leave_status_email(leave_emp['name'], leave_emp['email'],
-            leave['leave_type'], leave['leave_date'], 'rejected', user['name'])
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, l_type, l_date, 'rejected', rejector)
 
     flash('Leave rejected', 'success')
     return redirect(request.referrer or url_for('pending_approvals'))
