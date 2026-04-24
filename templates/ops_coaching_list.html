@@ -87,11 +87,12 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     <tr>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Training Program</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Course Type</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Method</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Vendor</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Status</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Start Date</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">End Date</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -99,11 +100,12 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCoachingDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.english_training or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.course_type or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.coaching_method or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.ielts_vendor or record.oet_vendor or record.plab1_partner or record.plab2_vendor or record.other_vendor or '—' }}</td>
                         <td style="padding:12px 16px;">{% if record.coaching_status %}<span class="badge-pill {% if record.coaching_status == 'On Going' or record.coaching_status == 'In Progress' %}badge-yellow{% elif record.coaching_status == 'Completed' %}badge-green{% else %}badge-gray{% endif %}">{{ record.coaching_status }}</span>{% else %}<span style="color:var(--gray-500);">—</span>{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.start_date|format_date }}</td>
-                        <td style="padding:12px 16px;">{{ record.end_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -192,32 +194,16 @@ function openCoachingDetail(id) {
     </div>
 
     <div class="drawer-grid">
+        ${field('Training Program', r.english_training)}
         ${field('Course Type', r.course_type)}
-        ${field('Method', r.coaching_method)}
+        ${field('Coaching Method', r.coaching_method)}
         ${field('Status', badgeHtml(r.coaching_status))}
+        ${field('Training Vendor', r.ielts_vendor || r.oet_vendor || r.plab1_partner || r.plab2_vendor || r.other_vendor)}
         ${field('Batch', (r.batch_month ? r.batch_month + ' ' + (r.batch_year || '') : ''))}
         ${field('Start Date', r.start_date)}
         ${field('End Date', r.end_date)}
-    </div>
-
-    <div class="drawer-section">
-        <h4>Training Details</h4>
-        <div class="drawer-grid">
-            ${field('English Training', r.english_training)}
-            ${field('Blueprint Stage', r.blueprint_stage)}
-            ${field('Attendance', r.attendance)}
-        </div>
-    </div>
-
-    <div class="drawer-section">
-        <h4>Vendors</h4>
-        <div class="drawer-grid">
-            ${field('IELTS Vendor', r.ielts_vendor)}
-            ${field('OET Vendor', r.oet_vendor)}
-            ${field('Other Vendor', r.other_vendor)}
-            ${field('PLAB1 Partner', r.plab1_partner)}
-            ${field('PLAB2 Vendor', r.plab2_vendor)}
-        </div>
+        ${field('Blueprint Stage', r.blueprint_stage)}
+        ${field('Attendance', r.attendance)}
     </div>`;
 
     document.getElementById('coachingDrawerBody').innerHTML = html;
