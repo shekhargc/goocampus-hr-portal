@@ -69,11 +69,60 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training</label>
-                    <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
-                        {% for et in english_trainings %}
-                        <option value="{{ et }}" {% if record and record.english_training == et %}selected{% endif %}>{{ et }}</option>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Training Program *</label>
+                    <select name="english_training" id="training_program" required onchange="updateVendorFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Program</option>
+                        {% for tp in training_programs %}
+                        <option value="{{ tp }}" {% if record and record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== VENDOR (conditional based on Training Program) ===== -->
+            <div id="vendor_section" style="margin-bottom:1.1rem;display:none;">
+                <div id="vendor_ielts" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">IELTS Training Vendor</label>
+                    <select name="ielts_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in ielts_vendors %}
+                        <option value="{{ v }}" {% if record and record.ielts_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="vendor_oet" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">OET Training Vendor</label>
+                    <select name="oet_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in oet_vendors %}
+                        <option value="{{ v }}" {% if record and record.oet_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="vendor_plab1" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB 1 Training Partner</label>
+                    <select name="plab1_partner" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Partner</option>
+                        {% for p in plab1_partners %}
+                        <option value="{{ p }}" {% if record and record.plab1_partner == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="vendor_plab2" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB 2 Training Vendor</label>
+                    <select name="plab2_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in plab2_vendors %}
+                        <option value="{{ v }}" {% if record and record.plab2_vendor == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div id="vendor_other" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Training Vendor</label>
+                    <select name="other_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Vendor</option>
+                        {% for v in other_vendors %}
+                        <option value="{{ v }}" {% if record and record.other_vendor == v %}selected{% endif %}>{{ v }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -130,61 +179,6 @@
                 </div>
             </div>
 
-            <!-- ===== VENDORS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Vendors</h3>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">IELTS Vendor</label>
-                    <select name="ielts_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in coaching_vendors %}
-                        <option value="{{ v }}" {% if record and record.ielts_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">OET Vendor</label>
-                    <select name="oet_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in coaching_vendors %}
-                        <option value="{{ v }}" {% if record and record.oet_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Vendor</label>
-                    <select name="other_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in coaching_vendors %}
-                        <option value="{{ v }}" {% if record and record.other_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB1 Partner</label>
-                    <select name="plab1_partner" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Partner</option>
-                        {% for p in plab_partners %}
-                        <option value="{{ p }}" {% if record and record.plab1_partner == p %}selected{% endif %}>{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB2 Vendor</label>
-                <select name="plab2_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                    <option value="">Select Vendor</option>
-                    {% for v in coaching_vendors %}
-                    <option value="{{ v }}" {% if record and record.plab2_vendor == v %}selected{% endif %}>{{ v }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
             <!-- ===== ACTIONS ===== -->
             <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
                 <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
@@ -197,6 +191,31 @@
 </div>
 
 <script>
+function updateVendorFields() {
+    const program = document.getElementById('training_program').value;
+    const section = document.getElementById('vendor_section');
+    const vendorDivs = {
+        'IELTS Training': 'vendor_ielts',
+        'OET Training': 'vendor_oet',
+        'PLAB 1 Training': 'vendor_plab1',
+        'PLAB 2 Training': 'vendor_plab2',
+        'PLAB 2 Mock': 'vendor_plab2',
+        'MRCP 1': 'vendor_other'
+    };
+    // Hide all vendor divs
+    ['vendor_ielts','vendor_oet','vendor_plab1','vendor_plab2','vendor_other'].forEach(function(id) {
+        document.getElementById(id).style.display = 'none';
+    });
+    if (program && vendorDivs[program]) {
+        section.style.display = 'block';
+        document.getElementById(vendorDivs[program]).style.display = 'block';
+    } else {
+        section.style.display = 'none';
+    }
+}
+// Run on page load for edit mode
+document.addEventListener('DOMContentLoaded', updateVendorFields);
+
 (function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
