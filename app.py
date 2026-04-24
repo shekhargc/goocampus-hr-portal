@@ -11121,10 +11121,13 @@ def ops_call_notes_tracker():
         active_tab='tracker')
 
 
-@app.route('/operations/call-notes/tracker/<reg>/details')
+@app.route('/operations/call-notes/tracker/details')
 @admin_required
-def ops_call_notes_tracker_details(reg):
+def ops_call_notes_tracker_details():
     """JSON API: Return client details and their call note history."""
+    reg = request.args.get('reg', '').strip()
+    if not reg:
+        return jsonify({'error': 'Missing registration number'}), 400
     conn = get_db()
 
     try:
