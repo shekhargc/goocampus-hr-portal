@@ -203,7 +203,6 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
     </div>
     {% endif %}
     {% endif %}
-</div>
 
     <!-- FOLLOW-UP TRACKER TAB -->
     {% if active_tab == 'tracker' %}
@@ -236,14 +235,31 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
             </div>
         </div>
 
-        <!-- Filter & Search -->
-        <div style="margin-bottom:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
-            <form method="GET" style="display:flex;gap:8px;flex:1;min-width:300px;">
-                <input type="text" name="q" placeholder="Search by name or registration..." value="{{ search_q or '' }}" style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;" />
-                <button type="submit" style="padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Search</button>
-                <a href="/operations/call-notes/tracker" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;">Clear</a>
+        <!-- Filter Badges -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            <span style="font-size:12px;color:var(--gray-500);font-weight:600;margin-right:4px;">Filter:</span>
+            <span class="filter-badge {% if gap_filter == 'never' %}active never{% endif %}" onclick="filterByGap('never')" style="cursor:pointer;">Never</span>
+            <span class="filter-badge {% if gap_filter == 'critical' %}active critical{% endif %}" onclick="filterByGap('critical')" style="cursor:pointer;">60+</span>
+            <span class="filter-badge {% if gap_filter == 'overdue' %}active overdue{% endif %}" onclick="filterByGap('overdue')" style="cursor:pointer;">45–60</span>
+            <span class="filter-badge {% if gap_filter == 'attention' %}active attention{% endif %}" onclick="filterByGap('attention')" style="cursor:pointer;">30–45</span>
+            <span class="filter-badge {% if gap_filter == 'ok' %}active ok{% endif %}" onclick="filterByGap('ok')" style="cursor:pointer;">15–30</span>
+            <span class="filter-badge {% if gap_filter == 'recent' %}active recent{% endif %}" onclick="filterByGap('recent')" style="cursor:pointer;">&lt;15</span>
+            {% if gap_filter %}
+            <span class="filter-badge" onclick="filterByGap('')" style="cursor:pointer;">All</span>
+            {% endif %}
+        </div>
+
+        <!-- Search -->
+        <div style="margin-bottom:16px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <form method="GET" action="/operations/call-notes/tracker" style="display:flex;gap:8px;flex:1;min-width:250px;">
+                {% if gap_filter %}<input type="hidden" name="gap" value="{{ gap_filter }}" />{% endif %}
+                <input type="text" name="q" placeholder="Search by name or registration..." value="{{ search_q or '' }}" style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;" />
+                <button type="submit" style="padding:8px 14px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;">Search</button>
+                {% if search_q or gap_filter %}
+                <a href="/operations/call-notes/tracker" style="padding:8px 14px;background:var(--gray-200);color:var(--gray-700);border-radius:6px;font-weight:600;font-size:13px;text-decoration:none;">Clear</a>
+                {% endif %}
             </form>
-            <span style="font-size:13px;color:var(--gray-600);font-weight:600;">Total: {{ summary.total }}</span>
+            <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ tracker_data|length }} clients{% if gap_filter %} (filtered){% endif %}</span>
         </div>
 
         <!-- Tracker Table -->
