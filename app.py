@@ -11121,8 +11121,8 @@ def ops_call_notes_tracker():
         active_tab='tracker')
 
 
-@app.route('/operations/call-notes/tracker/details')
-@admin_required
+@app.route('/operations/api/tracker-details')
+@login_required
 def ops_call_notes_tracker_details():
     """JSON API: Return client details and their call note history."""
     reg = request.args.get('reg', '').strip()

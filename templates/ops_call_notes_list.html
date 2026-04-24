@@ -399,7 +399,7 @@ function filterByGap(gap) {
 }
 
 function openTrackerDetail(reg) {
-    fetch('/operations/call-notes/tracker/details?reg=' + encodeURIComponent(reg))
+    fetch('/operations/api/tracker-details?reg=' + encodeURIComponent(reg))
         .then(r => r.json())
         .then(data => {
             if (data.error) {
