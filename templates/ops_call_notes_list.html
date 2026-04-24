@@ -46,17 +46,23 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 .tab-button:hover{background:var(--gray-100);}
 
 /* Tracker-specific styles */
-.tracker-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
-.summary-card{padding:16px;border-radius:8px;text-align:center;color:white;cursor:pointer;transition:transform .2s,box-shadow .2s;}
-.summary-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.15);}
-.summary-card.never{background:#374151;}
-.summary-card.critical{background:#ef4444;}
-.summary-card.overdue{background:#f97316;}
-.summary-card.attention{background:#eab308;color:#1e3a5f;}
-.summary-card.ok{background:#3b82f6;}
-.summary-card.recent{background:#22c55e;}
-.summary-card-value{font-size:28px;font-weight:700;margin-bottom:4px;}
-.summary-card-label{font-size:12px;font-weight:600;opacity:0.9;}
+.tracker-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
+.summary-card{padding:14px 12px;border-radius:8px;text-align:center;cursor:pointer;transition:transform .2s,box-shadow .2s;border:1px solid var(--gray-200);}
+.summary-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+.summary-card.never{background:#f9fafb;border-top:4px solid #374151;}
+.summary-card.critical{background:#fef2f2;border-top:4px solid #ef4444;}
+.summary-card.overdue{background:#fff7ed;border-top:4px solid #f97316;}
+.summary-card.attention{background:#fefce8;border-top:4px solid #eab308;}
+.summary-card.ok{background:#eff6ff;border-top:4px solid #3b82f6;}
+.summary-card.recent{background:#f0fdf4;border-top:4px solid #22c55e;}
+.summary-card-value{font-size:24px;font-weight:700;margin-bottom:2px;}
+.summary-card.never .summary-card-value{color:#374151;}
+.summary-card.critical .summary-card-value{color:#ef4444;}
+.summary-card.overdue .summary-card-value{color:#f97316;}
+.summary-card.attention .summary-card-value{color:#854d0e;}
+.summary-card.ok .summary-card-value{color:#3b82f6;}
+.summary-card.recent .summary-card-value{color:#22c55e;}
+.summary-card-label{font-size:11px;font-weight:600;color:var(--gray-600);}
 
 .tracker-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
 .filter-badge{padding:6px 12px;border-radius:6px;background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200);cursor:pointer;font-weight:500;font-size:12px;transition:all .2s;}
@@ -96,13 +102,12 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 .tracker-empty{padding:40px 20px;text-align:center;color:var(--gray-500);}
 </style>
 
-<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+<div style="padding:16px 24px 24px;background:var(--gray-50);min-height:100vh;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
         <div>
-            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Call Notes</h1>
-            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage call notes and communications &middot; Click a row to view details</p>
+            <h1 style="margin:0;font-size:22px;font-weight:700;color:var(--navy);">Call Notes</h1>
         </div>
-        <a href="/operations/call-notes/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+        <a href="/operations/call-notes/add" style="padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">
             + Add Call Note
         </a>
     </div>
