@@ -10952,7 +10952,8 @@ def ops_call_notes_list():
         records=records, reg=reg, client_name=client_name,
         added_by_filter=added_by_filter, note_search=note_search,
         added_by_options=added_by_options, has_filters=has_filters,
-        page=page, per_page=per_page, total_count=total_count, total_pages=total_pages)
+        page=page, per_page=per_page, total_count=total_count, total_pages=total_pages,
+        active_tab='notes')
 
 
 @app.route('/operations/api/client-search')
@@ -10982,6 +10983,191 @@ def ops_client_search_api():
         results = []
     conn.close()
     return jsonify(results)
+
+
+@app.route('/operations/call-notes/tracker')
+@admin_required
+def ops_call_notes_tracker():
+    """Client Follow-up Tracker: shows all 'In Process' clients and their contact status."""
+    from datetime import date
+
+    conn = get_db()
+    search_q = request.args.get('q', '').strip()
+    gap_filter = request.args.get('gap', '').strip()
+
+    try:
+        # Efficient single query with aggregation
+        sql = '''
+            SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
+                   p.current_stage, p.mobile, p.account_status,
+                   MAX(n.call_date) as last_call_date,
+                   COUNT(n.id) as note_count
+            FROM plab_clients p
+            LEFT JOIN ops_call_notes n ON p.registration_number = n.registration_number
+            WHERE p.account_status = 'In Process'
+        '''
+        params = []
+
+        if search_q:
+            sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR (p.prefix || ' ' || p.first_name || ' ' || p.last_name) ILIKE ?)"
+            params.extend([f'%{search_q}%'] * 4)
+
+        sql += '''
+            GROUP BY p.registration_number, p.prefix, p.first_name, p.last_name,
+                     p.current_stage, p.mobile, p.account_status
+            ORDER BY last_call_date ASC NULLS FIRST
+        '''
+
+        rows = conn.execute(sql, params).fetchall()
+
+        # Calculate category and days_since for each row
+        today = date.today()
+        tracker_data = []
+        category_counts = {
+            'never': 0,
+            'critical': 0,
+            'overdue': 0,
+            'attention': 0,
+            'ok': 0,
+            'recent': 0
+        }
+
+        for row in rows:
+            last_call_date = row['last_call_date']
+            note_count = row['note_count']
+
+            if not last_call_date or note_count == 0:
+                category = 'never'
+                days_since = None
+            else:
+                # Parse the date string
+                try:
+                    if isinstance(last_call_date, str):
+                        last_call = datetime.strptime(last_call_date, '%Y-%m-%d').date()
+                    else:
+                        last_call = last_call_date if isinstance(last_call_date, date) else last_call_date.date()
+                except:
+                    category = 'never'
+                    days_since = None
+                    last_call = None
+
+                if last_call:
+                    days_since = (today - last_call).days
+
+                    if days_since >= 60:
+                        category = 'critical'
+                    elif days_since >= 45:
+                        category = 'overdue'
+                    elif days_since >= 30:
+                        category = 'attention'
+                    elif days_since >= 15:
+                        category = 'ok'
+                    else:
+                        category = 'recent'
+                else:
+                    category = 'never'
+                    days_since = None
+
+            category_counts[category] += 1
+
+            client_name = f"{row['prefix']} {row['first_name']} {row['last_name']}" if row['prefix'] else f"{row['first_name']} {row['last_name']}"
+
+            tracker_data.append({
+                'registration_number': row['registration_number'],
+                'name': client_name.strip(),
+                'stage': row['current_stage'],
+                'mobile': row['mobile'],
+                'last_call_date': last_call_date,
+                'note_count': note_count,
+                'days_since': days_since,
+                'category': category
+            })
+
+        # Apply gap filter if specified
+        if gap_filter:
+            tracker_data = [d for d in tracker_data if d['category'] == gap_filter]
+
+        # Summary stats
+        summary = {
+            'never': category_counts['never'],
+            'critical': category_counts['critical'],
+            'overdue': category_counts['overdue'],
+            'attention': category_counts['attention'],
+            'ok': category_counts['ok'],
+            'recent': category_counts['recent'],
+            'total': len(tracker_data) if gap_filter else sum(category_counts.values())
+        }
+
+    except Exception as e:
+        logging.error(f"ops_call_notes_tracker: {e}")
+        tracker_data = []
+        summary = {
+            'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0
+        }
+
+    conn.close()
+
+    return render_template('ops_call_notes_list.html',
+        tracker_data=tracker_data, summary=summary,
+        gap_filter=gap_filter, search_q=search_q,
+        active_tab='tracker')
+
+
+@app.route('/operations/call-notes/tracker/<reg>/details')
+@admin_required
+def ops_call_notes_tracker_details(reg):
+    """JSON API: Return client details and their call note history."""
+    conn = get_db()
+
+    try:
+        # Get client details
+        client = conn.execute(
+            "SELECT registration_number, prefix, first_name, last_name, current_stage, mobile, email FROM plab_clients WHERE registration_number = ?",
+            (reg,)
+        ).fetchone()
+
+        if not client:
+            conn.close()
+            return jsonify({'error': 'Client not found'}), 404
+
+        # Get all call notes for this client, ordered by date desc
+        notes = conn.execute(
+            '''SELECT id, call_date, call_note, added_by FROM ops_call_notes
+               WHERE registration_number = ?
+               ORDER BY call_date DESC, created_at DESC''',
+            (reg,)
+        ).fetchall()
+
+        # Format notes
+        notes_list = []
+        for note in notes:
+            notes_list.append({
+                'id': note['id'],
+                'date': note['call_date'],
+                'added_by': note['added_by'],
+                'text': note['call_note']
+            })
+
+        # Client name
+        client_name = f"{client['prefix']} {client['first_name']} {client['last_name']}" if client['prefix'] else f"{client['first_name']} {client['last_name']}"
+
+        result = {
+            'registration_number': client['registration_number'],
+            'name': client_name.strip(),
+            'stage': client['current_stage'],
+            'mobile': client['mobile'],
+            'email': client['email'],
+            'total_notes': len(notes_list),
+            'notes': notes_list
+        }
+
+    except Exception as e:
+        logging.error(f"ops_call_notes_tracker_details: {e}")
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+    conn.close()
+    return jsonify(result)
 
 
 @app.route('/operations/call-notes/add', methods=['GET', 'POST'])

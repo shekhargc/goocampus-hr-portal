@@ -38,6 +38,62 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 .pagination a{padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;color:var(--navy);font-weight:600;font-size:14px}
 .pagination a:hover{background:var(--gray-50)}
 .pagination span{padding:8px 12px;color:var(--gray-600);font-size:14px}
+
+/* Tab Styles */
+.tab-buttons{display:flex;gap:0;border-bottom:2px solid var(--gray-200);}
+.tab-button{padding:12px 20px;background:var(--gray-50);border:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-600);border-bottom:3px solid transparent;margin-bottom:-2px;}
+.tab-button.active{color:var(--navy);border-bottom-color:var(--orange);}
+.tab-button:hover{background:var(--gray-100);}
+
+/* Tracker-specific styles */
+.tracker-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px;}
+.summary-card{padding:16px;border-radius:8px;text-align:center;color:white;cursor:pointer;transition:transform .2s,box-shadow .2s;}
+.summary-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.15);}
+.summary-card.never{background:#374151;}
+.summary-card.critical{background:#ef4444;}
+.summary-card.overdue{background:#f97316;}
+.summary-card.attention{background:#eab308;color:#1e3a5f;}
+.summary-card.ok{background:#3b82f6;}
+.summary-card.recent{background:#22c55e;}
+.summary-card-value{font-size:28px;font-weight:700;margin-bottom:4px;}
+.summary-card-label{font-size:12px;font-weight:600;opacity:0.9;}
+
+.tracker-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filter-badge{padding:6px 12px;border-radius:6px;background:var(--gray-100);color:var(--gray-700);border:1px solid var(--gray-200);cursor:pointer;font-weight:500;font-size:12px;transition:all .2s;}
+.filter-badge.active{color:white;border:none;}
+.filter-badge.active.never{background:#374151;}
+.filter-badge.active.critical{background:#ef4444;}
+.filter-badge.active.overdue{background:#f97316;}
+.filter-badge.active.attention{background:#eab308;color:#1e3a5f;}
+.filter-badge.active.ok{background:#3b82f6;}
+.filter-badge.active.recent{background:#22c55e;}
+
+.tracker-table tr{border-left:4px solid transparent;}
+.tracker-table tr.cat-never{border-left-color:#374151;}
+.tracker-table tr.cat-critical{border-left-color:#ef4444;background:rgba(239,68,68,0.03);}
+.tracker-table tr.cat-overdue{border-left-color:#f97316;background:rgba(249,115,22,0.03);}
+.tracker-table tr.cat-attention{border-left-color:#eab308;background:rgba(234,179,8,0.03);}
+.tracker-table tr.cat-ok{border-left-color:#3b82f6;background:rgba(59,130,246,0.03);}
+.tracker-table tr.cat-recent{border-left-color:#22c55e;background:rgba(34,197,94,0.03);}
+
+.status-badge{display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;color:white;text-transform:uppercase;}
+.status-badge.never{background:#374151;}
+.status-badge.critical{background:#ef4444;}
+.status-badge.overdue{background:#f97316;}
+.status-badge.attention{background:#eab308;color:#1e3a5f;}
+.status-badge.ok{background:#3b82f6;}
+.status-badge.recent{background:#22c55e;}
+
+.timeline{margin-top:16px;}
+.timeline-item{display:flex;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-200);}
+.timeline-item:last-child{border-bottom:none;}
+.timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0;margin-top:4px;}
+.timeline-content{flex:1;}
+.timeline-date{font-size:12px;color:var(--gray-500);font-weight:600;}
+.timeline-note{font-size:13px;color:var(--navy);margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.timeline-by{font-size:12px;color:var(--gray-500);margin-top:4px;}
+
+.tracker-empty{padding:40px 20px;text-align:center;color:var(--gray-500);}
 </style>
 
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
@@ -51,7 +107,21 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         </a>
     </div>
 
-    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <!-- Tab Buttons -->
+    <div style="margin-bottom:0;background:white;border-radius:12px 12px 0 0;padding:0;border-bottom:2px solid var(--gray-200);">
+        <div class="tab-buttons">
+            <button class="tab-button {% if active_tab == 'notes' %}active{% endif %}" onclick="window.location.href='/operations/call-notes'">
+                Call Notes
+            </button>
+            <button class="tab-button {% if active_tab == 'tracker' %}active{% endif %}" onclick="window.location.href='/operations/call-notes/tracker'">
+                Follow-up Tracker
+            </button>
+        </div>
+    </div>
+
+    <!-- CALL NOTES TAB -->
+    {% if active_tab == 'notes' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
             <div class="autocomplete-wrap">
                 <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
@@ -82,7 +152,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         </form>
     </div>
 
-    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+    <div style="background:white;border-radius:0 0 12px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
         {% if records %}
         <div style="overflow-x:auto;">
             <table style="width:100%;border-collapse:collapse;font-size:14px;">
@@ -127,12 +197,93 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         {% endif %}
     </div>
     {% endif %}
+    {% endif %}
+</div>
+
+    <!-- FOLLOW-UP TRACKER TAB -->
+    {% if active_tab == 'tracker' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <!-- Summary Cards -->
+        <div class="tracker-summary">
+            <div class="summary-card never" onclick="filterByGap('never')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.never }}</div>
+                <div class="summary-card-label">Never</div>
+            </div>
+            <div class="summary-card critical" onclick="filterByGap('critical')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.critical }}</div>
+                <div class="summary-card-label">Critical (60+)</div>
+            </div>
+            <div class="summary-card overdue" onclick="filterByGap('overdue')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.overdue }}</div>
+                <div class="summary-card-label">Overdue (45-60)</div>
+            </div>
+            <div class="summary-card attention" onclick="filterByGap('attention')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.attention }}</div>
+                <div class="summary-card-label">Attention (30-45)</div>
+            </div>
+            <div class="summary-card ok" onclick="filterByGap('ok')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.ok }}</div>
+                <div class="summary-card-label">OK (15-30)</div>
+            </div>
+            <div class="summary-card recent" onclick="filterByGap('recent')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.recent }}</div>
+                <div class="summary-card-label">Recent (&lt;15)</div>
+            </div>
+        </div>
+
+        <!-- Filter & Search -->
+        <div style="margin-bottom:20px;display:flex;gap:12px;flex-wrap:wrap;align-items:center;">
+            <form method="GET" style="display:flex;gap:8px;flex:1;min-width:300px;">
+                <input type="text" name="q" placeholder="Search by name or registration..." value="{{ search_q or '' }}" style="flex:1;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;" />
+                <button type="submit" style="padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Search</button>
+                <a href="/operations/call-notes/tracker" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;">Clear</a>
+            </form>
+            <span style="font-size:13px;color:var(--gray-600);font-weight:600;">Total: {{ summary.total }}</span>
+        </div>
+
+        <!-- Tracker Table -->
+        {% if tracker_data %}
+        <div style="overflow-x:auto;">
+            <table class="tracker-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Client Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Stage</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Call</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Days Since</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Notes</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tracker_data %}
+                    <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.stage or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;">{{ item.last_call_date|format_date if item.last_call_date else '—' }}</td>
+                        <td style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">{% if item.days_since != None %}{{ item.days_since }}{% else %}—{% endif %}</td>
+                        <td style="padding:12px 16px;text-align:center;color:var(--gray-600);">{{ item.note_count }}</td>
+                        <td style="padding:12px 16px;text-align:center;"><span class="status-badge {{ item.category }}">{{ item.category|upper }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tracker-empty">
+            <p>No clients found matching your criteria.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 <div class="drawer-backdrop" id="cnBackdrop" onclick="closeCnDetail()"></div>
 <aside class="drawer" id="cnDrawer" aria-hidden="true">
     <div class="drawer-head">
-        <h3>Call Note Details</h3>
+        <h3 id="drawerTitle">Call Note Details</h3>
         <button class="drawer-close" type="button" onclick="closeCnDetail()" aria-label="Close">&times;</button>
     </div>
     <div class="drawer-body" id="cnDrawerBody"></div>
@@ -217,6 +368,82 @@ function closeCnDetail() {
 }
 
 document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCnDetail(); });
+
+function filterByGap(gap) {
+    const url = '/operations/call-notes/tracker' + (gap ? '?gap=' + gap : '');
+    window.location.href = url;
+}
+
+function openTrackerDetail(reg) {
+    fetch('/operations/call-notes/tracker/' + encodeURIComponent(reg) + '/details')
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error loading details: ' + data.error);
+                return;
+            }
+            renderTrackerDetail(data);
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Failed to load details');
+        });
+}
+
+function renderTrackerDetail(data) {
+    const initials = data.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let notesHtml = '';
+    if (data.notes && data.notes.length > 0) {
+        notesHtml = '<div class="drawer-section"><h4>Call Note History</h4><div class="timeline">';
+        for (const note of data.notes) {
+            notesHtml += `
+                <div class="timeline-item">
+                    <div class="timeline-dot"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">${note.date || '—'}</div>
+                        <div class="timeline-note">${note.text || '(No note text)'}</div>
+                        <div class="timeline-by">${note.added_by ? 'by ' + note.added_by : '—'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        notesHtml += '</div></div>';
+    } else {
+        notesHtml = '<div class="drawer-section"><h4>Call Note History</h4><p style="color:var(--gray-500);font-size:13px;">No call notes yet</p></div>';
+    }
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${data.name}</p>
+            <div class="meta">${data.registration_number}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        <div class="drawer-field"><div class="label">Current Stage</div><div class="value">${data.stage || '—'}</div></div>
+        <div class="drawer-field"><div class="label">Total Notes</div><div class="value">${data.total_notes}</div></div>
+        <div class="drawer-field"><div class="label">Mobile</div><div class="value">${data.mobile || '—'}</div></div>
+        <div class="drawer-field"><div class="label">Email</div><div class="value" style="font-size:12px;">${data.email || '—'}</div></div>
+    </div>
+
+    ${notesHtml}
+    `;
+
+    document.getElementById('drawerTitle').textContent = 'Client Details';
+    document.getElementById('cnDrawerBody').innerHTML = html;
+    document.getElementById('cnDrawerActions').innerHTML = `
+        <a href="/operations/call-notes/add?client=${encodeURIComponent(data.registration_number)}" style="background:var(--orange);color:white;">+ Add Note</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(data.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
+    document.getElementById('cnDrawer').classList.add('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('cnBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
 
 (function() {
     const input = document.getElementById('cnSearch');
