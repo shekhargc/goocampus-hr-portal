@@ -9461,8 +9461,13 @@ def ensure_ops_tables():
                 'coaching_method': ['Online', 'Offline', 'Hybrid'],
                 # Test Bookings
                 'exam_name': ['OET', 'IELTS', 'PLAB 1', 'PLAB 2', 'MRCP', 'MRCS', 'MRCEM'],
-                'exam_status': ['Booked', 'Attended', 'Cancelled by Client', 'Cancelled by Authority', 'Rescheduled', 'Missed'],
+                'exam_status': ['Booked', 'Re - Booked', 'Attended', 'Missed', 'Cancelled by Authority', 'Cancelled by Client', 'Rescheduled'],
                 'exam_result': ['Passed', 'Failed'],
+                'exam_method': ['Pen and Paper', 'Computer Based'],
+                'exam_booked_by': ['Booked and Paid by Client', 'Booked by GC / Paid by Client', 'Booked & Paid by GooCampus', 'Booking included in Package'],
+                'exam_country': ['Australia', 'Bangladesh', 'Canada', 'Egypt', 'Ghana', 'India', 'Nigeria', 'Pakistan', 'Saudi Arabia', 'South Africa', 'Spain', 'Sri Lanka', 'Sudan', 'UAE', 'United Kingdom'],
+                'revaluation_option': ['Yes', 'No'],
+                'reval_result': ['Passed', 'Increased Score', 'Reduced Score', 'No Change'],
                 # EPIC
                 'epic_reg_status': ['Completed', 'Not Completed', 'In Process'],
                 'epic_status': ['Verification Stage', 'In Process', 'Sent to GMC'],
@@ -9779,7 +9784,7 @@ def ops_plab_pathway_dashboard():
 CATEGORY_GROUPS = {
     'Client & Pipeline': ['plab_stage', 'account_status', 'plan_type', 'joined_stage', 'english_training', 'lead_source'],
     'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'ielts_vendor', 'oet_vendor', 'plab1_partner', 'plab2_vendor', 'other_training_vendor', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
-    'Test Bookings': ['exam_name', 'exam_status', 'exam_result'],
+    'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_license_status'],
     'Payments': ['payment_method', 'instalment'],
     'Research & Publication': ['research_status', 'author_position', 'research_provider'],
@@ -9807,6 +9812,11 @@ CATEGORY_LABELS = {
     'exam_name': 'Exam Names',
     'exam_status': 'Exam Statuses',
     'exam_result': 'Exam Results',
+    'exam_method': 'Exam Method',
+    'exam_booked_by': 'Exam Booked By',
+    'exam_country': 'Countries',
+    'revaluation_option': 'Revaluation (Yes/No)',
+    'reval_result': 'Revaluation Results',
     'epic_reg_status': 'EPIC Registration',
     'epic_status': 'EPIC Statuses',
     'notary_camp_status': 'Notary Camp',
@@ -10829,7 +10839,10 @@ def ops_test_bookings_add():
     pre_reg = request.args.get('client', '')
     return render_template('ops_test_bookings_form.html', record=None, clients=clients,
                            exam_names=get_lookup_options('exam_name'), exam_statuses=get_lookup_options('exam_status'),
-                           exam_results=get_lookup_options('exam_result'), pre_reg=pre_reg)
+                           exam_results=get_lookup_options('exam_result'), exam_methods=get_lookup_options('exam_method'),
+                           exam_booked_by=get_lookup_options('exam_booked_by'), exam_countries=get_lookup_options('exam_country'),
+                           revaluation_options=get_lookup_options('revaluation_option'), reval_results=get_lookup_options('reval_result'),
+                           pre_reg=pre_reg)
 
 
 @app.route('/operations/test-bookings/<int:record_id>/edit', methods=['GET', 'POST'])
@@ -10864,7 +10877,10 @@ def ops_test_bookings_edit(record_id):
     conn.close()
     return render_template('ops_test_bookings_form.html', record=record, clients=clients,
                            exam_names=get_lookup_options('exam_name'), exam_statuses=get_lookup_options('exam_status'),
-                           exam_results=get_lookup_options('exam_result'), pre_reg='')
+                           exam_results=get_lookup_options('exam_result'), exam_methods=get_lookup_options('exam_method'),
+                           exam_booked_by=get_lookup_options('exam_booked_by'), exam_countries=get_lookup_options('exam_country'),
+                           revaluation_options=get_lookup_options('revaluation_option'), reval_results=get_lookup_options('reval_result'),
+                           pre_reg='')
 
 
 @app.route('/operations/test-bookings/<int:record_id>/delete', methods=['POST'])

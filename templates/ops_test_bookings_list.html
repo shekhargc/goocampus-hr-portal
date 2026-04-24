@@ -209,33 +209,27 @@ function openTbDetail(id) {
 
     <div class="drawer-grid">
         ${field('Exam', r.exam)}
-        ${field('Exam Type', r.exam_type)}
+        ${field('Exam Booked By', r.booked_by)}
+        ${field('Exam Method', r.exam_type)}
         ${field('Booking Date', r.booking_date)}
         ${field('Exam Date', r.exam_date)}
-        ${field('Status', badgeHtml(r.exam_status, 'status'))}
-        ${field('Result', badgeHtml(r.exam_result, 'result'))}
         ${field('Result Date', r.exam_result_date)}
-        ${field('Score', r.score)}
-    </div>
-
-    <div class="drawer-section">
-        <h4>Location & Details</h4>
-        <div class="drawer-grid">
-            ${field('Test Center', r.test_center)}
-            ${field('City/State', r.city_state)}
-            ${field('Country', r.country)}
-            ${field('Booked By', r.booked_by)}
-        </div>
+        ${field('Country', r.country)}
+        ${field('City / State', r.city_state)}
+        ${field('Exam Center', r.test_center)}
+        ${field('Exam Status', badgeHtml(r.exam_status, 'status'))}
+        ${field('Exam Result', badgeHtml(r.exam_result, 'result'))}
+        ${field('Test Score', r.score)}
     </div>`;
 
     if (r.revaluation) {
         html += `<div class="drawer-section">
             <h4>Revaluation</h4>
             <div class="drawer-grid">
-                ${field('Revaluation', r.revaluation)}
-                ${field('Applied Date', r.reval_applied_date)}
-                ${field('Result', r.reval_result)}
-                ${field('Score', r.reval_score)}
+                ${field('Applying for Revaluation', r.revaluation)}
+                ${field('Reval Applied Date', r.reval_applied_date)}
+                ${field('Reval Result', r.reval_result)}
+                ${field('Reval Score', r.reval_score)}
             </div>
         </div>`;
     }

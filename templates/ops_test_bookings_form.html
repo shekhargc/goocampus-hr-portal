@@ -48,8 +48,13 @@
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Type</label>
-                    <input type="text" name="exam_type" value="{{ record.exam_type or '' }}" placeholder="e.g., Academic" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Booked By</label>
+                    <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for b in exam_booked_by %}
+                        <option value="{{ b }}" {% if record and record.booked_by == b %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
@@ -64,38 +69,19 @@
                 </div>
             </div>
 
-            <!-- ===== RESULTS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Results</h3>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Status</label>
-                    <select name="exam_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select status —</option>
-                        {% for status in exam_statuses %}
-                        <option value="{{ status }}" {% if record and record.exam_status == status %}selected{% endif %}>{{ status }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Result</label>
-                    <select name="exam_result" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select result —</option>
-                        {% for result in exam_results %}
-                        <option value="{{ result }}" {% if record and record.exam_result == result %}selected{% endif %}>{{ result }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Result Date</label>
                     <input type="date" name="exam_result_date" value="{{ record.exam_result_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Score</label>
-                    <input type="text" name="score" value="{{ record.score or '' }}" placeholder="e.g., 7.5" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Method</label>
+                    <select name="exam_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for m in exam_methods %}
+                        <option value="{{ m }}" {% if record and record.exam_type == m %}selected{% endif %}>{{ m }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 
@@ -104,52 +90,88 @@
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Test Center</label>
-                    <input type="text" name="test_center" value="{{ record.test_center or '' }}" placeholder="Center name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City/State</label>
-                    <input type="text" name="city_state" value="{{ record.city_state or '' }}" placeholder="e.g., London, UK" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Country</label>
-                    <input type="text" name="country" value="{{ record.country or '' }}" placeholder="e.g., United Kingdom" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Booked By</label>
-                    <input type="text" name="booked_by" value="{{ record.booked_by or '' }}" placeholder="Staff name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <!-- ===== REVALUATION ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Revaluation</h3>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation</label>
-                    <select name="revaluation" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="country" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">— Select —</option>
-                        <option value="Yes" {% if record and record.revaluation == 'Yes' %}selected{% endif %}>Yes</option>
-                        <option value="No" {% if record and record.revaluation == 'No' %}selected{% endif %}>No</option>
+                        {% for c in exam_countries %}
+                        <option value="{{ c }}" {% if record and record.country == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
                     </select>
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Applied Date</label>
-                    <input type="date" name="reval_applied_date" value="{{ record.reval_applied_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City / State</label>
+                    <input type="text" name="city_state" value="{{ record.city_state or '' }}" placeholder="e.g., Mumbai, Bangalore" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
             </div>
 
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Center Name</label>
+                <input type="text" name="test_center" value="{{ record.test_center or '' }}" placeholder="Center name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== EXAM STATUS & RESULT (conditional) ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Status & Results</h3>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Result</label>
-                    <input type="text" name="reval_result" value="{{ record.reval_result or '' }}" placeholder="e.g., Pass" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Status *</label>
+                    <select name="exam_status" id="exam_status" required onchange="updateResultFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select status —</option>
+                        {% for status in exam_statuses %}
+                        <option value="{{ status }}" {% if record and record.exam_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Score</label>
-                    <input type="text" name="reval_score" value="{{ record.reval_score or '' }}" placeholder="e.g., 7.5" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <div id="result_field" style="display:none;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Result</label>
+                    <select name="exam_result" id="exam_result" onchange="updateRevalFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select result —</option>
+                        {% for result in exam_results %}
+                        <option value="{{ result }}" {% if record and record.exam_result == result %}selected{% endif %}>{{ result }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div id="score_field" style="display:none;margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Test Score</label>
+                <input type="text" name="score" value="{{ record.score or '' }}" placeholder="e.g., 7.5" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== REVALUATION (conditional — shows when result is Failed) ===== -->
+            <div id="reval_section" style="display:none;">
+                <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Revaluation</h3>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Applying for Revaluation?</label>
+                        <select name="revaluation" id="revaluation_select" onchange="updateRevalDetailFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                            <option value="">— Select —</option>
+                            {% for r in revaluation_options %}
+                            <option value="{{ r }}" {% if record and record.revaluation == r %}selected{% endif %}>{{ r }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div id="reval_date_field" style="display:none;">
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Reval Applied Date</label>
+                        <input type="date" name="reval_applied_date" value="{{ record.reval_applied_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+
+                <div id="reval_result_fields" style="display:none;display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Result</label>
+                        <select name="reval_result" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                            <option value="">— Select —</option>
+                            {% for rr in reval_results %}
+                            <option value="{{ rr }}" {% if record and record.reval_result == rr %}selected{% endif %}>{{ rr }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Score</label>
+                        <input type="text" name="reval_score" value="{{ record.reval_score or '' }}" placeholder="e.g., 7.5" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
                 </div>
             </div>
 
@@ -173,6 +195,29 @@
 </div>
 
 <script>
+function updateResultFields() {
+    const status = document.getElementById('exam_status').value;
+    const showResult = (status === 'Attended');
+    document.getElementById('result_field').style.display = showResult ? 'block' : 'none';
+    document.getElementById('score_field').style.display = showResult ? 'block' : 'none';
+    if (showResult) updateRevalFields();
+    else { document.getElementById('reval_section').style.display = 'none'; }
+}
+function updateRevalFields() {
+    const result = document.getElementById('exam_result').value;
+    document.getElementById('reval_section').style.display = (result === 'Failed') ? 'block' : 'none';
+    if (result === 'Failed') updateRevalDetailFields();
+}
+function updateRevalDetailFields() {
+    const reval = document.getElementById('revaluation_select').value;
+    const show = (reval === 'Yes');
+    document.getElementById('reval_date_field').style.display = show ? 'block' : 'none';
+    document.getElementById('reval_result_fields').style.display = show ? 'grid' : 'none';
+}
+document.addEventListener('DOMContentLoaded', function() {
+    updateResultFields();
+});
+
 (function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');
