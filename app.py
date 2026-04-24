@@ -10877,6 +10877,9 @@ def ops_test_bookings_delete(record_id):
 @admin_required
 def ops_call_notes_list():
     """List call notes with detailed filters: registration number, client name, added_by, note text."""
+    # Default to tracker tab unless explicitly requesting notes
+    if not request.args.get('tab') and not request.args.get('reg') and not request.args.get('client_name') and not request.args.get('added_by') and not request.args.get('note_search') and not request.args.get('q') and not request.args.get('client') and not request.args.get('page'):
+        return redirect(url_for('ops_call_notes_tracker'))
     conn = get_db()
     # Filter parameters
     reg = request.args.get('reg', '').strip()
@@ -10953,6 +10956,8 @@ def ops_call_notes_list():
         added_by_filter=added_by_filter, note_search=note_search,
         added_by_options=added_by_options, has_filters=has_filters,
         page=page, per_page=per_page, total_count=total_count, total_pages=total_pages,
+        tracker_data=[], summary={'never':0,'critical':0,'overdue':0,'attention':0,'ok':0,'recent':0,'total':0},
+        gap_filter='', search_q='',
         active_tab='notes')
 
 
@@ -11110,6 +11115,9 @@ def ops_call_notes_tracker():
     return render_template('ops_call_notes_list.html',
         tracker_data=tracker_data, summary=summary,
         gap_filter=gap_filter, search_q=search_q,
+        records=[], added_by_options=[], has_filters=False,
+        reg='', client_name='', added_by_filter='', note_search='',
+        page=1, per_page=50, total_count=0, total_pages=0,
         active_tab='tracker')
 
 

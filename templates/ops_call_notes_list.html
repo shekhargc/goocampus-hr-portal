@@ -110,11 +110,11 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
     <!-- Tab Buttons -->
     <div style="margin-bottom:0;background:white;border-radius:12px 12px 0 0;padding:0;border-bottom:2px solid var(--gray-200);">
         <div class="tab-buttons">
-            <button class="tab-button {% if active_tab == 'notes' %}active{% endif %}" onclick="window.location.href='/operations/call-notes'">
-                Call Notes
-            </button>
             <button class="tab-button {% if active_tab == 'tracker' %}active{% endif %}" onclick="window.location.href='/operations/call-notes/tracker'">
                 Follow-up Tracker
+            </button>
+            <button class="tab-button {% if active_tab == 'notes' %}active{% endif %}" onclick="window.location.href='/operations/call-notes?tab=notes'">
+                Call Notes
             </button>
         </div>
     </div>
@@ -292,6 +292,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 
 <script>
 const CN_RECORDS = {
+    {% if active_tab == 'notes' %}
     {% for record in records %}
     {{ record.id }}: {
         id: {{ record.id }},
@@ -302,6 +303,7 @@ const CN_RECORDS = {
         added_by: {{ (record.added_by or '')|tojson }}
     },
     {% endfor %}
+    {% endif %}
 };
 
 let activeRowId = null;
