@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}{{ title }}{% endblock %}
+{% block content %}
+<div style="max-width:600px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="{{ back_url }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to {{ section_name }}</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ title }}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            Upload a Zoho export file (CSV or XLSX). Existing records will be updated with the latest data; new records will be added.
+        </p>
+
+        <form method="POST" enctype="multipart/form-data">
+            <div style="margin-bottom:1.5rem;">
+                <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Select File</label>
+                <input type="file" name="csv_file" accept=".csv,.xlsx" required
+                    style="width:100%;padding:0.6rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);" />
+                <p style="font-size:0.75rem;color:var(--gray-500);margin-top:0.4rem;">Supported formats: .csv, .xlsx</p>
+            </div>
+
+            <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:1rem;margin-bottom:1.5rem;">
+                <p style="font-size:0.8rem;color:var(--gray-600);margin:0 0 0.4rem 0;font-weight:600;">How it works:</p>
+                <ul style="font-size:0.8rem;color:var(--gray-600);margin:0;padding-left:1.2rem;">
+                    <li style="margin-bottom:0.3rem;">File should have an <strong>Enter Candidate Name</strong> column with format: <code>Dr.Name - GCUKIP/XX-XX/XXX</code></li>
+                    <li style="margin-bottom:0.3rem;">Records matched by registration number are <strong>updated</strong> with latest data</li>
+                    <li style="margin-bottom:0.3rem;">New records are <strong>inserted</strong></li>
+                    <li>Candidates not found in the system are skipped</li>
+                </ul>
+            </div>
+
+            <div style="display:flex;gap:0.8rem;">
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;cursor:pointer;">
+                    Upload & Import
+                </button>
+                <a href="{{ back_url }}" style="background:var(--gray-100);color:var(--gray-700);border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-weight:600;font-size:0.9rem;text-decoration:none;display:inline-block;">
+                    Cancel
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

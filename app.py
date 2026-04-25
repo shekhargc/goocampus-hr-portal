@@ -10655,7 +10655,17 @@ def ops_coaching_edit(record_id):
     conn.close()
     return render_template('ops_coaching_form.html', record=record, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
-                           coaching_methods=get_lookup_options('coaching_method'), pre_reg='')
+                           coaching_methods=get_lookup_options('coaching_method'),
+                           training_programs=get_lookup_options('training_program'),
+                           ielts_vendors=get_lookup_options('ielts_vendor'),
+                           oet_vendors=get_lookup_options('oet_vendor'),
+                           plab1_partners=get_lookup_options('plab1_partner'),
+                           plab2_vendors=get_lookup_options('plab2_vendor'),
+                           other_vendors=get_lookup_options('other_training_vendor'),
+                           blueprint_stages=get_lookup_options('coaching_blueprint_stage'),
+                           attendance_options=get_lookup_options('coaching_attendance'),
+                           batch_months=get_lookup_options('batch_month'),
+                           pre_reg='')
 
 
 @app.route('/operations/coaching/<int:record_id>/delete', methods=['POST'])
@@ -10667,6 +10677,96 @@ def ops_coaching_delete(record_id):
     conn.close()
     flash('Coaching record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_coaching_list'))
+
+
+@app.route('/operations/coaching/import', methods=['GET', 'POST'])
+@admin_required
+def ops_coaching_import():
+    """Import coaching/training records from Zoho CSV/XLSX export.
+    Upserts by registration_number + english_training (Training Program) composite key."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                training_program = _s('Training Program')
+                course_type = _s('Course Type')
+                coaching_method = _s('Coaching Method')
+                coaching_status = _s('Coaching Status')
+                batch_month = _s('Batch (Month)')
+                batch_year = _s('Batch (year)')
+                start_date = _parse_zoho_date(row.get('Start Date', ''))
+                end_date = _parse_zoho_date(row.get('End Date', ''))
+                attendance = _s('Training Attendance')
+                ielts_vendor = _s('IELTS Training Vendor')
+                oet_vendor = _s('OET Training Vendor')
+                plab1_partner = _s('PLAB 1 Training Partner')
+                plab2_vendor = _s('PLAB 2 Training Vendor')
+                other_vendor = _s('Other Training Vendor')
+
+                # Upsert by reg_number + training_program + start_date (unique combo)
+                exists = conn.execute(
+                    """SELECT id FROM ops_coaching
+                       WHERE registration_number = ? AND english_training = ?
+                       AND (start_date = ? OR (start_date IS NULL AND ? = ''))""",
+                    (reg_num, training_program, start_date, start_date)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_coaching SET
+                        course_type=?, coaching_method=?, coaching_status=?,
+                        batch_month=?, batch_year=?, start_date=?, end_date=?,
+                        attendance=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
+                        plab1_partner=?, plab2_vendor=? WHERE id=?''', (
+                        course_type, coaching_method, coaching_status,
+                        batch_month, batch_year, start_date, end_date,
+                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        plab1_partner, plab2_vendor, exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_coaching (
+                        registration_number, english_training, course_type, coaching_method,
+                        coaching_status, batch_month, batch_year, start_date, end_date,
+                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        plab1_partner, plab2_vendor, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, training_program, course_type, coaching_method,
+                        coaching_status, batch_month, batch_year, start_date, end_date,
+                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        plab1_partner, plab2_vendor, session.get('user_id', 0)
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Training import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_coaching_list'))
+        except Exception as e:
+            logging.error(f"Coaching import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           title='Import Coaching & Training',
+                           back_url='/operations/coaching',
+                           section_name='Coaching & Training')
 
 
 # ─────────────────────────────────────────────────────────
@@ -10892,6 +10992,101 @@ def ops_test_bookings_delete(record_id):
     conn.close()
     flash('Test booking deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_test_bookings_list'))
+
+
+@app.route('/operations/test-bookings/import', methods=['GET', 'POST'])
+@admin_required
+def ops_test_bookings_import():
+    """Import test booking records from Zoho CSV/XLSX export.
+    Upserts by registration_number + exam + exam_date composite key."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                exam = _s('Exam')
+                exam_method = _s('Exam Method')
+                booking_date = _parse_zoho_date(row.get('Booking Date', ''))
+                exam_date = _parse_zoho_date(row.get('Exam Date', ''))
+                exam_result_date = _parse_zoho_date(row.get('Exam Result Date', ''))
+                exam_status = _s('Exam Status')
+                exam_result = _s('Exam Result')
+                score = _s('Test Score')
+                test_center = _s('Exam Center Name')
+                city_state = _s('City / State')
+                country = _s('Country')
+                booked_by = _s('Exam Booked By')
+                revaluation = _s('Are we applying for revaluation')
+                reval_date = _parse_zoho_date(row.get('Reval Applied Date', ''))
+                reval_result = _s('Reval Result')
+                reval_score = _s('Reval Score')
+                notes = _s('Notes')
+
+                # Upsert by reg_number + exam + exam_date
+                exists = conn.execute(
+                    """SELECT id FROM ops_test_bookings
+                       WHERE registration_number = ? AND exam = ?
+                       AND (booking_date = ? OR (booking_date IS NULL AND ? = ''))""",
+                    (reg_num, exam, booking_date, booking_date)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_test_bookings SET
+                        exam_type=?, booking_date=?, exam_date=?,
+                        exam_status=?, exam_result=?, exam_result_date=?, score=?,
+                        test_center=?, city_state=?, country=?, booked_by=?,
+                        revaluation=?, reval_applied_date=?, reval_result=?,
+                        reval_score=?, notes=? WHERE id=?''', (
+                        exam_method, booking_date, exam_date,
+                        exam_status, exam_result, exam_result_date, score,
+                        test_center, city_state, country, booked_by,
+                        revaluation, reval_date, reval_result,
+                        reval_score, notes, exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_test_bookings (
+                        registration_number, exam, exam_type, booking_date, exam_date,
+                        exam_status, exam_result, exam_result_date, score, test_center,
+                        city_state, country, booked_by, revaluation, reval_applied_date,
+                        reval_result, reval_score, notes, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, exam, exam_method, booking_date, exam_date,
+                        exam_status, exam_result, exam_result_date, score, test_center,
+                        city_state, country, booked_by, revaluation, reval_date,
+                        reval_result, reval_score, notes, session.get('user_id', 0)
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Test bookings import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_test_bookings_list'))
+        except Exception as e:
+            logging.error(f"Test bookings import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           title='Import Test Bookings',
+                           back_url='/operations/test-bookings',
+                           section_name='Test Bookings')
 
 
 # ─────────────────────────────────────────────────────────
@@ -12680,12 +12875,15 @@ def ops_cab_delete(rid):
 # ── EPIC + GMC CSV Import (Zoho export) ─────────────────────────────
 def _parse_zoho_date(val):
     """Convert Zoho date strings like '25-Dec-2025' or epoch ms to YYYY-MM-DD."""
-    if not val or not val.strip():
+    if not val or (isinstance(val, str) and not val.strip()):
         return ''
-    val = val.strip()
+    # Handle datetime objects from openpyxl
+    from datetime import datetime as dt, date as dt_date
+    if isinstance(val, (dt, dt_date)):
+        return val.strftime('%Y-%m-%d')
+    val = str(val).strip()
     # epoch milliseconds
     if val.isdigit() and len(val) > 10:
-        from datetime import datetime as dt
         try:
             return dt.utcfromtimestamp(int(val) / 1000).strftime('%Y-%m-%d')
         except Exception:
@@ -12693,41 +12891,66 @@ def _parse_zoho_date(val):
     # DD-Mon-YYYY
     for fmt in ('%d-%b-%Y', '%Y-%m-%d', '%d-%m-%Y'):
         try:
-            from datetime import datetime as dt
             return dt.strptime(val, fmt).strftime('%Y-%m-%d')
         except ValueError:
             continue
     return val
 
 
+def _extract_reg_number(candidate_str):
+    """Extract registration number from 'Dr.Name - GCUKIP/XX-XX/XXX' format."""
+    if not candidate_str:
+        return ''
+    parts = str(candidate_str).rsplit(' - ', 1)
+    return parts[1].strip() if len(parts) == 2 else ''
+
+
+def _read_import_file(data_file):
+    """Read CSV or XLSX file and return list of dicts (rows).
+    Supports both .csv and .xlsx uploads from Zoho."""
+    import csv, io
+    filename = data_file.filename.lower()
+    if filename.endswith('.xlsx'):
+        import openpyxl
+        wb = openpyxl.load_workbook(data_file.stream, read_only=True)
+        ws = wb.active
+        headers = [cell.value for cell in ws[1]]
+        rows = []
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            row_dict = {}
+            for i, val in enumerate(row):
+                if i < len(headers) and headers[i]:
+                    row_dict[headers[i]] = val if val is not None else ''
+            rows.append(row_dict)
+        wb.close()
+        return rows
+    elif filename.endswith('.csv'):
+        data_stream = io.StringIO(data_file.stream.read().decode('utf-8-sig'))
+        return list(csv.DictReader(data_stream))
+    else:
+        raise ValueError('Please upload a CSV or XLSX file')
+
+
 @app.route('/operations/epic/import', methods=['GET', 'POST'])
 @admin_required
 def ops_epic_import():
-    """Import EPIC registration records from Zoho CSV export.
-    Single CSV with 'Enter Candidate Name' containing 'Dr.Name - GCUKIP/XX-XX/XXX'."""
+    """Import EPIC registration records from Zoho CSV/XLSX export.
+    Upserts: updates existing records by registration_number, inserts new ones."""
     if request.method == 'POST':
-        import csv, io, re
         data_file = request.files.get('csv_file')
-        if not data_file or not data_file.filename.endswith('.csv'):
-            flash('Please upload a CSV file', 'error')
+        if not data_file:
+            flash('Please upload a file', 'error')
             return redirect(request.url)
         try:
-            data_stream = io.StringIO(data_file.stream.read().decode('utf-8-sig'))
+            rows = _read_import_file(data_file)
             conn = get_db()
-            imported = skipped = 0
-            for row in csv.DictReader(data_stream):
-                # Extract registration number from "Dr.Name - GCUKIP/XX-XX/XXX"
-                candidate = row.get('Enter Candidate Name', '').strip()
-                if not candidate:
-                    skipped += 1
-                    continue
-                # Split on " - " to get reg number (everything after last " - ")
-                parts = candidate.rsplit(' - ', 1)
-                reg_num = parts[1].strip() if len(parts) == 2 else ''
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
                 if not reg_num:
                     skipped += 1
                     continue
-                # Check if client exists in plab_clients
                 client = conn.execute(
                     "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
                     (reg_num,)
@@ -12735,53 +12958,64 @@ def ops_epic_import():
                 if not client:
                     skipped += 1
                     continue
-                # Check duplicate by reg_num + epic_id_number
-                epic_id = row.get('EPIC ID Number', '').strip()
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                epic_reg = _s('EPIC Registration')
+                epic_status = _s('EPIC Status')
+                notary = _s('Notary Camp')
+                reg_date = _parse_zoho_date(row.get('Registration Date', ''))
+                doc_stage = _s('Documents Stage')
+                doc_status = _s('Document Stage Status')
+                login_id = _s('Login ID')
+                login_pwd = _s('Login Pwd')
+                sq1 = _s('Secret Question 1'); sa1 = _s('Secret Answer 1')
+                sq2 = _s('Secret Question 2'); sa2 = _s('Secret Answer 2')
+                sq3 = _s('Secret Question 3'); sa3 = _s('Secret Answer 3')
+                sq4 = _s('Secret Question 4'); sa4 = _s('Secret Answer 4')
+                epic_id = _s('EPIC ID Number')
+                notary_login = _s('Notary Camp Login')
+                notary_pwd = _s('Notary Camp Password')
+
                 exists = conn.execute(
                     "SELECT id FROM ops_epic_registration WHERE registration_number = ?",
                     (reg_num,)
                 ).fetchone()
                 if exists:
-                    skipped += 1
-                    continue
-                conn.execute('''INSERT INTO ops_epic_registration (
-                    registration_number, epic_registration, epic_status,
-                    notary_camp, registration_date, documents_stage, document_stage_status,
-                    login_id, login_pwd,
-                    secret_question_1, secret_answer_1,
-                    secret_question_2, secret_answer_2,
-                    secret_question_3, secret_answer_3,
-                    secret_question_4, secret_answer_4,
-                    epic_id_number, notary_camp_login, notary_camp_password,
-                    created_by
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (
-                    reg_num,
-                    row.get('EPIC Registration', '').strip(),
-                    row.get('EPIC Status', '').strip(),
-                    row.get('Notary Camp', '').strip(),
-                    _parse_zoho_date(row.get('Registration Date', '')),
-                    row.get('Documents Stage', '').strip(),
-                    row.get('Document Stage Status', '').strip(),
-                    row.get('Login ID', '').strip(),
-                    row.get('Login Pwd', '').strip(),
-                    row.get('Secret Question 1', '').strip(),
-                    row.get('Secret Answer 1', '').strip(),
-                    row.get('Secret Question 2', '').strip(),
-                    row.get('Secret Answer 2', '').strip(),
-                    row.get('Secret Question 3', '').strip(),
-                    row.get('Secret Answer 3', '').strip(),
-                    row.get('Secret Question 4', '').strip(),
-                    row.get('Secret Answer 4', '').strip(),
-                    epic_id,
-                    row.get('Notary Camp Login', '').strip(),
-                    row.get('Notary Camp Password', '').strip(),
-                    session.get('user_id', 0)
-                ))
-                imported += 1
+                    conn.execute('''UPDATE ops_epic_registration SET
+                        epic_registration=?, epic_status=?, notary_camp=?,
+                        registration_date=?, documents_stage=?, document_stage_status=?,
+                        login_id=?, login_pwd=?,
+                        secret_question_1=?, secret_answer_1=?,
+                        secret_question_2=?, secret_answer_2=?,
+                        secret_question_3=?, secret_answer_3=?,
+                        secret_question_4=?, secret_answer_4=?,
+                        epic_id_number=?, notary_camp_login=?, notary_camp_password=?,
+                        updated_at=? WHERE id=?''', (
+                        epic_reg, epic_status, notary, reg_date, doc_stage, doc_status,
+                        login_id, login_pwd, sq1, sa1, sq2, sa2, sq3, sa3, sq4, sa4,
+                        epic_id, notary_login, notary_pwd, datetime.now(), exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_epic_registration (
+                        registration_number, epic_registration, epic_status,
+                        notary_camp, registration_date, documents_stage, document_stage_status,
+                        login_id, login_pwd,
+                        secret_question_1, secret_answer_1,
+                        secret_question_2, secret_answer_2,
+                        secret_question_3, secret_answer_3,
+                        secret_question_4, secret_answer_4,
+                        epic_id_number, notary_camp_login, notary_camp_password,
+                        created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, epic_reg, epic_status, notary, reg_date, doc_stage, doc_status,
+                        login_id, login_pwd, sq1, sa1, sq2, sa2, sq3, sa3, sq4, sa4,
+                        epic_id, notary_login, notary_pwd, session.get('user_id', 0)
+                    ))
+                    imported += 1
             conn.commit()
             conn.close()
-            flash(f'EPIC import complete: {imported} imported, {skipped} skipped', 'success')
+            flash(f'EPIC import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
             return redirect(url_for('ops_epic_list'))
         except Exception as e:
             logging.error(f"EPIC import error: {e}")
@@ -12793,25 +13027,20 @@ def ops_epic_import():
 @app.route('/operations/gmc/import', methods=['GET', 'POST'])
 @admin_required
 def ops_gmc_import():
-    """Import GMC registration records from Zoho CSV export.
-    Single CSV with 'Enter Candidate Name' containing 'Dr.Name - GCUKIP/XX-XX/XXX'."""
+    """Import GMC registration records from Zoho CSV/XLSX export.
+    Upserts: updates existing records by registration_number, inserts new ones."""
     if request.method == 'POST':
-        import csv, io
         data_file = request.files.get('csv_file')
-        if not data_file or not data_file.filename.endswith('.csv'):
-            flash('Please upload a CSV file', 'error')
+        if not data_file:
+            flash('Please upload a file', 'error')
             return redirect(request.url)
         try:
-            data_stream = io.StringIO(data_file.stream.read().decode('utf-8-sig'))
+            rows = _read_import_file(data_file)
             conn = get_db()
-            imported = skipped = 0
-            for row in csv.DictReader(data_stream):
-                candidate = row.get('Enter Candidate Name', '').strip()
-                if not candidate:
-                    skipped += 1
-                    continue
-                parts = candidate.rsplit(' - ', 1)
-                reg_num = parts[1].strip() if len(parts) == 2 else ''
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
                 if not reg_num:
                     skipped += 1
                     continue
@@ -12822,42 +13051,54 @@ def ops_gmc_import():
                 if not client:
                     skipped += 1
                     continue
-                # Check duplicate by reg_num
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                gmc_ref = _s('GMC Reference Number')
+                login_pwd = _s('Login Pwd')
+                sq = _s('Secret Question 1')
+                sa = _s('Secret Answer')
+                gmc_setup = _s('GMC Setup')
+                reg_date = _parse_zoho_date(row.get('Registration Date', ''))
+                eng_exam = _s('English Exam')
+                exam_date = _parse_zoho_date(row.get('Exam Date', ''))
+                eng_expiry = _parse_zoho_date(row.get('English Result Expiry Date', ''))
+                license_val = _s('License') or _s('License ') or _s('Licence')
+                license_date = _parse_zoho_date(row.get('License Received Date', ''))
+
                 exists = conn.execute(
                     "SELECT id FROM ops_gmc_registration WHERE registration_number = ?",
                     (reg_num,)
                 ).fetchone()
                 if exists:
-                    skipped += 1
-                    continue
-                gmc_ref = row.get('GMC Reference Number', '').strip()
-                conn.execute('''INSERT INTO ops_gmc_registration (
-                    registration_number, gmc_reference_number, login_pwd,
-                    secret_question, secret_answer,
-                    gmc_setup, registration_date,
-                    english_exam, exam_date, english_result_expiry_date,
-                    license, license_received_date,
-                    created_by
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (
-                    reg_num,
-                    gmc_ref,
-                    row.get('Login Pwd', '').strip(),
-                    row.get('Secret Question 1', '').strip(),
-                    row.get('Secret Answer', '').strip(),
-                    row.get('GMC Setup', '').strip(),
-                    _parse_zoho_date(row.get('Registration Date', '')),
-                    row.get('English Exam', '').strip(),
-                    _parse_zoho_date(row.get('Exam Date', '')),
-                    _parse_zoho_date(row.get('English Result Expiry Date', '')),
-                    row.get('License', row.get('License ', row.get('Licence', ''))).strip(),
-                    _parse_zoho_date(row.get('License Received Date', '')),
-                    session.get('user_id', 0)
-                ))
-                imported += 1
+                    conn.execute('''UPDATE ops_gmc_registration SET
+                        gmc_reference_number=?, login_pwd=?,
+                        secret_question=?, secret_answer=?,
+                        gmc_setup=?, registration_date=?,
+                        english_exam=?, exam_date=?, english_result_expiry_date=?,
+                        license=?, license_received_date=?,
+                        updated_at=? WHERE id=?''', (
+                        gmc_ref, login_pwd, sq, sa, gmc_setup, reg_date,
+                        eng_exam, exam_date, eng_expiry, license_val, license_date,
+                        datetime.now(), exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_gmc_registration (
+                        registration_number, gmc_reference_number, login_pwd,
+                        secret_question, secret_answer,
+                        gmc_setup, registration_date,
+                        english_exam, exam_date, english_result_expiry_date,
+                        license, license_received_date,
+                        created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, gmc_ref, login_pwd, sq, sa, gmc_setup, reg_date,
+                        eng_exam, exam_date, eng_expiry, license_val, license_date,
+                        session.get('user_id', 0)
+                    ))
+                    imported += 1
             conn.commit()
             conn.close()
-            flash(f'GMC import complete: {imported} imported, {skipped} skipped', 'success')
+            flash(f'GMC import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
             return redirect(url_for('ops_gmc_list'))
         except Exception as e:
             logging.error(f"GMC import error: {e}")
