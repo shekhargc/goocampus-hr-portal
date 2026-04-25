@@ -9476,7 +9476,8 @@ def ensure_ops_tables():
                 'doc_stage_status': ['Accepted', 'In Process', 'Rejected'],
                 # GMC
                 'gmc_setup_status': ['Completed', 'Not Completed', 'In Process'],
-                'gmc_license_status': ['Received', 'Not Received', 'In Process'],
+                'gmc_english_exam': ['OET', 'IELTS'],
+                'gmc_license_status': ['Received', 'Rejected', 'Not Received', 'On Hold'],
                 # Payment
                 'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque'],
                 'instalment': ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment'],
@@ -9548,6 +9549,39 @@ def ensure_ops_tables():
                     )
 
         conn.commit()
+
+        # Migration: add candidate_email and mobile_number to ops_gmc_registration
+        for col in ('candidate_email', 'mobile_number'):
+            try:
+                conn.execute(f"ALTER TABLE ops_gmc_registration ADD COLUMN {col} TEXT")
+                conn.commit()
+                logging.info(f"Added {col} column to ops_gmc_registration")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        # Migration: update gmc_license_status options (add Rejected, On Hold; remove In Process)
+        try:
+            existing_license = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'gmc_license_status' AND value = 'Rejected'"
+            ).fetchone()
+            if not existing_license:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'gmc_license_status'")
+                for sort_idx, val in enumerate(['Received', 'Rejected', 'Not Received', 'On Hold'], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('gmc_license_status', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Updated gmc_license_status options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"gmc_license_status migration: {e}")
+
         conn.close()
     except Exception as e:
         logging.error(f"ensure_ops_tables: {e}")
@@ -9785,7 +9819,7 @@ CATEGORY_GROUPS = {
     'Client & Pipeline': ['plab_stage', 'account_status', 'plan_type', 'joined_stage', 'english_training', 'lead_source'],
     'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'ielts_vendor', 'oet_vendor', 'plab1_partner', 'plab2_vendor', 'other_training_vendor', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
-    'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_license_status'],
+    'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_english_exam', 'gmc_license_status'],
     'Payments': ['payment_method', 'instalment'],
     'Research & Publication': ['research_status', 'author_position', 'research_provider'],
     'Subscriptions': ['subscription_type', 'activation_type', 'subscription_booked_by'],
@@ -9823,6 +9857,7 @@ CATEGORY_LABELS = {
     'doc_stage': 'Document Stage',
     'doc_stage_status': 'Document Status',
     'gmc_setup_status': 'GMC Setup',
+    'gmc_english_exam': 'GMC English Exam',
     'gmc_license_status': 'GMC License',
     'payment_method': 'Payment Methods',
     'instalment': 'Instalments',
@@ -11815,6 +11850,7 @@ def ops_gmc_list():
     return render_template('ops_gmc_list.html', records=records,
                            search=search, status_filter=status_filter,
                            gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_english_exams=get_lookup_options('gmc_english_exam'),
                            gmc_license_statuses=get_lookup_options('gmc_license_status'))
 
 
@@ -11828,14 +11864,16 @@ def ops_gmc_add():
         conn.execute('''INSERT INTO ops_gmc_registration (
             registration_number, gmc_reference_number, login_pwd, secret_question,
             secret_answer, gmc_setup, registration_date, english_exam, exam_date,
-            english_result_expiry_date, license, license_received_date, notes,
+            english_result_expiry_date, license, license_received_date,
+            candidate_email, mobile_number, notes,
             created_by, updated_at
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('gmc_reference_number'),
             f.get('login_pwd'), f.get('secret_question'), f.get('secret_answer'),
             f.get('gmc_setup'), f.get('registration_date'), f.get('english_exam'),
             f.get('exam_date'), f.get('english_result_expiry_date'),
-            f.get('license'), f.get('license_received_date'), f.get('notes'),
+            f.get('license'), f.get('license_received_date'),
+            f.get('candidate_email'), f.get('mobile_number'), f.get('notes'),
             session.get('user_id', 0), datetime.now()
         ))
         conn.commit()
@@ -11847,6 +11885,7 @@ def ops_gmc_add():
     pre_reg = request.args.get('reg', '')
     return render_template('ops_gmc_form.html', record=None, clients=clients,
                            gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_english_exams=get_lookup_options('gmc_english_exam'),
                            gmc_license_statuses=get_lookup_options('gmc_license_status'),
                            pre_reg=pre_reg)
 
@@ -11867,13 +11906,15 @@ def ops_gmc_edit(gid):
             registration_number=?, gmc_reference_number=?, login_pwd=?,
             secret_question=?, secret_answer=?, gmc_setup=?, registration_date=?,
             english_exam=?, exam_date=?, english_result_expiry_date=?,
-            license=?, license_received_date=?, notes=?, updated_at=?
+            license=?, license_received_date=?,
+            candidate_email=?, mobile_number=?, notes=?, updated_at=?
             WHERE id=?''', (
             f.get('registration_number'), f.get('gmc_reference_number'),
             f.get('login_pwd'), f.get('secret_question'), f.get('secret_answer'),
             f.get('gmc_setup'), f.get('registration_date'), f.get('english_exam'),
             f.get('exam_date'), f.get('english_result_expiry_date'),
-            f.get('license'), f.get('license_received_date'), f.get('notes'),
+            f.get('license'), f.get('license_received_date'),
+            f.get('candidate_email'), f.get('mobile_number'), f.get('notes'),
             datetime.now(), gid
         ))
         conn.commit()
@@ -11884,6 +11925,7 @@ def ops_gmc_edit(gid):
     conn.close()
     return render_template('ops_gmc_form.html', record=record, clients=clients,
                            gmc_setup_statuses=get_lookup_options('gmc_setup_status'),
+                           gmc_english_exams=get_lookup_options('gmc_english_exam'),
                            gmc_license_statuses=get_lookup_options('gmc_license_status'),
                            pre_reg='')
 
@@ -13064,6 +13106,8 @@ def ops_gmc_import():
                 eng_expiry = _parse_zoho_date(row.get('English Result Expiry Date', ''))
                 license_val = _s('License') or _s('License ') or _s('Licence')
                 license_date = _parse_zoho_date(row.get('License Received Date', ''))
+                candidate_email = _s('Candidate Email')
+                mobile_number = _s('Mobile Number')
 
                 exists = conn.execute(
                     "SELECT id FROM ops_gmc_registration WHERE registration_number = ?",
@@ -13076,9 +13120,11 @@ def ops_gmc_import():
                         gmc_setup=?, registration_date=?,
                         english_exam=?, exam_date=?, english_result_expiry_date=?,
                         license=?, license_received_date=?,
+                        candidate_email=?, mobile_number=?,
                         updated_at=? WHERE id=?''', (
                         gmc_ref, login_pwd, sq, sa, gmc_setup, reg_date,
                         eng_exam, exam_date, eng_expiry, license_val, license_date,
+                        candidate_email, mobile_number,
                         datetime.now(), exists['id']
                     ))
                     updated += 1
@@ -13089,10 +13135,12 @@ def ops_gmc_import():
                         gmc_setup, registration_date,
                         english_exam, exam_date, english_result_expiry_date,
                         license, license_received_date,
+                        candidate_email, mobile_number,
                         created_by
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                         reg_num, gmc_ref, login_pwd, sq, sa, gmc_setup, reg_date,
                         eng_exam, exam_date, eng_expiry, license_val, license_date,
+                        candidate_email, mobile_number,
                         session.get('user_id', 0)
                     ))
                     imported += 1
