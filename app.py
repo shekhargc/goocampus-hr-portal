@@ -9243,9 +9243,6 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
-        # Normalize legacy status value
-        conn.execute("UPDATE ops_research_publication SET research_status = 'Published' WHERE research_status = 'Research Published'")
-
         # ── Online Subscriptions ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_subscriptions (
             id SERIAL PRIMARY KEY,
@@ -9482,8 +9479,8 @@ def ensure_ops_tables():
                 'payment_method': ['Bank Transfer', 'Cash Deposit', 'Discount', 'Shifted from Portfolio', 'Online Payment', 'Cheque'],
                 'instalment': ['1st Instalment', '2nd Instalment', '3rd Instalment', '4th Instalment', '5th Instalment'],
                 # Research
-                'research_status': ['Started', 'In Progress', 'Completed', 'Published'],
-                'author_position': ['First Author', 'Second Author', 'Third Author', 'Co-Author', 'Corresponding Author'],
+                'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
+                'author_position': ['1 st Author', '2 nd Author', 'Co-Author'],
                 # Subscriptions
                 'subscription_type': ['Plabable (PLAB)', 'Plab keys (PLAB)', 'Cerebellum', 'Marrow', 'PrepLadder Subscription', 'PassMedicine', 'BMJ OnExamination', 'Other'],
                 'activation_type': ['New Access', 'Renewed'],
@@ -9533,7 +9530,7 @@ def ensure_ops_tables():
                 'coaching_attendance': ['Present', 'Absent', 'Late'],
                 'batch_month': ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'],
                 # Providers (shared across forms)
-                'research_provider': ['Cognibrain', 'The Good Research Project', 'Dr. Jayaraj', 'Other'],
+                'research_provider': ['Dr. Jayaraj', 'Dr. Mahesh', 'Dr. Urvish', 'Cognibrain', 'The Good Research Project'],
                 'course_provider': ['Coursera', 'Udemy', 'BMJ', 'BMA', 'RCSI', 'Other'],
                 'certification_body': ['Royal College', 'BMA', 'BMJ', 'ALS', 'Other'],
                 # Medical specialities (shared)
@@ -9581,6 +9578,49 @@ def ensure_ops_tables():
             except Exception:
                 pass
             logging.error(f"gmc_license_status migration: {e}")
+
+        # Migration: update research_status, author_position, and research_provider options
+        for category, new_values in [
+            ('research_status', ['Started', 'Research Completed', 'Research Published', 'Scrapped']),
+            ('author_position', ['1 st Author', '2 nd Author', 'Co-Author']),
+            ('research_provider', ['Dr. Jayaraj', 'Dr. Mahesh', 'Dr. Urvish', 'Cognibrain', 'The Good Research Project']),
+        ]:
+            try:
+                # Check if migration already done by looking for a new value
+                check_val = new_values[1]  # second value is unique to new set
+                exists = conn.execute(
+                    "SELECT value FROM lookup_options WHERE category = ? AND value = ?",
+                    (category, check_val)
+                ).fetchone()
+                if not exists:
+                    conn.execute("DELETE FROM lookup_options WHERE category = ?", (category,))
+                    for sort_idx, val in enumerate(new_values, 1):
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx)
+                        )
+                    conn.commit()
+                    logging.info(f"Updated {category} options")
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"{category} migration: {e}")
+
+        # Migration: revert legacy normalization — restore 'Research Published' from 'Published'
+        try:
+            conn.execute("UPDATE ops_research_publication SET research_status = 'Research Published' WHERE research_status = 'Published'")
+            conn.execute("UPDATE ops_research_publication SET research_status = 'Research Completed' WHERE research_status = 'Completed'")
+            conn.execute("UPDATE ops_research_publication SET research_status = 'Research Completed' WHERE research_status = 'In Progress'")
+            conn.commit()
+            logging.info("Migrated research_status values to new labels")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"research_status value migration: {e}")
 
         conn.close()
     except Exception as e:
@@ -9764,8 +9804,8 @@ def ops_plab_pathway_dashboard():
 
         # ── Research & Publication ──
         research_total = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication").fetchone()['c']
-        research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Published'").fetchone()['c']
-        research_in_progress = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'In Progress'").fetchone()['c']
+        research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Published'").fetchone()['c']
+        research_completed = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Completed'").fetchone()['c']
         research_started = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Started'").fetchone()['c']
 
         # ── UK Visa & Travel ──
@@ -9796,7 +9836,7 @@ def ops_plab_pathway_dashboard():
                                awaiting_results=0, recent_passes=0,
                                epic_total=0, epic_in_process=0, epic_sent_gmc=0,
                                gmc_total=0, gmc_completed=0, gmc_license_received=0,
-                               research_total=0, research_published=0, research_in_progress=0, research_started=0,
+                               research_total=0, research_published=0, research_completed=0, research_started=0,
                                visa_total=0, visa_accepted=0, visa_in_process=0,
                                academic_total=0, upcoming_exams=[])
 
@@ -9810,7 +9850,7 @@ def ops_plab_pathway_dashboard():
                            awaiting_results=awaiting_results, recent_passes=recent_passes,
                            epic_total=epic_total, epic_in_process=epic_in_process, epic_sent_gmc=epic_sent_gmc,
                            gmc_total=gmc_total, gmc_completed=gmc_completed, gmc_license_received=gmc_license_received,
-                           research_total=research_total, research_published=research_published, research_in_progress=research_in_progress, research_started=research_started,
+                           research_total=research_total, research_published=research_published, research_completed=research_completed, research_started=research_started,
                            visa_total=visa_total, visa_accepted=visa_accepted, visa_in_process=visa_in_process,
                            academic_total=academic_total, upcoming_exams=upcoming_exams)
 
@@ -12028,7 +12068,8 @@ def ops_research_edit(rid):
         return redirect(request.args.get('next') or url_for('ops_research_list'))
     conn.close()
     return render_template('ops_research_form.html', record=record,
-                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'), pre_reg='')
+                           research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
+                           research_providers=get_lookup_options('research_provider'), pre_reg='')
 
 
 @app.route('/operations/research-publication/<int:rid>/delete', methods=['POST'])
@@ -12037,6 +12078,90 @@ def ops_research_delete(rid):
     conn = get_db(); conn.execute("DELETE FROM ops_research_publication WHERE id=?", (rid,)); conn.commit(); conn.close()
     flash('Research record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_research_list'))
+
+
+@app.route('/operations/research-publication/import', methods=['GET', 'POST'])
+@admin_required
+def ops_research_import():
+    """Import Research & Publication records from Zoho CSV/XLSX export.
+    Upserts: updates existing records by registration_number + research_provider + research_start_date, inserts new ones."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                research_status = _s('Research Status')
+                research_topic = _s('Research Topic')
+                published_copy = _s('Published Copy')
+                start_date = _parse_zoho_date(row.get('Research Start Date', ''))
+                end_date = _parse_zoho_date(row.get('Research End Date', ''))
+                provider = _s('Research Provider')
+                mobile = _s('Mobile Number')
+                email = _s('Candidate Email')
+                batch = _s('Research Batch')
+                journal = _s('Published Journal Name')
+                author_pos = _s('Author Position')
+                notes = _s('Additional Notes')
+
+                exists = conn.execute(
+                    "SELECT id FROM ops_research_publication WHERE registration_number = ? AND COALESCE(research_provider,'') = ? AND COALESCE(research_start_date,'') = ?",
+                    (reg_num, provider, start_date)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_research_publication SET
+                        research_status=?, research_topic=?, published_copy=?,
+                        research_end_date=?, published_journal_name=?, author_position=?,
+                        research_batch=?, mobile_number=?, candidate_email=?,
+                        additional_notes=? WHERE id=?''', (
+                        research_status, research_topic, published_copy,
+                        end_date, journal, author_pos,
+                        batch, mobile, email, notes, exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_research_publication (
+                        registration_number, research_status, research_topic, published_copy,
+                        research_start_date, research_end_date, research_provider,
+                        published_journal_name, author_position, research_batch,
+                        mobile_number, candidate_email, additional_notes, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, research_status, research_topic, published_copy,
+                        start_date, end_date, provider,
+                        journal, author_pos, batch,
+                        mobile, email, notes, session.get('user_id', 0)
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Research import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_research_list'))
+        except Exception as e:
+            logging.error(f"Research import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           title='Import Research & Publication',
+                           section_name='Research & Publication',
+                           back_url=url_for('ops_research_list'))
 
 
 # ─────────────────────────────────────────────────────────
