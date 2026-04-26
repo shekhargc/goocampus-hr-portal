@@ -9486,9 +9486,9 @@ def ensure_ops_tables():
                 'activation_type': ['New Access', 'Renewed', 'Shared Login'],
                 'subscription_booked_by': ['Booked & Paid by GooCampus', 'Booked by GC / Paid by Client', 'Booked and Paid by Client', 'Booking included in Package'],
                 # Webinars
-                'event_type': ['Webinar', 'Conference'],
-                'event_value': ['Paid', 'Free'],
-                'participation_type': ['Attendee', 'Speaker', 'Presenter', 'Panelist', 'Organizer'],
+                'event_type': ['Webinar', 'Conference', 'ABMA CPD Webinar'],
+                'event_value': ['Paid', 'ABMA Membership', 'Free'],
+                'participation_type': ['Attendee', 'Oral Presenter', 'E-Poster Presenter'],
                 # Visa
                 'visa_app_status': ['Not Started', 'In Process', 'Completed'],
                 'visa_doc_collected': ['Collected', 'Not Collected', 'Partial'],
@@ -9627,6 +9627,33 @@ def ensure_ops_tables():
             ('subscription_type', ['Plabable (PLAB)', 'Passmedicine', 'ABMA Online (PLAB)', 'Plab keys (PLAB)', 'Swoosh OET', 'Swoosh IELTS', 'Arora PLAB 1 Access', 'Pastest', 'MRCEM Success', 'E-MRCS'], 'Passmedicine'),
             ('activation_type', ['New Access', 'Renewed', 'Shared Login'], 'Shared Login'),
             ('subscription_booked_by', ['Booked & Paid by GooCampus', 'Booked by GC / Paid by Client', 'Booked and Paid by Client', 'Booking included in Package'], 'Booking included in Package'),
+        ]:
+            try:
+                exists = conn.execute(
+                    "SELECT value FROM lookup_options WHERE category = ? AND value = ?",
+                    (category, check_val)
+                ).fetchone()
+                if not exists:
+                    conn.execute("DELETE FROM lookup_options WHERE category = ?", (category,))
+                    for sort_idx, val in enumerate(new_values, 1):
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx)
+                        )
+                    conn.commit()
+                    logging.info(f"Updated {category} options")
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"{category} migration: {e}")
+
+        # Migration: update event_type, event_value, participation_type options
+        for category, new_values, check_val in [
+            ('event_type', ['Webinar', 'Conference', 'ABMA CPD Webinar'], 'ABMA CPD Webinar'),
+            ('event_value', ['Paid', 'ABMA Membership', 'Free'], 'ABMA Membership'),
+            ('participation_type', ['Attendee', 'Oral Presenter', 'E-Poster Presenter'], 'Oral Presenter'),
         ]:
             try:
                 exists = conn.execute(
@@ -12455,6 +12482,98 @@ def ops_webinars_delete(rid):
     conn = get_db(); conn.execute("DELETE FROM ops_webinars_conferences WHERE id=?", (rid,)); conn.commit(); conn.close()
     flash('Webinar/Conference record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_webinars_list'))
+
+
+@app.route('/operations/webinars-conferences/import', methods=['GET', 'POST'])
+@admin_required
+def ops_webinars_import():
+    """Import Webinar & Conference records from Zoho CSV/XLSX export.
+    Upserts by registration_number + event_name + start_date."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Candidate Name', '') or '').strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                event_type = _s('Event Type')
+                event_name = _s('Webinar and Event Name')
+                start_date = _parse_zoho_date(row.get('Start Date', ''))
+                end_date = _parse_zoho_date(row.get('End Date', ''))
+                duration_raw = row.get('Duration (Days)', '')
+                duration_days = ''
+                if duration_raw:
+                    try:
+                        duration_days = str(int(float(str(duration_raw))))
+                    except (ValueError, TypeError):
+                        duration_days = str(duration_raw).strip()
+                event_value = _s('Event Value')
+                cpd_raw = row.get('CPD Points', '')
+                cpd_points = ''
+                if cpd_raw:
+                    try:
+                        cpd_points = str(int(float(str(cpd_raw))))
+                    except (ValueError, TypeError):
+                        cpd_points = str(cpd_raw).strip()
+                participation_type = _s('Conference Participation Type')
+                notes = _s('Notes')
+                mobile = _s('Mobile Number')
+                candidate_email = _s('Candidate Email')
+
+                exists = conn.execute(
+                    "SELECT id FROM ops_webinars_conferences WHERE registration_number = ? AND COALESCE(event_name,'') = ? AND COALESCE(start_date,'') = ?",
+                    (reg_num, event_name, start_date)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_webinars_conferences SET
+                        event_type=?, end_date=?, duration_days=?, event_value=?,
+                        cpd_points=?, participation_type=?, notes=?,
+                        mobile_number=?, candidate_email=? WHERE id=?''', (
+                        event_type, end_date, duration_days, event_value,
+                        cpd_points, participation_type, notes,
+                        mobile, candidate_email, exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_webinars_conferences (
+                        registration_number, event_type, start_date, end_date, duration_days,
+                        event_value, cpd_points, event_name, participation_type,
+                        notes, mobile_number, candidate_email, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, event_type, start_date, end_date, duration_days,
+                        event_value, cpd_points, event_name, participation_type,
+                        notes, mobile, candidate_email, session.get('user_id', 0)
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Webinar/Conference import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_webinars_list'))
+        except Exception as e:
+            logging.error(f"Webinar import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           title='Import Webinars & Conferences',
+                           section_name='Webinars & Conferences',
+                           back_url=url_for('ops_webinars_list'))
 
 
 # ─────────────────────────────────────────────────────────
