@@ -9482,9 +9482,9 @@ def ensure_ops_tables():
                 'research_status': ['Started', 'Research Completed', 'Research Published', 'Scrapped'],
                 'author_position': ['1 st Author', '2 nd Author', 'Co-Author'],
                 # Subscriptions
-                'subscription_type': ['Plabable (PLAB)', 'Plab keys (PLAB)', 'Cerebellum', 'Marrow', 'PrepLadder Subscription', 'PassMedicine', 'BMJ OnExamination', 'Other'],
-                'activation_type': ['New Access', 'Renewed'],
-                'subscription_booked_by': ['Booked & Paid by GooCampus', 'Booked & Paid by Candidate', 'Booked by GooCampus Paid by Candidate'],
+                'subscription_type': ['Plabable (PLAB)', 'Passmedicine', 'ABMA Online (PLAB)', 'Plab keys (PLAB)', 'Swoosh OET', 'Swoosh IELTS', 'Arora PLAB 1 Access', 'Pastest', 'MRCEM Success', 'E-MRCS'],
+                'activation_type': ['New Access', 'Renewed', 'Shared Login'],
+                'subscription_booked_by': ['Booked & Paid by GooCampus', 'Booked by GC / Paid by Client', 'Booked and Paid by Client', 'Booking included in Package'],
                 # Webinars
                 'event_type': ['Webinar', 'Conference'],
                 'event_value': ['Paid', 'Free'],
@@ -9621,6 +9621,33 @@ def ensure_ops_tables():
             except Exception:
                 pass
             logging.error(f"research_status value migration: {e}")
+
+        # Migration: update subscription_type, activation_type, subscription_booked_by options
+        for category, new_values, check_val in [
+            ('subscription_type', ['Plabable (PLAB)', 'Passmedicine', 'ABMA Online (PLAB)', 'Plab keys (PLAB)', 'Swoosh OET', 'Swoosh IELTS', 'Arora PLAB 1 Access', 'Pastest', 'MRCEM Success', 'E-MRCS'], 'Passmedicine'),
+            ('activation_type', ['New Access', 'Renewed', 'Shared Login'], 'Shared Login'),
+            ('subscription_booked_by', ['Booked & Paid by GooCampus', 'Booked by GC / Paid by Client', 'Booked and Paid by Client', 'Booking included in Package'], 'Booking included in Package'),
+        ]:
+            try:
+                exists = conn.execute(
+                    "SELECT value FROM lookup_options WHERE category = ? AND value = ?",
+                    (category, check_val)
+                ).fetchone()
+                if not exists:
+                    conn.execute("DELETE FROM lookup_options WHERE category = ?", (category,))
+                    for sort_idx, val in enumerate(new_values, 1):
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx)
+                        )
+                    conn.commit()
+                    logging.info(f"Updated {category} options")
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"{category} migration: {e}")
 
         conn.close()
     except Exception as e:
@@ -12253,6 +12280,85 @@ def ops_subscriptions_delete(rid):
     conn = get_db(); conn.execute("DELETE FROM ops_online_subscriptions WHERE id=?", (rid,)); conn.commit(); conn.close()
     flash('Subscription record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
+
+
+@app.route('/operations/online-subscriptions/import', methods=['GET', 'POST'])
+@admin_required
+def ops_subscriptions_import():
+    """Import Online Subscription records from Zoho CSV/XLSX export.
+    Upserts by registration_number + online_subscription + issued_date."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Candidate Name', '') or row.get('Enter Candidate Name', '')).strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                subscription = _s('Online Subscription')
+                issued_date = _parse_zoho_date(row.get('Issued Date', ''))
+                activation = _s('Activation type') or _s('Activation Type')
+                notes = _s('Notes')
+                client_email = _s('Client Email')
+                login_id = _s('Login Id')
+                password = _s('Password')
+                booked_by = _s('Booked By')
+                mobile = _s('Mobile Number')
+                candidate_email = _s('Candidate Email')
+
+                exists = conn.execute(
+                    "SELECT id FROM ops_online_subscriptions WHERE registration_number = ? AND COALESCE(online_subscription,'') = ? AND COALESCE(issued_date,'') = ?",
+                    (reg_num, subscription, issued_date)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_online_subscriptions SET
+                        activation_type=?, notes=?, client_email=?,
+                        login_id=?, password=?, booked_by=?,
+                        mobile_number=?, candidate_email=? WHERE id=?''', (
+                        activation, notes, client_email,
+                        login_id, password, booked_by,
+                        mobile, candidate_email, exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_online_subscriptions (
+                        registration_number, online_subscription, issued_date, activation_type,
+                        notes, client_email, login_id, password, booked_by,
+                        mobile_number, candidate_email, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, subscription, issued_date, activation,
+                        notes, client_email, login_id, password, booked_by,
+                        mobile, candidate_email, session.get('user_id', 0)
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Subscription import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_subscriptions_list'))
+        except Exception as e:
+            logging.error(f"Subscription import error: {e}")
+            flash(f'Import error: {e}', 'error')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           title='Import Online Subscriptions',
+                           section_name='Online Subscriptions',
+                           back_url=url_for('ops_subscriptions_list'))
 
 
 # ─────────────────────────────────────────────────────────
