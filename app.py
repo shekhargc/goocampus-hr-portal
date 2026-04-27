@@ -15026,7 +15026,7 @@ def sales_calls_view():
 #  SALES – Partners
 # ─────────────────────────────────────────────────────────
 
-PARTNER_EDITORS = ['GC001', 'GC002', 'GC003']
+PARTNER_EDITORS = ['GC001', 'GC002', 'GC003', 'GC061']
 
 def can_edit_partners(user):
     """Check if user is admin or in PARTNER_EDITORS."""
