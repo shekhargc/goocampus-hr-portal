@@ -144,7 +144,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Quarantine</label>
-                    <input type="text" name="quarantine" value="{{ record.quarantine or '' if record else '' }}" placeholder="e.g., Yes/No" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="quarantine" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for q in quarantine_options %}
+                        <option value="{{ q }}" {% if record and record.quarantine == q %}selected{% endif %}>{{ q }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Quarantine Days</label>

@@ -9583,13 +9583,14 @@ def ensure_ops_tables():
                 'event_value': ['Paid', 'ABMA Membership', 'Free'],
                 'participation_type': ['Attendee', 'Oral Presenter', 'E-Poster Presenter'],
                 # Visa
-                'visa_app_status': ['Not Started', 'In Process', 'Completed'],
-                'visa_doc_collected': ['Collected', 'Not Collected', 'Partial'],
-                'visa_doc_status': ['Accepted', 'In Process', 'Rejected'],
-                'visa_status': ['Accepted', 'Rejected', 'In Process', 'Not Applied'],
-                'visa_period': ['6 Months', '1 Year', '2 Years', '5 Years', '10 Years'],
-                'visa_type': ['Visitor Visas', 'Student Visa', 'Work Visa', 'Skilled Worker Visa', 'Other'],
-                'lodging_type': ['Hotel', 'Hostel', 'Airbnb', 'Shared Accommodation', 'Other'],
+                'visa_app_status': ['Started', 'In Process', 'Completed'],
+                'visa_doc_collected': ['Yet To Receive', 'Collected'],
+                'visa_doc_status': ['Accepted', 'Documents Missing'],
+                'visa_status': ['Accepted', 'Rejected'],
+                'visa_period': ['1 Month', '2 Months', '3 Months', '4 Months', '5 Months', '6 Months', '1 Year'],
+                'visa_type': ['Work Visas', 'Business Visas', 'Study Visas', 'Visitor Visas', 'Family Visas', 'Settlement Visas', 'Transit Visas'],
+                'lodging_type': ['Single (Toilet Attached)', 'Single (Common Toilet)', 'Sharing (Toilet Attached)', 'Sharing (Common Toilet)'],
+                'quarantine': ['Yes', 'No'],
                 # Academic
                 'img_fmg': ['IMG', 'FMG'],
                 'mbbs_status': ['Completed', 'In Progress', 'Not Started'],
@@ -9771,6 +9772,43 @@ def ensure_ops_tables():
                 except Exception:
                     pass
                 logging.error(f"{category} migration: {e}")
+
+        # Migration: update visa & travel dropdown options
+        for category, new_values, check_val in [
+            ('visa_app_status', ['Started', 'In Process', 'Completed'], 'Started'),
+            ('visa_doc_collected', ['Yet To Receive', 'Collected'], 'Yet To Receive'),
+            ('visa_doc_status', ['Accepted', 'Documents Missing'], 'Documents Missing'),
+            ('visa_status', ['Accepted', 'Rejected'], None),  # reduced list — check count
+            ('visa_period', ['1 Month', '2 Months', '3 Months', '4 Months', '5 Months', '6 Months', '1 Year'], '1 Month'),
+            ('visa_type', ['Work Visas', 'Business Visas', 'Study Visas', 'Visitor Visas', 'Family Visas', 'Settlement Visas', 'Transit Visas'], 'Business Visas'),
+            ('lodging_type', ['Single (Toilet Attached)', 'Single (Common Toilet)', 'Sharing (Toilet Attached)', 'Sharing (Common Toilet)'], 'Single (Toilet Attached)'),
+            ('quarantine', ['Yes', 'No'], None),
+        ]:
+            try:
+                if check_val:
+                    exists = conn.execute(
+                        "SELECT value FROM lookup_options WHERE category = ? AND value = ?",
+                        (category, check_val)
+                    ).fetchone()
+                    needs_update = not exists
+                else:
+                    cnt = conn.execute("SELECT COUNT(*) as c FROM lookup_options WHERE category = ?", (category,)).fetchone()['c']
+                    needs_update = (cnt != len(new_values))
+                if needs_update:
+                    conn.execute("DELETE FROM lookup_options WHERE category = ?", (category,))
+                    for sort_idx, val in enumerate(new_values, 1):
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx)
+                        )
+                    conn.commit()
+                    logging.info(f"Updated {category} options")
+            except Exception as e:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"{category} visa migration: {e}")
 
         conn.close()
     except Exception as e:
@@ -10014,7 +10052,7 @@ CATEGORY_GROUPS = {
     'Research & Publication': ['research_status', 'author_position', 'research_provider'],
     'Subscriptions': ['subscription_type', 'activation_type', 'subscription_booked_by'],
     'Webinars & Events': ['event_type', 'event_value', 'participation_type'],
-    'UK Visa & Travel': ['visa_app_status', 'visa_doc_collected', 'visa_doc_status', 'visa_status', 'visa_period', 'visa_type', 'lodging_type'],
+    'UK Visa & Travel': ['visa_app_status', 'visa_doc_collected', 'visa_doc_status', 'visa_status', 'visa_period', 'visa_type', 'lodging_type', 'quarantine'],
     'Academic Details': ['img_fmg', 'mbbs_status', 'internship_status', 'internship_gap', 'working_status'],
     'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by', 'course_provider', 'certification_body'],
     'Observerships': ['observership_payment', 'medical_speciality'],
@@ -10067,6 +10105,7 @@ CATEGORY_LABELS = {
     'visa_period': 'Visa Period',
     'visa_type': 'Visa Type',
     'lodging_type': 'Lodging Type',
+    'quarantine': 'Quarantine',
     'img_fmg': 'IMG/FMG',
     'mbbs_status': 'MBBS Status',
     'internship_status': 'Internship Status',
@@ -12743,7 +12782,7 @@ def ops_visa_add():
                            visa_app_statuses=get_lookup_options('visa_app_status'), visa_doc_collected=get_lookup_options('visa_doc_collected'),
                            visa_doc_statuses=get_lookup_options('visa_doc_status'), visa_statuses=get_lookup_options('visa_status'),
                            visa_periods=get_lookup_options('visa_period'), visa_types=get_lookup_options('visa_type'),
-                           lodging_types=get_lookup_options('lodging_type'), pre_reg=pre_reg)
+                           lodging_types=get_lookup_options('lodging_type'), quarantine_options=get_lookup_options('quarantine'), pre_reg=pre_reg)
 
 
 @app.route('/operations/uk-visa-travel/<int:rid>/edit', methods=['GET', 'POST'])
@@ -12781,7 +12820,7 @@ def ops_visa_edit(rid):
                            visa_app_statuses=get_lookup_options('visa_app_status'), visa_doc_collected=get_lookup_options('visa_doc_collected'),
                            visa_doc_statuses=get_lookup_options('visa_doc_status'), visa_statuses=get_lookup_options('visa_status'),
                            visa_periods=get_lookup_options('visa_period'), visa_types=get_lookup_options('visa_type'),
-                           lodging_types=get_lookup_options('lodging_type'), pre_reg='')
+                           lodging_types=get_lookup_options('lodging_type'), quarantine_options=get_lookup_options('quarantine'), pre_reg='')
 
 
 @app.route('/operations/uk-visa-travel/<int:rid>/delete', methods=['POST'])
@@ -12790,6 +12829,129 @@ def ops_visa_delete(rid):
     conn = get_db(); conn.execute("DELETE FROM ops_uk_visa_travel WHERE id=?", (rid,)); conn.commit(); conn.close()
     flash('Visa & Travel record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_visa_list'))
+
+
+@app.route('/operations/uk-visa-travel/import', methods=['GET', 'POST'])
+@admin_required
+def ops_visa_import():
+    """Import Visa & Travel records from Zoho XLSX export.
+    Upserts by registration_number (one visa record per client)."""
+    if request.method == 'POST':
+        data_file = request.files.get('csv_file')
+        if not data_file:
+            flash('Please upload a file', 'error')
+            return redirect(request.url)
+        try:
+            rows = _read_import_file(data_file)
+            conn = get_db()
+            imported = updated = skipped = 0
+            for row in rows:
+                candidate = str(row.get('Enter Candidate Name', '') or '').strip()
+                reg_num = _extract_reg_number(candidate)
+                if not reg_num:
+                    skipped += 1
+                    continue
+                client = conn.execute(
+                    "SELECT registration_number FROM plab_clients WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if not client:
+                    skipped += 1
+                    continue
+
+                _s = lambda k: str(row.get(k, '') or '').strip()
+                visa_app_status = _s('Visa Application Status')
+                documents_collected = _s('Documents Collected')
+                note_on_documents = _s('Note on Documents')
+                documents_status = _s('Documents Status')
+                visa_interview_date = _parse_zoho_date(row.get('Visa Interview Date', ''))
+                visa_status = _s('Visa Status')
+                note_on_visa_status = _s('Note on Visa status')
+                visa_issued_date = _parse_zoho_date(row.get('Visa Issued Date', ''))
+                visa_period = _s('Visa Period')
+                visa_expiry_date = _parse_zoho_date(row.get('Visa Expiry Date', ''))
+                visa_type = _s('Visa Type')
+                departure_date = _parse_zoho_date(row.get('Departure Date', ''))
+                quarantine = _s('Quarantine')
+                quarantine_days_raw = row.get('Quarantine Days', '')
+                quarantine_days = ''
+                if quarantine_days_raw:
+                    try:
+                        quarantine_days = str(int(float(str(quarantine_days_raw))))
+                    except (ValueError, TypeError):
+                        quarantine_days = str(quarantine_days_raw).strip()
+                quarantine_hotel_name = _s('Quarantine Hotel Name')
+                lodging_name = _s('Lodging Name')
+                lodging_type = _s('Lodging Type')
+                arrival_date = _parse_zoho_date(row.get('Arrival Date', ''))
+                uk_phone_number = _s('UK Phone Number')
+                mobile_number = _s('Mobile Number')
+                candidate_email = _s('Candidate Email')
+                note = _s('Note')
+
+                # Check-in/out: duplicate headers in Excel — last one wins (lodging cols 26-27)
+                check_in = _parse_zoho_date(row.get('Check IN Date', ''))
+                check_out = _parse_zoho_date(row.get('Check OUT Date', ''))
+
+                exists = conn.execute(
+                    "SELECT id FROM ops_uk_visa_travel WHERE registration_number = ?",
+                    (reg_num,)
+                ).fetchone()
+                if exists:
+                    conn.execute('''UPDATE ops_uk_visa_travel SET
+                        visa_application_status=?, documents_collected=?, note_on_documents=?,
+                        documents_status=?, visa_interview_date=?, visa_status=?,
+                        note_on_visa_status=?, visa_issued_date=?, visa_period=?,
+                        visa_expiry_date=?, visa_type=?, departure_date=?,
+                        quarantine=?, quarantine_days=?, quarantine_hotel_name=?,
+                        lodging_name=?, check_in_date=?, check_out_date=?,
+                        lodging_type=?, note=?, arrival_date=?,
+                        uk_phone_number=?, mobile_number=?, candidate_email=?
+                        WHERE id=?''', (
+                        visa_app_status, documents_collected, note_on_documents,
+                        documents_status, visa_interview_date, visa_status,
+                        note_on_visa_status, visa_issued_date, visa_period,
+                        visa_expiry_date, visa_type, departure_date,
+                        quarantine, quarantine_days, quarantine_hotel_name,
+                        lodging_name, check_in, check_out,
+                        lodging_type, note, arrival_date,
+                        uk_phone_number, mobile_number, candidate_email,
+                        exists['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute('''INSERT INTO ops_uk_visa_travel (
+                        registration_number, visa_application_status, documents_collected,
+                        note_on_documents, documents_status, visa_interview_date,
+                        visa_status, note_on_visa_status, visa_issued_date,
+                        visa_period, visa_expiry_date, visa_type,
+                        departure_date, quarantine, quarantine_days,
+                        quarantine_hotel_name, lodging_name, check_in_date,
+                        check_out_date, lodging_type, note, arrival_date,
+                        uk_phone_number, mobile_number, candidate_email, created_by
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                        reg_num, visa_app_status, documents_collected,
+                        note_on_documents, documents_status, visa_interview_date,
+                        visa_status, note_on_visa_status, visa_issued_date,
+                        visa_period, visa_expiry_date, visa_type,
+                        departure_date, quarantine, quarantine_days,
+                        quarantine_hotel_name, lodging_name, check_in,
+                        check_out, lodging_type, note, arrival_date,
+                        uk_phone_number, mobile_number, candidate_email,
+                        session.get('user_id')
+                    ))
+                    imported += 1
+            conn.commit()
+            conn.close()
+            flash(f'Import complete: {imported} new, {updated} updated, {skipped} skipped', 'success')
+            return redirect(url_for('ops_visa_list'))
+        except Exception as e:
+            logging.error(f"Visa import error: {e}")
+            flash(f'Import error: {str(e)}', 'danger')
+            return redirect(request.url)
+    return render_template('ops_import_generic.html',
+                           section='UK Visa & Travel',
+                           back_url='/operations/uk-visa-travel')
 
 
 # ─────────────────────────────────────────────────────────
