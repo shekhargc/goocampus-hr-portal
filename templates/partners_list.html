@@ -1,0 +1,256 @@
+{% extends "base.html" %}
+{% block title %}Partners{% endblock %}
+{% block content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:5px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:600;padding:6px 8px;background:var(--gray-50);border-radius:6px;border:1px solid var(--gray-100)}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-section-list{list-style:none;margin:0;padding:0}
+.drawer-section-list li{padding:6px 0;font-size:13px;color:var(--navy)}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+.badge-pill{display:inline-block;padding:4px 12px;border-radius:999px;font-size:12px;font-weight:600}
+.badge-green{background:#ECFDF5;color:#065F46}
+.badge-gray{background:#F3F4F6;color:#374151}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+</style>
+
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Partners</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage business partners &middot; Click a row to view details</p>
+        </div>
+        {% if can_edit %}
+        <div style="display:flex;gap:10px;">
+            <a href="/partners/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+                + Add Partner
+            </a>
+        </div>
+        {% endif %}
+    </div>
+
+    <!-- Filters Card -->
+    <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search</label>
+                <input type="text" name="q" placeholder="Company name, contact, city..." value="{{ search or '' }}" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Partner Type</label>
+                <select name="type" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All</option>
+                    {% for opt in partner_types %}
+                    <option value="{{ opt }}" {% if type_filter == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Status</label>
+                <select name="status" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All</option>
+                    {% for opt in partner_statuses %}
+                    <option value="{{ opt }}" {% if status_filter == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Filter
+                </button>
+                <a href="/partners" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Reset
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <!-- Records Table -->
+    <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Company Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Contact Person</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Type</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">City / Country</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Status</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Products</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openPartnerDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.company_name or 'N/A' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.contact_person or '—' }}</td>
+                        <td style="padding:12px 16px;">{{ record.partner_type or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.city or '' }}{% if record.city and record.country %} / {% endif %}{{ record.country or '' }}</td>
+                        <td style="padding:12px 16px;">{% if record.status == 'Active' %}<span class="badge-pill badge-green">Active</span>{% else %}<span class="badge-pill badge-gray">{{ record.status }}</span>{% endif %}</td>
+                        <td style="padding:12px 16px;text-align:center;">{{ record.product_count or 0 }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No partners found.</p>
+            {% if can_edit %}<a href="/partners/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>{% endif %}
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Slide-out Detail Drawer -->
+<div class="drawer-backdrop" id="partnerBackdrop" onclick="closePartnerDetail()"></div>
+<aside class="drawer" id="partnerDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Partner Details</h3>
+        <button class="drawer-close" type="button" onclick="closePartnerDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="partnerDrawerBody"></div>
+    <div class="drawer-actions" id="partnerDrawerActions"></div>
+</aside>
+
+<script>
+const RECORDS = {
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        company_name: {{ (record.company_name or '')|tojson }},
+        contact_person: {{ (record.contact_person or '')|tojson }},
+        email: {{ (record.email or '')|tojson }},
+        phone: {{ (record.phone or '')|tojson }},
+        website: {{ (record.website or '')|tojson }},
+        address: {{ (record.address or '')|tojson }},
+        city: {{ (record.city or '')|tojson }},
+        state: {{ (record.state or '')|tojson }},
+        country: {{ (record.country or '')|tojson }},
+        partner_type: {{ (record.partner_type or '')|tojson }},
+        status: {{ (record.status or '')|tojson }},
+        notes: {{ (record.notes or '')|tojson }},
+    },
+    {% endfor %}
+};
+
+let activeRowId = null;
+
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
+
+function openPartnerDetail(id) {
+    const r = RECORDS[id];
+    if (!r) return;
+
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+
+    let html = `
+    <div style="margin-bottom:20px;">
+        <div style="font-size:18px;font-weight:700;color:var(--navy);margin-bottom:4px;">${r.company_name}</div>
+        <div style="font-size:13px;color:var(--gray-500);">${r.contact_person || '—'}</div>
+    </div>
+    <div class="drawer-grid">
+        ${field('Email', r.email ? `<a href="mailto:${r.email}" style="color:var(--orange);text-decoration:none;">${r.email}</a>` : '')}
+        ${field('Phone', r.phone)}
+        ${field('Website', r.website ? `<a href="${r.website}" target="_blank" style="color:var(--orange);text-decoration:none;">${r.website}</a>` : '')}
+        ${field('Partner Type', r.partner_type)}
+        ${field('Status', r.status)}
+        ${field('City', r.city)}
+        ${field('State', r.state)}
+        ${field('Country', r.country)}
+        ${field('Address', r.address, 'full')}
+        ${field('Notes', r.notes, 'full')}
+    </div>
+    <div class="drawer-section">
+        <h4>Linked Products</h4>
+        <div id="productsSection" style="font-size:13px;color:var(--gray-500);">Loading...</div>
+    </div>
+    `;
+
+    document.getElementById('partnerDrawerBody').innerHTML = html;
+
+    // Fetch and display products
+    fetch(`/partners/api/${id}`)
+        .then(r => r.json())
+        .then(data => {
+            let productsHtml = '';
+            if (data.products && data.products.length > 0) {
+                productsHtml = '<ul class="drawer-section-list">';
+                for (const p of data.products) {
+                    productsHtml += `<li>${p.name} <span style="color:var(--gray-400);font-size:11px;">(${p.type})</span></li>`;
+                }
+                productsHtml += '</ul>';
+            } else {
+                productsHtml = '<p style="font-size:13px;color:var(--gray-400);margin:0;">No products linked</p>';
+            }
+            document.getElementById('productsSection').innerHTML = productsHtml;
+        })
+        .catch(e => {
+            document.getElementById('productsSection').innerHTML = '<p style="color:var(--danger);margin:0;">Error loading products</p>';
+        });
+
+    let actions = '';
+    {% if can_edit %}
+    actions += `<a href="/partners/${id}/edit" style="background:var(--orange);color:white;">Edit Partner</a>`;
+    {% endif %}
+    {% if is_admin %}
+    actions += `<a href="#" onclick="deletePartner(${id}); return false;" style="background:var(--danger);color:white;">Delete Partner</a>`;
+    {% endif %}
+    document.getElementById('partnerDrawerActions').innerHTML = actions;
+
+    document.getElementById('partnerDrawer').classList.add('open');
+    document.getElementById('partnerDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('partnerBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closePartnerDetail() {
+    document.getElementById('partnerDrawer').classList.remove('open');
+    document.getElementById('partnerDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('partnerBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+}
+
+function deletePartner(id) {
+    if (confirm('Are you sure you want to delete this partner?')) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = `/partners/${id}/delete`;
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closePartnerDetail(); });
+</script>
+{% endblock %}

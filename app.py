@@ -9432,6 +9432,35 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Partners ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partners (
+            id SERIAL PRIMARY KEY,
+            company_name TEXT NOT NULL,
+            contact_person TEXT,
+            email TEXT,
+            phone TEXT,
+            website TEXT,
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            country TEXT,
+            partner_type TEXT,
+            status TEXT DEFAULT 'Active',
+            notes TEXT,
+            password_hash TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Partner Products ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_products (
+            id SERIAL PRIMARY KEY,
+            partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+            product_id INTEGER REFERENCES products_services(id) ON DELETE CASCADE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(partner_id, product_id)
+        )''')
+
         # ── Lookup Options (for PLAB Settings) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS lookup_options (
             id SERIAL PRIMARY KEY,
@@ -9535,6 +9564,9 @@ def ensure_ops_tables():
                 'certification_body': ['Royal College', 'BMA', 'BMJ', 'ALS', 'Other'],
                 # Medical specialities (shared)
                 'medical_speciality': ['General Medicine', 'General Surgery', 'Paediatrics', 'Obstetrics & Gynaecology', 'Orthopaedics', 'Cardiology', 'Neurology', 'Dermatology', 'Psychiatry', 'Radiology', 'Anaesthesia', 'Emergency Medicine', 'Ophthalmology', 'ENT', 'Pathology', 'Other'],
+                # Partners
+                'partner_type': ['Channel Partner', 'Marketing Partner', 'Consultant'],
+                'partner_status': ['Active', 'Inactive'],
             }
         for category, values in SEED_DATA.items():
             existing = conn.execute("SELECT COUNT(*) as c FROM lookup_options WHERE category = ?", (category,)).fetchone()['c']
@@ -9925,6 +9957,7 @@ CATEGORY_GROUPS = {
     'NGO Activities': ['ngo_vendor', 'ngo_activity_type'],
     'Mentorship': ['mentorship_payment_status', 'mentorship_attendance', 'mentorship_confirmation'],
     'Cab Bookings': ['cab_vendor'],
+    'Partners': ['partner_type', 'partner_status'],
 }
 
 CATEGORY_LABELS = {
@@ -9999,6 +10032,8 @@ CATEGORY_LABELS = {
     'course_provider': 'Course Providers',
     'certification_body': 'Certification Bodies',
     'medical_speciality': 'Medical Specialities',
+    'partner_type': 'Partner Types',
+    'partner_status': 'Partner Statuses',
 }
 
 
@@ -14921,6 +14956,394 @@ def sales_calls_view():
                            year=year, month=month,
                            my_logs=my_logs, rollup=rollup, owners=owners,
                            total_calls=total_calls, total_minutes=total_minutes)
+
+
+# ─────────────────────────────────────────────────────────
+#  SALES – Partners
+# ─────────────────────────────────────────────────────────
+
+PARTNER_EDITORS = ['GC001', 'GC002', 'GC003']
+
+def can_edit_partners(user):
+    """Check if user is admin or in PARTNER_EDITORS."""
+    return user['is_admin'] == 1 or user['emp_code'] in PARTNER_EDITORS
+
+
+@app.route('/partners')
+@login_required
+def partners_list():
+    """Partner list page with search and filters."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    search = request.args.get('q', '').strip()
+    type_filter = request.args.get('type', '').strip()
+    status_filter = request.args.get('status', '').strip()
+
+    try:
+        sql = 'SELECT * FROM partners WHERE 1=1'
+        params = []
+
+        if type_filter:
+            sql += ' AND partner_type = ?'
+            params.append(type_filter)
+        if status_filter:
+            sql += ' AND status = ?'
+            params.append(status_filter)
+        if search:
+            sql += " AND (company_name ILIKE ? OR contact_person ILIKE ? OR city ILIKE ? OR country ILIKE ? OR email ILIKE ?)"
+            params.extend([f'%{search}%'] * 5)
+
+        sql += ' ORDER BY created_at DESC'
+        records = conn.execute(sql, params).fetchall()
+
+        # Get product counts for each partner
+        for r in records:
+            r['product_count'] = conn.execute(
+                'SELECT COUNT(*) as c FROM partner_products WHERE partner_id = ?',
+                (r['id'],)
+            ).fetchone()['c']
+    except Exception as e:
+        logging.error(f"partners_list: {e}")
+        records = []
+
+    conn.close()
+
+    can_edit = can_edit_partners(user)
+    is_admin = user['is_admin'] == 1
+
+    return render_template('partners_list.html',
+                         records=records,
+                         search=search,
+                         type_filter=type_filter,
+                         status_filter=status_filter,
+                         partner_types=get_lookup_options('partner_type'),
+                         partner_statuses=get_lookup_options('partner_status'),
+                         can_edit=can_edit,
+                         is_admin=is_admin)
+
+
+@app.route('/partners/dashboard')
+@login_required
+def partners_dashboard():
+    """Dashboard with partner statistics."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    try:
+        # Basic stats
+        total_partners = conn.execute('SELECT COUNT(*) as c FROM partners').fetchone()['c']
+        active_partners = conn.execute("SELECT COUNT(*) as c FROM partners WHERE status = 'Active'").fetchone()['c']
+        inactive_partners = total_partners - active_partners
+        total_products_linked = conn.execute('SELECT COUNT(*) as c FROM partner_products').fetchone()['c']
+
+        # Partners by type
+        partner_types_data = conn.execute('''
+            SELECT partner_type, COUNT(*) as count
+            FROM partners
+            WHERE partner_type IS NOT NULL
+            GROUP BY partner_type
+            ORDER BY count DESC
+        ''').fetchall()
+
+        # Top cities
+        top_cities = conn.execute('''
+            SELECT city, COUNT(*) as count
+            FROM partners
+            WHERE city IS NOT NULL AND city != ''
+            GROUP BY city
+            ORDER BY count DESC
+            LIMIT 10
+        ''').fetchall()
+
+        # Top countries
+        top_countries = conn.execute('''
+            SELECT country, COUNT(*) as count
+            FROM partners
+            WHERE country IS NOT NULL AND country != ''
+            GROUP BY country
+            ORDER BY count DESC
+            LIMIT 10
+        ''').fetchall()
+
+        # Products assignment breakdown
+        products_breakdown = conn.execute('''
+            SELECT ps.id, ps.name, COUNT(pp.id) as partner_count
+            FROM products_services ps
+            LEFT JOIN partner_products pp ON pp.product_id = ps.id
+            GROUP BY ps.id, ps.name
+            ORDER BY partner_count DESC
+            LIMIT 15
+        ''').fetchall()
+
+    except Exception as e:
+        logging.error(f"partners_dashboard: {e}")
+        total_partners = active_partners = inactive_partners = total_products_linked = 0
+        partner_types_data = top_cities = top_countries = products_breakdown = []
+
+    conn.close()
+
+    return render_template('partners_dashboard.html',
+                         total_partners=total_partners,
+                         active_partners=active_partners,
+                         inactive_partners=inactive_partners,
+                         total_products_linked=total_products_linked,
+                         partner_types_data=partner_types_data,
+                         top_cities=top_cities,
+                         top_countries=top_countries,
+                         products_breakdown=products_breakdown)
+
+
+@app.route('/partners/add', methods=['GET', 'POST'])
+@login_required
+def partners_add():
+    """Add a new partner."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not can_edit_partners(user):
+        conn.close()
+        flash('You do not have permission to add partners.', 'error')
+        return redirect(url_for('partners_list'))
+
+    if request.method == 'POST':
+        f = request.form
+        try:
+            conn.execute('''INSERT INTO partners (
+                company_name, contact_person, email, phone, website,
+                address, city, state, country, partner_type, status, notes, created_by
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+                f.get('company_name'),
+                f.get('contact_person'),
+                f.get('email'),
+                f.get('phone'),
+                f.get('website'),
+                f.get('address'),
+                f.get('city'),
+                f.get('state'),
+                f.get('country'),
+                f.get('partner_type'),
+                f.get('status', 'Active'),
+                f.get('notes'),
+                session.get('user_id', 0)
+            ))
+            partner_id = conn.lastrowid
+
+            # Add products
+            product_ids = request.form.getlist('products')
+            for prod_id in product_ids:
+                try:
+                    conn.execute(
+                        'INSERT INTO partner_products (partner_id, product_id) VALUES (?, ?)',
+                        (partner_id, int(prod_id))
+                    )
+                except Exception:
+                    pass
+
+            conn.commit()
+            conn.close()
+            flash('Partner added successfully.', 'success')
+            return redirect(url_for('partners_list'))
+        except Exception as e:
+            logging.error(f"partners_add: {e}")
+            conn.rollback()
+            conn.close()
+            flash(f'Error adding partner: {e}', 'error')
+            return redirect(url_for('partners_add'))
+
+    conn.close()
+    products = get_db().execute('SELECT id, name FROM products_services WHERE status = ? ORDER BY name', ('active',)).fetchall()
+    get_db().close()
+
+    return render_template('partners_form.html',
+                         record=None,
+                         products=products,
+                         partner_types=get_lookup_options('partner_type'),
+                         partner_statuses=get_lookup_options('partner_status'))
+
+
+@app.route('/partners/<int:pid>/edit', methods=['GET', 'POST'])
+@login_required
+def partners_edit(pid):
+    """Edit an existing partner."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not can_edit_partners(user):
+        conn.close()
+        flash('You do not have permission to edit partners.', 'error')
+        return redirect(url_for('partners_list'))
+
+    record = conn.execute('SELECT * FROM partners WHERE id = ?', (pid,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Partner not found.', 'error')
+        return redirect(url_for('partners_list'))
+
+    if request.method == 'POST':
+        f = request.form
+        try:
+            conn.execute('''UPDATE partners SET
+                company_name = ?, contact_person = ?, email = ?, phone = ?,
+                website = ?, address = ?, city = ?, state = ?, country = ?,
+                partner_type = ?, status = ?, notes = ?
+                WHERE id = ?''', (
+                f.get('company_name'),
+                f.get('contact_person'),
+                f.get('email'),
+                f.get('phone'),
+                f.get('website'),
+                f.get('address'),
+                f.get('city'),
+                f.get('state'),
+                f.get('country'),
+                f.get('partner_type'),
+                f.get('status', 'Active'),
+                f.get('notes'),
+                pid
+            ))
+
+            # Update products
+            conn.execute('DELETE FROM partner_products WHERE partner_id = ?', (pid,))
+            product_ids = request.form.getlist('products')
+            for prod_id in product_ids:
+                try:
+                    conn.execute(
+                        'INSERT INTO partner_products (partner_id, product_id) VALUES (?, ?)',
+                        (pid, int(prod_id))
+                    )
+                except Exception:
+                    pass
+
+            conn.commit()
+            conn.close()
+            flash('Partner updated successfully.', 'success')
+            return redirect(url_for('partners_list'))
+        except Exception as e:
+            logging.error(f"partners_edit: {e}")
+            conn.rollback()
+            conn.close()
+            flash(f'Error updating partner: {e}', 'error')
+            return redirect(url_for('partners_edit', pid=pid))
+
+    # Get linked products
+    linked_products = conn.execute(
+        'SELECT product_id FROM partner_products WHERE partner_id = ?',
+        (pid,)
+    ).fetchall()
+    linked_product_ids = [p['product_id'] for p in linked_products]
+
+    products = conn.execute('SELECT id, name FROM products_services WHERE status = ? ORDER BY name', ('active',)).fetchall()
+    conn.close()
+
+    return render_template('partners_form.html',
+                         record=record,
+                         linked_product_ids=linked_product_ids,
+                         products=products,
+                         partner_types=get_lookup_options('partner_type'),
+                         partner_statuses=get_lookup_options('partner_status'))
+
+
+@app.route('/partners/<int:pid>/delete', methods=['POST'])
+@admin_required
+def partners_delete(pid):
+    """Delete a partner (admin only)."""
+    conn = get_db()
+    try:
+        conn.execute('DELETE FROM partners WHERE id = ?', (pid,))
+        conn.commit()
+        conn.close()
+        flash('Partner deleted successfully.', 'success')
+    except Exception as e:
+        logging.error(f"partners_delete: {e}")
+        conn.rollback()
+        conn.close()
+        flash(f'Error deleting partner: {e}', 'error')
+
+    return redirect(url_for('partners_list'))
+
+
+@app.route('/partners/api/<int:pid>')
+@login_required
+def partners_api(pid):
+    """API endpoint returning partner details + linked products."""
+    conn = get_db()
+
+    partner = conn.execute('SELECT * FROM partners WHERE id = ?', (pid,)).fetchone()
+    if not partner:
+        conn.close()
+        return jsonify({'error': 'Partner not found'}), 404
+
+    # Get linked products
+    products = conn.execute('''
+        SELECT ps.id, ps.name, ps.type
+        FROM products_services ps
+        JOIN partner_products pp ON pp.product_id = ps.id
+        WHERE pp.partner_id = ?
+        ORDER BY ps.name
+    ''', (pid,)).fetchall()
+
+    conn.close()
+
+    return jsonify({
+        'id': partner['id'],
+        'company_name': partner['company_name'],
+        'contact_person': partner['contact_person'],
+        'email': partner['email'],
+        'phone': partner['phone'],
+        'website': partner['website'],
+        'address': partner['address'],
+        'city': partner['city'],
+        'state': partner['state'],
+        'country': partner['country'],
+        'partner_type': partner['partner_type'],
+        'status': partner['status'],
+        'notes': partner['notes'],
+        'created_at': str(partner['created_at']),
+        'products': [{'id': p['id'], 'name': p['name'], 'type': p['type']} for p in products]
+    })
+
+
+@app.route('/partners/<int:pid>/products', methods=['POST'])
+@login_required
+def partners_products(pid):
+    """Update linked products for a partner."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not can_edit_partners(user):
+        conn.close()
+        return jsonify({'error': 'Permission denied'}), 403
+
+    partner = conn.execute('SELECT id FROM partners WHERE id = ?', (pid,)).fetchone()
+    if not partner:
+        conn.close()
+        return jsonify({'error': 'Partner not found'}), 404
+
+    try:
+        product_ids = request.form.getlist('product_ids[]')
+
+        # Clear existing products
+        conn.execute('DELETE FROM partner_products WHERE partner_id = ?', (pid,))
+
+        # Add new products
+        for prod_id in product_ids:
+            try:
+                conn.execute(
+                    'INSERT INTO partner_products (partner_id, product_id) VALUES (?, ?)',
+                    (pid, int(prod_id))
+                )
+            except Exception:
+                pass
+
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Products updated'}), 200
+    except Exception as e:
+        logging.error(f"partners_products: {e}")
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
 
 
 # Run on startup
