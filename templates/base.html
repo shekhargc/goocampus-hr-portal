@@ -913,8 +913,10 @@
                         </span>
                         <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
-                                <a href="/sales">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <!-- ── Sales ── -->
+                                <div style="padding:6px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);">Sales</div>
+                                <a href="/sales" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                                     Sales Dashboard
                                 </a>
                                 <a href="/sales/leads">
@@ -941,11 +943,11 @@
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
                                     Lead Stages
                                 </a>
-                                <a href="/sales/news" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/sales/news">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/></svg>
                                     Sales News
                                 </a>
-                                <a href="/projects" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/projects">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
                                     Projects
                                 </a>
@@ -957,15 +959,19 @@
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
                                     Products &amp; Services
                                 </a>
-                                <a href="/partners" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-                                    Partners
-                                </a>
-                                <a href="/partners/dashboard">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                                <!-- ── Partners ── -->
+                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Partners</div>
+                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                                     Partner Dashboard
                                 </a>
-                                <a href="/b2b" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/partners">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+                                    Partners List
+                                </a>
+                                <!-- ── Meetings ── -->
+                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>
+                                <a href="/b2b">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                                     Meetings
                                 </a>
@@ -1277,12 +1283,14 @@
                         </span>
                         <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
-                                <a href="/sales">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+                                <!-- ── Sales ── -->
+                                <div style="padding:6px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);">Sales</div>
+                                <a href="/sales" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
                                     Sales Dashboard
                                 </a>
-                                <a href="/sales/crm" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                <a href="/sales/crm">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                     Sales CRM
                                 </a>
                                 <a href="/sales/leads">
@@ -1301,7 +1309,7 @@
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7a2 2 0 011.72 2z"/></svg>
                                     Call Reports
                                 </a>
-                                <a href="/sales/news" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/sales/news">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/></svg>
                                     Sales News
                                 </a>
@@ -1317,10 +1325,19 @@
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
                                     Products &amp; Services
                                 </a>
-                                <a href="/partners" style="border-top: 1px solid var(--gray-100);">
-                                    Partners
+                                <!-- ── Partners ── -->
+                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Partners</div>
+                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                                    Partner Dashboard
                                 </a>
-                                <a href="/b2b" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/partners">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+                                    Partners List
+                                </a>
+                                <!-- ── Meetings ── -->
+                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>
+                                <a href="/b2b">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                                     Meetings
                                 </a>
