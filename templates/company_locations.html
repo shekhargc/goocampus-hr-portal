@@ -1,0 +1,123 @@
+{% extends "base.html" %}
+
+{% block title %}State & City Settings - Company{% endblock %}
+
+{% block content %}
+<div style="max-width:1100px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1.5rem;">
+        <div>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">State & City Settings</h1>
+            <p style="font-size:0.85rem;color:var(--gray-500);margin:0;">Manage Indian states and cities used across CRM forms.</p>
+        </div>
+        <form method="POST" action="/company/locations/backfill" style="margin:0;">
+            <button type="submit" style="padding:0.5rem 1rem;background:var(--blue);color:white;border:none;border-radius:8px;font-size:0.82rem;font-weight:600;cursor:pointer;" title="Scan Partners & PLAB Clients and add any missing cities">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;margin-right:4px;"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Backfill from Data
+            </button>
+        </form>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for cat, msg in messages %}
+    <div style="padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:0.85rem;font-weight:500;
+        {% if cat == 'success' %}background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;
+        {% elif cat == 'danger' %}background:#FEF2F2;color:#991B1B;border:1px solid #FECACA;
+        {% else %}background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;{% endif %}">
+        {{ msg }}
+    </div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:1.5rem;">
+        <!-- LEFT: States List -->
+        <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;">
+            <div style="padding:1rem 1.2rem;border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between;">
+                <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0;">States & UTs <span style="font-size:0.78rem;font-weight:500;color:var(--gray-400);">({{ states|length }})</span></h2>
+            </div>
+
+            <!-- Add State Form -->
+            <form method="POST" action="/company/locations/add-state" style="padding:0.8rem 1.2rem;border-bottom:1px solid var(--gray-100);display:flex;gap:0.5rem;">
+                <input type="text" name="name" placeholder="New state name..." required style="flex:1;padding:0.45rem 0.7rem;border:1px solid var(--gray-300);border-radius:6px;font-size:0.82rem;" />
+                <button type="submit" style="padding:0.45rem 0.8rem;background:var(--orange);color:white;border:none;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>
+            </form>
+
+            <div style="max-height:550px;overflow-y:auto;">
+                {% for s in states %}
+                <a href="/company/locations?state_id={{ s.id }}" style="display:flex;align-items:center;justify-content:space-between;padding:0.6rem 1.2rem;border-bottom:1px solid var(--gray-50);text-decoration:none;cursor:pointer;
+                    {% if sel_state and sel_state.id == s.id %}background:var(--orange-light);{% else %}{% endif %}"
+                    onmouseover="if(!this.classList.contains('active'))this.style.background='var(--gray-50)'"
+                    onmouseout="if(!this.classList.contains('active'))this.style.background='{% if sel_state and sel_state.id == s.id %}var(--orange-light){% else %}white{% endif %}'">
+                    <div style="display:flex;align-items:center;gap:0.5rem;">
+                        <span style="font-size:0.85rem;font-weight:{% if sel_state and sel_state.id == s.id %}700{% else %}500{% endif %};color:{% if not s.is_active %}var(--gray-400){% elif sel_state and sel_state.id == s.id %}var(--orange-dark){% else %}var(--gray-700){% endif %};{% if not s.is_active %}text-decoration:line-through;{% endif %}">{{ s.name }}</span>
+                        {% if not s.is_active %}<span style="font-size:0.65rem;background:#FEE2E2;color:#991B1B;padding:1px 6px;border-radius:4px;">Disabled</span>{% endif %}
+                    </div>
+                    <div style="display:flex;align-items:center;gap:0.6rem;">
+                        <span style="font-size:0.75rem;color:var(--gray-400);">{{ s.city_count }} cities</span>
+                        <form method="POST" action="/company/locations/toggle-state/{{ s.id }}" style="margin:0;" onclick="event.stopPropagation();">
+                            <button type="submit" style="background:none;border:none;cursor:pointer;padding:2px;" title="{% if s.is_active %}Disable{% else %}Enable{% endif %}">
+                                {% if s.is_active %}
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                {% else %}
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                {% endif %}
+                            </button>
+                        </form>
+                    </div>
+                </a>
+                {% endfor %}
+            </div>
+        </div>
+
+        <!-- RIGHT: Cities for selected state -->
+        <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);overflow:hidden;">
+            {% if sel_state %}
+            <div style="padding:1rem 1.2rem;border-bottom:1px solid var(--gray-100);">
+                <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0;">Cities in {{ sel_state.name }} <span style="font-size:0.78rem;font-weight:500;color:var(--gray-400);">({{ cities|length }})</span></h2>
+            </div>
+
+            <!-- Add City Form -->
+            <form method="POST" action="/company/locations/add-city" style="padding:0.8rem 1.2rem;border-bottom:1px solid var(--gray-100);display:flex;gap:0.5rem;">
+                <input type="hidden" name="state_id" value="{{ sel_state.id }}" />
+                <input type="text" name="name" placeholder="New city name..." required style="flex:1;padding:0.45rem 0.7rem;border:1px solid var(--gray-300);border-radius:6px;font-size:0.82rem;" />
+                <button type="submit" style="padding:0.45rem 0.8rem;background:var(--orange);color:white;border:none;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add City</button>
+            </form>
+
+            <div style="max-height:550px;overflow-y:auto;">
+                {% for c in cities %}
+                <div style="display:flex;align-items:center;justify-content:space-between;padding:0.5rem 1.2rem;border-bottom:1px solid var(--gray-50);">
+                    <span style="font-size:0.85rem;color:{% if not c.is_active %}var(--gray-400){% else %}var(--gray-700){% endif %};{% if not c.is_active %}text-decoration:line-through;{% endif %}">{{ c.name }}</span>
+                    <div style="display:flex;align-items:center;gap:0.4rem;">
+                        <form method="POST" action="/company/locations/toggle-city/{{ c.id }}" style="margin:0;">
+                            <button type="submit" style="background:none;border:none;cursor:pointer;padding:2px;" title="{% if c.is_active %}Disable{% else %}Enable{% endif %}">
+                                {% if c.is_active %}
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#10B981" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+                                {% else %}
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+                                {% endif %}
+                            </button>
+                        </form>
+                        <form method="POST" action="/company/locations/delete-city/{{ c.id }}" style="margin:0;" onsubmit="return confirm('Delete city {{ c.name }}?');">
+                            <button type="submit" style="background:none;border:none;cursor:pointer;padding:2px;" title="Delete">
+                                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="#EF4444" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 01-2 2H7a2 2 0 01-2-2V6m3 0V4a2 2 0 012-2h4a2 2 0 012 2v2"/></svg>
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                {% endfor %}
+                {% if not cities %}
+                <div style="padding:2rem;text-align:center;color:var(--gray-400);font-size:0.85rem;">No cities added yet for this state.</div>
+                {% endif %}
+            </div>
+            {% else %}
+            <div style="padding:3rem;text-align:center;color:var(--gray-400);">
+                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="margin-bottom:0.8rem;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                <p style="font-size:0.9rem;font-weight:600;margin:0 0 0.3rem 0;">Select a State</p>
+                <p style="font-size:0.82rem;margin:0;">Click on a state to view and manage its cities.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+{% endblock %}

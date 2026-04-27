@@ -9461,6 +9461,70 @@ def ensure_ops_tables():
             UNIQUE(partner_id, product_id)
         )''')
 
+        # ── States & Cities ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS states (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            code TEXT,
+            sort_order INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS cities (
+            id SERIAL PRIMARY KEY,
+            state_id INTEGER REFERENCES states(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            UNIQUE(state_id, name)
+        )''')
+
+        # Seed states & cities if empty
+        state_count = conn.execute("SELECT COUNT(*) as c FROM states").fetchone()['c']
+        if state_count == 0:
+            INDIA_STATES_CITIES = {
+                'Andhra Pradesh': ['Visakhapatnam', 'Vijayawada', 'Guntur', 'Nellore', 'Kurnool', 'Rajahmundry', 'Tirupati', 'Kakinada', 'Kadapa', 'Anantapur', 'Eluru', 'Ongole', 'Chittoor', 'Machilipatnam', 'Srikakulam', 'Adoni', 'Tenali', 'Proddatur', 'Hindupur', 'Bhimavaram'],
+                'Arunachal Pradesh': ['Itanagar', 'Naharlagun', 'Pasighat', 'Tawang', 'Ziro', 'Bomdila', 'Along', 'Tezu', 'Roing', 'Daporijo'],
+                'Assam': ['Guwahati', 'Silchar', 'Dibrugarh', 'Jorhat', 'Nagaon', 'Tinsukia', 'Tezpur', 'Bongaigaon', 'Karimganj', 'Dhubri', 'North Lakhimpur', 'Goalpara', 'Sivasagar'],
+                'Bihar': ['Patna', 'Gaya', 'Bhagalpur', 'Muzaffarpur', 'Purnia', 'Darbhanga', 'Arrah', 'Begusarai', 'Katihar', 'Munger', 'Chhapra', 'Bihar Sharif', 'Saharsa', 'Hajipur', 'Dehri', 'Siwan', 'Motihari', 'Nawada', 'Bettiah', 'Samastipur'],
+                'Chhattisgarh': ['Raipur', 'Bhilai', 'Bilaspur', 'Korba', 'Durg', 'Rajnandgaon', 'Raigarh', 'Jagdalpur', 'Ambikapur', 'Mahasamund', 'Dhamtari', 'Chirmiri', 'Kanker'],
+                'Goa': ['Panaji', 'Margao', 'Vasco da Gama', 'Mapusa', 'Ponda', 'Bicholim', 'Curchorem', 'Sanquelim', 'Canacona', 'Quepem'],
+                'Gujarat': ['Ahmedabad', 'Surat', 'Vadodara', 'Rajkot', 'Bhavnagar', 'Jamnagar', 'Junagadh', 'Gandhinagar', 'Anand', 'Navsari', 'Morbi', 'Nadiad', 'Mehsana', 'Surendranagar', 'Bharuch', 'Vapi', 'Gandhidham', 'Godhra', 'Palanpur', 'Porbandar'],
+                'Haryana': ['Gurugram', 'Faridabad', 'Panipat', 'Ambala', 'Yamunanagar', 'Rohtak', 'Hisar', 'Karnal', 'Sonipat', 'Panchkula', 'Bhiwani', 'Sirsa', 'Bahadurgarh', 'Jind', 'Thanesar', 'Kaithal', 'Rewari', 'Palwal'],
+                'Himachal Pradesh': ['Shimla', 'Dharamshala', 'Solan', 'Mandi', 'Palampur', 'Baddi', 'Nahan', 'Kullu', 'Manali', 'Hamirpur', 'Una', 'Bilaspur', 'Chamba', 'Kangra'],
+                'Jharkhand': ['Ranchi', 'Jamshedpur', 'Dhanbad', 'Bokaro', 'Deoghar', 'Hazaribag', 'Giridih', 'Ramgarh', 'Medininagar', 'Phusro', 'Dumka', 'Chaibasa'],
+                'Karnataka': ['Bengaluru', 'Mysuru', 'Hubli-Dharwad', 'Mangaluru', 'Belagavi', 'Davanagere', 'Ballari', 'Tumakuru', 'Shivamogga', 'Raichur', 'Bidar', 'Hospet', 'Gadag-Betageri', 'Hassan', 'Udupi', 'Robertson Pet', 'Chitradurga', 'Kolar', 'Mandya', 'Chikkamagaluru'],
+                'Kerala': ['Thiruvananthapuram', 'Kochi', 'Kozhikode', 'Thrissur', 'Kollam', 'Palakkad', 'Alappuzha', 'Kannur', 'Kottayam', 'Malappuram', 'Kasaragod', 'Pathanamthitta', 'Idukki', 'Wayanad'],
+                'Madhya Pradesh': ['Bhopal', 'Indore', 'Jabalpur', 'Gwalior', 'Ujjain', 'Sagar', 'Dewas', 'Satna', 'Ratlam', 'Rewa', 'Murwara', 'Singrauli', 'Burhanpur', 'Khandwa', 'Bhind', 'Chhindwara', 'Guna', 'Shivpuri', 'Vidisha', 'Damoh'],
+                'Maharashtra': ['Mumbai', 'Pune', 'Nagpur', 'Thane', 'Nashik', 'Aurangabad', 'Solapur', 'Kolhapur', 'Amravati', 'Navi Mumbai', 'Sangli', 'Malegaon', 'Jalgaon', 'Akola', 'Latur', 'Dhule', 'Ahmednagar', 'Chandrapur', 'Parbhani', 'Ichalkaranji', 'Jalna', 'Nanded', 'Satara', 'Ratnagiri'],
+                'Manipur': ['Imphal', 'Thoubal', 'Bishnupur', 'Churachandpur', 'Kakching', 'Ukhrul', 'Senapati', 'Tamenglong'],
+                'Meghalaya': ['Shillong', 'Tura', 'Nongstoin', 'Jowai', 'Baghmara', 'Williamnagar', 'Resubelpara'],
+                'Mizoram': ['Aizawl', 'Lunglei', 'Champhai', 'Serchhip', 'Kolasib', 'Saiha', 'Lawngtlai', 'Mamit'],
+                'Nagaland': ['Kohima', 'Dimapur', 'Mokokchung', 'Tuensang', 'Wokha', 'Zunheboto', 'Mon', 'Phek'],
+                'Odisha': ['Bhubaneswar', 'Cuttack', 'Rourkela', 'Berhampur', 'Sambalpur', 'Puri', 'Balasore', 'Baripada', 'Bhadrak', 'Jharsuguda', 'Jeypore', 'Bargarh', 'Koraput', 'Angul'],
+                'Punjab': ['Ludhiana', 'Amritsar', 'Jalandhar', 'Patiala', 'Bathinda', 'Mohali', 'Hoshiarpur', 'Batala', 'Pathankot', 'Moga', 'Abohar', 'Malerkotla', 'Khanna', 'Muktsar', 'Barnala', 'Rajpura', 'Firozpur', 'Kapurthala', 'Phagwara'],
+                'Rajasthan': ['Jaipur', 'Jodhpur', 'Kota', 'Bikaner', 'Ajmer', 'Udaipur', 'Bhilwara', 'Alwar', 'Bharatpur', 'Sikar', 'Pali', 'Sri Ganganagar', 'Tonk', 'Beawar', 'Hanumangarh', 'Kishangarh', 'Nagaur', 'Makrana', 'Sujangarh', 'Jhunjhunu'],
+                'Sikkim': ['Gangtok', 'Namchi', 'Gyalshing', 'Mangan', 'Rangpo', 'Singtam', 'Jorethang'],
+                'Tamil Nadu': ['Chennai', 'Coimbatore', 'Madurai', 'Tiruchirappalli', 'Salem', 'Tirunelveli', 'Tiruppur', 'Vellore', 'Erode', 'Thoothukudi', 'Dindigul', 'Thanjavur', 'Ranipet', 'Sivakasi', 'Karur', 'Nagercoil', 'Kanchipuram', 'Hosur', 'Cuddalore', 'Kumbakonam'],
+                'Telangana': ['Hyderabad', 'Warangal', 'Nizamabad', 'Karimnagar', 'Ramagundam', 'Khammam', 'Mahbubnagar', 'Nalgonda', 'Adilabad', 'Suryapet', 'Siddipet', 'Miryalaguda', 'Jagtial', 'Mancherial'],
+                'Tripura': ['Agartala', 'Udaipur', 'Dharmanagar', 'Kailasahar', 'Belonia', 'Ambassa', 'Khowai', 'Sabroom'],
+                'Uttar Pradesh': ['Lucknow', 'Kanpur', 'Agra', 'Varanasi', 'Meerut', 'Prayagraj', 'Ghaziabad', 'Noida', 'Bareilly', 'Aligarh', 'Moradabad', 'Gorakhpur', 'Saharanpur', 'Jhansi', 'Mathura', 'Firozabad', 'Ayodhya', 'Muzaffarnagar', 'Shahjahanpur', 'Rampur', 'Etawah', 'Maunath Bhanjan', 'Hapur', 'Sambhal', 'Loni', 'Bulandshahr'],
+                'Uttarakhand': ['Dehradun', 'Haridwar', 'Roorkee', 'Haldwani', 'Rudrapur', 'Kashipur', 'Rishikesh', 'Pithoragarh', 'Ramnagar', 'Mussoorie', 'Nainital', 'Almora', 'Kotdwar'],
+                'West Bengal': ['Kolkata', 'Howrah', 'Asansol', 'Siliguri', 'Durgapur', 'Bardhaman', 'Malda', 'Baharampur', 'Habra', 'Kharagpur', 'Shantipur', 'Raiganj', 'Haldia', 'Krishnanagar', 'Medinipur', 'Jalpaiguri', 'Balurghat', 'Basirhat', 'Bankura', 'Darjeeling'],
+                'Andaman and Nicobar Islands': ['Port Blair', 'Diglipur', 'Rangat', 'Mayabunder', 'Bamboo Flat'],
+                'Chandigarh': ['Chandigarh'],
+                'Dadra and Nagar Haveli and Daman and Diu': ['Silvassa', 'Daman', 'Diu'],
+                'Delhi': ['New Delhi', 'Delhi', 'Dwarka', 'Rohini', 'Saket', 'Karol Bagh', 'Lajpat Nagar', 'Janakpuri'],
+                'Jammu and Kashmir': ['Srinagar', 'Jammu', 'Anantnag', 'Baramulla', 'Sopore', 'Kathua', 'Udhampur', 'Pulwama', 'Kupwara', 'Poonch', 'Rajouri'],
+                'Ladakh': ['Leh', 'Kargil'],
+                'Lakshadweep': ['Kavaratti', 'Agatti', 'Minicoy', 'Andrott', 'Amini'],
+                'Puducherry': ['Puducherry', 'Karaikal', 'Mahe', 'Yanam'],
+            }
+            for sort_idx, (state_name, cities_list) in enumerate(sorted(INDIA_STATES_CITIES.items()), 1):
+                conn.execute("INSERT INTO states (name, sort_order, is_active) VALUES (?, ?, TRUE)", (state_name, sort_idx))
+                state_row = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
+                for city_name in cities_list:
+                    conn.execute("INSERT INTO cities (state_id, name, is_active) VALUES (?, ?, TRUE)", (state_row['id'], city_name))
+            conn.commit()
+
         # ── Lookup Options (for PLAB Settings) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS lookup_options (
             id SERIAL PRIMARY KEY,
@@ -15364,6 +15428,229 @@ try:
 except Exception as _sync_err:
     logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
+
+# ═══════════════════════════════════════════════════════════════
+#  STATE & CITY  – API + Settings
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/api/states')
+@login_required
+def api_states():
+    """Return all active states as JSON."""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY sort_order, name").fetchall()
+        return jsonify([{'id': r['id'], 'name': r['name']} for r in rows])
+    except Exception as e:
+        logging.error(f"api_states: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
+@app.route('/api/cities')
+@login_required
+def api_cities():
+    """Return cities for a given state (by name or id). Supports ?state=Name or ?state_id=123"""
+    conn = get_db()
+    try:
+        state_name = request.args.get('state', '').strip()
+        state_id = request.args.get('state_id', '').strip()
+        if state_id:
+            rows = conn.execute("SELECT id, name FROM cities WHERE state_id = ? AND is_active = TRUE ORDER BY name", (int(state_id),)).fetchall()
+        elif state_name:
+            st = conn.execute("SELECT id FROM states WHERE name = ? AND is_active = TRUE", (state_name,)).fetchone()
+            if st:
+                rows = conn.execute("SELECT id, name FROM cities WHERE state_id = ? AND is_active = TRUE ORDER BY name", (st['id'],)).fetchall()
+            else:
+                rows = []
+        else:
+            rows = []
+        return jsonify([{'id': r['id'], 'name': r['name']} for r in rows])
+    except Exception as e:
+        logging.error(f"api_cities: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
+@app.route('/company/locations')
+@admin_required
+def company_locations():
+    """Admin page to manage States & Cities."""
+    conn = get_db()
+    try:
+        states = conn.execute("SELECT s.id, s.name, s.code, s.is_active, (SELECT COUNT(*) FROM cities c WHERE c.state_id = s.id) as city_count FROM states s ORDER BY s.sort_order, s.name").fetchall()
+        # Get selected state for city view
+        sel_state_id = request.args.get('state_id', '')
+        cities = []
+        sel_state = None
+        if sel_state_id:
+            sel_state = conn.execute("SELECT id, name FROM states WHERE id = ?", (int(sel_state_id),)).fetchone()
+            cities = conn.execute("SELECT id, name, is_active FROM cities WHERE state_id = ? ORDER BY name", (int(sel_state_id),)).fetchall()
+        return render_template('company_locations.html', states=states, cities=cities, sel_state=sel_state)
+    except Exception as e:
+        logging.error(f"company_locations: {e}")
+        flash(f"Error: {e}", "danger")
+        return redirect('/admin/dashboard')
+    finally:
+        conn.close()
+
+
+@app.route('/company/locations/add-state', methods=['POST'])
+@admin_required
+def company_locations_add_state():
+    name = request.form.get('name', '').strip()
+    if not name:
+        flash("State name is required.", "danger")
+        return redirect('/company/locations')
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM states WHERE name = ?", (name,)).fetchone()
+        if existing:
+            flash(f"State '{name}' already exists.", "warning")
+        else:
+            max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM states").fetchone()['m']
+            conn.execute("INSERT INTO states (name, sort_order, is_active) VALUES (?, ?, TRUE)", (name, max_sort + 1))
+            conn.commit()
+            flash(f"State '{name}' added.", "success")
+    except Exception as e:
+        logging.error(f"add_state: {e}")
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect('/company/locations')
+
+
+@app.route('/company/locations/add-city', methods=['POST'])
+@admin_required
+def company_locations_add_city():
+    state_id = request.form.get('state_id', '').strip()
+    name = request.form.get('name', '').strip()
+    if not state_id or not name:
+        flash("State and city name are required.", "danger")
+        return redirect('/company/locations')
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT id FROM cities WHERE state_id = ? AND name = ?", (int(state_id), name)).fetchone()
+        if existing:
+            flash(f"City '{name}' already exists in this state.", "warning")
+        else:
+            conn.execute("INSERT INTO cities (state_id, name, is_active) VALUES (?, ?, TRUE)", (int(state_id), name))
+            conn.commit()
+            flash(f"City '{name}' added.", "success")
+    except Exception as e:
+        logging.error(f"add_city: {e}")
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(f'/company/locations?state_id={state_id}')
+
+
+@app.route('/company/locations/toggle-state/<int:state_id>', methods=['POST'])
+@admin_required
+def company_locations_toggle_state(state_id):
+    conn = get_db()
+    try:
+        current = conn.execute("SELECT is_active FROM states WHERE id = ?", (state_id,)).fetchone()
+        if current:
+            new_val = not current['is_active']
+            conn.execute("UPDATE states SET is_active = ? WHERE id = ?", (new_val, state_id))
+            conn.commit()
+    except Exception as e:
+        logging.error(f"toggle_state: {e}")
+    finally:
+        conn.close()
+    return redirect('/company/locations')
+
+
+@app.route('/company/locations/toggle-city/<int:city_id>', methods=['POST'])
+@admin_required
+def company_locations_toggle_city(city_id):
+    conn = get_db()
+    try:
+        current = conn.execute("SELECT state_id, is_active FROM cities WHERE id = ?", (city_id,)).fetchone()
+        if current:
+            new_val = not current['is_active']
+            conn.execute("UPDATE cities SET is_active = ? WHERE id = ?", (new_val, city_id))
+            conn.commit()
+            return redirect(f'/company/locations?state_id={current["state_id"]}')
+    except Exception as e:
+        logging.error(f"toggle_city: {e}")
+    finally:
+        conn.close()
+    return redirect('/company/locations')
+
+
+@app.route('/company/locations/delete-city/<int:city_id>', methods=['POST'])
+@admin_required
+def company_locations_delete_city(city_id):
+    conn = get_db()
+    try:
+        city = conn.execute("SELECT state_id FROM cities WHERE id = ?", (city_id,)).fetchone()
+        state_id = city['state_id'] if city else ''
+        conn.execute("DELETE FROM cities WHERE id = ?", (city_id,))
+        conn.commit()
+        flash("City deleted.", "success")
+        return redirect(f'/company/locations?state_id={state_id}')
+    except Exception as e:
+        logging.error(f"delete_city: {e}")
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect('/company/locations')
+
+
+@app.route('/company/locations/backfill', methods=['POST'])
+@admin_required
+def company_locations_backfill():
+    """Scan partners + plab_clients tables for city/state combos not in the DB, and add them."""
+    conn = get_db()
+    added = 0
+    try:
+        # Collect all existing state/city pairs from data
+        queries = [
+            "SELECT DISTINCT state, city FROM partners WHERE state IS NOT NULL AND state != '' AND city IS NOT NULL AND city != ''",
+            "SELECT DISTINCT state, city FROM plab_clients WHERE state IS NOT NULL AND state != '' AND city IS NOT NULL AND city != ''",
+        ]
+        data_pairs = []
+        for q in queries:
+            try:
+                rows = conn.execute(q).fetchall()
+                data_pairs.extend([(r['state'].strip(), r['city'].strip()) for r in rows if r['state'] and r['city']])
+            except Exception:
+                pass
+        # Deduplicate
+        seen = set()
+        unique_pairs = []
+        for s, c in data_pairs:
+            key = (s.lower(), c.lower())
+            if key not in seen:
+                seen.add(key)
+                unique_pairs.append((s, c))
+        # For each pair, check if state exists (case-insensitive), then check city
+        for state_name, city_name in unique_pairs:
+            st = conn.execute("SELECT id FROM states WHERE LOWER(name) = LOWER(?)", (state_name,)).fetchone()
+            if not st:
+                # State doesn't exist — add it
+                max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM states").fetchone()['m']
+                conn.execute("INSERT INTO states (name, sort_order, is_active) VALUES (?, ?, TRUE)", (state_name, max_sort + 1))
+                conn.commit()
+                st = conn.execute("SELECT id FROM states WHERE LOWER(name) = LOWER(?)", (state_name,)).fetchone()
+            # Check city
+            existing_city = conn.execute("SELECT id FROM cities WHERE state_id = ? AND LOWER(name) = LOWER(?)", (st['id'], city_name)).fetchone()
+            if not existing_city:
+                conn.execute("INSERT INTO cities (state_id, name, is_active) VALUES (?, ?, TRUE)", (st['id'], city_name))
+                added += 1
+        conn.commit()
+        flash(f"Backfill complete. {added} new cities added from existing data.", "success")
+    except Exception as e:
+        logging.error(f"backfill: {e}")
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect('/company/locations')
+
 
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))

@@ -94,20 +94,24 @@
                 </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">DOB</label>
                     <input type="date" name="dob" value="{{ item.dob or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City</label>
-                    <input type="text" name="city" value="{{ item.city or '' }}" placeholder="City" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State</label>
+                    <select name="state" id="state_select" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select State</option>
+                    </select>
                 </div>
-            </div>
-
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State</label>
-                <input type="text" name="state" value="{{ item.state or '' }}" placeholder="State/Province" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City</label>
+                    <div style="position:relative;">
+                        <input type="text" name="city" id="city_input" autocomplete="off" value="{{ item.city or '' }}" placeholder="Select or type city..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                        <div id="city_dropdown" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:200px;overflow-y:auto;"></div>
+                    </div>
+                </div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
@@ -492,5 +496,80 @@ document.addEventListener('DOMContentLoaded', function() {
     // Initialize on page load
     updateFinalPackage();
 });
+</script>
+
+<script>
+(function() {
+    const stateSelect = document.getElementById('state_select');
+    const cityInput = document.getElementById('city_input');
+    const cityDropdown = document.getElementById('city_dropdown');
+    if (!stateSelect || !cityInput) return;
+
+    const existingState = {{ (item.state or '')|tojson }};
+    const existingCity = {{ (item.city or '')|tojson }};
+    let allCities = [];
+
+    fetch('/api/states').then(r => r.json()).then(states => {
+        states.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
+            if (existingState && s.name.toLowerCase() === existingState.toLowerCase()) opt.selected = true;
+            stateSelect.appendChild(opt);
+        });
+        if (existingState && !stateSelect.value) {
+            const opt = document.createElement('option');
+            opt.value = existingState;
+            opt.textContent = existingState + ' (custom)';
+            opt.selected = true;
+            stateSelect.appendChild(opt);
+        }
+        if (stateSelect.value) loadCities(stateSelect.value);
+    });
+
+    stateSelect.addEventListener('change', function() {
+        cityInput.value = '';
+        if (this.value) loadCities(this.value);
+        else { allCities = []; hideDrop(); }
+    });
+
+    function loadCities(stateName) {
+        fetch('/api/cities?state=' + encodeURIComponent(stateName))
+            .then(r => r.json())
+            .then(cities => {
+                allCities = cities.map(c => c.name);
+                if (existingCity && cityInput.value === '' && stateName.toLowerCase() === existingState.toLowerCase()) {
+                    cityInput.value = existingCity;
+                }
+            });
+    }
+
+    cityInput.addEventListener('focus', function() { showFiltered(this.value); });
+    cityInput.addEventListener('input', function() { showFiltered(this.value); });
+
+    function showFiltered(q) {
+        const lower = q.toLowerCase();
+        const filtered = allCities.filter(c => c.toLowerCase().includes(lower));
+        if (!filtered.length) { hideDrop(); return; }
+        cityDropdown.innerHTML = filtered.map(c =>
+            '<div style="padding:0.5rem 0.8rem;cursor:pointer;font-size:0.84rem;border-bottom:1px solid #f3f4f6;" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' + esc(c) + '</div>'
+        ).join('');
+        cityDropdown.querySelectorAll('div').forEach(el => {
+            el.addEventListener('mousedown', function(e) {
+                e.preventDefault();
+                cityInput.value = this.textContent;
+                hideDrop();
+            });
+        });
+        cityDropdown.style.display = 'block';
+    }
+
+    document.addEventListener('click', function(e) {
+        if (!cityInput.contains(e.target) && !cityDropdown.contains(e.target)) hideDrop();
+    });
+
+    function hideDrop() { cityDropdown.style.display = 'none'; cityDropdown.innerHTML = ''; }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
 </script>
 {% endblock %}
