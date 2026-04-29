@@ -1,4 +1,5 @@
 import os
+import re
 import hashlib
 import logging
 from datetime import datetime, timedelta
@@ -13554,8 +13555,16 @@ def _extract_reg_number(candidate_str):
     """Extract registration number from 'Dr.Name - GCUKIP/XX-XX/XXX' format."""
     if not candidate_str:
         return ''
-    parts = str(candidate_str).rsplit(' - ', 1)
-    return parts[1].strip() if len(parts) == 2 else ''
+    candidate_str = str(candidate_str).strip()
+    # Try ' - ' separator first (old format: "Dr.Name - GCUKIP/2019/001")
+    parts = candidate_str.rsplit(' - ', 1)
+    if len(parts) == 2:
+        return parts[1].strip()
+    # Look for GCUKIP anywhere after a dash/space (new format: "Dr.Name -GCUKIP/24-25/002")
+    m = re.search(r'[-\s](GCUKIP/\S+)', candidate_str)
+    if m:
+        return m.group(1).strip()
+    return ''
 
 
 def _read_import_file(data_file):
