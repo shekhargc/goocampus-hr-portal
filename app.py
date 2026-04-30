@@ -16003,106 +16003,86 @@ def upload_attendance():
             flash('Only .xls and .xlsx files are supported', 'error')
             return render_template('upload_attendance.html', user=user)
 
-        import tempfile, os
+        import tempfile
 
         # Save uploaded file temporarily — preserve original extension
-        file_ext = os.path.splitext(file.filename)[1].lower() or '.xls'
+        file_ext = os.path.splitext(file.filename)[1].lower() or '.xlsx'
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
         file.save(tmp.name)
         tmp.close()
+        tmp_path = tmp.name
 
         try:
-            # Try xlrd first (true .xls format), fall back to openpyxl (.xlsx disguised as .xls)
+            # ── Step 1: Open the workbook ──
             sheet = None
             use_openpyxl = False
-            xlrd_available = False
+
+            # Try xlrd first for .xls files
             try:
                 import xlrd
-                xlrd_available = True
+                wb = xlrd.open_workbook(tmp_path)
+                sheet = wb.sheets()[0]
+                logging.info(f"Attendance file opened with xlrd ({sheet.nrows} rows)")
             except ImportError:
-                logging.warning("xlrd not installed — will try openpyxl only")
+                logging.info("xlrd not available, using openpyxl")
+            except Exception as xlrd_err:
+                logging.info(f"xlrd failed ({xlrd_err}), trying openpyxl")
 
-            if xlrd_available:
-                try:
-                    wb = xlrd.open_workbook(tmp.name)
-                    sheet = wb.sheets()[0]
-                except xlrd.biffh.XLRDError:
-                    # Not a true .xls — try openpyxl
-                    logging.info("xlrd cannot read file, falling back to openpyxl")
-                    xlrd_available = False
-
-            if not xlrd_available or sheet is None:
-                # Check if it's a true .xls that we can't read without xlrd
-                with open(tmp.name, 'rb') as f:
-                    magic = f.read(8)
-                is_ole = magic[:4] == b'\xd0\xcf\x11\xe0'  # OLE2 magic bytes = true .xls
-                if is_ole:
-                    if not xlrd_available:
-                        flash('This is an old-format .xls file. Please convert it to .xlsx first (open in Excel or Google Sheets → Save As → .xlsx), then upload the .xlsx version.', 'error')
-                        os.unlink(tmp.name)
-                        return render_template('upload_attendance.html', user=user)
-                    else:
-                        # xlrd is available but failed for another reason — re-raise
-                        raise Exception("xlrd failed to read the .xls file")
-
-                from openpyxl import load_workbook
-                wb = load_workbook(tmp.name, read_only=True, data_only=True)
+            # Fall back to openpyxl
+            if sheet is None:
+                from openpyxl import load_workbook as load_wb
+                wb = load_wb(tmp_path, read_only=True, data_only=True)
                 sheet = wb.active
                 use_openpyxl = True
+                logging.info(f"Attendance file opened with openpyxl ({sheet.max_row} rows)")
 
-            conn = get_db()
-            # Build emp_code → employee_id map
-            employees = conn.execute("SELECT id, emp_code FROM employees WHERE is_active = 1").fetchall()
-            code_map = {e['emp_code']: e['id'] for e in employees}
-
-            current_date = None
-            skipped = 0
-            rows_to_upsert = []
-
-            # Cell reader abstraction: xlrd uses 0-based (row, col), openpyxl uses 1-based (row, column)
-            def cell_val(r, c):
-                """Read cell value at 0-based row r, 0-based col c."""
+            # ── Step 2: Cell reader helpers ──
+            def cv(r, c):
+                """Cell value as string (0-based row/col)."""
                 try:
-                    if use_openpyxl:
-                        v = sheet.cell(row=r + 1, column=c + 1).value
-                    else:
-                        v = sheet.cell(r, c).value
+                    v = sheet.cell(row=r+1, column=c+1).value if use_openpyxl else sheet.cell(r, c).value
                     return str(v).strip() if v is not None else ''
                 except Exception:
                     return ''
 
-            def cell_raw(r, c):
-                """Read raw cell value (not stringified)."""
+            def cr(r, c):
+                """Cell raw value (0-based row/col)."""
                 try:
-                    if use_openpyxl:
-                        return sheet.cell(row=r + 1, column=c + 1).value
-                    else:
-                        return sheet.cell(r, c).value
+                    return sheet.cell(row=r+1, column=c+1).value if use_openpyxl else sheet.cell(r, c).value
                 except Exception:
                     return None
 
             total_rows = sheet.max_row if use_openpyxl else sheet.nrows
             total_cols = sheet.max_column if use_openpyxl else sheet.ncols
 
-            for r in range(total_rows):
-                cell_b = cell_val(r, 1)
+            # ── Step 3: Build employee lookup ──
+            conn = get_db()
+            employees = conn.execute("SELECT id, emp_code FROM employees WHERE is_active = 1").fetchall()
+            code_map = {e['emp_code']: e['id'] for e in employees}
+            logging.info(f"Employee lookup: {len(code_map)} active employees")
 
-                # Detect date header rows
-                if cell_b == 'Attendance Date :':
-                    current_date = cell_val(r, 5)
+            # ── Step 4: Parse rows ──
+            current_date = None
+            skipped = 0
+            rows = []
+
+            for r in range(total_rows):
+                b = cv(r, 1)
+
+                if b == 'Attendance Date :':
+                    current_date = cv(r, 5)
                     continue
 
                 if not current_date:
                     continue
 
-                # Detect data rows (SNo column is numeric)
-                cell_sno = cell_raw(r, 1)
+                sno = cr(r, 1)
                 try:
-                    float(cell_sno)
+                    float(sno)
                 except (ValueError, TypeError):
                     continue
 
-                e_code_raw = cell_val(r, 2)
+                e_code_raw = cv(r, 2)
                 if not e_code_raw:
                     continue
 
@@ -16112,81 +16092,57 @@ def upload_attendance():
                     skipped += 1
                     continue
 
-                # Parse date to standard format
                 try:
-                    from datetime import datetime as dt_parse
-                    parsed_date = dt_parse.strptime(current_date, '%d-%b-%Y').strftime('%Y-%m-%d')
+                    parsed_date = datetime.strptime(current_date, '%d-%b-%Y').strftime('%Y-%m-%d')
                 except ValueError:
                     parsed_date = current_date
 
-                shift = cell_val(r, 5)
-                scheduled_in = cell_val(r, 6)
-                scheduled_out = cell_val(r, 7)
-                actual_in = cell_val(r, 9)
-                actual_out = cell_val(r, 10)
-                work_dur = cell_val(r, 11)
-                ot = cell_val(r, 12)
-                total_dur = cell_val(r, 13)
-                late_by = cell_val(r, 14)
-                early_going = cell_val(r, 15)
-                status = cell_val(r, 16)
-                punch_recs = cell_val(r, 18) if total_cols > 18 else ''
-
-                rows_to_upsert.append((
-                    employee_id, parsed_date, shift, scheduled_in, scheduled_out,
-                    actual_in, actual_out, work_dur, ot, total_dur,
-                    late_by, early_going, status, punch_recs
+                rows.append((
+                    employee_id, parsed_date, cv(r,5), cv(r,6), cv(r,7),
+                    cv(r,9), cv(r,10), cv(r,11), cv(r,12), cv(r,13),
+                    cv(r,14), cv(r,15), cv(r,16),
+                    cv(r,18) if total_cols > 18 else ''
                 ))
 
-            # Bulk upsert — use PostgreSQL ON CONFLICT or SQLite fallback
-            imported = 0
-            updated = 0
-            if conn.is_postgres:
-                for row in rows_to_upsert:
+            logging.info(f"Parsed {len(rows)} attendance rows, {skipped} skipped")
+
+            # ── Step 5: Delete existing records for the date range, then bulk insert ──
+            if rows:
+                dates = set(r[1] for r in rows)
+                min_date = min(dates)
+                max_date = max(dates)
+                emp_ids = set(r[0] for r in rows)
+
+                # Delete old records in the date range for these employees
+                for eid in emp_ids:
+                    conn.execute(
+                        "DELETE FROM attendance_logs WHERE employee_id = ? AND attendance_date >= ? AND attendance_date <= ?",
+                        (eid, min_date, max_date)
+                    )
+
+                # Insert all rows fresh
+                for row in rows:
                     conn.execute("""INSERT INTO attendance_logs (
                         employee_id, attendance_date, shift, scheduled_in, scheduled_out,
                         actual_in, actual_out, work_duration, overtime, total_duration,
                         late_by, early_going_by, status, punch_records
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
-                    ON CONFLICT (employee_id, attendance_date) DO UPDATE SET
-                        shift=EXCLUDED.shift, scheduled_in=EXCLUDED.scheduled_in,
-                        scheduled_out=EXCLUDED.scheduled_out, actual_in=EXCLUDED.actual_in,
-                        actual_out=EXCLUDED.actual_out, work_duration=EXCLUDED.work_duration,
-                        overtime=EXCLUDED.overtime, total_duration=EXCLUDED.total_duration,
-                        late_by=EXCLUDED.late_by, early_going_by=EXCLUDED.early_going_by,
-                        status=EXCLUDED.status, punch_records=EXCLUDED.punch_records
-                    """, row)
-                imported = len(rows_to_upsert)
-            else:
-                for row in rows_to_upsert:
-                    existing = conn.execute(
-                        "SELECT id FROM attendance_logs WHERE employee_id = ? AND attendance_date = ?",
-                        (row[0], row[1])
-                    ).fetchone()
-                    if existing:
-                        conn.execute("""UPDATE attendance_logs SET
-                            shift=?, scheduled_in=?, scheduled_out=?,
-                            actual_in=?, actual_out=?, work_duration=?,
-                            overtime=?, total_duration=?, late_by=?,
-                            early_going_by=?, status=?, punch_records=?
-                            WHERE id=?""", row[2:] + (existing['id'],))
-                        updated += 1
-                    else:
-                        conn.execute("""INSERT INTO attendance_logs (
-                            employee_id, attendance_date, shift, scheduled_in, scheduled_out,
-                            actual_in, actual_out, work_duration, overtime, total_duration,
-                            late_by, early_going_by, status, punch_records
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", row)
-                        imported += 1
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", row)
 
-            conn.commit()
+                conn.commit()
+                logging.info(f"Attendance import committed: {len(rows)} records")
+
             conn.close()
-            flash(f'Import complete: {len(rows_to_upsert)} records processed ({skipped} skipped — unmatched codes)', 'success')
+            flash(f'Import complete: {len(rows)} records imported for {len(set(r[0] for r in rows))} employees ({skipped} skipped — unmatched codes)', 'success')
+
         except Exception as e:
-            logging.error(f"Attendance import error: {e}")
+            import traceback
+            logging.error(f"Attendance import error: {traceback.format_exc()}")
             flash(f'Import error: {str(e)}', 'error')
         finally:
-            os.unlink(tmp.name)
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
 
         return redirect(url_for('upload_attendance'))
 
