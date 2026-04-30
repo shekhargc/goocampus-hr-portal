@@ -10,6 +10,13 @@ from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import calendar
 from db import get_db
+
+# Check xlrd availability at startup
+try:
+    import xlrd
+    logging.info(f"xlrd {xlrd.__VERSION__} loaded successfully")
+except ImportError:
+    logging.warning("xlrd is NOT installed — .xls file uploads will require conversion to .xlsx")
 from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email, send_leave_status_email
 
 app = Flask(__name__)
@@ -16027,10 +16034,14 @@ def upload_attendance():
                 with open(tmp.name, 'rb') as f:
                     magic = f.read(8)
                 is_ole = magic[:4] == b'\xd0\xcf\x11\xe0'  # OLE2 magic bytes = true .xls
-                if is_ole and not xlrd_available:
-                    flash('This is a .xls file but xlrd is not installed on the server. Please convert the file to .xlsx format first (open in Excel/Google Sheets and Save As .xlsx).', 'error')
-                    os.unlink(tmp.name)
-                    return render_template('upload_attendance.html', user=user)
+                if is_ole:
+                    if not xlrd_available:
+                        flash('This is an old-format .xls file. Please convert it to .xlsx first (open in Excel or Google Sheets → Save As → .xlsx), then upload the .xlsx version.', 'error')
+                        os.unlink(tmp.name)
+                        return render_template('upload_attendance.html', user=user)
+                    else:
+                        # xlrd is available but failed for another reason — re-raise
+                        raise Exception("xlrd failed to read the .xls file")
 
                 from openpyxl import load_workbook
                 wb = load_workbook(tmp.name, read_only=True, data_only=True)
