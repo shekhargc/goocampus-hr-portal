@@ -16031,66 +16031,54 @@ def upload_attendance():
             # Fall back to openpyxl
             if sheet is None:
                 from openpyxl import load_workbook as load_wb
-                wb = load_wb(tmp_path, read_only=True, data_only=True)
+                wb = load_wb(tmp_path, data_only=True)
                 sheet = wb.active
                 use_openpyxl = True
                 logging.info(f"Attendance file opened with openpyxl ({sheet.max_row} rows)")
 
-            # ── Step 2: Cell reader helpers ──
-            def cv(r, c):
-                """Cell value as string (0-based row/col)."""
-                try:
-                    v = sheet.cell(row=r+1, column=c+1).value if use_openpyxl else sheet.cell(r, c).value
-                    return str(v).strip() if v is not None else ''
-                except Exception:
-                    return ''
-
-            def cr(r, c):
-                """Cell raw value (0-based row/col)."""
-                try:
-                    return sheet.cell(row=r+1, column=c+1).value if use_openpyxl else sheet.cell(r, c).value
-                except Exception:
-                    return None
-
-            total_rows = sheet.max_row if use_openpyxl else sheet.nrows
-            total_cols = sheet.max_column if use_openpyxl else sheet.ncols
-
-            # ── Step 3: Build employee lookup ──
+            # ── Step 2: Build employee lookup ──
             conn = get_db()
             employees = conn.execute("SELECT id, emp_code FROM employees WHERE is_active = 1").fetchall()
             code_map = {e['emp_code']: e['id'] for e in employees}
             logging.info(f"Employee lookup: {len(code_map)} active employees")
 
+            # ── Step 3: Read all rows into memory ──
+            def s(v):
+                """Safe string conversion."""
+                return str(v).strip() if v is not None else ''
+
+            if use_openpyxl:
+                all_rows = list(sheet.iter_rows(values_only=True))
+            else:
+                all_rows = []
+                for r in range(sheet.nrows):
+                    all_rows.append(tuple(sheet.cell(r, c).value for c in range(sheet.ncols)))
+
+            logging.info(f"Loaded {len(all_rows)} rows into memory")
+
             # ── Step 4: Detect format and parse ──
             skipped = 0
             rows = []
 
-            # Check if first row is a flat-table header (Date, Emp Code, ...)
-            first_cell = cv(0, 0)
+            first_cell = s(all_rows[0][0]) if all_rows else ''
             is_flat = first_cell.lower() in ('date', 'attendance_date', 'attendance date')
-            logging.info(f"File format detected: {'flat table' if is_flat else 'raw fingerprint'}")
+            logging.info(f"File format: {'flat table' if is_flat else 'raw fingerprint'}")
 
             if is_flat:
-                # ── Flat table format: Row 1=headers, Row 2+=data ──
-                # Columns: Date, Emp Code, Employee Name, Shift, Scheduled In, Scheduled Out,
-                #          Actual In, Actual Out, Work Duration, Overtime, Total Duration,
-                #          Late By, Early Going, Status, Punch Records
-                for r in range(1, total_rows):  # skip header row
-                    date_val = cv(r, 0)
-                    emp_code = cv(r, 1)
+                # Flat table: Date, Emp Code, Name, Shift, SchedIn, SchedOut,
+                #             ActualIn, ActualOut, WorkDur, OT, TotalDur,
+                #             LateBy, EarlyGoing, Status, PunchRecords
+                for row in all_rows[1:]:
+                    date_val = s(row[0])
+                    emp_code = s(row[1])
                     if not date_val or not emp_code:
                         continue
-
-                    # Accept both GC codes and raw numbers
                     if not emp_code.startswith('GC'):
                         emp_code = _emp_code_from_number(emp_code)
-
                     employee_id = code_map.get(emp_code)
                     if not employee_id:
                         skipped += 1
                         continue
-
-                    # Normalise date
                     parsed_date = date_val
                     for fmt in ('%Y-%m-%d', '%d-%b-%Y', '%d/%m/%Y', '%m/%d/%Y'):
                         try:
@@ -16098,54 +16086,49 @@ def upload_attendance():
                             break
                         except ValueError:
                             continue
-
                     rows.append((
                         employee_id, parsed_date,
-                        cv(r,3), cv(r,4), cv(r,5),   # shift, sched_in, sched_out
-                        cv(r,6), cv(r,7), cv(r,8),    # actual_in, actual_out, work_dur
-                        cv(r,9), cv(r,10),             # ot, total_dur
-                        cv(r,11), cv(r,12), cv(r,13),  # late_by, early_going, status
-                        cv(r,14) if total_cols > 14 else ''  # punch_records
+                        s(row[3]), s(row[4]), s(row[5]),
+                        s(row[6]), s(row[7]), s(row[8]),
+                        s(row[9]), s(row[10]),
+                        s(row[11]), s(row[12]), s(row[13]),
+                        s(row[14]) if len(row) > 14 else ''
                     ))
             else:
-                # ── Raw fingerprint format: date headers + employee rows ──
+                # Raw fingerprint: Attendance Date headers + SNo/E.Code rows
                 current_date = None
-                for r in range(total_rows):
-                    b = cv(r, 1)
+                for row in all_rows:
+                    ncols = len(row)
+                    b = s(row[1]) if ncols > 1 else ''
 
                     if b == 'Attendance Date :':
-                        current_date = cv(r, 5)
+                        current_date = s(row[5]) if ncols > 5 else ''
                         continue
-
                     if not current_date:
                         continue
-
-                    sno = cr(r, 1)
                     try:
-                        float(sno)
+                        float(row[1])
                     except (ValueError, TypeError):
                         continue
-
-                    e_code_raw = cv(r, 2)
+                    e_code_raw = s(row[2]) if ncols > 2 else ''
                     if not e_code_raw:
                         continue
-
                     emp_code = _emp_code_from_number(e_code_raw)
                     employee_id = code_map.get(emp_code)
                     if not employee_id:
                         skipped += 1
                         continue
-
                     try:
                         parsed_date = datetime.strptime(current_date, '%d-%b-%Y').strftime('%Y-%m-%d')
                     except ValueError:
                         parsed_date = current_date
-
                     rows.append((
-                        employee_id, parsed_date, cv(r,5), cv(r,6), cv(r,7),
-                        cv(r,9), cv(r,10), cv(r,11), cv(r,12), cv(r,13),
-                        cv(r,14), cv(r,15), cv(r,16),
-                        cv(r,18) if total_cols > 18 else ''
+                        employee_id, parsed_date,
+                        s(row[5]) if ncols>5 else '', s(row[6]) if ncols>6 else '', s(row[7]) if ncols>7 else '',
+                        s(row[9]) if ncols>9 else '', s(row[10]) if ncols>10 else '', s(row[11]) if ncols>11 else '',
+                        s(row[12]) if ncols>12 else '', s(row[13]) if ncols>13 else '',
+                        s(row[14]) if ncols>14 else '', s(row[15]) if ncols>15 else '', s(row[16]) if ncols>16 else '',
+                        s(row[18]) if ncols>18 else ''
                     ))
 
             logging.info(f"Parsed {len(rows)} attendance rows, {skipped} skipped")
