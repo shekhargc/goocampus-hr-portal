@@ -4552,6 +4552,7 @@ def seed_default_meeting_types():
 # ─── WFH (Work from Home) Routes ───
 
 @app.route('/wfh/apply', methods=['GET', 'POST'])
+@app.route('/apply-wfh', methods=['GET', 'POST'])
 @login_required
 def apply_wfh():
     user = get_user()
