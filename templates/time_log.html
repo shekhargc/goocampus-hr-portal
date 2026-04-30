@@ -177,9 +177,14 @@
         <form method="GET" style="display: flex; gap: 0.5rem; align-items: center;">
             <input type="hidden" name="month" value="{{ month }}">
             <input type="hidden" name="year" value="{{ year }}">
-            <input type="text" name="employee" value="{{ f_employee }}" placeholder="Search employee..."
-                   style="min-width: 180px;">
-            <button type="submit" class="button button-primary button-small">Filter</button>
+            <select name="employee" onchange="this.form.submit()" style="min-width: 200px;">
+                <option value="">All Employees</option>
+                {% for emp in all_employees %}
+                <option value="{{ emp.name }}" {% if f_employee == emp.name %}selected{% endif %}>
+                    {{ emp.name }} ({{ emp.emp_code }})
+                </option>
+                {% endfor %}
+            </select>
             {% if f_employee %}
             <a href="{{ url_for('time_log', month=month, year=year) }}" class="button button-small"
                style="background: var(--gray-100); color: var(--gray-600); border: 1px solid var(--gray-300);">Clear</a>

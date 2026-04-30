@@ -16207,11 +16207,12 @@ def time_log():
                 FROM attendance_logs al
                 JOIN employees e ON al.employee_id = e.id
                 WHERE al.attendance_date >= ? AND al.attendance_date <= ?
-                  AND (LOWER(e.name) LIKE LOWER(?) OR LOWER(e.emp_code) LIKE LOWER(?))
+                  AND (LOWER(e.name) = LOWER(?) OR LOWER(e.emp_code) = LOWER(?)
+                       OR LOWER(e.name) LIKE LOWER(?) OR LOWER(e.emp_code) LIKE LOWER(?))
                 ORDER BY al.attendance_date ASC
             """
             like = f'%{f_employee}%'
-            logs = conn.execute(query, (date_from, date_to, like, like)).fetchall()
+            logs = conn.execute(query, (date_from, date_to, f_employee, f_employee, like, like)).fetchall()
         else:
             query = """
                 SELECT al.*, e.name AS employee_name, e.emp_code, e.department, e.photo_url
