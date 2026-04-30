@@ -16004,8 +16004,9 @@ def upload_attendance():
 
         import tempfile, os
 
-        # Save uploaded file temporarily
-        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xls')
+        # Save uploaded file temporarily — preserve original extension
+        file_ext = os.path.splitext(file.filename)[1].lower() or '.xls'
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix=file_ext)
         file.save(tmp.name)
         tmp.close()
 
