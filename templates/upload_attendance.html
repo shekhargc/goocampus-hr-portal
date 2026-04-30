@@ -15,8 +15,8 @@
             <input type="file" name="attendance_file" accept=".xls,.xlsx"
                    style="width: 100%; padding: 0.6rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; font-size: 0.9rem;" required>
             <p style="font-size: 0.78rem; color: var(--gray-500); margin-top: 0.4rem;">
-                Accepts the Daily Attendance Report format exported from the fingerprint device software.
-                Employee codes in the file (1, 6, 11...) are automatically mapped to HR codes (GC001, GC006, GC011...).
+                Accepts .xlsx files in either format: the raw fingerprint device export or the formatted attendance table
+                (Date, Emp Code, Employee Name, Shift, ...). Employee codes are automatically mapped.
             </p>
         </div>
         <button type="submit" class="button button-primary" style="width: 100%;">
