@@ -16055,9 +16055,8 @@ def upload_attendance():
             code_map = {e['emp_code']: e['id'] for e in employees}
 
             current_date = None
-            imported = 0
             skipped = 0
-            updated = 0
+            rows_to_upsert = []
 
             # Cell reader abstraction: xlrd uses 0-based (row, col), openpyxl uses 1-based (row, column)
             def cell_val(r, c):
@@ -16132,41 +16131,56 @@ def upload_attendance():
                 status = cell_val(r, 16)
                 punch_recs = cell_val(r, 18) if total_cols > 18 else ''
 
-                # Upsert
-                existing = conn.execute(
-                    "SELECT id FROM attendance_logs WHERE employee_id = ? AND attendance_date = ?",
-                    (employee_id, parsed_date)
-                ).fetchone()
+                rows_to_upsert.append((
+                    employee_id, parsed_date, shift, scheduled_in, scheduled_out,
+                    actual_in, actual_out, work_dur, ot, total_dur,
+                    late_by, early_going, status, punch_recs
+                ))
 
-                if existing:
-                    conn.execute("""UPDATE attendance_logs SET
-                        shift=?, scheduled_in=?, scheduled_out=?,
-                        actual_in=?, actual_out=?, work_duration=?,
-                        overtime=?, total_duration=?, late_by=?,
-                        early_going_by=?, status=?, punch_records=?
-                        WHERE id=?""", (
-                        shift, scheduled_in, scheduled_out,
-                        actual_in, actual_out, work_dur,
-                        ot, total_dur, late_by,
-                        early_going, status, punch_recs,
-                        existing['id']
-                    ))
-                    updated += 1
-                else:
+            # Bulk upsert — use PostgreSQL ON CONFLICT or SQLite fallback
+            imported = 0
+            updated = 0
+            if conn.is_postgres:
+                for row in rows_to_upsert:
                     conn.execute("""INSERT INTO attendance_logs (
                         employee_id, attendance_date, shift, scheduled_in, scheduled_out,
                         actual_in, actual_out, work_duration, overtime, total_duration,
                         late_by, early_going_by, status, punch_records
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
-                        employee_id, parsed_date, shift, scheduled_in, scheduled_out,
-                        actual_in, actual_out, work_dur, ot, total_dur,
-                        late_by, early_going, status, punch_recs
-                    ))
-                    imported += 1
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+                    ON CONFLICT (employee_id, attendance_date) DO UPDATE SET
+                        shift=EXCLUDED.shift, scheduled_in=EXCLUDED.scheduled_in,
+                        scheduled_out=EXCLUDED.scheduled_out, actual_in=EXCLUDED.actual_in,
+                        actual_out=EXCLUDED.actual_out, work_duration=EXCLUDED.work_duration,
+                        overtime=EXCLUDED.overtime, total_duration=EXCLUDED.total_duration,
+                        late_by=EXCLUDED.late_by, early_going_by=EXCLUDED.early_going_by,
+                        status=EXCLUDED.status, punch_records=EXCLUDED.punch_records
+                    """, row)
+                imported = len(rows_to_upsert)
+            else:
+                for row in rows_to_upsert:
+                    existing = conn.execute(
+                        "SELECT id FROM attendance_logs WHERE employee_id = ? AND attendance_date = ?",
+                        (row[0], row[1])
+                    ).fetchone()
+                    if existing:
+                        conn.execute("""UPDATE attendance_logs SET
+                            shift=?, scheduled_in=?, scheduled_out=?,
+                            actual_in=?, actual_out=?, work_duration=?,
+                            overtime=?, total_duration=?, late_by=?,
+                            early_going_by=?, status=?, punch_records=?
+                            WHERE id=?""", row[2:] + (existing['id'],))
+                        updated += 1
+                    else:
+                        conn.execute("""INSERT INTO attendance_logs (
+                            employee_id, attendance_date, shift, scheduled_in, scheduled_out,
+                            actual_in, actual_out, work_duration, overtime, total_duration,
+                            late_by, early_going_by, status, punch_records
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", row)
+                        imported += 1
 
             conn.commit()
             conn.close()
-            flash(f'Import complete: {imported} new, {updated} updated, {skipped} skipped (unmatched codes)', 'success')
+            flash(f'Import complete: {len(rows_to_upsert)} records processed ({skipped} skipped — unmatched codes)', 'success')
         except Exception as e:
             logging.error(f"Attendance import error: {e}")
             flash(f'Import error: {str(e)}', 'error')
