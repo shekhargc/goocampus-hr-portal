@@ -15840,6 +15840,38 @@ def partners_products(pid):
         return jsonify({'error': str(e)}), 500
 
 
+def ensure_attendance_table():
+    """Create attendance_logs table if it doesn't exist."""
+    try:
+        conn = get_db()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS attendance_logs (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                attendance_date TEXT NOT NULL,
+                shift TEXT,
+                scheduled_in TEXT,
+                scheduled_out TEXT,
+                actual_in TEXT,
+                actual_out TEXT,
+                work_duration TEXT,
+                overtime TEXT,
+                total_duration TEXT,
+                late_by TEXT,
+                early_going_by TEXT,
+                status TEXT,
+                punch_records TEXT,
+                created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE(employee_id, attendance_date)
+            )
+        """)
+        conn.commit()
+        conn.close()
+        logging.info("attendance_logs table ensured.")
+    except Exception as e:
+        logging.error(f"ensure_attendance_table: {e}")
+
+
 def ensure_leave_group_column():
     """Migration: add leave_group_id column to leave_records and backfill existing multi-day leaves."""
     try:
@@ -15923,6 +15955,298 @@ except Exception as _sync_err:
     logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
 ensure_leave_group_column()
+ensure_attendance_table()
+
+# ═══════════════════════════════════════════════════════════════
+#  TIME LOG / ATTENDANCE
+# ═══════════════════════════════════════════════════════════════
+
+def _emp_code_from_number(num_str):
+    """Convert fingerprint device number (e.g. '1', '6', '11') to HR emp_code (GC001, GC006, GC011)."""
+    try:
+        n = int(float(str(num_str)))
+        return f'GC{n:03d}'
+    except (ValueError, TypeError):
+        return ''
+
+
+def _parse_time_minutes(time_str):
+    """Convert 'HH:MM' or 'H:MM' to total minutes. Returns 0 for empty/invalid."""
+    if not time_str or not time_str.strip():
+        return 0
+    try:
+        parts = time_str.strip().split(':')
+        return int(parts[0]) * 60 + int(parts[1])
+    except (ValueError, IndexError):
+        return 0
+
+
+@app.route('/admin/upload-attendance', methods=['GET', 'POST'])
+@admin_required
+def upload_attendance():
+    user = get_user()
+    if request.method == 'POST':
+        file = request.files.get('attendance_file')
+        if not file or not file.filename:
+            flash('Please select a file', 'error')
+            return render_template('upload_attendance.html', user=user)
+
+        if not file.filename.lower().endswith(('.xls', '.xlsx')):
+            flash('Only .xls and .xlsx files are supported', 'error')
+            return render_template('upload_attendance.html', user=user)
+
+        import tempfile, os
+        try:
+            import xlrd
+        except ImportError:
+            flash('xlrd library not available on server', 'error')
+            return render_template('upload_attendance.html', user=user)
+
+        # Save uploaded file temporarily
+        tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xls')
+        file.save(tmp.name)
+        tmp.close()
+
+        try:
+            wb = xlrd.open_workbook(tmp.name)
+            sheet = wb.sheets()[0]
+
+            conn = get_db()
+            # Build emp_code → employee_id map
+            employees = conn.execute("SELECT id, emp_code FROM employees WHERE is_active = 1").fetchall()
+            code_map = {e['emp_code']: e['id'] for e in employees}
+
+            current_date = None
+            imported = 0
+            skipped = 0
+            updated = 0
+
+            for r in range(sheet.nrows):
+                cell_b = str(sheet.cell(r, 1).value).strip()
+
+                # Detect date header rows
+                if cell_b == 'Attendance Date :':
+                    current_date = str(sheet.cell(r, 5).value).strip()
+                    continue
+
+                if not current_date:
+                    continue
+
+                # Detect data rows (SNo column is numeric)
+                cell_sno = sheet.cell(r, 1).value
+                try:
+                    float(cell_sno)
+                except (ValueError, TypeError):
+                    continue
+
+                e_code_raw = str(sheet.cell(r, 2).value).strip()
+                if not e_code_raw:
+                    continue
+
+                emp_code = _emp_code_from_number(e_code_raw)
+                employee_id = code_map.get(emp_code)
+                if not employee_id:
+                    skipped += 1
+                    continue
+
+                # Parse date to standard format
+                try:
+                    from datetime import datetime as dt_parse
+                    parsed_date = dt_parse.strptime(current_date, '%d-%b-%Y').strftime('%Y-%m-%d')
+                except ValueError:
+                    parsed_date = current_date
+
+                shift = str(sheet.cell(r, 5).value).strip()
+                scheduled_in = str(sheet.cell(r, 6).value).strip()
+                scheduled_out = str(sheet.cell(r, 7).value).strip()
+                actual_in = str(sheet.cell(r, 9).value).strip()
+                actual_out = str(sheet.cell(r, 10).value).strip()
+                work_dur = str(sheet.cell(r, 11).value).strip()
+                ot = str(sheet.cell(r, 12).value).strip()
+                total_dur = str(sheet.cell(r, 13).value).strip()
+                late_by = str(sheet.cell(r, 14).value).strip()
+                early_going = str(sheet.cell(r, 15).value).strip()
+                status = str(sheet.cell(r, 16).value).strip()
+                punch_recs = str(sheet.cell(r, 18).value).strip() if sheet.ncols > 18 else ''
+
+                # Upsert
+                existing = conn.execute(
+                    "SELECT id FROM attendance_logs WHERE employee_id = ? AND attendance_date = ?",
+                    (employee_id, parsed_date)
+                ).fetchone()
+
+                if existing:
+                    conn.execute("""UPDATE attendance_logs SET
+                        shift=?, scheduled_in=?, scheduled_out=?,
+                        actual_in=?, actual_out=?, work_duration=?,
+                        overtime=?, total_duration=?, late_by=?,
+                        early_going_by=?, status=?, punch_records=?
+                        WHERE id=?""", (
+                        shift, scheduled_in, scheduled_out,
+                        actual_in, actual_out, work_dur,
+                        ot, total_dur, late_by,
+                        early_going, status, punch_recs,
+                        existing['id']
+                    ))
+                    updated += 1
+                else:
+                    conn.execute("""INSERT INTO attendance_logs (
+                        employee_id, attendance_date, shift, scheduled_in, scheduled_out,
+                        actual_in, actual_out, work_duration, overtime, total_duration,
+                        late_by, early_going_by, status, punch_records
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""", (
+                        employee_id, parsed_date, shift, scheduled_in, scheduled_out,
+                        actual_in, actual_out, work_dur, ot, total_dur,
+                        late_by, early_going, status, punch_recs
+                    ))
+                    imported += 1
+
+            conn.commit()
+            conn.close()
+            flash(f'Import complete: {imported} new, {updated} updated, {skipped} skipped (unmatched codes)', 'success')
+        except Exception as e:
+            logging.error(f"Attendance import error: {e}")
+            flash(f'Import error: {str(e)}', 'error')
+        finally:
+            os.unlink(tmp.name)
+
+        return redirect(url_for('upload_attendance'))
+
+    return render_template('upload_attendance.html', user=user)
+
+
+@app.route('/time-log')
+@login_required
+def time_log():
+    user = get_user()
+    conn = get_db()
+
+    # Determine month/year
+    now = datetime.now()
+    try:
+        month = int(request.args.get('month', now.month))
+        year = int(request.args.get('year', now.year))
+    except (ValueError, TypeError):
+        month, year = now.month, now.year
+
+    # Date range for selected month
+    import calendar as cal_mod
+    _, days_in_month = cal_mod.monthrange(year, month)
+    date_from = f'{year}-{month:02d}-01'
+    date_to = f'{year}-{month:02d}-{days_in_month:02d}'
+
+    # Admin/management sees all or filtered; employee sees own
+    f_employee = request.args.get('employee', '').strip()
+    is_admin_view = user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
+
+    if is_admin_view:
+        if f_employee:
+            query = """
+                SELECT al.*, e.name AS employee_name, e.emp_code, e.department, e.photo_url
+                FROM attendance_logs al
+                JOIN employees e ON al.employee_id = e.id
+                WHERE al.attendance_date >= ? AND al.attendance_date <= ?
+                  AND (LOWER(e.name) LIKE LOWER(?) OR LOWER(e.emp_code) LIKE LOWER(?))
+                ORDER BY al.attendance_date ASC
+            """
+            like = f'%{f_employee}%'
+            logs = conn.execute(query, (date_from, date_to, like, like)).fetchall()
+        else:
+            query = """
+                SELECT al.*, e.name AS employee_name, e.emp_code, e.department, e.photo_url
+                FROM attendance_logs al
+                JOIN employees e ON al.employee_id = e.id
+                WHERE al.attendance_date >= ? AND al.attendance_date <= ?
+                ORDER BY e.name ASC, al.attendance_date ASC
+            """
+            logs = conn.execute(query, (date_from, date_to)).fetchall()
+    else:
+        query = """
+            SELECT al.*, e.name AS employee_name, e.emp_code, e.department, e.photo_url
+            FROM attendance_logs al
+            JOIN employees e ON al.employee_id = e.id
+            WHERE al.employee_id = ? AND al.attendance_date >= ? AND al.attendance_date <= ?
+            ORDER BY al.attendance_date ASC
+        """
+        logs = conn.execute(query, (user['id'], date_from, date_to)).fetchall()
+
+    # Enrich logs and compute summaries per employee
+    logs_list = [dict(r) for r in logs]
+    from collections import defaultdict
+    emp_summaries = defaultdict(lambda: {
+        'name': '', 'emp_code': '', 'department': '', 'photo_url': '',
+        'total_work_mins': 0, 'total_ot_mins': 0,
+        'present_days': 0, 'absent_days': 0, 'late_days': 0,
+        'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
+        'days': []
+    })
+
+    for log in logs_list:
+        eid = log['employee_id']
+        s = emp_summaries[eid]
+        s['name'] = log['employee_name']
+        s['emp_code'] = log['emp_code']
+        s['department'] = log['department']
+        s['photo_url'] = log.get('photo_url', '')
+
+        status = (log.get('status') or '').strip()
+        s['days'].append(log)
+
+        if 'Present' in status and '½' not in status and 'No OutPunch' not in status:
+            s['present_days'] += 1
+        elif '½' in status:
+            s['half_days'] += 1
+            s['present_days'] += 0.5
+        elif 'No OutPunch' in status:
+            s['no_punch_days'] += 1
+        elif status == 'WeeklyOff':
+            s['weekly_off_days'] += 1
+        elif 'Absent' in status:
+            s['absent_days'] += 1
+
+        s['total_work_mins'] += _parse_time_minutes(log.get('work_duration', ''))
+        s['total_ot_mins'] += _parse_time_minutes(log.get('overtime', ''))
+
+        late_mins = _parse_time_minutes(log.get('late_by', ''))
+        if late_mins > 0:
+            s['late_days'] += 1
+
+    # Format summaries
+    summaries = []
+    for eid, s in sorted(emp_summaries.items(), key=lambda x: x[1]['name']):
+        working_days = s['present_days'] + s['half_days'] + s['no_punch_days']
+        s['total_work_hrs'] = f"{s['total_work_mins'] // 60}h {s['total_work_mins'] % 60}m"
+        s['total_ot_hrs'] = f"{s['total_ot_mins'] // 60}h {s['total_ot_mins'] % 60}m"
+        s['avg_work_hrs'] = ''
+        if working_days > 0:
+            avg = s['total_work_mins'] / working_days
+            s['avg_work_hrs'] = f"{int(avg) // 60}h {int(avg) % 60}m"
+        s['employee_id'] = eid
+        summaries.append(s)
+
+    # For admin: employee list for filter
+    all_employees = []
+    if is_admin_view:
+        all_employees = conn.execute(
+            "SELECT DISTINCT e.id, e.name, e.emp_code FROM attendance_logs al JOIN employees e ON al.employee_id = e.id ORDER BY e.name"
+        ).fetchall()
+
+    conn.close()
+
+    # Month names for picker
+    month_names = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December']
+
+    return render_template('time_log.html',
+        user=user,
+        summaries=summaries,
+        is_admin_view=is_admin_view,
+        all_employees=all_employees,
+        month=month, year=year,
+        month_name=month_names[month - 1],
+        f_employee=f_employee,
+        month_names=month_names)
+
 
 # ═══════════════════════════════════════════════════════════════
 #  STATE & CITY  – API + Settings

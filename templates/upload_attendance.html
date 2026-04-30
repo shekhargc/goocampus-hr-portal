@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}Upload Attendance - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Upload Attendance Report</h1>
+    <p>Upload the fingerprint attendance report (.xls) to import employee time logs.</p>
+</div>
+
+<div class="card" style="max-width: 600px;">
+    <form method="POST" enctype="multipart/form-data">
+        <div style="margin-bottom: 1.25rem;">
+            <label style="display: block; font-weight: 600; margin-bottom: 0.5rem; color: var(--navy);">Attendance File (.xls)</label>
+            <input type="file" name="attendance_file" accept=".xls,.xlsx"
+                   style="width: 100%; padding: 0.6rem; border: 1px solid var(--gray-300); border-radius: 0.4rem; font-size: 0.9rem;" required>
+            <p style="font-size: 0.78rem; color: var(--gray-500); margin-top: 0.4rem;">
+                Accepts the Daily Attendance Report format exported from the fingerprint device software.
+                Employee codes in the file (1, 6, 11...) are automatically mapped to HR codes (GC001, GC006, GC011...).
+            </p>
+        </div>
+        <button type="submit" class="button button-primary" style="width: 100%;">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 0.4rem; vertical-align: -2px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Upload &amp; Import
+        </button>
+    </form>
+</div>
+
+<div class="card" style="margin-top: 1.5rem;">
+    <h3 style="margin-bottom: 0.75rem; color: var(--navy);">How it works</h3>
+    <div style="font-size: 0.88rem; color: var(--gray-600); line-height: 1.7;">
+        <p>1. Export the <strong>Daily Attendance Report (Detailed Report)</strong> from your fingerprint software as an .xls file.</p>
+        <p style="margin-top: 0.5rem;">2. Upload it here. The system will parse each day's records and match employee codes to your HR profiles.</p>
+        <p style="margin-top: 0.5rem;">3. If data for the same employee and date already exists, it will be updated with the new values.</p>
+        <p style="margin-top: 0.5rem;">4. View the imported data on the <a href="{{ url_for('time_log') }}" style="color: var(--orange); font-weight: 600;">Time Log</a> page.</p>
+    </div>
+</div>
+{% endblock %}

@@ -63,6 +63,29 @@ def init_db():
     ''')
 
     c.execute('''
+        CREATE TABLE attendance_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            employee_id INTEGER NOT NULL,
+            attendance_date TEXT NOT NULL,
+            shift TEXT,
+            scheduled_in TEXT,
+            scheduled_out TEXT,
+            actual_in TEXT,
+            actual_out TEXT,
+            work_duration TEXT,
+            overtime TEXT,
+            total_duration TEXT,
+            late_by TEXT,
+            early_going_by TEXT,
+            status TEXT,
+            punch_records TEXT,
+            created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (employee_id) REFERENCES employees(id),
+            UNIQUE(employee_id, attendance_date)
+        )
+    ''')
+
+    c.execute('''
         CREATE TABLE holidays (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             holiday_date TEXT NOT NULL,
