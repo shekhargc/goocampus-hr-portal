@@ -196,9 +196,8 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if leave.day_portion == 'first_half' %}First Half
-                    {% elif leave.day_portion == 'second_half' %}Second Half
-                    {% else %}Full Day{% endif %}
+                    {{ leave.days }} day{{ 's' if leave.days != 1 else '' }}
+                    {% if leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
                 </td>
                 <td style="color: var(--gray-600); max-width: 250px;">
                     <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '—') }}</div>

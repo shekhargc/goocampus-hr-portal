@@ -56,6 +56,7 @@ def init_db():
             approved_by INTEGER,
             approved_at TEXT,
             created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+            leave_group_id TEXT,
             FOREIGN KEY (employee_id) REFERENCES employees(id),
             FOREIGN KEY (approved_by) REFERENCES employees(id)
         )

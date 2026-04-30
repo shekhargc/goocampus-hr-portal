@@ -871,7 +871,9 @@ def apply_leave():
             return render_template('apply_leave.html', user=user)
 
         # Determine day portions for each day
+        import uuid
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        group_id = str(uuid.uuid4())[:12]
         total_days = 0
 
         for i, day in enumerate(leave_days):
@@ -898,9 +900,9 @@ def apply_leave():
                 return render_template('apply_leave.html', user=user)
 
             conn.execute('''
-                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?)
-            ''', (user['id'], leave_type, date_str, day_val, portion, reason, now_str))
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, created_at, leave_group_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?)
+            ''', (user['id'], leave_type, date_str, day_val, portion, reason, now_str, group_id))
 
         conn.commit()
         conn.close()
@@ -1018,7 +1020,9 @@ def apply_late_leave():
             return redirect(url_for('apply_late_leave'))
 
         # Insert leave records with is_late = 1
+        import uuid
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        group_id = str(uuid.uuid4())[:12]
         total_days = 0
         combined_reason = f"{reason}\n\n[Late Application Reason]: {late_reason}"
 
@@ -1046,9 +1050,9 @@ def apply_late_leave():
                 return redirect(url_for('apply_late_leave'))
 
             conn.execute('''
-                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, is_late, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, ?)
-            ''', (user['id'], leave_type, date_str, day_val, portion, combined_reason, now_str))
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, is_late, created_at, leave_group_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', 1, ?, ?)
+            ''', (user['id'], leave_type, date_str, day_val, portion, combined_reason, now_str, group_id))
 
         # Increment late leave count
         conn.execute('UPDATE employees SET late_leave_count = late_leave_count + 1 WHERE id = ?', (user['id'],))
@@ -1238,6 +1242,8 @@ def modify_leave(leave_id):
         ''', (mod_reason, leave_id))
 
         # Insert new leave records (one per working day)
+        import uuid
+        group_id = str(uuid.uuid4())[:12]
         total_days = 0
         for i, day in enumerate(leave_days):
             date_str = day.strftime('%Y-%m-%d')
@@ -1259,10 +1265,10 @@ def modify_leave(leave_id):
 
             conn.execute('''
                 INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion,
-                    reason, status, is_late, original_id, original_reason, modification_reason, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?)
+                    reason, status, is_late, original_id, original_reason, modification_reason, created_at, leave_group_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'pending', ?, ?, ?, ?, ?, ?)
             ''', (user['id'], new_leave_type, date_str, day_val, portion,
-                  new_reason, is_late, leave_id, original_reason, mod_reason, now_str))
+                  new_reason, is_late, leave_id, original_reason, mod_reason, now_str, group_id))
 
         conn.commit()
         conn.close()
@@ -1391,9 +1397,36 @@ def employee_approvals():
 
     conn.close()
 
+    # Group pending leaves by leave_group_id
+    from collections import OrderedDict
+    grouped_pending = OrderedDict()
+    for r in pending:
+        d = dict(r)
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in grouped_pending:
+            d['group_id'] = gid
+            d['group_ids'] = [d['id']]
+            d['group_dates'] = [d['leave_date']]
+            d['group_total_days'] = d['days']
+            d['group_count'] = 1
+            d['date_from'] = d['leave_date']
+            d['date_to'] = d['leave_date']
+            grouped_pending[gid] = d
+        else:
+            g = grouped_pending[gid]
+            g['group_ids'].append(d['id'])
+            g['group_dates'].append(d['leave_date'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    pending_grouped = list(grouped_pending.values())
+
     return render_template('employee_approvals.html',
                          user=user,
-                         pending_leaves=pending,
+                         pending_leaves=pending_grouped,
                          recent_actions=recent,
                          direct_reports=direct_reports)
 
@@ -1484,6 +1517,97 @@ def employee_reject_leave(leave_id):
 
     flash('Leave rejected', 'success')
     return redirect(url_for('employee_approvals'))
+
+
+@app.route('/approve-group/<group_id>', methods=['POST'])
+@login_required
+def employee_approve_group(group_id):
+    """Approve all pending leaves in a group - for managers."""
+    user = get_user()
+    conn = get_db()
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    leaves = conn.execute(
+        "SELECT * FROM leave_records WHERE leave_group_id = ? AND status = 'pending'",
+        (group_id,)
+    ).fetchall()
+    if not leaves:
+        flash('No pending leaves found', 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leaves[0]['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
+    conn.execute(
+        "UPDATE leave_records SET status = 'approved', approved_by = ?, approved_at = ? WHERE leave_group_id = ? AND status = 'pending'",
+        (user['id'], now_str, group_id)
+    )
+    total_days = sum(l['days'] for l in leaves)
+    dates = sorted([l['leave_date'] for l in leaves])
+    date_range = f"{dates[0]} to {dates[-1]}" if len(dates) > 1 else dates[0]
+    create_notification(conn, leaves[0]['employee_id'],
+        'Leave Approved',
+        f'Your {leaves[0]["leave_type"]} leave ({date_range}, {total_days:.1f} days) has been approved by {user["name"]}.',
+        'success', '/my-leaves')
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    conn.commit()
+    conn.close()
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, leaves[0]['leave_type'], date_range, 'approved', user['name'])
+    flash(f'Approved {len(leaves)} leave day(s) ({total_days:.1f} days total)', 'success')
+    return redirect(url_for('employee_approvals'))
+
+
+@app.route('/reject-group/<group_id>', methods=['POST'])
+@login_required
+def employee_reject_group(group_id):
+    """Reject all pending leaves in a group - for managers."""
+    user = get_user()
+    conn = get_db()
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    leaves = conn.execute(
+        "SELECT * FROM leave_records WHERE leave_group_id = ? AND status = 'pending'",
+        (group_id,)
+    ).fetchall()
+    if not leaves:
+        flash('No pending leaves found', 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leaves[0]['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
+        conn.close()
+        return redirect(url_for('employee_approvals'))
+
+    conn.execute(
+        "UPDATE leave_records SET status = 'rejected', approved_by = ?, approved_at = ? WHERE leave_group_id = ? AND status = 'pending'",
+        (user['id'], now_str, group_id)
+    )
+    total_days = sum(l['days'] for l in leaves)
+    dates = sorted([l['leave_date'] for l in leaves])
+    date_range = f"{dates[0]} to {dates[-1]}" if len(dates) > 1 else dates[0]
+    create_notification(conn, leaves[0]['employee_id'],
+        'Leave Rejected',
+        f'Your {leaves[0]["leave_type"]} leave ({date_range}, {total_days:.1f} days) has been rejected by {user["name"]}.',
+        'danger', '/my-leaves')
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    conn.commit()
+    conn.close()
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, leaves[0]['leave_type'], date_range, 'rejected', user['name'])
+    flash(f'Rejected {len(leaves)} leave day(s)', 'success')
+    return redirect(url_for('employee_approvals'))
+
 
 @app.route('/calendar')
 @login_required
@@ -2087,10 +2211,12 @@ def admin_add_leave():
 
         days = 0.5 if day_portion in ['first_half', 'second_half'] else 1.0
 
+        import uuid
+        group_id = str(uuid.uuid4())[:12]
         conn.execute('''
-            INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, approved_by, approved_at, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?)
-        ''', (employee_id, leave_type, leave_date, days, day_portion, reason or '', user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, approved_by, approved_at, created_at, leave_group_id)
+            VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)
+        ''', (employee_id, leave_type, leave_date, days, day_portion, reason or '', user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), group_id))
         conn.commit()
         conn.close()
 
@@ -2132,12 +2258,14 @@ def admin_bulk_leave():
         # Get all employees in department
         dept_employees = conn.execute('SELECT id FROM employees WHERE department = ? AND is_active = 1', (department,)).fetchall()
 
+        import uuid
         count = 0
         for emp in dept_employees:
+            group_id = str(uuid.uuid4())[:12]
             conn.execute('''
-                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, reason, status, approved_by, approved_at, created_at)
-                VALUES (?, ?, ?, ?, ?, 'approved', ?, ?, ?)
-            ''', (emp['id'], leave_type, leave_date, days, reason or '', user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, reason, status, approved_by, approved_at, created_at, leave_group_id)
+                VALUES (?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)
+            ''', (emp['id'], leave_type, leave_date, days, reason or '', user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), group_id))
             count += 1
 
         conn.commit()
@@ -2486,6 +2614,7 @@ def pending_approvals():
                lr.day_portion, lr.reason, lr.status, lr.is_late,
                lr.original_id, lr.modification_reason, lr.original_reason,
                lr.approved_by, lr.approved_at, lr.created_at,
+               lr.leave_group_id,
                e.name        AS employee_name,
                e.emp_code    AS emp_code,
                e.department  AS department,
@@ -2546,15 +2675,46 @@ def pending_approvals():
             result.append(d)
         return result
 
+    def _group_leaves(rows):
+        """Group leave records by leave_group_id. Returns list of grouped dicts."""
+        from collections import OrderedDict
+        groups = OrderedDict()
+        for r in rows:
+            gid = r.get('leave_group_id') or f"single_{r['id']}"
+            if gid not in groups:
+                groups[gid] = {
+                    **r,
+                    'group_id': gid,
+                    'group_ids': [r['id']],
+                    'group_dates': [r['leave_date']],
+                    'group_total_days': r['days'],
+                    'group_count': 1,
+                    'date_from': r['leave_date'],
+                    'date_to': r['leave_date'],
+                }
+            else:
+                g = groups[gid]
+                g['group_ids'].append(r['id'])
+                g['group_dates'].append(r['leave_date'])
+                g['group_total_days'] += r['days']
+                g['group_count'] += 1
+                if r['leave_date'] < g['date_from']:
+                    g['date_from'] = r['leave_date']
+                if r['leave_date'] > g['date_to']:
+                    g['date_to'] = r['leave_date']
+        return list(groups.values())
+
     # Pending leaves
     pw, pp = _build_where("lr.status = 'pending'")
     pending_sql = base_select + ' WHERE ' + ' AND '.join(pw) + ' ORDER BY lr.is_late DESC, lr.created_at DESC'
-    pending = _enrich(conn.execute(pending_sql, tuple(pp)).fetchall())
+    pending_raw = _enrich(conn.execute(pending_sql, tuple(pp)).fetchall())
+    pending = _group_leaves(pending_raw)
 
     # Approved / Rejected leaves
     aw, ap = _build_where("lr.status IN ('approved', 'rejected')")
     approved_sql = base_select + ' WHERE ' + ' AND '.join(aw) + ' ORDER BY lr.approved_at DESC, lr.created_at DESC'
-    approved = _enrich(conn.execute(approved_sql, tuple(ap)).fetchall())
+    approved_raw = _enrich(conn.execute(approved_sql, tuple(ap)).fetchall())
+    approved = _group_leaves(approved_raw)
 
     # Late leave summary
     if user['is_admin']:
@@ -2676,6 +2836,105 @@ def reject_leave(leave_id):
 
     flash('Leave rejected', 'success')
     return redirect(request.referrer or url_for('pending_approvals'))
+
+
+@app.route('/admin/approve-group/<group_id>', methods=['POST'])
+@login_required
+def approve_leave_group(group_id):
+    """Approve all pending leaves in a group with one click."""
+    user = get_user()
+    conn = get_db()
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    leaves = conn.execute(
+        "SELECT * FROM leave_records WHERE leave_group_id = ? AND status = 'pending'",
+        (group_id,)
+    ).fetchall()
+    if not leaves:
+        flash('No pending leaves found in this group', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leaves[0]['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+
+    conn.execute(
+        "UPDATE leave_records SET status = 'approved', approved_by = ?, approved_at = ? WHERE leave_group_id = ? AND status = 'pending'",
+        (user['id'], now_str, group_id)
+    )
+    total_days = sum(l['days'] for l in leaves)
+    dates = sorted([l['leave_date'] for l in leaves])
+    date_range = f"{dates[0]} to {dates[-1]}" if len(dates) > 1 else dates[0]
+
+    create_notification(conn, leaves[0]['employee_id'],
+        'Leave Approved',
+        f'Your {leaves[0]["leave_type"]} leave ({date_range}, {total_days:.1f} days) has been approved by {user["name"]}.',
+        'success', '/my-leaves')
+
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    conn.commit()
+    conn.close()
+
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, leaves[0]['leave_type'], date_range, 'approved', user['name'])
+
+    flash(f'Approved {len(leaves)} leave day(s) ({total_days:.1f} days total)', 'success')
+    return redirect(request.referrer or url_for('pending_approvals'))
+
+
+@app.route('/admin/reject-group/<group_id>', methods=['POST'])
+@login_required
+def reject_leave_group(group_id):
+    """Reject all pending leaves in a group with one click."""
+    user = get_user()
+    conn = get_db()
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    leaves = conn.execute(
+        "SELECT * FROM leave_records WHERE leave_group_id = ? AND status = 'pending'",
+        (group_id,)
+    ).fetchall()
+    if not leaves:
+        flash('No pending leaves found in this group', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+
+    leave_emp = conn.execute('SELECT * FROM employees WHERE id = ?', (leaves[0]['employee_id'],)).fetchone()
+    allowed, reason = can_approve_leave(user, leave_emp, conn)
+    if not allowed:
+        flash(reason, 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+
+    conn.execute(
+        "UPDATE leave_records SET status = 'rejected', approved_by = ?, approved_at = ? WHERE leave_group_id = ? AND status = 'pending'",
+        (user['id'], now_str, group_id)
+    )
+    total_days = sum(l['days'] for l in leaves)
+    dates = sorted([l['leave_date'] for l in leaves])
+    date_range = f"{dates[0]} to {dates[-1]}" if len(dates) > 1 else dates[0]
+
+    create_notification(conn, leaves[0]['employee_id'],
+        'Leave Rejected',
+        f'Your {leaves[0]["leave_type"]} leave ({date_range}, {total_days:.1f} days) has been rejected by {user["name"]}.',
+        'danger', '/my-leaves')
+
+    emp_name = leave_emp['name'] if leave_emp else None
+    emp_email = leave_emp['email'] if leave_emp else None
+    conn.commit()
+    conn.close()
+
+    if emp_email:
+        send_leave_status_email(emp_name, emp_email, leaves[0]['leave_type'], date_range, 'rejected', user['name'])
+
+    flash(f'Rejected {len(leaves)} leave day(s)', 'success')
+    return redirect(request.referrer or url_for('pending_approvals'))
+
 
 @app.route('/api/balance')
 @login_required
@@ -15581,6 +15840,70 @@ def partners_products(pid):
         return jsonify({'error': str(e)}), 500
 
 
+def ensure_leave_group_column():
+    """Migration: add leave_group_id column to leave_records and backfill existing multi-day leaves."""
+    try:
+        conn = get_db()
+        # Add column if missing
+        try:
+            conn.execute("ALTER TABLE leave_records ADD COLUMN leave_group_id TEXT")
+            conn.commit()
+            logging.info("Migration: added leave_group_id column to leave_records")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # Backfill: group existing leaves by employee_id + leave_type + reason + consecutive dates
+        try:
+            rows = conn.execute("""
+                SELECT id, employee_id, leave_type, leave_date, reason, status, leave_group_id
+                FROM leave_records
+                WHERE leave_group_id IS NULL
+                ORDER BY employee_id, leave_date
+            """).fetchall()
+            if rows:
+                import uuid
+                from collections import defaultdict
+                groups = defaultdict(list)
+                for r in rows:
+                    key = (r['employee_id'], r['leave_type'], (r['reason'] or '').strip(), r['status'])
+                    groups[key].append(r)
+                for key, recs in groups.items():
+                    recs_sorted = sorted(recs, key=lambda x: x['leave_date'])
+                    current_group = []
+                    for rec in recs_sorted:
+                        if not current_group:
+                            current_group.append(rec)
+                        else:
+                            prev_date = datetime.strptime(current_group[-1]['leave_date'], '%Y-%m-%d')
+                            curr_date = datetime.strptime(rec['leave_date'], '%Y-%m-%d')
+                            diff = (curr_date - prev_date).days
+                            if diff <= 3:  # allow weekend gaps
+                                current_group.append(rec)
+                            else:
+                                gid = str(uuid.uuid4())[:12]
+                                for g in current_group:
+                                    conn.execute("UPDATE leave_records SET leave_group_id = ? WHERE id = ?", (gid, g['id']))
+                                current_group = [rec]
+                        # flush last group
+                    if current_group:
+                        gid = str(uuid.uuid4())[:12]
+                        for g in current_group:
+                            conn.execute("UPDATE leave_records SET leave_group_id = ? WHERE id = ?", (gid, g['id']))
+                conn.commit()
+                logging.info(f"Migration: backfilled leave_group_id for {len(rows)} records")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.warning(f"leave_group_id backfill skipped: {e}")
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_leave_group_column: {e}")
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_sales_crm_tables()
@@ -15599,6 +15922,7 @@ try:
 except Exception as _sync_err:
     logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
+ensure_leave_group_column()
 
 # ═══════════════════════════════════════════════════════════════
 #  STATE & CITY  – API + Settings

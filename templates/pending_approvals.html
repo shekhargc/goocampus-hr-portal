@@ -327,7 +327,7 @@
             </thead>
             <tbody>
                 {% for leave in pending_leaves %}
-                <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
+                <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail('{{ leave.group_id }}')">
                     <td>
                         <div class="emp-cell">
                             {% if leave.photo_src %}
@@ -343,12 +343,18 @@
                         </div>
                     </td>
                     <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
-                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date|format_date }}</td>
+                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                        {% if leave.group_count > 1 %}
+                            {{ leave.date_from|format_date }} – {{ leave.date_to|format_date }}
+                        {% else %}
+                            {{ leave.leave_date|format_date }}
+                        {% endif %}
+                    </td>
                     <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
                     <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
-                        {% if leave.day_portion == 'first_half' %}First Half
-                        {% elif leave.day_portion == 'second_half' %}Second Half
-                        {% else %}Full Day
+                        {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
+                        {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}
+                            (Half)
                         {% endif %}
                     </td>
                     <td class="reason-cell">
@@ -397,7 +403,7 @@
             </thead>
             <tbody>
                 {% for leave in approved_leaves %}
-                <tr onclick="openLeaveDetail({{ leave.id }})">
+                <tr onclick="openLeaveDetail('{{ leave.group_id }}')">
                     <td>
                         <div class="emp-cell">
                             {% if leave.photo_src %}
@@ -413,13 +419,16 @@
                         </div>
                     </td>
                     <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
-                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">{{ leave.leave_date|format_date }}</td>
+                    <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
+                        {% if leave.group_count > 1 %}
+                            {{ leave.date_from|format_date }} – {{ leave.date_to|format_date }}
+                        {% else %}
+                            {{ leave.leave_date|format_date }}
+                        {% endif %}
+                    </td>
                     <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
                     <td style="font-size: 0.82rem; color: var(--gray-600); white-space: nowrap;">
-                        {% if leave.day_portion == 'first_half' %}First Half
-                        {% elif leave.day_portion == 'second_half' %}Second Half
-                        {% else %}Full Day
-                        {% endif %}
+                        {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
                     </td>
                     <td>
                         <span class="status-badge-sm {{ leave.status }}">{{ leave.status }}</span>
@@ -456,10 +465,11 @@
 </aside>
 
 <script>
-/* ── All leave records (pending + approved/rejected) ── */
+/* ── All leave records grouped (pending + approved/rejected) ── */
 const LEAVE_REQUESTS = {
     {% for leave in pending_leaves %}
-    "{{ leave.id }}": {
+    {{ leave.group_id|tojson }}: {
+        group_id: {{ leave.group_id|tojson }},
         id: {{ leave.id }},
         employee_id: {{ leave.employee_id }},
         own: {{ 'true' if leave.employee_id == user.id else 'false' }},
@@ -471,7 +481,11 @@ const LEAVE_REQUESTS = {
         mobile: {{ (leave.mobile or '')|tojson }},
         photo_src: {{ (leave.photo_src or '')|tojson }},
         leave_type: {{ (leave.leave_type or '')|tojson }},
-        leave_date: {{ (leave.leave_date|format_date)|tojson }},
+        date_from: {{ (leave.date_from|format_date)|tojson }},
+        date_to: {{ (leave.date_to|format_date)|tojson }},
+        group_count: {{ leave.group_count }},
+        group_total_days: {{ leave.group_total_days }},
+        group_ids: {{ leave.group_ids|tojson }},
         days: {{ (leave.days or 0)|tojson }},
         day_portion: {{ (leave.day_portion or 'full')|tojson }},
         reason: {{ (leave.reason_main or '')|tojson }},
@@ -487,7 +501,8 @@ const LEAVE_REQUESTS = {
     },
     {% endfor %}
     {% for leave in approved_leaves %}
-    "{{ leave.id }}": {
+    {{ leave.group_id|tojson }}: {
+        group_id: {{ leave.group_id|tojson }},
         id: {{ leave.id }},
         employee_id: {{ leave.employee_id }},
         own: {{ 'true' if leave.employee_id == user.id else 'false' }},
@@ -499,7 +514,11 @@ const LEAVE_REQUESTS = {
         mobile: {{ (leave.mobile or '')|tojson }},
         photo_src: {{ (leave.photo_src or '')|tojson }},
         leave_type: {{ (leave.leave_type or '')|tojson }},
-        leave_date: {{ (leave.leave_date|format_date)|tojson }},
+        date_from: {{ (leave.date_from|format_date)|tojson }},
+        date_to: {{ (leave.date_to|format_date)|tojson }},
+        group_count: {{ leave.group_count }},
+        group_total_days: {{ leave.group_total_days }},
+        group_ids: {{ leave.group_ids|tojson }},
         days: {{ (leave.days or 0)|tojson }},
         day_portion: {{ (leave.day_portion or 'full')|tojson }},
         reason: {{ (leave.reason_main or '')|tojson }},
@@ -539,8 +558,8 @@ function switchTab(tab) {
 }
 
 /* ── Drawer ── */
-function openLeaveDetail(reqId) {
-    const r = LEAVE_REQUESTS[reqId];
+function openLeaveDetail(groupId) {
+    const r = LEAVE_REQUESTS[groupId];
     if (!r) return;
     const body = document.getElementById('leaveDrawerBody');
     const actions = document.getElementById('leaveDrawerActions');
@@ -553,6 +572,9 @@ function openLeaveDetail(reqId) {
     if (r.status === 'approved') statusHtml = '<span class="status-badge-sm approved">Approved</span>';
     else if (r.status === 'rejected') statusHtml = '<span class="status-badge-sm rejected">Rejected</span>';
     else statusHtml = '<span class="status-badge-sm" style="background:#FEF3C7;color:#92400E;">Pending</span>';
+
+    const dateDisplay = (r.group_count > 1) ? `${escapeHtml(r.date_from)} to ${escapeHtml(r.date_to)}` : escapeHtml(r.date_from || '—');
+    const daysDisplay = `${r.group_total_days} day${r.group_total_days == 1 ? '' : 's'} (${r.group_count} working day${r.group_count == 1 ? '' : 's'})`;
 
     let html = `
         <div class="drawer-emp">
@@ -578,12 +600,12 @@ function openLeaveDetail(reqId) {
                 <div class="value">${escapeHtml(r.created_at || '—')}</div>
             </div>
             <div class="drawer-field">
-                <div class="label">Leave Date</div>
-                <div class="value">${escapeHtml(r.leave_date || '—')}</div>
+                <div class="label">Leave Dates</div>
+                <div class="value">${dateDisplay}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">Duration</div>
-                <div class="value">${escapeHtml(dayPortionLabel(r.day_portion))} (${r.days} day${r.days == 1 ? '' : 's'})</div>
+                <div class="value">${daysDisplay}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">Email</div>
@@ -646,13 +668,15 @@ function openLeaveDetail(reqId) {
             actions.style.display = 'flex';
             actions.innerHTML = `<div style="flex:1; text-align:center; color: var(--gray-400); font-style: italic; font-size: 0.85rem;">You cannot approve your own request</div>`;
         } else {
+            const gid = encodeURIComponent(r.group_id);
+            const dayLabel = r.group_total_days == 1 ? '1 day' : r.group_total_days + ' days';
             actions.style.display = 'flex';
             actions.innerHTML = `
-                <form method="POST" action="/admin/approve-leave/${r.id}" style="flex:1;">
-                    <button type="submit" class="btn-action btn-approve" style="width:100%;">Approve</button>
+                <form method="POST" action="/admin/approve-group/${gid}" style="flex:1;">
+                    <button type="submit" class="btn-action btn-approve" style="width:100%;">Approve ${dayLabel}</button>
                 </form>
-                <form method="POST" action="/admin/reject-leave/${r.id}" style="flex:1;">
-                    <button type="submit" class="btn-action btn-reject" style="width:100%;">Reject</button>
+                <form method="POST" action="/admin/reject-group/${gid}" style="flex:1;">
+                    <button type="submit" class="btn-action btn-reject" style="width:100%;">Reject ${dayLabel}</button>
                 </form>
             `;
         }
