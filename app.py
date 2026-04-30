@@ -15996,11 +15996,6 @@ def upload_attendance():
             return render_template('upload_attendance.html', user=user)
 
         import tempfile, os
-        try:
-            import xlrd
-        except ImportError:
-            flash('xlrd library not available on server', 'error')
-            return render_template('upload_attendance.html', user=user)
 
         # Save uploaded file temporarily
         tmp = tempfile.NamedTemporaryFile(delete=False, suffix='.xls')
@@ -16008,8 +16003,19 @@ def upload_attendance():
         tmp.close()
 
         try:
-            wb = xlrd.open_workbook(tmp.name)
-            sheet = wb.sheets()[0]
+            # Try xlrd first (true .xls format), fall back to openpyxl (.xlsx disguised as .xls)
+            sheet = None
+            use_openpyxl = False
+            try:
+                import xlrd
+                wb = xlrd.open_workbook(tmp.name)
+                sheet = wb.sheets()[0]
+            except Exception:
+                # xlrd failed — file is likely xlsx format with .xls extension
+                from openpyxl import load_workbook
+                wb = load_workbook(tmp.name, read_only=True, data_only=True)
+                sheet = wb.active
+                use_openpyxl = True
 
             conn = get_db()
             # Build emp_code → employee_id map
@@ -16021,25 +16027,50 @@ def upload_attendance():
             skipped = 0
             updated = 0
 
-            for r in range(sheet.nrows):
-                cell_b = str(sheet.cell(r, 1).value).strip()
+            # Cell reader abstraction: xlrd uses 0-based (row, col), openpyxl uses 1-based (row, column)
+            def cell_val(r, c):
+                """Read cell value at 0-based row r, 0-based col c."""
+                try:
+                    if use_openpyxl:
+                        v = sheet.cell(row=r + 1, column=c + 1).value
+                    else:
+                        v = sheet.cell(r, c).value
+                    return str(v).strip() if v is not None else ''
+                except Exception:
+                    return ''
+
+            def cell_raw(r, c):
+                """Read raw cell value (not stringified)."""
+                try:
+                    if use_openpyxl:
+                        return sheet.cell(row=r + 1, column=c + 1).value
+                    else:
+                        return sheet.cell(r, c).value
+                except Exception:
+                    return None
+
+            total_rows = sheet.max_row if use_openpyxl else sheet.nrows
+            total_cols = sheet.max_column if use_openpyxl else sheet.ncols
+
+            for r in range(total_rows):
+                cell_b = cell_val(r, 1)
 
                 # Detect date header rows
                 if cell_b == 'Attendance Date :':
-                    current_date = str(sheet.cell(r, 5).value).strip()
+                    current_date = cell_val(r, 5)
                     continue
 
                 if not current_date:
                     continue
 
                 # Detect data rows (SNo column is numeric)
-                cell_sno = sheet.cell(r, 1).value
+                cell_sno = cell_raw(r, 1)
                 try:
                     float(cell_sno)
                 except (ValueError, TypeError):
                     continue
 
-                e_code_raw = str(sheet.cell(r, 2).value).strip()
+                e_code_raw = cell_val(r, 2)
                 if not e_code_raw:
                     continue
 
@@ -16056,18 +16087,18 @@ def upload_attendance():
                 except ValueError:
                     parsed_date = current_date
 
-                shift = str(sheet.cell(r, 5).value).strip()
-                scheduled_in = str(sheet.cell(r, 6).value).strip()
-                scheduled_out = str(sheet.cell(r, 7).value).strip()
-                actual_in = str(sheet.cell(r, 9).value).strip()
-                actual_out = str(sheet.cell(r, 10).value).strip()
-                work_dur = str(sheet.cell(r, 11).value).strip()
-                ot = str(sheet.cell(r, 12).value).strip()
-                total_dur = str(sheet.cell(r, 13).value).strip()
-                late_by = str(sheet.cell(r, 14).value).strip()
-                early_going = str(sheet.cell(r, 15).value).strip()
-                status = str(sheet.cell(r, 16).value).strip()
-                punch_recs = str(sheet.cell(r, 18).value).strip() if sheet.ncols > 18 else ''
+                shift = cell_val(r, 5)
+                scheduled_in = cell_val(r, 6)
+                scheduled_out = cell_val(r, 7)
+                actual_in = cell_val(r, 9)
+                actual_out = cell_val(r, 10)
+                work_dur = cell_val(r, 11)
+                ot = cell_val(r, 12)
+                total_dur = cell_val(r, 13)
+                late_by = cell_val(r, 14)
+                early_going = cell_val(r, 15)
+                status = cell_val(r, 16)
+                punch_recs = cell_val(r, 18) if total_cols > 18 else ''
 
                 # Upsert
                 existing = conn.execute(
