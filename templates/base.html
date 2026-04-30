@@ -173,7 +173,7 @@
         .nav-dropdown-menu-inner a svg { flex-shrink: 0; }
 
         /* Wide / multi-column dropdown menus for long sub-lists */
-        .nav-dropdown-menu--wide { min-width: 500px; }
+        .nav-dropdown-menu--wide { min-width: 500px; max-width: calc(100vw - 1rem); }
         .nav-dropdown-menu--wide .nav-dropdown-menu-inner {
             display: grid;
             grid-template-columns: repeat(2, minmax(220px, 1fr));
@@ -182,7 +182,7 @@
             max-height: none;
             overflow-y: visible;
         }
-        .nav-dropdown-menu--wide-3 { min-width: 720px; }
+        .nav-dropdown-menu--wide-3 { min-width: 720px; max-width: calc(100vw - 1rem); }
         .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner {
             display: grid;
             grid-template-columns: repeat(3, minmax(220px, 1fr));
@@ -1651,7 +1651,29 @@
         document.querySelectorAll('.nav-dropdown.open').forEach(el => {
             if (el.id !== 'notif-dropdown') el.classList.remove('open');
         });
-        if (!wasOpen) dd.classList.add('open');
+        if (!wasOpen) {
+            dd.classList.add('open');
+            // Reposition if menu overflows viewport on the right
+            const menu = dd.querySelector('.nav-dropdown-menu');
+            if (menu) {
+                menu.style.left = '0';
+                menu.style.right = 'auto';
+                requestAnimationFrame(function() {
+                    const rect = menu.getBoundingClientRect();
+                    const vw = window.innerWidth;
+                    if (rect.right > vw - 8) {
+                        menu.style.left = 'auto';
+                        menu.style.right = '0';
+                        // Re-check: if it now overflows on the left, pin to left edge
+                        const rect2 = menu.getBoundingClientRect();
+                        if (rect2.left < 8) {
+                            menu.style.left = (-dd.getBoundingClientRect().left + 8) + 'px';
+                            menu.style.right = 'auto';
+                        }
+                    }
+                });
+            }
+        }
     }
 
     // Account dropdown toggle

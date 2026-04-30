@@ -92,13 +92,8 @@ function updateDateSummary() {
     summary.classList.add('visible');
 }
 
-// Set min date to today
+// Sync to_date min with from_date (no restriction on past dates)
 document.addEventListener('DOMContentLoaded', function() {
-    const today = new Date().toISOString().split('T')[0];
-    document.getElementById('from_date').setAttribute('min', today);
-    document.getElementById('to_date').setAttribute('min', today);
-
-    // Sync to_date min with from_date
     document.getElementById('from_date').addEventListener('change', function() {
         document.getElementById('to_date').setAttribute('min', this.value);
         if (document.getElementById('to_date').value && document.getElementById('to_date').value < this.value) {
