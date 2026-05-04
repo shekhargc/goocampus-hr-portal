@@ -16891,10 +16891,10 @@ def send_all_attendance_reports():
     conn = get_db()
     # Get all employees with attendance data for the month
     emp_rows = conn.execute(
-        "SELECT DISTINCT e.id "
+        "SELECT DISTINCT e.id, e.name "
         "FROM employees e "
         "JOIN attendance_logs a ON a.employee_id = e.id "
-        "WHERE e.is_active = 1 "
+        "WHERE e.is_active = TRUE "
         "AND a.attendance_date >= ? AND a.attendance_date <= ? "
         "ORDER BY e.name",
         (date_from, date_to)
