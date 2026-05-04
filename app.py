@@ -16883,6 +16883,11 @@ def send_all_attendance_reports():
         flash('Missing month/year for bulk report.', 'error')
         return redirect(url_for('time_log'))
 
+    import calendar as cal_mod
+    days_in_month = cal_mod.monthrange(year, month)[1]
+    date_from = f"{year}-{month:02d}-01"
+    date_to = f"{year}-{month:02d}-{days_in_month:02d}"
+
     conn = get_db()
     # Get all employees with attendance data for the month
     emp_rows = conn.execute(
@@ -16890,9 +16895,9 @@ def send_all_attendance_reports():
         "FROM employees e "
         "JOIN attendance_logs a ON a.employee_id = e.id "
         "WHERE e.is_active = 1 "
-        "AND strftime('%%Y-%%m', a.attendance_date) = ? "
+        "AND a.attendance_date >= ? AND a.attendance_date <= ? "
         "ORDER BY e.name",
-        (f"{year}-{month:02d}",)
+        (date_from, date_to)
     ).fetchall()
     conn.close()
 
