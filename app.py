@@ -16564,21 +16564,21 @@ def _build_and_send_attendance_report(employee_id, month, year):
         WHERE employee_id = ? AND attendance_date >= ? AND attendance_date <= ?
         ORDER BY attendance_date ASC
     """, (employee_id, date_from, date_to)).fetchall()
-    att_lookup = {row['attendance_date']: dict(row) for row in logs}
+    att_lookup = {str(row['attendance_date']): dict(row) for row in logs}
 
     # Fetch holidays
     holidays_rows = conn.execute(
         "SELECT holiday_date, name FROM holidays WHERE holiday_date >= ? AND holiday_date <= ?",
         (date_from, date_to)
     ).fetchall()
-    holidays_map = {row['holiday_date']: row['name'] for row in holidays_rows}
+    holidays_map = {str(row['holiday_date']): row['name'] for row in holidays_rows}
 
     # Fetch approved leaves
     leaves_rows = conn.execute("""
         SELECT leave_date, leave_type, day_portion FROM leave_records
         WHERE employee_id = ? AND leave_date >= ? AND leave_date <= ? AND status = 'approved'
     """, (employee_id, date_from, date_to)).fetchall()
-    leaves_map = {row['leave_date']: dict(row) for row in leaves_rows}
+    leaves_map = {str(row['leave_date']): dict(row) for row in leaves_rows}
 
     # Fetch approved WFH
     wfh_rows = conn.execute("""
@@ -16588,10 +16588,13 @@ def _build_and_send_attendance_report(employee_id, month, year):
     wfh_dates = set()
     for wfh in wfh_rows:
         try:
-            wfh_start = datetime.strptime(wfh['from_date'], '%Y-%m-%d')
-            wfh_end = datetime.strptime(wfh['to_date'], '%Y-%m-%d')
-            cur = wfh_start
-            while cur <= wfh_end:
+            fd = wfh['from_date']
+            td = wfh['to_date']
+            wfh_start = fd if hasattr(fd, 'year') else datetime.strptime(str(fd), '%Y-%m-%d')
+            wfh_end = td if hasattr(td, 'year') else datetime.strptime(str(td), '%Y-%m-%d')
+            cur = wfh_start if isinstance(wfh_start, datetime) else datetime(wfh_start.year, wfh_start.month, wfh_start.day)
+            end = wfh_end if isinstance(wfh_end, datetime) else datetime(wfh_end.year, wfh_end.month, wfh_end.day)
+            while cur <= end:
                 ds = cur.strftime('%Y-%m-%d')
                 if date_from <= ds <= date_to:
                     wfh_dates.add(ds)
