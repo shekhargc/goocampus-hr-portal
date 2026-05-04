@@ -345,7 +345,6 @@
                             <th>Total Hrs</th>
                             <th>WHD - 9 HR</th>
                             <th>Late By</th>
-                            <th>Early Going</th>
                             <th>Punch Records</th>
                         </tr>
                     </thead>
@@ -422,7 +421,6 @@
                             <td class="time-val"><strong>{% if day.total_duration and day.total_duration != '00:00' %}{{ day.total_duration }}{% else %}—{% endif %}</strong></td>
                             <td>{% if day.whd == '✓' %}<span style="color: #16a34a; font-weight: 700; font-size: 1.1rem;">&#10003;</span>{% elif day.whd %}<span style="color: #dc2626; font-weight: 600;">{{ day.whd }}</span>{% else %}—{% endif %}</td>
                             <td>{% if day.late_by and day.late_by != '00:00' %}<span class="late-val">{{ day.late_by }}</span>{% else %}—{% endif %}</td>
-                            <td class="time-val">{% if day.early_going_by and day.early_going_by != '00:00' %}{{ day.early_going_by }}{% else %}—{% endif %}</td>
                             <td style="font-size: 0.72rem; color: var(--gray-500); max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
                                 {{ day.punch_records or '—' }}
                             </td>
