@@ -16306,7 +16306,7 @@ def time_log():
         s = {
             'name': info['name'], 'emp_code': info['emp_code'],
             'department': info['department'], 'photo_url': info['photo_url'],
-            'total_work_mins': 0, 'total_ot_mins': 0,
+            'total_work_mins': 0,
             'present_days': 0, 'absent_days': 0, 'late_days': 0,
             'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
             'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
@@ -16408,9 +16408,9 @@ def time_log():
                         s['absent_days'] += 1
                     # No attendance record and no leave/WFH → will be blank row
 
-                # ── Calculate Work, OT, Total from actual in/out times ──
-                BREAK_MINS = 60     # 1 hour lunch break
-                OT_THRESHOLD = 480  # 8 hours total → OT starts after 8h completion
+                # ── Calculate Total Hours from actual in/out times ──
+                FULL_DAY_MINS = 540   # 9 hours = standard working day
+                HALF_DAY_MINS = 240   # 4 hours = half-day minimum
 
                 # Compute total_in_out from actual punch times
                 total_in_out = 0
@@ -16424,31 +16424,33 @@ def time_log():
                     except Exception:
                         total_in_out = _parse_time_minutes(att.get('total_duration', ''))
 
-                # Work hours & OT calculation:
-                # >= 8h total: work = 8h standard (displayed), OT = total - 8h
-                # 1h-8h total: work = total - 1h break, OT = 0
-                # < 1h total: work = total (no break deduction), OT = 0
-                if total_in_out >= OT_THRESHOLD:
-                    calc_work = OT_THRESHOLD  # 8h standard display
-                    calc_ot = total_in_out - OT_THRESHOLD
-                elif total_in_out > BREAK_MINS:
-                    calc_work = total_in_out - BREAK_MINS
-                    calc_ot = 0
-                else:
-                    calc_work = total_in_out  # less than 1h, no break deduction
-                    calc_ot = 0
-
-                # Override display fields
-                day_rec['work_duration'] = f"{calc_work // 60}:{calc_work % 60:02d}" if total_in_out > 0 else ''
-                day_rec['overtime'] = f"{calc_ot // 60}:{calc_ot % 60:02d}" if calc_ot > 0 else ''
+                # Total working hours = pure in-to-out
                 day_rec['total_duration'] = f"{total_in_out // 60}:{total_in_out % 60:02d}" if total_in_out > 0 else ''
 
-                s['total_work_mins'] += calc_work
-                s['total_ot_mins'] += calc_ot
+                # WHD (Working Hour Deficit) against 9-hour standard
+                # For half-day leave: standard is 4h instead of 9h
+                is_half_day = (day_rec.get('day_type') == 'half_leave')
+                whd_standard = HALF_DAY_MINS if is_half_day else FULL_DAY_MINS
+
+                if total_in_out > 0 and has_in and has_out:
+                    deficit = whd_standard - total_in_out
+                    if deficit > 0:
+                        # Deficit — show difference in red
+                        day_rec['whd'] = f"-{deficit // 60}:{deficit % 60:02d}"
+                        day_rec['whd_ok'] = False
+                    else:
+                        # Met or exceeded — green tick
+                        day_rec['whd'] = '✓'
+                        day_rec['whd_ok'] = True
+                else:
+                    day_rec['whd'] = ''
+                    day_rec['whd_ok'] = None
+
+                s['total_work_mins'] += total_in_out
 
                 # Track mins only for days with both in & out (for avg calculations)
                 if has_in and has_out:
-                    s['full_days_work_mins'] += calc_work
+                    s['full_days_work_mins'] += total_in_out
                     s['full_days_total_mins'] += total_in_out
 
                 late_mins = _parse_time_minutes(att.get('late_by', ''))
@@ -16463,15 +16465,11 @@ def time_log():
     summaries = []
     for eid, s in sorted(emp_summaries.items(), key=lambda x: x[1]['name']):
         s['total_work_hrs'] = f"{s['total_work_mins'] // 60}h {s['total_work_mins'] % 60}m"
-        s['total_ot_hrs'] = f"{s['total_ot_mins'] // 60}h {s['total_ot_mins'] % 60}m"
         # Average based only on days with both In & Out
         s['avg_work_hrs'] = ''
-        s['avg_total_hrs'] = ''
         if s['in_out_days'] > 0:
             avg = s['full_days_work_mins'] / s['in_out_days']
             s['avg_work_hrs'] = f"{int(avg) // 60}h {int(avg) % 60}m"
-            avg_total = s['full_days_total_mins'] / s['in_out_days']
-            s['avg_total_hrs'] = f"{int(avg_total) // 60}h {int(avg_total) % 60}m"
         summaries.append(s)
 
     # For admin: employee list for filter (include all employees, not just those with attendance)
@@ -16585,14 +16583,14 @@ def send_attendance_report():
 
     # Build daily rows and compute stats
     DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    BREAK_MINS = 60      # 1 hour lunch break
-    OT_THRESHOLD = 480   # 8 hours total → OT starts after 8h completion
+    FULL_DAY_MINS_CFG = 540   # 9 hours standard for WHD
+    HALF_DAY_MINS_CFG = 240   # 4 hours half-day minimum
 
     stats = {
         'present': 0, 'absent': 0, 'leave': 0, 'wfh': 0,
         'holiday': 0, 'weekend': 0, 'late': 0,
         'in_out': 0, 'no_in': 0, 'no_out': 0,
-        'total_work_mins': 0, 'total_ot_mins': 0, 'full_days_work_mins': 0, 'full_days_total_mins': 0
+        'total_work_mins': 0, 'full_days_work_mins': 0, 'full_days_total_mins': 0
     }
     rows_html = []
 
@@ -16676,7 +16674,9 @@ def send_attendance_report():
             row_bg = '#FFFFFF'
             status_color = '#9CA3AF'
 
-        # Work hours and OT — computed from actual in/out times
+        # Total hours — computed from actual in/out times
+        FULL_DAY_MINS = 540   # 9 hours standard
+        HALF_DAY_MINS = 240   # 4 hours half-day minimum
         total_in_out = 0
         if has_in and has_out and att:
             try:
@@ -16688,20 +16688,25 @@ def send_attendance_report():
             except Exception:
                 total_in_out = _parse_time_minutes(att.get('total_duration', ''))
 
-        if total_in_out >= OT_THRESHOLD:
-            work_mins = OT_THRESHOLD   # 8h standard display
-            ot_mins = total_in_out - OT_THRESHOLD
-        elif total_in_out > BREAK_MINS:
-            work_mins = total_in_out - BREAK_MINS
-            ot_mins = 0
-        else:
-            work_mins = total_in_out
-            ot_mins = 0
+        is_half_day = (day_type == 'half_leave')
+        whd_standard = HALF_DAY_MINS if is_half_day else FULL_DAY_MINS
 
-        stats['total_work_mins'] += work_mins
-        stats['total_ot_mins'] += ot_mins
+        # WHD calculation
+        if total_in_out > 0 and has_in and has_out:
+            deficit = whd_standard - total_in_out
+            if deficit > 0:
+                whd_display = f"-{deficit // 60}:{deficit % 60:02d}"
+                whd_color = '#DC2626'
+            else:
+                whd_display = '&#10003;'
+                whd_color = '#16A34A'
+        else:
+            whd_display = '—'
+            whd_color = '#6B7280'
+
+        stats['total_work_mins'] += total_in_out
         if has_in and has_out:
-            stats['full_days_work_mins'] += work_mins
+            stats['full_days_work_mins'] += total_in_out
             stats['full_days_total_mins'] += total_in_out
 
         if att:
@@ -16712,8 +16717,6 @@ def send_attendance_report():
         # Format values
         actual_in = (att.get('actual_in') or '—') if att else '—'
         actual_out = (att.get('actual_out') or '—') if att else '—'
-        work_display = f"{work_mins // 60}:{work_mins % 60:02d}" if work_mins > 0 else '—'
-        ot_display = f"{ot_mins // 60}:{ot_mins % 60:02d}" if ot_mins > 0 else '—'
         total_display = f"{total_in_out // 60}:{total_in_out % 60:02d}" if total_in_out > 0 else '—'
         late_display = att.get('late_by', '') if att else ''
         late_display = late_display if late_display and late_display != '00:00' else '—'
@@ -16728,22 +16731,18 @@ def send_attendance_report():
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {status_color}; font-weight: 600; font-size: 13px;">{status_text}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_in}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_out}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">{work_display}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #7C3AED; font-weight: 600;">{ot_display}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">{total_display}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {whd_color}; font-weight: 600;">{whd_display}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {'#DC2626' if late_display != '—' else '#6B7280'}; font-weight: {'600' if late_display != '—' else '400'};">{late_display}</td>
             </tr>
         ''')
 
     # Format stats
     total_work = f"{stats['total_work_mins'] // 60}h {stats['total_work_mins'] % 60}m"
-    total_ot = f"{stats['total_ot_mins'] // 60}h {stats['total_ot_mins'] % 60}m"
     avg_work = '—'
-    avg_total = '—'
     if stats['in_out'] > 0:
         avg_m = stats['full_days_work_mins'] / stats['in_out']
         avg_work = f"{int(avg_m) // 60}h {int(avg_m) % 60}m"
-        avg_t = stats['full_days_total_mins'] / stats['in_out']
-        avg_total = f"{int(avg_t) // 60}h {int(avg_t) % 60}m"
 
     # Build HTML email
     html_body = f'''
@@ -16782,22 +16781,12 @@ def send_attendance_report():
                 <tr>
                     <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
                         <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{total_work}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Total Work</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Total Hours</div>
                     </td>
                     <td style="width: 8px;"></td>
                     <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
                         <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_work}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Work (In&Out)</div>
-                    </td>
-                    <td style="width: 8px;"></td>
-                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_total}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Total (In&Out)</div>
-                    </td>
-                    <td style="width: 8px;"></td>
-                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 800; color: #7C3AED;">{total_ot}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Overtime</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Hours (In&Out)</div>
                     </td>
                     <td style="width: 8px;"></td>
                     <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
@@ -16839,8 +16828,8 @@ def send_attendance_report():
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Status</th>
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">In</th>
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Out</th>
-                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Work Hrs</th>
-                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">OT</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Total Hrs</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">WHD - 9 HR</th>
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Late</th>
                     </tr>
                 </thead>
