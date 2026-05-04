@@ -16310,6 +16310,8 @@ def time_log():
             'present_days': 0, 'absent_days': 0, 'late_days': 0,
             'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
             'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
+            'in_out_days': 0, 'no_in_days': 0, 'no_out_days': 0,
+            'full_days_work_mins': 0,  # work mins only for days with both in & out
             'days': [], 'employee_id': eid
         }
 
@@ -16369,24 +16371,48 @@ def time_log():
             # Update attendance-based counters (only for actual attendance records)
             if att:
                 status = (att.get('status') or '').strip()
-                # Don't count weekend/holiday attendance status in present/absent
+                has_in = bool(att.get('actual_in') and att['actual_in'].strip() and att['actual_in'].strip() != '—')
+                has_out = bool(att.get('actual_out') and att['actual_out'].strip() and att['actual_out'].strip() != '—')
+
+                # Track In/Out, No In, No Out (only for working days)
                 if day_type not in ('weekend', 'holiday'):
-                    if 'Present' in status and '½' not in status and 'No OutPunch' not in status:
-                        s['present_days'] += 1
-                    elif '½' in status:
+                    if has_in and has_out:
+                        s['in_out_days'] += 1
+                    elif has_in and not has_out:
+                        s['no_out_days'] += 1
+                    elif not has_in and has_out:
+                        s['no_in_days'] += 1
+
+                    # Determine punch tag for display
+                    if has_in and not has_out:
+                        day_rec['punch_tag'] = 'no_out'
+                    elif not has_in and has_out:
+                        day_rec['punch_tag'] = 'no_in'
+                    elif has_in and has_out:
+                        day_rec['punch_tag'] = 'full'
+                    else:
+                        day_rec['punch_tag'] = 'none'
+
+                    # Present-day logic: count as present if they have at least an in or out
+                    if leave_info and leave_info['day_portion'] in ('first_half', 'second_half'):
+                        # Half-day leave: count 0.5 present + 0.5 leave (leave already counted above)
                         s['half_days'] += 1
                         s['present_days'] += 0.5
-                    elif 'No OutPunch' in status:
-                        s['no_punch_days'] += 1
+                    elif has_in or has_out:
+                        # They showed up (even if missing one punch)
+                        s['present_days'] += 1
+                    elif leave_info or is_wfh:
+                        pass  # On leave/WFH, already counted
                     elif 'Absent' in status:
-                        # If employee was on leave or WFH, don't count as absent
-                        if leave_info or is_wfh:
-                            pass  # Already counted above
-                        else:
-                            s['absent_days'] += 1
+                        s['absent_days'] += 1
+                    # No attendance record and no leave/WFH → will be blank row
 
                 work_mins = _parse_time_minutes(att.get('work_duration', ''))
                 s['total_work_mins'] += work_mins
+
+                # Track work mins only for days with both in & out (for avg calculation)
+                if has_in and has_out:
+                    s['full_days_work_mins'] += work_mins
 
                 # Auto-calculate overtime: anything beyond 9 hours (540 mins)
                 STANDARD_WORK_MINS = 540  # 9 hours
@@ -16401,18 +16427,20 @@ def time_log():
                 late_mins = _parse_time_minutes(att.get('late_by', ''))
                 if late_mins > 0:
                     s['late_days'] += 1
+            else:
+                day_rec['punch_tag'] = 'none'
 
         emp_summaries[eid] = s
 
     # Format summaries
     summaries = []
     for eid, s in sorted(emp_summaries.items(), key=lambda x: x[1]['name']):
-        working_days = s['present_days'] + s['half_days'] + s['no_punch_days']
         s['total_work_hrs'] = f"{s['total_work_mins'] // 60}h {s['total_work_mins'] % 60}m"
         s['total_ot_hrs'] = f"{s['total_ot_mins'] // 60}h {s['total_ot_mins'] % 60}m"
+        # Average based only on days with both In & Out
         s['avg_work_hrs'] = ''
-        if working_days > 0:
-            avg = s['total_work_mins'] / working_days
+        if s['in_out_days'] > 0:
+            avg = s['full_days_work_mins'] / s['in_out_days']
             s['avg_work_hrs'] = f"{int(avg) // 60}h {int(avg) % 60}m"
         summaries.append(s)
 

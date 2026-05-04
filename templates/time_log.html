@@ -52,6 +52,9 @@
     .summary-card.leave .sc-value { color: #1E40AF; }
     .summary-card.wfh .sc-value { color: #0E7490; }
     .summary-card.holiday .sc-value { color: #9D174D; }
+    .summary-card.in-out .sc-value { color: #059669; }
+    .summary-card.no-in .sc-value { color: #B45309; }
+    .summary-card.no-out .sc-value { color: #9A3412; }
 
     /* ── Employee Section ── */
     .emp-section {
@@ -268,7 +271,7 @@
                 </div>
                 <div class="summary-card hours">
                     <div class="sc-value">{{ s.avg_work_hrs or '—' }}</div>
-                    <div class="sc-label">Avg / Day</div>
+                    <div class="sc-label">Avg / Day (In&Out)</div>
                 </div>
                 <div class="summary-card present">
                     <div class="sc-value">{{ s.present_days }}</div>
@@ -277,6 +280,18 @@
                 <div class="summary-card absent">
                     <div class="sc-value">{{ s.absent_days }}</div>
                     <div class="sc-label">Absent Days</div>
+                </div>
+                <div class="summary-card in-out">
+                    <div class="sc-value">{{ s.in_out_days }}</div>
+                    <div class="sc-label">In & Out</div>
+                </div>
+                <div class="summary-card no-in">
+                    <div class="sc-value">{{ s.no_in_days }}</div>
+                    <div class="sc-label">No In</div>
+                </div>
+                <div class="summary-card no-out">
+                    <div class="sc-value">{{ s.no_out_days }}</div>
+                    <div class="sc-label">No Out</div>
                 </div>
                 <div class="summary-card leave">
                     <div class="sc-value">{{ s.leave_days|int }}</div>
@@ -330,24 +345,39 @@
                                 <span class="day-name{% if day.is_weekend %} weekend{% endif %}">{{ day.day_name }}</span>
                             </td>
                             <td>
+                                {% set ptag = day.punch_tag|default('none') %}
                                 {% if dtype == 'holiday' %}
                                     <span class="att-status holiday">Holiday</span>
                                     <span style="font-size: 0.7rem; color: #9D174D; margin-left: 0.25rem;">{{ day.holiday_name }}</span>
-                                {% elif dtype == 'leave' %}
-                                    <span class="att-status leave">On Leave</span>
-                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}{% if day.leave_portion and day.leave_portion != 'full' %} ({{ day.leave_portion|replace('_', ' ')|title }}){% endif %}</span>
-                                {% elif day.is_wfh and dtype == 'wfh' %}
-                                    <span class="att-status wfh">WFH</span>
                                 {% elif dtype == 'weekend' %}
                                     <span class="att-status weekly-off">Weekend</span>
-                                {% elif 'Present' in st and '½' not in st and 'No OutPunch' not in st %}
+                                {% elif dtype == 'leave' and day.leave_portion in ('first_half', 'second_half') %}
+                                    {# Half-day leave — show both present status and leave tag #}
+                                    {% if ptag == 'full' %}
+                                        <span class="att-status present">Present</span>
+                                    {% elif ptag == 'no_out' %}
+                                        <span class="att-status no-punch">No Out</span>
+                                    {% elif ptag == 'no_in' %}
+                                        <span class="att-status no-punch">No In</span>
+                                    {% endif %}
+                                    <span class="att-status leave" style="margin-left: 0.25rem;">½ {{ day.leave_type }}</span>
+                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.15rem;">({{ day.leave_portion|replace('_', ' ')|title }})</span>
+                                {% elif dtype == 'leave' %}
+                                    <span class="att-status leave">On Leave</span>
+                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}</span>
+                                {% elif dtype == 'wfh' %}
+                                    <span class="att-status wfh">WFH</span>
+                                {% elif ptag == 'full' %}
                                     <span class="att-status present">Present</span>
                                     {% if day.is_wfh %}<span class="att-status wfh" style="margin-left: 0.25rem;">WFH</span>{% endif %}
-                                {% elif '½' in st %}
-                                    <span class="att-status half">½ Day</span>
-                                    {% if day.leave_type %}<span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">+ {{ day.leave_type }} Leave</span>{% endif %}
-                                {% elif 'No OutPunch' in st %}
-                                    <span class="att-status no-punch">No Out</span>
+                                {% elif ptag == 'no_out' %}
+                                    <span class="att-status present">Present</span>
+                                    <span class="att-status no-punch" style="margin-left: 0.25rem;">No Out</span>
+                                    {% if day.is_wfh %}<span class="att-status wfh" style="margin-left: 0.25rem;">WFH</span>{% endif %}
+                                {% elif ptag == 'no_in' %}
+                                    <span class="att-status present">Present</span>
+                                    <span class="att-status no-punch" style="margin-left: 0.25rem;">No In</span>
+                                    {% if day.is_wfh %}<span class="att-status wfh" style="margin-left: 0.25rem;">WFH</span>{% endif %}
                                 {% elif 'Absent' in st %}
                                     {% if day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
