@@ -16609,70 +16609,74 @@ def send_attendance_report():
         has_in = bool(att and att.get('actual_in') and att['actual_in'].strip() and att['actual_in'].strip() != '—')
         has_out = bool(att and att.get('actual_out') and att['actual_out'].strip() and att['actual_out'].strip() != '—')
 
-        # Determine day type and status text
+        # Determine day type and status HTML (matching web page badge style)
+        badge = lambda text, bg, color: f'<span style="display:inline-block;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600;background:{bg};color:{color};">{text}</span>'
+
         if holiday_name:
             day_type = 'holiday'
-            status_text = f'Holiday — {holiday_name}'
+            status_html = badge('Holiday', '#FDF2F8', '#9D174D') + f' <span style="font-size:11px;color:#9D174D;">{holiday_name}</span>'
             stats['holiday'] += 1
             row_bg = '#FDF2F8'
-            status_color = '#9D174D'
         elif is_weekend:
             day_type = 'weekend'
-            status_text = 'Weekend'
+            status_html = badge('Weekend', '#F5F3FF', '#3730A3')
             stats['weekend'] += 1
             row_bg = '#F5F3FF'
-            status_color = '#3730A3'
         elif leave and leave['day_portion'] in ('first_half', 'second_half'):
             day_type = 'half_leave'
             portion_label = leave['day_portion'].replace('_', ' ').title()
-            status_text = f'Present + ½ {leave["leave_type"].capitalize()} ({portion_label})'
+            leave_type = leave['leave_type'].capitalize()
+            # Show punch status + half-leave tag (same as web page)
+            if has_in and has_out:
+                stats['in_out'] += 1
+                punch_badge = badge('Present', '#F0FDF4', '#065F46')
+            elif has_in:
+                stats['no_out'] += 1
+                punch_badge = badge('No Out', '#FFF7ED', '#9A3412')
+            elif has_out:
+                stats['no_in'] += 1
+                punch_badge = badge('No In', '#FFF7ED', '#B45309')
+            else:
+                punch_badge = ''
+            status_html = f'{punch_badge} {badge(f"½ {leave_type}", "#EFF6FF", "#1E40AF")} <span style="font-size:11px;color:#1E40AF;">({portion_label})</span>'
             stats['present'] += 0.5
             stats['leave'] += 0.5
             row_bg = '#EFF6FF'
-            status_color = '#1E40AF'
-            if has_in and has_out:
-                stats['in_out'] += 1
-            elif has_in:
-                stats['no_out'] += 1
-            elif has_out:
-                stats['no_in'] += 1
         elif leave:
             day_type = 'leave'
-            status_text = f'On Leave — {leave["leave_type"].capitalize()}'
+            status_html = badge('On Leave', '#EFF6FF', '#1E40AF') + f' <span style="font-size:11px;color:#1E40AF;">{leave["leave_type"].capitalize()}</span>'
             stats['leave'] += 1
             row_bg = '#EFF6FF'
-            status_color = '#1E40AF'
         elif is_wfh:
             day_type = 'wfh'
-            status_text = 'WFH'
+            status_html = badge('WFH', '#ECFEFF', '#0E7490')
             stats['wfh'] += 1
             row_bg = '#ECFEFF'
-            status_color = '#0E7490'
         elif has_in or has_out:
             day_type = 'present'
             stats['present'] += 1
             if has_in and has_out:
                 stats['in_out'] += 1
-                status_text = 'Present'
+                status_html = badge('Present', '#F0FDF4', '#065F46')
             elif has_in and not has_out:
                 stats['no_out'] += 1
-                status_text = 'Present (No Out)'
+                status_html = badge('Present', '#F0FDF4', '#065F46') + ' ' + badge('No Out', '#FFF7ED', '#9A3412')
             else:
                 stats['no_in'] += 1
-                status_text = 'Present (No In)'
+                status_html = badge('Present', '#F0FDF4', '#065F46') + ' ' + badge('No In', '#FFF7ED', '#B45309')
             row_bg = '#FFFFFF'
-            status_color = '#065F46'
         elif att and 'Absent' in (att.get('status') or ''):
             day_type = 'absent'
-            status_text = 'Absent'
+            if is_wfh:
+                status_html = badge('WFH', '#ECFEFF', '#0E7490')
+            else:
+                status_html = badge('Absent', '#FEF2F2', '#991B1B')
             stats['absent'] += 1
             row_bg = '#FEF2F2'
-            status_color = '#991B1B'
         else:
             day_type = 'blank'
-            status_text = '—'
+            status_html = '—'
             row_bg = '#FFFFFF'
-            status_color = '#9CA3AF'
 
         # Total hours — computed from actual in/out times
         FULL_DAY_MINS = 540   # 9 hours standard
@@ -16728,7 +16732,7 @@ def send_attendance_report():
             <tr style="background: {row_bg};">
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #1e3a5f; white-space: nowrap;">{d:02d} {month_name[:3]}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB;"><span style="{day_name_style}">{day_name}</span></td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {status_color}; font-weight: 600; font-size: 13px;">{status_text}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-size: 13px;">{status_html}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_in}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_out}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">{total_display}</td>
