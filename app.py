@@ -16496,34 +16496,22 @@ def time_log():
         month_names=month_names)
 
 
-@app.route('/admin/send-attendance-report', methods=['POST'])
-@admin_required
-def send_attendance_report():
-    """Email an individual employee their monthly attendance report, CC reporting manager."""
+def _build_and_send_attendance_report(employee_id, month, year):
+    """Core logic: build and send an attendance report email for one employee.
+    Returns True on success, False on failure."""
     from email_utils import send_email
     import calendar as cal_mod
 
-    employee_id = request.form.get('employee_id', type=int)
-    month = request.form.get('month', type=int)
-    year = request.form.get('year', type=int)
-
-    if not employee_id or not month or not year:
-        flash('Missing parameters for attendance report.', 'error')
-        return redirect(request.referrer or url_for('time_log'))
-
     conn = get_db()
 
-    # Get employee info
     emp = conn.execute(
         "SELECT id, name, emp_code, email, department, reporting_to FROM employees WHERE id = ?",
         (employee_id,)
     ).fetchone()
     if not emp or not emp['email']:
         conn.close()
-        flash('Employee not found or has no email address.', 'error')
-        return redirect(request.referrer or url_for('time_log'))
+        return False
 
-    # Get reporting manager email for CC
     cc_list = []
     if emp['reporting_to']:
         mgr = conn.execute("SELECT name, email FROM employees WHERE id = ?", (emp['reporting_to'],)).fetchone()
@@ -16860,11 +16848,73 @@ def send_attendance_report():
         cc_list=cc_list if cc_list else None
     )
 
+    return success
+
+
+@app.route('/admin/send-attendance-report', methods=['POST'])
+@admin_required
+def send_attendance_report():
+    """Email an individual employee their monthly attendance report."""
+    employee_id = request.form.get('employee_id', type=int)
+    month = request.form.get('month', type=int)
+    year = request.form.get('year', type=int)
+
+    if not employee_id or not month or not year:
+        flash('Missing parameters for attendance report.', 'error')
+        return redirect(request.referrer or url_for('time_log'))
+
+    success = _build_and_send_attendance_report(employee_id, month, year)
     if success:
-        cc_note = f" (CC: reporting manager)" if cc_list else ""
-        flash(f"Attendance report sent to {emp['name']} ({emp['email']}){cc_note}", 'success')
+        flash('Attendance report sent successfully.', 'success')
     else:
-        flash(f"Failed to send report to {emp['email']}. Check email configuration.", 'error')
+        flash('Failed to send report. Check email configuration or employee email.', 'error')
+
+    return redirect(url_for('time_log', month=month, year=year))
+
+
+@app.route('/admin/send-all-attendance-reports', methods=['POST'])
+@admin_required
+def send_all_attendance_reports():
+    """Send attendance reports to ALL employees who have attendance data for the month."""
+    month = request.form.get('month', type=int)
+    year = request.form.get('year', type=int)
+
+    if not month or not year:
+        flash('Missing month/year for bulk report.', 'error')
+        return redirect(url_for('time_log'))
+
+    conn = get_db()
+    # Get all employees with attendance data for the month
+    emp_rows = conn.execute(
+        "SELECT DISTINCT e.id "
+        "FROM employees e "
+        "JOIN attendance_logs a ON a.employee_id = e.id "
+        "WHERE e.is_active = 1 "
+        "AND strftime('%%Y-%%m', a.attendance_date) = ? "
+        "ORDER BY e.name",
+        (f"{year}-{month:02d}",)
+    ).fetchall()
+    conn.close()
+
+    sent = 0
+    failed = 0
+    for emp_row in emp_rows:
+        try:
+            success = _build_and_send_attendance_report(emp_row['id'], month, year)
+            if success:
+                sent += 1
+            else:
+                failed += 1
+        except Exception as e:
+            logging.error(f"Bulk send failed for employee {emp_row['id']}: {e}")
+            failed += 1
+
+    if sent > 0:
+        flash(f'Attendance reports sent to {sent} employee(s).', 'success')
+    if failed > 0:
+        flash(f'Failed to send {failed} report(s). Check email configuration or employee email addresses.', 'error')
+    if sent == 0 and failed == 0:
+        flash('No employees found with attendance data for this month.', 'warning')
 
     return redirect(url_for('time_log', month=month, year=year))
 
