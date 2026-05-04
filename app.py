@@ -16565,6 +16565,7 @@ def _build_and_send_attendance_report(employee_id, month, year):
         ORDER BY attendance_date ASC
     """, (employee_id, date_from, date_to)).fetchall()
     att_lookup = {str(row['attendance_date']): dict(row) for row in logs}
+    logging.info(f"[EMAIL DEBUG] emp={employee_id} month={month}/{year} logs={len(logs)} att_keys={list(att_lookup.keys())[:5]}")
 
     # Fetch holidays
     holidays_rows = conn.execute(
@@ -16874,6 +16875,8 @@ def _build_and_send_attendance_report(employee_id, month, year):
         </div>
     </div>
     '''
+
+    logging.info(f"[EMAIL DEBUG] emp={employee_id} stats={stats} rows_html_count={len(rows_html)} html_len={len(html_body)}")
 
     subject = f"Attendance Report — {month_name} {year} | {emp['name']}"
     success = send_email(
