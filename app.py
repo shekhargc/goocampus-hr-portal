@@ -16312,6 +16312,7 @@ def time_log():
             'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
             'in_out_days': 0, 'no_in_days': 0, 'no_out_days': 0,
             'full_days_work_mins': 0,  # work mins only for days with both in & out
+            'full_days_total_mins': 0,  # total duration mins only for days with both in & out
             'days': [], 'employee_id': eid
         }
 
@@ -16408,16 +16409,18 @@ def time_log():
                     # No attendance record and no leave/WFH → will be blank row
 
                 work_mins = _parse_time_minutes(att.get('work_duration', ''))
+                total_dur_mins = _parse_time_minutes(att.get('total_duration', ''))
                 s['total_work_mins'] += work_mins
 
-                # Track work mins only for days with both in & out (for avg calculation)
+                # Track mins only for days with both in & out (for avg calculations)
                 if has_in and has_out:
                     s['full_days_work_mins'] += work_mins
+                    s['full_days_total_mins'] += total_dur_mins
 
-                # Auto-calculate overtime: anything beyond 9 hours (540 mins)
+                # Auto-calculate overtime: total duration beyond 9 hours (540 mins)
                 STANDARD_WORK_MINS = 540  # 9 hours
-                if work_mins > STANDARD_WORK_MINS:
-                    calc_ot = work_mins - STANDARD_WORK_MINS
+                if total_dur_mins > STANDARD_WORK_MINS:
+                    calc_ot = total_dur_mins - STANDARD_WORK_MINS
                     day_rec['overtime'] = f"{calc_ot // 60}:{calc_ot % 60:02d}"
                 else:
                     calc_ot = 0
@@ -16439,9 +16442,12 @@ def time_log():
         s['total_ot_hrs'] = f"{s['total_ot_mins'] // 60}h {s['total_ot_mins'] % 60}m"
         # Average based only on days with both In & Out
         s['avg_work_hrs'] = ''
+        s['avg_total_hrs'] = ''
         if s['in_out_days'] > 0:
             avg = s['full_days_work_mins'] / s['in_out_days']
             s['avg_work_hrs'] = f"{int(avg) // 60}h {int(avg) % 60}m"
+            avg_total = s['full_days_total_mins'] / s['in_out_days']
+            s['avg_total_hrs'] = f"{int(avg_total) // 60}h {int(avg_total) % 60}m"
         summaries.append(s)
 
     # For admin: employee list for filter (include all employees, not just those with attendance)
@@ -16561,7 +16567,7 @@ def send_attendance_report():
         'present': 0, 'absent': 0, 'leave': 0, 'wfh': 0,
         'holiday': 0, 'weekend': 0, 'late': 0,
         'in_out': 0, 'no_in': 0, 'no_out': 0,
-        'total_work_mins': 0, 'total_ot_mins': 0, 'full_days_work_mins': 0
+        'total_work_mins': 0, 'total_ot_mins': 0, 'full_days_work_mins': 0, 'full_days_total_mins': 0
     }
     rows_html = []
 
@@ -16647,10 +16653,13 @@ def send_attendance_report():
 
         # Work hours and OT
         work_mins = _parse_time_minutes(att.get('work_duration', '')) if att else 0
+        total_dur_mins = _parse_time_minutes(att.get('total_duration', '')) if att else 0
         stats['total_work_mins'] += work_mins
         if has_in and has_out:
             stats['full_days_work_mins'] += work_mins
-        ot_mins = max(0, work_mins - STANDARD_WORK_MINS) if work_mins > STANDARD_WORK_MINS else 0
+            stats['full_days_total_mins'] += total_dur_mins
+        # OT based on total duration (actual in-to-out), not work_duration
+        ot_mins = max(0, total_dur_mins - STANDARD_WORK_MINS) if total_dur_mins > STANDARD_WORK_MINS else 0
         stats['total_ot_mins'] += ot_mins
 
         if att:
@@ -16687,9 +16696,12 @@ def send_attendance_report():
     total_work = f"{stats['total_work_mins'] // 60}h {stats['total_work_mins'] % 60}m"
     total_ot = f"{stats['total_ot_mins'] // 60}h {stats['total_ot_mins'] % 60}m"
     avg_work = '—'
+    avg_total = '—'
     if stats['in_out'] > 0:
         avg_m = stats['full_days_work_mins'] / stats['in_out']
         avg_work = f"{int(avg_m) // 60}h {int(avg_m) % 60}m"
+        avg_t = stats['full_days_total_mins'] / stats['in_out']
+        avg_total = f"{int(avg_t) // 60}h {int(avg_t) % 60}m"
 
     # Build HTML email
     html_body = f'''
@@ -16733,7 +16745,12 @@ def send_attendance_report():
                     <td style="width: 8px;"></td>
                     <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
                         <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_work}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg/Day (In&Out)</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Work (In&Out)</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_total}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Total (In&Out)</div>
                     </td>
                     <td style="width: 8px;"></td>
                     <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">

@@ -292,7 +292,11 @@
                 </div>
                 <div class="summary-card hours">
                     <div class="sc-value">{{ s.avg_work_hrs or '—' }}</div>
-                    <div class="sc-label">Avg / Day (In&Out)</div>
+                    <div class="sc-label">Avg Work (In&Out)</div>
+                </div>
+                <div class="summary-card hours">
+                    <div class="sc-value">{{ s.avg_total_hrs or '—' }}</div>
+                    <div class="sc-label">Avg Total (In&Out)</div>
                 </div>
                 <div class="summary-card present">
                     <div class="sc-value">{{ s.present_days }}</div>
