@@ -16232,46 +16232,166 @@ def time_log():
         """
         logs = conn.execute(query, (user['id'], date_from, date_to)).fetchall()
 
-    # Enrich logs and compute summaries per employee
-    logs_list = [dict(r) for r in logs]
-    from collections import defaultdict
-    emp_summaries = defaultdict(lambda: {
-        'name': '', 'emp_code': '', 'department': '', 'photo_url': '',
-        'total_work_mins': 0, 'total_ot_mins': 0,
-        'present_days': 0, 'absent_days': 0, 'late_days': 0,
-        'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
-        'days': []
-    })
+    # ── Fetch holidays for this month ──
+    holidays_rows = conn.execute(
+        "SELECT holiday_date, name, holiday_type FROM holidays WHERE holiday_date >= ? AND holiday_date <= ? ORDER BY holiday_date",
+        (date_from, date_to)
+    ).fetchall()
+    holidays_map = {row['holiday_date']: dict(row) for row in holidays_rows}
 
+    # ── Fetch approved leaves for this month ──
+    leaves_rows = conn.execute("""
+        SELECT lr.employee_id, lr.leave_date, lr.leave_type, lr.day_portion, lr.status
+        FROM leave_records lr
+        WHERE lr.leave_date >= ? AND lr.leave_date <= ? AND lr.status = 'approved'
+    """, (date_from, date_to)).fetchall()
+    # Key: (employee_id, date_str) → leave info
+    from collections import defaultdict
+    leaves_map = {}
+    for lv in leaves_rows:
+        key = (lv['employee_id'], lv['leave_date'])
+        leaves_map[key] = {
+            'leave_type': lv['leave_type'],
+            'day_portion': lv['day_portion'],
+            'status': lv['status']
+        }
+
+    # ── Fetch approved WFH for this month ──
+    wfh_rows = conn.execute("""
+        SELECT employee_id, from_date, to_date
+        FROM wfh_requests
+        WHERE status = 'approved'
+          AND from_date <= ? AND to_date >= ?
+    """, (date_to, date_from)).fetchall()
+    # Build set of (employee_id, date_str) for WFH days
+    wfh_set = set()
+    for wfh in wfh_rows:
+        try:
+            wfh_start = datetime.strptime(wfh['from_date'], '%Y-%m-%d')
+            wfh_end = datetime.strptime(wfh['to_date'], '%Y-%m-%d')
+            cur = wfh_start
+            while cur <= wfh_end:
+                ds = cur.strftime('%Y-%m-%d')
+                if date_from <= ds <= date_to:
+                    wfh_set.add((wfh['employee_id'], ds))
+                cur += timedelta(days=1)
+        except Exception:
+            pass
+
+    # ── Build attendance lookup by (employee_id, date) ──
+    logs_list = [dict(r) for r in logs]
+    att_lookup = {}
+    emp_info = {}
     for log in logs_list:
         eid = log['employee_id']
-        s = emp_summaries[eid]
-        s['name'] = log['employee_name']
-        s['emp_code'] = log['emp_code']
-        s['department'] = log['department']
-        s['photo_url'] = log.get('photo_url', '')
+        att_lookup[(eid, log['attendance_date'])] = log
+        if eid not in emp_info:
+            emp_info[eid] = {
+                'name': log['employee_name'], 'emp_code': log['emp_code'],
+                'department': log['department'], 'photo_url': log.get('photo_url', '')
+            }
 
-        status = (log.get('status') or '').strip()
-        s['days'].append(log)
+    # If non-admin with no attendance records, still show calendar for self
+    if not is_admin_view and user['id'] not in emp_info:
+        emp_info[user['id']] = {
+            'name': user['name'], 'emp_code': user['emp_code'],
+            'department': user.get('department', ''), 'photo_url': user.get('photo_url', '')
+        }
 
-        if 'Present' in status and '½' not in status and 'No OutPunch' not in status:
-            s['present_days'] += 1
-        elif '½' in status:
-            s['half_days'] += 1
-            s['present_days'] += 0.5
-        elif 'No OutPunch' in status:
-            s['no_punch_days'] += 1
-        elif status == 'WeeklyOff':
-            s['weekly_off_days'] += 1
-        elif 'Absent' in status:
-            s['absent_days'] += 1
+    # ── Build full calendar for each employee ──
+    DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
 
-        s['total_work_mins'] += _parse_time_minutes(log.get('work_duration', ''))
-        s['total_ot_mins'] += _parse_time_minutes(log.get('overtime', ''))
+    emp_summaries = {}
+    for eid, info in emp_info.items():
+        s = {
+            'name': info['name'], 'emp_code': info['emp_code'],
+            'department': info['department'], 'photo_url': info['photo_url'],
+            'total_work_mins': 0, 'total_ot_mins': 0,
+            'present_days': 0, 'absent_days': 0, 'late_days': 0,
+            'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
+            'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
+            'days': [], 'employee_id': eid
+        }
 
-        late_mins = _parse_time_minutes(log.get('late_by', ''))
-        if late_mins > 0:
-            s['late_days'] += 1
+        for d in range(1, days_in_month + 1):
+            date_str = f'{year}-{month:02d}-{d:02d}'
+            dt_obj = datetime(year, month, d)
+            weekday = dt_obj.weekday()  # 0=Mon, 6=Sun
+            day_name = DAY_NAMES[weekday]
+            is_weekend = weekday >= 5  # Sat/Sun
+
+            att = att_lookup.get((eid, date_str))
+            leave_info = leaves_map.get((eid, date_str))
+            is_wfh = (eid, date_str) in wfh_set
+            holiday_info = holidays_map.get(date_str)
+
+            # Determine the day_type for coloring
+            if holiday_info:
+                day_type = 'holiday'
+                s['holiday_days'] += 1
+            elif is_weekend:
+                day_type = 'weekend'
+                s['weekly_off_days'] += 1
+            elif leave_info:
+                day_type = 'leave'
+                lv_days = 0.5 if leave_info['day_portion'] in ('first_half', 'second_half') else 1.0
+                s['leave_days'] += lv_days
+            elif is_wfh:
+                day_type = 'wfh'
+                s['wfh_days'] += 1
+            else:
+                day_type = 'weekday'
+
+            # Build day record
+            if att:
+                day_rec = dict(att)
+            else:
+                day_rec = {
+                    'attendance_date': date_str, 'employee_id': eid,
+                    'employee_name': info['name'], 'emp_code': info['emp_code'],
+                    'department': info['department'], 'photo_url': info['photo_url'],
+                    'shift': '', 'scheduled_in': '', 'scheduled_out': '',
+                    'actual_in': '', 'actual_out': '', 'work_duration': '',
+                    'overtime': '', 'total_duration': '', 'late_by': '',
+                    'early_going_by': '', 'status': '', 'punch_records': ''
+                }
+
+            day_rec['day_type'] = day_type
+            day_rec['day_name'] = day_name
+            day_rec['is_weekend'] = is_weekend
+            day_rec['holiday_name'] = holiday_info['name'] if holiday_info else ''
+            day_rec['leave_type'] = leave_info['leave_type'].capitalize() if leave_info else ''
+            day_rec['leave_portion'] = leave_info['day_portion'] if leave_info else ''
+            day_rec['is_wfh'] = is_wfh
+
+            s['days'].append(day_rec)
+
+            # Update attendance-based counters (only for actual attendance records)
+            if att:
+                status = (att.get('status') or '').strip()
+                # Don't count weekend/holiday attendance status in present/absent
+                if day_type not in ('weekend', 'holiday'):
+                    if 'Present' in status and '½' not in status and 'No OutPunch' not in status:
+                        s['present_days'] += 1
+                    elif '½' in status:
+                        s['half_days'] += 1
+                        s['present_days'] += 0.5
+                    elif 'No OutPunch' in status:
+                        s['no_punch_days'] += 1
+                    elif 'Absent' in status:
+                        # If employee was on leave or WFH, don't count as absent
+                        if leave_info or is_wfh:
+                            pass  # Already counted above
+                        else:
+                            s['absent_days'] += 1
+
+                s['total_work_mins'] += _parse_time_minutes(att.get('work_duration', ''))
+                s['total_ot_mins'] += _parse_time_minutes(att.get('overtime', ''))
+                late_mins = _parse_time_minutes(att.get('late_by', ''))
+                if late_mins > 0:
+                    s['late_days'] += 1
+
+        emp_summaries[eid] = s
 
     # Format summaries
     summaries = []
@@ -16283,14 +16403,13 @@ def time_log():
         if working_days > 0:
             avg = s['total_work_mins'] / working_days
             s['avg_work_hrs'] = f"{int(avg) // 60}h {int(avg) % 60}m"
-        s['employee_id'] = eid
         summaries.append(s)
 
-    # For admin: employee list for filter
+    # For admin: employee list for filter (include all employees, not just those with attendance)
     all_employees = []
     if is_admin_view:
         all_employees = conn.execute(
-            "SELECT DISTINCT e.id, e.name, e.emp_code FROM attendance_logs al JOIN employees e ON al.employee_id = e.id ORDER BY e.name"
+            "SELECT DISTINCT e.id, e.name, e.emp_code FROM employees e WHERE e.is_active = 1 ORDER BY e.name"
         ).fetchall()
 
     conn.close()

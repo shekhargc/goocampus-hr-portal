@@ -49,6 +49,9 @@
     .summary-card.late .sc-value { color: #D97706; }
     .summary-card.ot .sc-value { color: #7C3AED; }
     .summary-card.hours .sc-value { color: var(--navy); }
+    .summary-card.leave .sc-value { color: #1E40AF; }
+    .summary-card.wfh .sc-value { color: #0E7490; }
+    .summary-card.holiday .sc-value { color: #9D174D; }
 
     /* ── Employee Section ── */
     .emp-section {
@@ -85,6 +88,8 @@
     .stat-chip.absent { background: #FEE2E2; color: #991B1B; }
     .stat-chip.late { background: #FEF3C7; color: #92400E; }
     .stat-chip.hours { background: #EFF6FF; color: #1E40AF; }
+    .stat-chip.leave { background: #DBEAFE; color: #1E40AF; }
+    .stat-chip.wfh { background: #D5F5F6; color: #0E7490; }
     .emp-section-head .toggle-icon {
         transition: transform 0.2s; color: var(--gray-400);
     }
@@ -116,6 +121,16 @@
     .att-status.weekly-off { background: #E0E7FF; color: #3730A3; }
     .att-status.half { background: #FEF3C7; color: #92400E; }
     .att-status.no-punch { background: #FED7AA; color: #9A3412; }
+    .att-status.holiday { background: #FCE7F3; color: #9D174D; }
+    .att-status.leave { background: #DBEAFE; color: #1E40AF; }
+    .att-status.wfh { background: #D5F5F6; color: #0E7490; }
+
+    /* Row background colors for day types */
+    .row-weekend { background: #F5F3FF !important; }
+    .row-holiday { background: #FDF2F8 !important; }
+    .row-leave { background: #EFF6FF !important; }
+    .row-wfh { background: #ECFEFF !important; }
+    .row-weekend:hover, .row-holiday:hover, .row-leave:hover, .row-wfh:hover { opacity: 0.92; }
 
     .late-val { color: #DC2626; font-weight: 600; }
     .ot-val { color: #7C3AED; font-weight: 600; }
@@ -124,6 +139,18 @@
     /* Day column */
     .day-cell { font-weight: 600; }
     .day-cell .day-name { font-size: 0.68rem; color: var(--gray-400); font-weight: 400; }
+    .day-cell .day-name.weekend { color: #7C3AED; font-weight: 600; }
+
+    /* Legend */
+    .legend-bar {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; padding: 0.6rem 1rem;
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.5rem;
+        margin-bottom: 1rem; font-size: 0.75rem; align-items: center;
+    }
+    .legend-item { display: flex; align-items: center; gap: 0.35rem; }
+    .legend-swatch {
+        width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
+    }
 
     /* Upload button */
     .btn-upload {
@@ -194,6 +221,16 @@
     {% endif %}
 </div>
 
+<!-- Legend -->
+<div class="legend-bar">
+    <strong style="color: var(--navy); font-size: 0.78rem;">Legend:</strong>
+    <div class="legend-item"><div class="legend-swatch" style="background: white; border: 1px solid var(--gray-200);"></div> Weekday</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #F5F3FF; border: 1px solid #DDD6FE;"></div> Weekend</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #FDF2F8; border: 1px solid #FBCFE8;"></div> Holiday</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #EFF6FF; border: 1px solid #BFDBFE;"></div> On Leave</div>
+    <div class="legend-item"><div class="legend-swatch" style="background: #ECFEFF; border: 1px solid #A5F3FC;"></div> WFH</div>
+</div>
+
 {% if summaries %}
     {% for s in summaries %}
     <!-- Employee Section -->
@@ -214,6 +251,8 @@
             <div class="stats">
                 <span class="stat-chip present">{{ s.present_days|int }} Present</span>
                 {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ s.absent_days }} Absent</span>{% endif %}
+                {% if s.leave_days > 0 %}<span class="stat-chip leave">{{ s.leave_days|int }} Leave</span>{% endif %}
+                {% if s.wfh_days > 0 %}<span class="stat-chip wfh">{{ s.wfh_days }} WFH</span>{% endif %}
                 {% if s.late_days > 0 %}<span class="stat-chip late">{{ s.late_days }} Late</span>{% endif %}
                 <span class="stat-chip hours">{{ s.total_work_hrs }}</span>
             </div>
@@ -239,6 +278,18 @@
                     <div class="sc-value">{{ s.absent_days }}</div>
                     <div class="sc-label">Absent Days</div>
                 </div>
+                <div class="summary-card leave">
+                    <div class="sc-value">{{ s.leave_days|int }}</div>
+                    <div class="sc-label">Leave Days</div>
+                </div>
+                <div class="summary-card wfh">
+                    <div class="sc-value">{{ s.wfh_days }}</div>
+                    <div class="sc-label">WFH Days</div>
+                </div>
+                <div class="summary-card holiday">
+                    <div class="sc-value">{{ s.holiday_days }}</div>
+                    <div class="sc-label">Holidays</div>
+                </div>
                 <div class="summary-card late">
                     <div class="sc-value">{{ s.late_days }}</div>
                     <div class="sc-label">Late Days</div>
@@ -255,6 +306,7 @@
                     <thead>
                         <tr>
                             <th>Date</th>
+                            <th>Day</th>
                             <th>Status</th>
                             <th>In</th>
                             <th>Out</th>
@@ -269,24 +321,54 @@
                     <tbody>
                         {% for day in s.days %}
                         {% set st = day.status|default('')|trim %}
-                        <tr{% if 'Absent' in st %} style="background: #FEF2F2;"{% elif st == 'WeeklyOff' %} style="background: #F5F3FF;"{% elif '½' in st %} style="background: #FFFBEB;"{% endif %}>
+                        {% set dtype = day.day_type|default('weekday') %}
+                        <tr class="{% if dtype == 'weekend' %}row-weekend{% elif dtype == 'holiday' %}row-holiday{% elif dtype == 'leave' %}row-leave{% elif dtype == 'wfh' %}row-wfh{% endif %}{% if 'Absent' in st and dtype == 'weekday' and not day.is_wfh %} row-absent{% endif %}">
                             <td class="day-cell">
                                 {{ day.attendance_date|format_date }}
-                                {% set dt_parts = day.attendance_date.split('-') %}
+                            </td>
+                            <td class="day-cell">
+                                <span class="day-name{% if day.is_weekend %} weekend{% endif %}">{{ day.day_name }}</span>
                             </td>
                             <td>
-                                {% if 'Present' in st and '½' not in st and 'No OutPunch' not in st %}
+                                {% if dtype == 'holiday' %}
+                                    <span class="att-status holiday">Holiday</span>
+                                    <span style="font-size: 0.7rem; color: #9D174D; margin-left: 0.25rem;">{{ day.holiday_name }}</span>
+                                {% elif dtype == 'leave' %}
+                                    <span class="att-status leave">On Leave</span>
+                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}{% if day.leave_portion and day.leave_portion != 'full' %} ({{ day.leave_portion|replace('_', ' ')|title }}){% endif %}</span>
+                                {% elif day.is_wfh and dtype == 'wfh' %}
+                                    <span class="att-status wfh">WFH</span>
+                                {% elif dtype == 'weekend' %}
+                                    <span class="att-status weekly-off">Weekend</span>
+                                {% elif 'Present' in st and '½' not in st and 'No OutPunch' not in st %}
                                     <span class="att-status present">Present</span>
+                                    {% if day.is_wfh %}<span class="att-status wfh" style="margin-left: 0.25rem;">WFH</span>{% endif %}
                                 {% elif '½' in st %}
                                     <span class="att-status half">½ Day</span>
+                                    {% if day.leave_type %}<span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">+ {{ day.leave_type }} Leave</span>{% endif %}
                                 {% elif 'No OutPunch' in st %}
                                     <span class="att-status no-punch">No Out</span>
-                                {% elif st == 'WeeklyOff' %}
-                                    <span class="att-status weekly-off">Week Off</span>
                                 {% elif 'Absent' in st %}
-                                    <span class="att-status absent">Absent</span>
+                                    {% if day.is_wfh %}
+                                        <span class="att-status wfh">WFH</span>
+                                    {% elif day.leave_type %}
+                                        <span class="att-status leave">On Leave</span>
+                                        <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}</span>
+                                    {% else %}
+                                        <span class="att-status absent">Absent</span>
+                                    {% endif %}
+                                {% elif st == 'WeeklyOff' %}
+                                    <span class="att-status weekly-off">Weekend</span>
+                                {% elif st %}
+                                    <span class="att-status" style="background: var(--gray-100); color: var(--gray-600);">{{ st }}</span>
                                 {% else %}
-                                    <span class="att-status" style="background: var(--gray-100); color: var(--gray-600);">{{ st or '—' }}</span>
+                                    {% if day.is_wfh %}
+                                        <span class="att-status wfh">WFH</span>
+                                    {% elif day.leave_type %}
+                                        <span class="att-status leave">On Leave</span>
+                                    {% else %}
+                                        <span style="color: var(--gray-400);">—</span>
+                                    {% endif %}
                                 {% endif %}
                             </td>
                             <td class="time-val">{{ day.actual_in or '—' }}</td>
