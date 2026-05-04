@@ -237,7 +237,7 @@
 {% if summaries %}
     {% for s in summaries %}
     <!-- Employee Section -->
-    <div class="emp-section" id="emp-{{ s.employee_id }}">
+    <div class="emp-section collapsed" id="emp-{{ s.employee_id }}">
         <div class="emp-section-head" onclick="toggleSection({{ s.employee_id }})">
             {% set photo = s.photo_url or '' %}
             {% if photo %}
