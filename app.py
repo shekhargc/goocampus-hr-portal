@@ -16385,8 +16385,19 @@ def time_log():
                         else:
                             s['absent_days'] += 1
 
-                s['total_work_mins'] += _parse_time_minutes(att.get('work_duration', ''))
-                s['total_ot_mins'] += _parse_time_minutes(att.get('overtime', ''))
+                work_mins = _parse_time_minutes(att.get('work_duration', ''))
+                s['total_work_mins'] += work_mins
+
+                # Auto-calculate overtime: anything beyond 9 hours (540 mins)
+                STANDARD_WORK_MINS = 540  # 9 hours
+                if work_mins > STANDARD_WORK_MINS:
+                    calc_ot = work_mins - STANDARD_WORK_MINS
+                    day_rec['overtime'] = f"{calc_ot // 60}:{calc_ot % 60:02d}"
+                else:
+                    calc_ot = 0
+                    day_rec['overtime'] = ''
+                s['total_ot_mins'] += calc_ot
+
                 late_mins = _parse_time_minutes(att.get('late_by', ''))
                 if late_mins > 0:
                     s['late_days'] += 1
