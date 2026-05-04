@@ -16894,7 +16894,7 @@ def send_all_attendance_reports():
         "SELECT DISTINCT e.id, e.name "
         "FROM employees e "
         "JOIN attendance_logs a ON a.employee_id = e.id "
-        "WHERE e.is_active = TRUE "
+        "WHERE e.is_active = 1 "
         "AND a.attendance_date >= ? AND a.attendance_date <= ? "
         "ORDER BY e.name",
         (date_from, date_to)
