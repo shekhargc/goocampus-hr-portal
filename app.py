@@ -16408,24 +16408,48 @@ def time_log():
                         s['absent_days'] += 1
                     # No attendance record and no leave/WFH → will be blank row
 
-                work_mins = _parse_time_minutes(att.get('work_duration', ''))
-                total_dur_mins = _parse_time_minutes(att.get('total_duration', ''))
-                s['total_work_mins'] += work_mins
+                # ── Calculate Work, OT, Total from actual in/out times ──
+                BREAK_MINS = 60     # 1 hour lunch break
+                OT_THRESHOLD = 480  # 8 hours total → OT starts after 8h completion
+
+                # Compute total_in_out from actual punch times
+                total_in_out = 0
+                if has_in and has_out:
+                    try:
+                        t_in = datetime.strptime(att['actual_in'].strip(), '%H:%M')
+                        t_out = datetime.strptime(att['actual_out'].strip(), '%H:%M')
+                        total_in_out = int((t_out - t_in).total_seconds() / 60)
+                        if total_in_out < 0:
+                            total_in_out = 0
+                    except Exception:
+                        total_in_out = _parse_time_minutes(att.get('total_duration', ''))
+
+                # Work hours & OT calculation:
+                # >= 8h total: work = 8h standard (displayed), OT = total - 8h
+                # 1h-8h total: work = total - 1h break, OT = 0
+                # < 1h total: work = total (no break deduction), OT = 0
+                if total_in_out >= OT_THRESHOLD:
+                    calc_work = OT_THRESHOLD  # 8h standard display
+                    calc_ot = total_in_out - OT_THRESHOLD
+                elif total_in_out > BREAK_MINS:
+                    calc_work = total_in_out - BREAK_MINS
+                    calc_ot = 0
+                else:
+                    calc_work = total_in_out  # less than 1h, no break deduction
+                    calc_ot = 0
+
+                # Override display fields
+                day_rec['work_duration'] = f"{calc_work // 60}:{calc_work % 60:02d}" if total_in_out > 0 else ''
+                day_rec['overtime'] = f"{calc_ot // 60}:{calc_ot % 60:02d}" if calc_ot > 0 else ''
+                day_rec['total_duration'] = f"{total_in_out // 60}:{total_in_out % 60:02d}" if total_in_out > 0 else ''
+
+                s['total_work_mins'] += calc_work
+                s['total_ot_mins'] += calc_ot
 
                 # Track mins only for days with both in & out (for avg calculations)
                 if has_in and has_out:
-                    s['full_days_work_mins'] += work_mins
-                    s['full_days_total_mins'] += total_dur_mins
-
-                # Auto-calculate overtime: total duration beyond 9 hours (540 mins)
-                STANDARD_WORK_MINS = 540  # 9 hours
-                if total_dur_mins > STANDARD_WORK_MINS:
-                    calc_ot = total_dur_mins - STANDARD_WORK_MINS
-                    day_rec['overtime'] = f"{calc_ot // 60}:{calc_ot % 60:02d}"
-                else:
-                    calc_ot = 0
-                    day_rec['overtime'] = ''
-                s['total_ot_mins'] += calc_ot
+                    s['full_days_work_mins'] += calc_work
+                    s['full_days_total_mins'] += total_in_out
 
                 late_mins = _parse_time_minutes(att.get('late_by', ''))
                 if late_mins > 0:
@@ -16561,7 +16585,8 @@ def send_attendance_report():
 
     # Build daily rows and compute stats
     DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    STANDARD_WORK_MINS = 540
+    BREAK_MINS = 60      # 1 hour lunch break
+    OT_THRESHOLD = 480   # 8 hours total → OT starts after 8h completion
 
     stats = {
         'present': 0, 'absent': 0, 'leave': 0, 'wfh': 0,
@@ -16651,16 +16676,33 @@ def send_attendance_report():
             row_bg = '#FFFFFF'
             status_color = '#9CA3AF'
 
-        # Work hours and OT
-        work_mins = _parse_time_minutes(att.get('work_duration', '')) if att else 0
-        total_dur_mins = _parse_time_minutes(att.get('total_duration', '')) if att else 0
+        # Work hours and OT — computed from actual in/out times
+        total_in_out = 0
+        if has_in and has_out and att:
+            try:
+                t_in = datetime.strptime(att['actual_in'].strip(), '%H:%M')
+                t_out = datetime.strptime(att['actual_out'].strip(), '%H:%M')
+                total_in_out = int((t_out - t_in).total_seconds() / 60)
+                if total_in_out < 0:
+                    total_in_out = 0
+            except Exception:
+                total_in_out = _parse_time_minutes(att.get('total_duration', ''))
+
+        if total_in_out >= OT_THRESHOLD:
+            work_mins = OT_THRESHOLD   # 8h standard display
+            ot_mins = total_in_out - OT_THRESHOLD
+        elif total_in_out > BREAK_MINS:
+            work_mins = total_in_out - BREAK_MINS
+            ot_mins = 0
+        else:
+            work_mins = total_in_out
+            ot_mins = 0
+
         stats['total_work_mins'] += work_mins
+        stats['total_ot_mins'] += ot_mins
         if has_in and has_out:
             stats['full_days_work_mins'] += work_mins
-            stats['full_days_total_mins'] += total_dur_mins
-        # OT based on total duration (actual in-to-out), not work_duration
-        ot_mins = max(0, total_dur_mins - STANDARD_WORK_MINS) if total_dur_mins > STANDARD_WORK_MINS else 0
-        stats['total_ot_mins'] += ot_mins
+            stats['full_days_total_mins'] += total_in_out
 
         if att:
             late_mins = _parse_time_minutes(att.get('late_by', ''))
@@ -16670,9 +16712,9 @@ def send_attendance_report():
         # Format values
         actual_in = (att.get('actual_in') or '—') if att else '—'
         actual_out = (att.get('actual_out') or '—') if att else '—'
-        work_dur = att.get('work_duration', '') if att else ''
-        work_display = work_dur if work_dur and work_dur != '00:00' else '—'
+        work_display = f"{work_mins // 60}:{work_mins % 60:02d}" if work_mins > 0 else '—'
         ot_display = f"{ot_mins // 60}:{ot_mins % 60:02d}" if ot_mins > 0 else '—'
+        total_display = f"{total_in_out // 60}:{total_in_out % 60:02d}" if total_in_out > 0 else '—'
         late_display = att.get('late_by', '') if att else ''
         late_display = late_display if late_display and late_display != '00:00' else '—'
 
