@@ -48,7 +48,8 @@ def send_email(
     to_list: List[str],
     subject: str,
     html_body: str,
-    from_address: str = DEFAULT_SENDER
+    from_address: str = DEFAULT_SENDER,
+    cc_list: Optional[List[str]] = None
 ) -> bool:
     """
     Send an HTML email to a list of recipients via Resend API.
@@ -58,6 +59,7 @@ def send_email(
         subject: Email subject line.
         html_body: HTML formatted email body.
         from_address: Sender address (default: GooCampus HR <info@goocampus.in>).
+        cc_list: Optional list of CC recipient email addresses.
 
     Returns:
         True if email was sent successfully, False otherwise.
@@ -81,6 +83,8 @@ def send_email(
             "subject": subject,
             "html": html_body,
         }
+        if cc_list:
+            params["cc"] = cc_list
 
         result = resend.Emails.send(params)
 

@@ -155,6 +155,16 @@
         width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0;
     }
 
+    /* Send Report button */
+    .btn-send-report {
+        display: inline-flex; align-items: center; gap: 0.3rem;
+        padding: 0.3rem 0.7rem; border-radius: 0.35rem;
+        font-size: 0.72rem; font-weight: 600;
+        background: #EFF6FF; color: #1E40AF; border: 1px solid #BFDBFE;
+        cursor: pointer; transition: all 0.2s; white-space: nowrap;
+    }
+    .btn-send-report:hover { background: #DBEAFE; border-color: #93C5FD; }
+
     /* Upload button */
     .btn-upload {
         display: inline-flex; align-items: center; gap: 0.35rem;
@@ -259,6 +269,17 @@
                 {% if s.late_days > 0 %}<span class="stat-chip late">{{ s.late_days }} Late</span>{% endif %}
                 <span class="stat-chip hours">{{ s.total_work_hrs }}</span>
             </div>
+            {% if is_admin_view %}
+            <form method="POST" action="{{ url_for('send_attendance_report') }}" onclick="event.stopPropagation();" style="margin: 0;">
+                <input type="hidden" name="employee_id" value="{{ s.employee_id }}">
+                <input type="hidden" name="month" value="{{ month }}">
+                <input type="hidden" name="year" value="{{ year }}">
+                <button type="submit" class="btn-send-report" title="Email {{ month_name }} report to {{ s.name }}">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                    Send Report
+                </button>
+            </form>
+            {% endif %}
             <svg class="toggle-icon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
         </div>
 

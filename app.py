@@ -16468,6 +16468,355 @@ def time_log():
         month_names=month_names)
 
 
+@app.route('/admin/send-attendance-report', methods=['POST'])
+@admin_required
+def send_attendance_report():
+    """Email an individual employee their monthly attendance report, CC reporting manager."""
+    from email_utils import send_email
+    import calendar as cal_mod
+
+    employee_id = request.form.get('employee_id', type=int)
+    month = request.form.get('month', type=int)
+    year = request.form.get('year', type=int)
+
+    if not employee_id or not month or not year:
+        flash('Missing parameters for attendance report.', 'error')
+        return redirect(request.referrer or url_for('time_log'))
+
+    conn = get_db()
+
+    # Get employee info
+    emp = conn.execute(
+        "SELECT id, name, emp_code, email, department, reporting_to FROM employees WHERE id = ?",
+        (employee_id,)
+    ).fetchone()
+    if not emp or not emp['email']:
+        conn.close()
+        flash('Employee not found or has no email address.', 'error')
+        return redirect(request.referrer or url_for('time_log'))
+
+    # Get reporting manager email for CC
+    cc_list = []
+    if emp['reporting_to']:
+        mgr = conn.execute("SELECT name, email FROM employees WHERE id = ?", (emp['reporting_to'],)).fetchone()
+        if mgr and mgr['email']:
+            cc_list.append(mgr['email'])
+
+    # Build date range
+    _, days_in_month = cal_mod.monthrange(year, month)
+    date_from = f'{year}-{month:02d}-01'
+    date_to = f'{year}-{month:02d}-{days_in_month:02d}'
+    month_names = ['January', 'February', 'March', 'April', 'May', 'June',
+                   'July', 'August', 'September', 'October', 'November', 'December']
+    month_name = month_names[month - 1]
+
+    # Fetch attendance logs
+    logs = conn.execute("""
+        SELECT * FROM attendance_logs
+        WHERE employee_id = ? AND attendance_date >= ? AND attendance_date <= ?
+        ORDER BY attendance_date ASC
+    """, (employee_id, date_from, date_to)).fetchall()
+    att_lookup = {row['attendance_date']: dict(row) for row in logs}
+
+    # Fetch holidays
+    holidays_rows = conn.execute(
+        "SELECT holiday_date, name FROM holidays WHERE holiday_date >= ? AND holiday_date <= ?",
+        (date_from, date_to)
+    ).fetchall()
+    holidays_map = {row['holiday_date']: row['name'] for row in holidays_rows}
+
+    # Fetch approved leaves
+    leaves_rows = conn.execute("""
+        SELECT leave_date, leave_type, day_portion FROM leave_records
+        WHERE employee_id = ? AND leave_date >= ? AND leave_date <= ? AND status = 'approved'
+    """, (employee_id, date_from, date_to)).fetchall()
+    leaves_map = {row['leave_date']: dict(row) for row in leaves_rows}
+
+    # Fetch approved WFH
+    wfh_rows = conn.execute("""
+        SELECT from_date, to_date FROM wfh_requests
+        WHERE employee_id = ? AND status = 'approved' AND from_date <= ? AND to_date >= ?
+    """, (employee_id, date_to, date_from)).fetchall()
+    wfh_dates = set()
+    for wfh in wfh_rows:
+        try:
+            wfh_start = datetime.strptime(wfh['from_date'], '%Y-%m-%d')
+            wfh_end = datetime.strptime(wfh['to_date'], '%Y-%m-%d')
+            cur = wfh_start
+            while cur <= wfh_end:
+                ds = cur.strftime('%Y-%m-%d')
+                if date_from <= ds <= date_to:
+                    wfh_dates.add(ds)
+                cur += timedelta(days=1)
+        except Exception:
+            pass
+
+    conn.close()
+
+    # Build daily rows and compute stats
+    DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    STANDARD_WORK_MINS = 540
+
+    stats = {
+        'present': 0, 'absent': 0, 'leave': 0, 'wfh': 0,
+        'holiday': 0, 'weekend': 0, 'late': 0,
+        'in_out': 0, 'no_in': 0, 'no_out': 0,
+        'total_work_mins': 0, 'total_ot_mins': 0, 'full_days_work_mins': 0
+    }
+    rows_html = []
+
+    for d in range(1, days_in_month + 1):
+        date_str = f'{year}-{month:02d}-{d:02d}'
+        dt_obj = datetime(year, month, d)
+        weekday = dt_obj.weekday()
+        day_name = DAY_NAMES[weekday]
+        is_weekend = weekday >= 5
+
+        att = att_lookup.get(date_str)
+        leave = leaves_map.get(date_str)
+        is_wfh = date_str in wfh_dates
+        holiday_name = holidays_map.get(date_str)
+
+        has_in = bool(att and att.get('actual_in') and att['actual_in'].strip() and att['actual_in'].strip() != '—')
+        has_out = bool(att and att.get('actual_out') and att['actual_out'].strip() and att['actual_out'].strip() != '—')
+
+        # Determine day type and status text
+        if holiday_name:
+            day_type = 'holiday'
+            status_text = f'Holiday — {holiday_name}'
+            stats['holiday'] += 1
+            row_bg = '#FDF2F8'
+            status_color = '#9D174D'
+        elif is_weekend:
+            day_type = 'weekend'
+            status_text = 'Weekend'
+            stats['weekend'] += 1
+            row_bg = '#F5F3FF'
+            status_color = '#3730A3'
+        elif leave and leave['day_portion'] in ('first_half', 'second_half'):
+            day_type = 'half_leave'
+            portion_label = leave['day_portion'].replace('_', ' ').title()
+            status_text = f'Present + ½ {leave["leave_type"].capitalize()} ({portion_label})'
+            stats['present'] += 0.5
+            stats['leave'] += 0.5
+            row_bg = '#EFF6FF'
+            status_color = '#1E40AF'
+            if has_in and has_out:
+                stats['in_out'] += 1
+            elif has_in:
+                stats['no_out'] += 1
+            elif has_out:
+                stats['no_in'] += 1
+        elif leave:
+            day_type = 'leave'
+            status_text = f'On Leave — {leave["leave_type"].capitalize()}'
+            stats['leave'] += 1
+            row_bg = '#EFF6FF'
+            status_color = '#1E40AF'
+        elif is_wfh:
+            day_type = 'wfh'
+            status_text = 'WFH'
+            stats['wfh'] += 1
+            row_bg = '#ECFEFF'
+            status_color = '#0E7490'
+        elif has_in or has_out:
+            day_type = 'present'
+            stats['present'] += 1
+            if has_in and has_out:
+                stats['in_out'] += 1
+                status_text = 'Present'
+            elif has_in and not has_out:
+                stats['no_out'] += 1
+                status_text = 'Present (No Out)'
+            else:
+                stats['no_in'] += 1
+                status_text = 'Present (No In)'
+            row_bg = '#FFFFFF'
+            status_color = '#065F46'
+        elif att and 'Absent' in (att.get('status') or ''):
+            day_type = 'absent'
+            status_text = 'Absent'
+            stats['absent'] += 1
+            row_bg = '#FEF2F2'
+            status_color = '#991B1B'
+        else:
+            day_type = 'blank'
+            status_text = '—'
+            row_bg = '#FFFFFF'
+            status_color = '#9CA3AF'
+
+        # Work hours and OT
+        work_mins = _parse_time_minutes(att.get('work_duration', '')) if att else 0
+        stats['total_work_mins'] += work_mins
+        if has_in and has_out:
+            stats['full_days_work_mins'] += work_mins
+        ot_mins = max(0, work_mins - STANDARD_WORK_MINS) if work_mins > STANDARD_WORK_MINS else 0
+        stats['total_ot_mins'] += ot_mins
+
+        if att:
+            late_mins = _parse_time_minutes(att.get('late_by', ''))
+            if late_mins > 0 and day_type not in ('weekend', 'holiday'):
+                stats['late'] += 1
+
+        # Format values
+        actual_in = (att.get('actual_in') or '—') if att else '—'
+        actual_out = (att.get('actual_out') or '—') if att else '—'
+        work_dur = att.get('work_duration', '') if att else ''
+        work_display = work_dur if work_dur and work_dur != '00:00' else '—'
+        ot_display = f"{ot_mins // 60}:{ot_mins % 60:02d}" if ot_mins > 0 else '—'
+        late_display = att.get('late_by', '') if att else ''
+        late_display = late_display if late_display and late_display != '00:00' else '—'
+
+        # Day name styling
+        day_name_style = 'color: #7C3AED; font-weight: 600;' if is_weekend else 'color: #6B7280;'
+
+        rows_html.append(f'''
+            <tr style="background: {row_bg};">
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600; color: #1e3a5f; white-space: nowrap;">{d:02d} {month_name[:3]}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB;"><span style="{day_name_style}">{day_name}</span></td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {status_color}; font-weight: 600; font-size: 13px;">{status_text}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_in}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_out}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">{work_display}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #7C3AED; font-weight: 600;">{ot_display}</td>
+                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {'#DC2626' if late_display != '—' else '#6B7280'}; font-weight: {'600' if late_display != '—' else '400'};">{late_display}</td>
+            </tr>
+        ''')
+
+    # Format stats
+    total_work = f"{stats['total_work_mins'] // 60}h {stats['total_work_mins'] % 60}m"
+    total_ot = f"{stats['total_ot_mins'] // 60}h {stats['total_ot_mins'] % 60}m"
+    avg_work = '—'
+    if stats['in_out'] > 0:
+        avg_m = stats['full_days_work_mins'] / stats['in_out']
+        avg_work = f"{int(avg_m) // 60}h {int(avg_m) % 60}m"
+
+    # Build HTML email
+    html_body = f'''
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 750px; margin: 0 auto; color: #1e3a5f;">
+        <div style="background: #1e3a5f; padding: 24px 30px; border-radius: 8px 8px 0 0;">
+            <h1 style="color: white; margin: 0; font-size: 20px;">Attendance Report — {month_name} {year}</h1>
+            <p style="color: #94A3B8; margin: 6px 0 0; font-size: 14px;">{emp['name']} ({emp['emp_code']}) · {emp['department'] or 'N/A'}</p>
+        </div>
+
+        <div style="background: white; padding: 24px 30px; border: 1px solid #E5E7EB; border-top: none;">
+            <h3 style="color: #1e3a5f; margin: 0 0 16px; font-size: 15px;">Summary</h3>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                <tr>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center; width: 25%;">
+                        <div style="font-size: 22px; font-weight: 800; color: #059669;">{int(stats['present'])}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Present</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center; width: 25%;">
+                        <div style="font-size: 22px; font-weight: 800; color: #DC2626;">{stats['absent']}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Absent</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center; width: 25%;">
+                        <div style="font-size: 22px; font-weight: 800; color: #1E40AF;">{int(stats['leave'])}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Leave</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center; width: 25%;">
+                        <div style="font-size: 22px; font-weight: 800; color: #0E7490;">{stats['wfh']}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">WFH</div>
+                    </td>
+                </tr>
+            </table>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                <tr>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{total_work}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Total Work</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_work}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg/Day (In&Out)</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #7C3AED;">{total_ot}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Overtime</div>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 18px; font-weight: 800; color: #D97706;">{stats['late']}</div>
+                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Late Days</div>
+                    </td>
+                </tr>
+            </table>
+            <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
+                <tr>
+                    <td style="padding: 8px 14px; background: #F0FDF4; border-radius: 6px; text-align: center;">
+                        <span style="font-weight: 700; color: #059669;">{stats['in_out']}</span>
+                        <span style="font-size: 12px; color: #6B7280;"> In & Out</span>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 8px 14px; background: #FFF7ED; border-radius: 6px; text-align: center;">
+                        <span style="font-weight: 700; color: #B45309;">{stats['no_in']}</span>
+                        <span style="font-size: 12px; color: #6B7280;"> No In</span>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 8px 14px; background: #FFF7ED; border-radius: 6px; text-align: center;">
+                        <span style="font-weight: 700; color: #9A3412;">{stats['no_out']}</span>
+                        <span style="font-size: 12px; color: #6B7280;"> No Out</span>
+                    </td>
+                    <td style="width: 8px;"></td>
+                    <td style="padding: 8px 14px; background: #FDF2F8; border-radius: 6px; text-align: center;">
+                        <span style="font-weight: 700; color: #9D174D;">{stats['holiday']}</span>
+                        <span style="font-size: 12px; color: #6B7280;"> Holidays</span>
+                    </td>
+                </tr>
+            </table>
+
+            <h3 style="color: #1e3a5f; margin: 0 0 12px; font-size: 15px;">Daily Log</h3>
+            <table style="width: 100%; border-collapse: collapse; font-size: 13px;">
+                <thead>
+                    <tr style="background: #F3F4F6;">
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Date</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Day</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Status</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">In</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Out</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Work Hrs</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">OT</th>
+                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Late</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {''.join(rows_html)}
+                </tbody>
+            </table>
+        </div>
+
+        <div style="background: #F9FAFB; padding: 16px 30px; border: 1px solid #E5E7EB; border-top: none; border-radius: 0 0 8px 8px; text-align: center;">
+            <p style="margin: 0; font-size: 12px; color: #9CA3AF;">
+                This is an automated report from <strong style="color: #f97316;">GooCampus HR Portal</strong>.
+                Generated on {datetime.now().strftime('%d %b %Y at %I:%M %p')}.
+            </p>
+        </div>
+    </div>
+    '''
+
+    subject = f"Attendance Report — {month_name} {year} | {emp['name']}"
+    success = send_email(
+        to_list=[emp['email']],
+        subject=subject,
+        html_body=html_body,
+        cc_list=cc_list if cc_list else None
+    )
+
+    if success:
+        cc_note = f" (CC: reporting manager)" if cc_list else ""
+        flash(f"Attendance report sent to {emp['name']} ({emp['email']}){cc_note}", 'success')
+    else:
+        flash(f"Failed to send report to {emp['email']}. Check email configuration.", 'error')
+
+    return redirect(url_for('time_log', month=month, year=year))
+
+
 # ═══════════════════════════════════════════════════════════════
 #  STATE & CITY  – API + Settings
 # ═══════════════════════════════════════════════════════════════
