@@ -363,7 +363,6 @@
                 {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ s.absent_days }} Absent</span>{% endif %}
                 {% if s.leave_days > 0 %}<span class="stat-chip leave">{{ s.leave_days|int }} Leave</span>{% endif %}
                 {% if s.wfh_days > 0 %}<span class="stat-chip wfh">{{ s.wfh_days }} WFH</span>{% endif %}
-                {% if s.late_days > 0 %}<span class="stat-chip late">{{ s.late_days }} Late</span>{% endif %}
                 <span class="stat-chip hours">{{ s.total_work_hrs }}</span>
             </div>
             {% if is_admin_view %}
@@ -423,10 +422,6 @@
                     <div class="sc-value">{{ s.holiday_days }}</div>
                     <div class="sc-label">Holidays</div>
                 </div>
-                <div class="summary-card late">
-                    <div class="sc-value">{{ s.late_days }}</div>
-                    <div class="sc-label">Late Days</div>
-                </div>
             </div>
 
             <!-- Daily Table -->
@@ -441,7 +436,6 @@
                             <th>Out</th>
                             <th>Total Hrs</th>
                             <th>WHD - 9 HR</th>
-                            <th>Late By</th>
                             <th>Punch Records</th>
                         </tr>
                     </thead>
@@ -517,7 +511,6 @@
                             <td class="time-val">{{ day.actual_out or '—' }}</td>
                             <td class="time-val"><strong>{% if day.total_duration and day.total_duration != '00:00' %}{{ day.total_duration }}{% else %}—{% endif %}</strong></td>
                             <td>{% if day.whd == '✓' %}<span style="color: #16a34a; font-weight: 700; font-size: 1.1rem;">&#10003;</span>{% elif day.whd %}<span style="color: #dc2626; font-weight: 600;">{{ day.whd }}</span>{% else %}—{% endif %}</td>
-                            <td>{% if day.late_by and day.late_by != '00:00' %}<span class="late-val">{{ day.late_by }}</span>{% else %}—{% endif %}</td>
                             <td style="font-size: 0.72rem; color: var(--gray-500); max-width: 200px; overflow: hidden; text-overflow: ellipsis;">
                                 {{ day.punch_records or '—' }}
                             </td>
