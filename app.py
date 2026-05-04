@@ -16612,7 +16612,7 @@ def _build_and_send_attendance_report(employee_id, month, year):
 
     stats = {
         'present': 0, 'absent': 0, 'leave': 0, 'wfh': 0,
-        'holiday': 0, 'weekend': 0, 'late': 0,
+        'holiday': 0, 'weekend': 0,
         'in_out': 0, 'no_in': 0, 'no_out': 0,
         'total_work_mins': 0, 'full_days_work_mins': 0, 'full_days_total_mins': 0
     }
@@ -16737,17 +16737,10 @@ def _build_and_send_attendance_report(employee_id, month, year):
             stats['full_days_work_mins'] += total_in_out
             stats['full_days_total_mins'] += total_in_out
 
-        if att:
-            late_mins = _parse_time_minutes(att.get('late_by', ''))
-            if late_mins > 0 and day_type not in ('weekend', 'holiday'):
-                stats['late'] += 1
-
         # Format values
         actual_in = (att.get('actual_in') or '—') if att else '—'
         actual_out = (att.get('actual_out') or '—') if att else '—'
         total_display = f"{total_in_out // 60}:{total_in_out % 60:02d}" if total_in_out > 0 else '—'
-        late_display = att.get('late_by', '') if att else ''
-        late_display = late_display if late_display and late_display != '00:00' else '—'
 
         # Day name styling
         day_name_style = 'color: #7C3AED; font-weight: 600;' if is_weekend else 'color: #6B7280;'
@@ -16761,7 +16754,6 @@ def _build_and_send_attendance_report(employee_id, month, year):
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: #6B7280;">{actual_out}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; font-weight: 600;">{total_display}</td>
                 <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {whd_color}; font-weight: 600;">{whd_display}</td>
-                <td style="padding: 8px 12px; border-bottom: 1px solid #E5E7EB; color: {'#DC2626' if late_display != '—' else '#6B7280'}; font-weight: {'600' if late_display != '—' else '400'};">{late_display}</td>
             </tr>
         ''')
 
@@ -16816,11 +16808,6 @@ def _build_and_send_attendance_report(employee_id, month, year):
                         <div style="font-size: 18px; font-weight: 800; color: #1e3a5f;">{avg_work}</div>
                         <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Avg Hours (In&Out)</div>
                     </td>
-                    <td style="width: 8px;"></td>
-                    <td style="padding: 10px 14px; background: #F9FAFB; border-radius: 6px; text-align: center;">
-                        <div style="font-size: 18px; font-weight: 800; color: #D97706;">{stats['late']}</div>
-                        <div style="font-size: 11px; color: #6B7280; text-transform: uppercase; font-weight: 600;">Late Days</div>
-                    </td>
                 </tr>
             </table>
             <table style="width: 100%; border-collapse: collapse; margin-bottom: 24px;">
@@ -16858,7 +16845,6 @@ def _build_and_send_attendance_report(employee_id, month, year):
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Out</th>
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Total Hrs</th>
                         <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">WHD - 9 HR</th>
-                        <th style="padding: 10px 12px; text-align: left; font-size: 11px; font-weight: 700; color: #6B7280; text-transform: uppercase; border-bottom: 2px solid #E5E7EB;">Late</th>
                     </tr>
                 </thead>
                 <tbody>
