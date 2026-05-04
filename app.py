@@ -4385,6 +4385,18 @@ def ensure_crm_tables():
             except Exception:
                 pass
             logging.warning(f"stream project_id cleanup skipped: {_mig_err}")
+        # Report send log — tracks when attendance reports were emailed
+        conn.execute('''CREATE TABLE IF NOT EXISTS report_send_log (
+            id SERIAL PRIMARY KEY,
+            send_type TEXT NOT NULL DEFAULT 'bulk',
+            month INTEGER NOT NULL,
+            year INTEGER NOT NULL,
+            sent_count INTEGER DEFAULT 0,
+            failed_count INTEGER DEFAULT 0,
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+
         conn.close()
         logging.info("CRM tables ensured.")
     except Exception as e:
@@ -16479,6 +16491,25 @@ def time_log():
             "SELECT DISTINCT e.id, e.name, e.emp_code FROM employees e WHERE e.is_active = 1 ORDER BY e.name"
         ).fetchall()
 
+    # Query last bulk report send date for this month/year
+    last_report_sent = None
+    if is_admin_view:
+        try:
+            last_log = conn.execute(
+                "SELECT sent_at, sent_count FROM report_send_log "
+                "WHERE send_type = 'bulk' AND month = ? AND year = ? "
+                "ORDER BY sent_at DESC LIMIT 1",
+                (month, year)
+            ).fetchone()
+            if last_log and last_log['sent_at']:
+                ts = last_log['sent_at']
+                if hasattr(ts, 'strftime'):
+                    last_report_sent = ts.strftime('%d %b %Y, %I:%M %p')
+                else:
+                    last_report_sent = str(ts)
+        except Exception:
+            pass  # table may not exist yet
+
     conn.close()
 
     # Month names for picker
@@ -16493,7 +16524,8 @@ def time_log():
         month=month, year=year,
         month_name=month_names[month - 1],
         f_employee=f_employee,
-        month_names=month_names)
+        month_names=month_names,
+        last_report_sent=last_report_sent)
 
 
 def _build_and_send_attendance_report(employee_id, month, year):
@@ -16876,20 +16908,20 @@ def send_attendance_report():
 @admin_required
 def send_all_attendance_reports():
     """Send attendance reports to ALL employees who have attendance data for the month."""
+    from flask import jsonify
+    import calendar as cal_mod
+
     month = request.form.get('month', type=int)
     year = request.form.get('year', type=int)
 
     if not month or not year:
-        flash('Missing month/year for bulk report.', 'error')
-        return redirect(url_for('time_log'))
+        return jsonify({'status': 'error', 'message': 'Missing month/year for bulk report.'}), 400
 
-    import calendar as cal_mod
     days_in_month = cal_mod.monthrange(year, month)[1]
     date_from = f"{year}-{month:02d}-01"
     date_to = f"{year}-{month:02d}-{days_in_month:02d}"
 
     conn = get_db()
-    # Get all employees with attendance data for the month
     emp_rows = conn.execute(
         "SELECT DISTINCT e.id, e.name "
         "FROM employees e "
@@ -16914,14 +16946,45 @@ def send_all_attendance_reports():
             logging.error(f"Bulk send failed for employee {emp_row['id']}: {e}")
             failed += 1
 
-    if sent > 0:
-        flash(f'Attendance reports sent to {sent} employee(s).', 'success')
-    if failed > 0:
-        flash(f'Failed to send {failed} report(s). Check email configuration or employee email addresses.', 'error')
-    if sent == 0 and failed == 0:
-        flash('No employees found with attendance data for this month.', 'warning')
+    # Log the bulk send
+    try:
+        log_conn = get_db()
+        log_conn.execute(
+            "INSERT INTO report_send_log (send_type, month, year, sent_count, failed_count) "
+            "VALUES (?, ?, ?, ?, ?)",
+            ('bulk', month, year, sent, failed)
+        )
+        log_conn.commit()
+        log_conn.close()
+    except Exception as log_err:
+        logging.error(f"Failed to log bulk send: {log_err}")
 
-    return redirect(url_for('time_log', month=month, year=year))
+    if sent > 0 and failed == 0:
+        return jsonify({
+            'status': 'success',
+            'message': f'Attendance reports sent successfully to all {sent} employees.',
+            'sent': sent, 'failed': failed,
+            'sent_at': datetime.now().strftime('%d %b %Y, %I:%M %p')
+        })
+    elif sent > 0 and failed > 0:
+        return jsonify({
+            'status': 'partial',
+            'message': f'Sent to {sent} employee(s). Failed for {failed} employee(s).',
+            'sent': sent, 'failed': failed,
+            'sent_at': datetime.now().strftime('%d %b %Y, %I:%M %p')
+        })
+    elif failed > 0:
+        return jsonify({
+            'status': 'error',
+            'message': f'Failed to send to {failed} employee(s). Check email configuration.',
+            'sent': sent, 'failed': failed
+        }), 500
+    else:
+        return jsonify({
+            'status': 'warning',
+            'message': 'No employees found with attendance data for this month.',
+            'sent': 0, 'failed': 0
+        })
 
 
 # ═══════════════════════════════════════════════════════════════

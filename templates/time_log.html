@@ -246,19 +246,101 @@
 
 {% if summaries %}
     {% if is_admin_view %}
-    <div style="display: flex; justify-content: flex-end; margin-bottom: 0.75rem;">
-        <form method="POST" action="{{ url_for('send_all_attendance_reports') }}" id="send-all-form">
-            <input type="hidden" name="month" value="{{ month }}">
-            <input type="hidden" name="year" value="{{ year }}">
-            <button type="submit" class="btn-send-report" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;"
-                    onclick="return confirm('Send {{ month_name }} {{ year }} attendance report to all {{ summaries|length }} employees?');">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px;">
-                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
-                </svg>
-                Send Report to All ({{ summaries|length }})
-            </button>
-        </form>
+    <div style="display: flex; justify-content: flex-end; align-items: flex-end; flex-direction: column; margin-bottom: 0.75rem;">
+        <button type="button" class="btn-send-report" id="send-all-btn" style="padding: 0.5rem 1.25rem; font-size: 0.85rem;"
+                onclick="sendAllReports()">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align: -2px;">
+                <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/>
+            </svg>
+            Send Report to All ({{ summaries|length }})
+        </button>
+        <div id="last-sent-info" style="margin-top: 0.4rem; font-size: 0.75rem; color: #6B7280;">
+            {% if last_report_sent %}
+                Last sent: {{ last_report_sent }}
+            {% endif %}
+        </div>
     </div>
+
+    <!-- Success/Error Popup Overlay -->
+    <div id="send-popup-overlay" style="display:none; position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.45); z-index:9999; justify-content:center; align-items:center;">
+        <div id="send-popup-box" style="background:white; border-radius:12px; padding:2rem 2.5rem; max-width:420px; width:90%; text-align:center; box-shadow:0 20px 60px rgba(0,0,0,0.3); animation: popIn 0.3s ease-out;">
+            <div id="popup-icon" style="margin-bottom:1rem;"></div>
+            <h3 id="popup-title" style="margin:0 0 0.5rem; font-size:1.2rem; color:#1e3a5f;"></h3>
+            <p id="popup-message" style="margin:0 0 1.5rem; color:#6B7280; font-size:0.9rem;"></p>
+            <button onclick="closePopup()" style="background:#1e3a5f; color:white; border:none; padding:0.5rem 2rem; border-radius:6px; font-size:0.9rem; font-weight:600; cursor:pointer;">OK</button>
+        </div>
+    </div>
+
+    <style>
+        @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+
+    <script>
+    function sendAllReports() {
+        if (!confirm('Send {{ month_name }} {{ year }} attendance report to all {{ summaries|length }} employees?')) return;
+
+        var btn = document.getElementById('send-all-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span style="display:inline-block;width:16px;height:16px;border:2px solid #fff;border-top-color:transparent;border-radius:50%;animation:spin 0.8s linear infinite;vertical-align:-2px;"></span> Sending...';
+        btn.style.opacity = '0.7';
+
+        var style = document.createElement('style');
+        style.textContent = '@keyframes spin { to { transform: rotate(360deg); } }';
+        document.head.appendChild(style);
+
+        var formData = new FormData();
+        formData.append('month', '{{ month }}');
+        formData.append('year', '{{ year }}');
+
+        fetch('{{ url_for("send_all_attendance_reports") }}', {
+            method: 'POST',
+            body: formData
+        })
+        .then(function(resp) { return resp.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Send Report to All ({{ summaries|length }})';
+
+            if (data.status === 'success') {
+                showPopup('success', 'Sent Successfully!', data.message);
+                document.getElementById('last-sent-info').textContent = 'Last sent: ' + data.sent_at;
+            } else if (data.status === 'partial') {
+                showPopup('warning', 'Partially Sent', data.message);
+                if (data.sent_at) document.getElementById('last-sent-info').textContent = 'Last sent: ' + data.sent_at;
+            } else {
+                showPopup('error', 'Failed', data.message);
+            }
+        })
+        .catch(function(err) {
+            btn.disabled = false;
+            btn.style.opacity = '1';
+            btn.innerHTML = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-2px;"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg> Send Report to All ({{ summaries|length }})';
+            showPopup('error', 'Error', 'Something went wrong. Please try again.');
+        });
+    }
+
+    function showPopup(type, title, message) {
+        var icons = {
+            success: '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#F0FDF4"/><circle cx="28" cy="28" r="20" fill="#16A34A"/><path d="M20 28l5 5 11-11" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>',
+            warning: '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#FFF7ED"/><circle cx="28" cy="28" r="20" fill="#D97706"/><path d="M28 20v10M28 34v2" stroke="white" stroke-width="2.5" stroke-linecap="round"/></svg>',
+            error: '<svg width="56" height="56" viewBox="0 0 56 56" fill="none"><circle cx="28" cy="28" r="28" fill="#FEF2F2"/><circle cx="28" cy="28" r="20" fill="#DC2626"/><path d="M22 22l12 12M34 22l-12 12" stroke="white" stroke-width="2.5" stroke-linecap="round"/></svg>'
+        };
+        document.getElementById('popup-icon').innerHTML = icons[type] || icons.error;
+        document.getElementById('popup-title').textContent = title;
+        document.getElementById('popup-message').textContent = message;
+        var overlay = document.getElementById('send-popup-overlay');
+        overlay.style.display = 'flex';
+    }
+
+    function closePopup() {
+        document.getElementById('send-popup-overlay').style.display = 'none';
+    }
+
+    document.getElementById('send-popup-overlay').addEventListener('click', function(e) {
+        if (e.target === this) closePopup();
+    });
+    </script>
     {% endif %}
     {% for s in summaries %}
     <!-- Employee Section -->
