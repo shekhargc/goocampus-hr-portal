@@ -16336,8 +16336,8 @@ def time_log():
                 day_type = 'weekend'
                 s['weekly_off_days'] += 1
             elif leave_info:
-                day_type = 'leave'
                 lv_days = 0.5 if leave_info['day_portion'] in ('first_half', 'second_half') else 1.0
+                day_type = 'half_leave' if lv_days == 0.5 else 'leave'
                 s['leave_days'] += lv_days
             elif is_wfh:
                 day_type = 'wfh'

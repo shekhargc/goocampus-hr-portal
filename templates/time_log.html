@@ -352,7 +352,7 @@
                         {% for day in s.days %}
                         {% set st = day.status|default('')|trim %}
                         {% set dtype = day.day_type|default('weekday') %}
-                        <tr class="{% if dtype == 'weekend' %}row-weekend{% elif dtype == 'holiday' %}row-holiday{% elif dtype == 'leave' %}row-leave{% elif dtype == 'wfh' %}row-wfh{% endif %}{% if 'Absent' in st and dtype == 'weekday' and not day.is_wfh %} row-absent{% endif %}">
+                        <tr class="{% if dtype == 'weekend' %}row-weekend{% elif dtype == 'holiday' %}row-holiday{% elif dtype in ('leave', 'half_leave') %}row-leave{% elif dtype == 'wfh' %}row-wfh{% endif %}{% if 'Absent' in st and dtype == 'weekday' and not day.is_wfh %} row-absent{% endif %}">
                             <td class="day-cell">
                                 {{ day.attendance_date|format_date }}
                             </td>
@@ -366,7 +366,7 @@
                                     <span style="font-size: 0.7rem; color: #9D174D; margin-left: 0.25rem;">{{ day.holiday_name }}</span>
                                 {% elif dtype == 'weekend' %}
                                     <span class="att-status weekly-off">Weekend</span>
-                                {% elif dtype == 'leave' and day.leave_portion in ('first_half', 'second_half') %}
+                                {% elif dtype == 'half_leave' %}
                                     {# Half-day leave — show both present status and leave tag #}
                                     {% if ptag == 'full' %}
                                         <span class="att-status present">Present</span>
