@@ -37,7 +37,7 @@
                 {% else %}
                 <input type="hidden" name="employee_id" value="{{ user.id }}" />
                 {% endif %}
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.7rem;margin-bottom:1rem;">
+                <div style="display:grid;grid-template-columns:1fr 1fr 0.7fr 0.7fr;gap:0.7rem;margin-bottom:1rem;">
                     <div>
                         <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Date *</label>
                         <input type="date" name="log_date" required value="{{ year }}-{{ '%02d' % month }}-{{ '%02d' % (1) }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
@@ -47,8 +47,12 @@
                         <input type="number" name="num_calls" min="0" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
                     </div>
                     <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Talk (hrs)</label>
+                        <input type="number" name="talk_hours" min="0" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
                         <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Talk (min)</label>
-                        <input type="number" name="talk_time_minutes" min="0" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
+                        <input type="number" name="talk_minutes" min="0" max="59" value="0" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;" />
                     </div>
                 </div>
                 <div style="margin-bottom:1rem;">

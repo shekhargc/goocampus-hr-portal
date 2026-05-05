@@ -15405,7 +15405,9 @@ def sales_calls_view():
         except ValueError:
             num_calls = 0
         try:
-            talk_time = int(request.form.get('talk_time_minutes') or 0)
+            talk_hours = int(request.form.get('talk_hours') or 0)
+            talk_mins = int(request.form.get('talk_minutes') or 0)
+            talk_time = (talk_hours * 60) + talk_mins
         except ValueError:
             talk_time = 0
         notes = (request.form.get('notes') or '').strip()
