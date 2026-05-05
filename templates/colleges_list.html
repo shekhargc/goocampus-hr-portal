@@ -1,0 +1,136 @@
+{% extends "base.html" %}
+{% block title %}Colleges - GooCampus{% endblock %}
+{% block content %}
+<div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
+
+    <!-- Header -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
+        <div>
+            <h1 style="font-size:1.6rem;font-weight:800;color:var(--navy);margin:0 0 0.3rem 0;">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2" style="vertical-align:-4px;margin-right:6px;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
+                College Portal
+            </h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Browse Indian &amp; International medical colleges for MBBS</p>
+        </div>
+        <div style="display:flex;gap:0.5rem;flex-wrap:wrap;">
+            <a href="/colleges/admin/add" style="background:var(--orange);color:white;text-decoration:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;display:inline-flex;align-items:center;gap:0.4rem;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+                Add College
+            </a>
+            <form method="POST" action="/colleges/admin/seed" style="display:inline;">
+                <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Seed Russian Colleges</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Category Tabs -->
+    <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--gray-200);">
+        <a href="/colleges?category=all" style="padding:0.65rem 1.3rem;font-weight:{% if category=='all' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='all' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='all' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+            All Colleges
+        </a>
+        <a href="/colleges?category=indian" style="padding:0.65rem 1.3rem;font-weight:{% if category=='indian' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='indian' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='indian' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+            Indian Colleges
+        </a>
+        <a href="/colleges?category=international" style="padding:0.65rem 1.3rem;font-weight:{% if category=='international' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='international' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='international' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+            International Colleges
+        </a>
+    </div>
+
+    <!-- Search & Filters -->
+    <form method="GET" style="display:flex;gap:0.6rem;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center;">
+        <input type="hidden" name="category" value="{{ category }}">
+        <input type="text" name="search" value="{{ search }}" placeholder="Search colleges by name or city..." style="flex:1;min-width:220px;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+        <select name="country" style="padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
+            <option value="">All Countries</option>
+            {% for c in countries %}<option value="{{ c }}" {% if c == country_filter %}selected{% endif %}>{{ c }}</option>{% endfor %}
+        </select>
+        <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
+        {% if search or country_filter %}
+        <a href="/colleges?category={{ category }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;">Clear</a>
+        {% endif %}
+    </form>
+
+    <!-- Stats Bar -->
+    <div style="display:flex;gap:1rem;margin-bottom:1.5rem;flex-wrap:wrap;">
+        <div style="background:var(--navy);color:white;padding:0.6rem 1.2rem;border-radius:0.5rem;font-size:0.85rem;">
+            <strong>{{ colleges|length }}</strong> College{{ 's' if colleges|length != 1 }}
+        </div>
+    </div>
+
+    <!-- College Cards Grid -->
+    {% if colleges %}
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));gap:1.25rem;">
+        {% for c in colleges %}
+        <a href="/colleges/{{ c.slug }}" style="text-decoration:none;color:inherit;">
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:box-shadow 0.2s, transform 0.2s;cursor:pointer;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)';this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';this.style.transform='none'">
+                <!-- Cover Image / Gradient Header -->
+                <div style="height:110px;background:linear-gradient(135deg, var(--navy), var(--navy-light));position:relative;display:flex;align-items:center;justify-content:center;">
+                    {% if c.cover_image_url %}
+                    <img src="{{ c.cover_image_url }}" style="width:100%;height:100%;object-fit:cover;">
+                    {% else %}
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
+                    {% endif %}
+                    {% if c.is_featured %}
+                    <span style="position:absolute;top:8px;right:8px;background:var(--orange);color:white;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:3px;text-transform:uppercase;">Featured</span>
+                    {% endif %}
+                    <!-- Country flag badge -->
+                    <span style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.7rem;font-weight:600;padding:3px 8px;border-radius:3px;">
+                        {% if c.country == 'Russia' %}🇷🇺{% elif c.country == 'India' %}🇮🇳{% else %}🌍{% endif %} {{ c.country }}
+                    </span>
+                </div>
+
+                <div style="padding:1rem 1.2rem;">
+                    <h3 style="margin:0 0 0.4rem 0;font-size:0.95rem;font-weight:700;color:var(--navy);line-height:1.3;">{{ c.name }}</h3>
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+                        {% if c.city %}
+                        <span style="font-size:0.75rem;color:var(--gray-500);">
+                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {{ c.city }}
+                        </span>
+                        {% endif %}
+                        {% if c.established_year and c.established_year > 0 %}
+                        <span style="font-size:0.75rem;color:var(--gray-500);">Est. {{ c.established_year }}</span>
+                        {% endif %}
+                    </div>
+
+                    <!-- Badges -->
+                    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.7rem;">
+                        {% if c.nmc_approved %}
+                        <span style="background:#dcfce7;color:#166534;font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">NMC</span>
+                        {% endif %}
+                        {% if c.who_approved %}
+                        <span style="background:#dbeafe;color:#1e40af;font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">WHO</span>
+                        {% endif %}
+                        <span style="background:var(--gray-100);color:var(--gray-600);font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ c.university_type or 'Government' }}</span>
+                        <span style="background:var(--orange-light);color:var(--orange-dark);font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ course_counts.get(c.id, 0) }} Course{{ 's' if course_counts.get(c.id, 0) != 1 }}</span>
+                    </div>
+
+                    <!-- Fee Info -->
+                    <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.6rem;">
+                        {% if c.full_package_inr_lakhs and c.full_package_inr_lakhs > 0 %}
+                        <div>
+                            <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Full Package</div>
+                            <div style="font-size:1rem;font-weight:800;color:var(--navy);">₹{{ '{:,.2f}'.format(c.full_package_inr_lakhs) }} Lac</div>
+                        </div>
+                        {% else %}
+                        <div>
+                            <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Medium</div>
+                            <div style="font-size:0.88rem;font-weight:600;color:var(--navy);">{{ c.medium_of_instruction }}</div>
+                        </div>
+                        {% endif %}
+                        <span style="color:var(--orange);font-size:0.8rem;font-weight:600;">View Profile →</span>
+                    </div>
+                </div>
+            </div>
+        </a>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:3rem;text-align:center;color:var(--gray-500);">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="1.5" style="margin-bottom:1rem;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
+        <p style="margin:0 0 0.5rem 0;font-weight:600;">No colleges found</p>
+        <p style="margin:0;font-size:0.85rem;">Try adjusting your search or filters, or <a href="/colleges/admin/add" style="color:var(--orange);font-weight:600;">add a new college</a>.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

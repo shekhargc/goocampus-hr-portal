@@ -17204,6 +17204,535 @@ def company_locations_backfill():
     return redirect('/company/locations')
 
 
+# ═══════════════════════════════════════════════════════════════
+#  COLLEGE PORTAL MODULE
+# ═══════════════════════════════════════════════════════════════
+
+def ensure_college_tables():
+    """Create colleges, college_courses, college_fee_structure tables."""
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS colleges (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            slug TEXT UNIQUE,
+            category TEXT NOT NULL DEFAULT 'international',
+            country TEXT NOT NULL DEFAULT 'Russia',
+            state_or_region TEXT DEFAULT '',
+            city TEXT DEFAULT '',
+            established_year INTEGER DEFAULT 0,
+            university_type TEXT DEFAULT 'Government',
+            medium_of_instruction TEXT DEFAULT 'English',
+            nmc_approved BOOLEAN DEFAULT FALSE,
+            who_approved BOOLEAN DEFAULT FALSE,
+            indian_passouts TEXT DEFAULT '',
+            description TEXT DEFAULT '',
+            eligibility TEXT DEFAULT '',
+            facilities TEXT DEFAULT '',
+            ranking_info TEXT DEFAULT '',
+            website_url TEXT DEFAULT '',
+            logo_url TEXT DEFAULT '',
+            cover_image_url TEXT DEFAULT '',
+            contact_phone TEXT DEFAULT '',
+            contact_email TEXT DEFAULT '',
+            currency TEXT DEFAULT 'USD',
+            full_package_inr_lakhs NUMERIC(10,2) DEFAULT 0,
+            mess_charges TEXT DEFAULT '',
+            consultancy_fee_inr NUMERIC(10,2) DEFAULT 125000,
+            admin_fee TEXT DEFAULT '1500 $',
+            travel_cost_inr NUMERIC(10,2) DEFAULT 75000,
+            hostel_included BOOLEAN DEFAULT FALSE,
+            is_featured BOOLEAN DEFAULT FALSE,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS college_courses (
+            id SERIAL PRIMARY KEY,
+            college_id INTEGER NOT NULL REFERENCES colleges(id) ON DELETE CASCADE,
+            course_name TEXT NOT NULL DEFAULT 'MBBS',
+            degree TEXT DEFAULT 'MBBS',
+            duration_years INTEGER DEFAULT 6,
+            duration_includes TEXT DEFAULT 'Including Internship',
+            intake_season TEXT DEFAULT 'Summer',
+            seats_available INTEGER DEFAULT 0,
+            description TEXT DEFAULT '',
+            eligibility TEXT DEFAULT '',
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS college_fee_structure (
+            id SERIAL PRIMARY KEY,
+            course_id INTEGER NOT NULL REFERENCES college_courses(id) ON DELETE CASCADE,
+            year_label TEXT NOT NULL,
+            semester TEXT NOT NULL,
+            tuition_fee NUMERIC(12,2) DEFAULT 0,
+            hostel_fee NUMERIC(12,2) DEFAULT 0,
+            docs_med_checkup NUMERIC(12,2) DEFAULT 0,
+            visa_med_insurance NUMERIC(12,2) DEFAULT 0,
+            total NUMERIC(12,2) DEFAULT 0,
+            total_inr NUMERIC(12,2) DEFAULT 0,
+            notes TEXT DEFAULT '',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.commit()
+        conn.close()
+        logging.info("College tables ensured successfully")
+    except Exception as e:
+        logging.error(f"ensure_college_tables: {e}")
+
+ensure_college_tables()
+
+
+# ── Currency conversion cache ──
+import time as _time
+_currency_cache = {'rates': {}, 'last_fetch': 0}
+
+def _get_exchange_rates():
+    """Fetch exchange rates with 6-hour caching."""
+    now = _time.time()
+    if _currency_cache['rates'] and (now - _currency_cache['last_fetch']) < 21600:
+        return _currency_cache['rates']
+    try:
+        import urllib.request
+        import json as _json
+        url = "https://open.er-api.com/v6/latest/USD"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = _json.loads(resp.read().decode())
+            if data.get('result') == 'success':
+                _currency_cache['rates'] = data['rates']
+                _currency_cache['last_fetch'] = now
+                logging.info(f"Currency rates refreshed: INR={data['rates'].get('INR')}")
+    except Exception as e:
+        logging.error(f"Currency fetch error: {e}")
+        if not _currency_cache['rates']:
+            _currency_cache['rates'] = {'INR': 85.0, 'RUB': 0.011 * 85.0, 'USD': 1.0}
+    return _currency_cache['rates']
+
+
+def _to_inr(amount, currency, rates):
+    """Convert amount in given currency to INR."""
+    if not amount or not rates:
+        return 0
+    currency = currency.upper()
+    inr_rate = rates.get('INR', 85.0)
+    if currency == 'INR':
+        return float(amount)
+    elif currency == 'USD':
+        return float(amount) * inr_rate
+    elif currency == 'RUB':
+        rub_rate = rates.get('RUB', 80.0)
+        return float(amount) / rub_rate * inr_rate
+    return float(amount)
+
+
+def _make_slug(name):
+    """Generate URL-friendly slug from college name."""
+    import re
+    slug = name.lower().strip()
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    slug = re.sub(r'[\s]+', '-', slug)
+    slug = re.sub(r'-+', '-', slug)
+    return slug.strip('-')
+
+
+# ── College List Page ──
+@app.route('/colleges')
+@admin_required
+def colleges_list():
+    conn = get_db()
+    category = request.args.get('category', 'all')
+    search = request.args.get('search', '').strip()
+    country = request.args.get('country', '')
+
+    query = "SELECT * FROM colleges WHERE is_active = TRUE"
+    params = []
+
+    if category == 'indian':
+        query += " AND category = 'indian'"
+    elif category == 'international':
+        query += " AND category = 'international'"
+
+    if country:
+        query += " AND country = ?"
+        params.append(country)
+
+    if search:
+        query += " AND (LOWER(name) LIKE ? OR LOWER(city) LIKE ?)"
+        params.extend([f'%{search.lower()}%', f'%{search.lower()}%'])
+
+    query += " ORDER BY is_featured DESC, name ASC"
+    colleges = conn.execute(query, params).fetchall()
+
+    # Get unique countries for filter
+    countries = conn.execute(
+        "SELECT DISTINCT country FROM colleges WHERE is_active = TRUE ORDER BY country"
+    ).fetchall()
+
+    # Get course count per college
+    course_counts = {}
+    for c in colleges:
+        cnt = conn.execute(
+            "SELECT COUNT(*) as cnt FROM college_courses WHERE college_id = ? AND is_active = TRUE",
+            (c['id'],)
+        ).fetchone()
+        course_counts[c['id']] = cnt['cnt'] if cnt else 0
+
+    # Get exchange rates for INR display
+    rates = _get_exchange_rates()
+
+    conn.close()
+    return render_template('colleges_list.html',
+        colleges=colleges,
+        countries=[c['country'] for c in countries],
+        course_counts=course_counts,
+        category=category,
+        search=search,
+        country_filter=country,
+        rates=rates,
+        to_inr=_to_inr
+    )
+
+
+# ── College Profile Page ──
+@app.route('/colleges/<slug>')
+@admin_required
+def college_profile(slug):
+    conn = get_db()
+    college = conn.execute("SELECT * FROM colleges WHERE slug = ?", (slug,)).fetchone()
+    if not college:
+        conn.close()
+        flash("College not found.", "danger")
+        return redirect('/colleges')
+
+    courses = conn.execute(
+        "SELECT * FROM college_courses WHERE college_id = ? AND is_active = TRUE ORDER BY course_name",
+        (college['id'],)
+    ).fetchall()
+
+    # Get fee structure for each course
+    fees_by_course = {}
+    for course in courses:
+        fees = conn.execute(
+            "SELECT * FROM college_fee_structure WHERE course_id = ? ORDER BY year_label, semester",
+            (course['id'],)
+        ).fetchall()
+        fees_by_course[course['id']] = fees
+
+    rates = _get_exchange_rates()
+    conn.close()
+    return render_template('college_profile.html',
+        college=college,
+        courses=courses,
+        fees_by_course=fees_by_course,
+        rates=rates,
+        to_inr=_to_inr
+    )
+
+
+# ── Admin: Add/Edit College ──
+@app.route('/colleges/admin/add', methods=['GET', 'POST'])
+@admin_required
+def college_add():
+    if request.method == 'POST':
+        conn = get_db()
+        name = request.form.get('name', '').strip()
+        if not name:
+            flash("College name is required.", "danger")
+            return redirect('/colleges/admin/add')
+
+        slug = _make_slug(name)
+        # Check unique slug
+        existing = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+        if existing:
+            slug = slug + '-' + str(int(_time.time()) % 10000)
+
+        category = request.form.get('category', 'international')
+        try:
+            conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
+                established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
+                indian_passouts, description, eligibility, facilities, ranking_info, website_url,
+                contact_phone, contact_email, currency, full_package_inr_lakhs,
+                mess_charges, consultancy_fee_inr, admin_fee, travel_cost_inr,
+                hostel_included, is_featured, logo_url, cover_image_url)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (name, slug, category,
+                 request.form.get('country', 'Russia'),
+                 request.form.get('state_or_region', ''),
+                 request.form.get('city', ''),
+                 int(request.form.get('established_year') or 0),
+                 request.form.get('university_type', 'Government'),
+                 request.form.get('medium_of_instruction', 'English'),
+                 1 if request.form.get('nmc_approved') else 0,
+                 1 if request.form.get('who_approved') else 0,
+                 request.form.get('indian_passouts', ''),
+                 request.form.get('description', ''),
+                 request.form.get('eligibility', ''),
+                 request.form.get('facilities', ''),
+                 request.form.get('ranking_info', ''),
+                 request.form.get('website_url', ''),
+                 request.form.get('contact_phone', ''),
+                 request.form.get('contact_email', ''),
+                 request.form.get('currency', 'USD'),
+                 float(request.form.get('full_package_inr_lakhs') or 0),
+                 request.form.get('mess_charges', ''),
+                 float(request.form.get('consultancy_fee_inr') or 125000),
+                 request.form.get('admin_fee', '1500 $'),
+                 float(request.form.get('travel_cost_inr') or 75000),
+                 1 if request.form.get('hostel_included') else 0,
+                 1 if request.form.get('is_featured') else 0,
+                 request.form.get('logo_url', ''),
+                 request.form.get('cover_image_url', '')))
+            conn.commit()
+            flash(f"College '{name}' added successfully!", "success")
+        except Exception as e:
+            logging.error(f"College add error: {e}")
+            flash(f"Error adding college: {e}", "danger")
+        finally:
+            conn.close()
+        return redirect('/colleges')
+
+    return render_template('college_form.html', college=None, mode='add')
+
+
+@app.route('/colleges/admin/edit/<int:college_id>', methods=['GET', 'POST'])
+@admin_required
+def college_edit(college_id):
+    conn = get_db()
+    college = conn.execute("SELECT * FROM colleges WHERE id = ?", (college_id,)).fetchone()
+    if not college:
+        conn.close()
+        flash("College not found.", "danger")
+        return redirect('/colleges')
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        try:
+            conn.execute('''UPDATE colleges SET name=?, category=?, country=?, state_or_region=?, city=?,
+                established_year=?, university_type=?, medium_of_instruction=?, nmc_approved=?, who_approved=?,
+                indian_passouts=?, description=?, eligibility=?, facilities=?, ranking_info=?, website_url=?,
+                contact_phone=?, contact_email=?, currency=?, full_package_inr_lakhs=?,
+                mess_charges=?, consultancy_fee_inr=?, admin_fee=?, travel_cost_inr=?,
+                hostel_included=?, is_featured=?, logo_url=?, cover_image_url=?,
+                updated_at=CURRENT_TIMESTAMP WHERE id=?''',
+                (name,
+                 request.form.get('category', 'international'),
+                 request.form.get('country', 'Russia'),
+                 request.form.get('state_or_region', ''),
+                 request.form.get('city', ''),
+                 int(request.form.get('established_year') or 0),
+                 request.form.get('university_type', 'Government'),
+                 request.form.get('medium_of_instruction', 'English'),
+                 1 if request.form.get('nmc_approved') else 0,
+                 1 if request.form.get('who_approved') else 0,
+                 request.form.get('indian_passouts', ''),
+                 request.form.get('description', ''),
+                 request.form.get('eligibility', ''),
+                 request.form.get('facilities', ''),
+                 request.form.get('ranking_info', ''),
+                 request.form.get('website_url', ''),
+                 request.form.get('contact_phone', ''),
+                 request.form.get('contact_email', ''),
+                 request.form.get('currency', 'USD'),
+                 float(request.form.get('full_package_inr_lakhs') or 0),
+                 request.form.get('mess_charges', ''),
+                 float(request.form.get('consultancy_fee_inr') or 125000),
+                 request.form.get('admin_fee', '1500 $'),
+                 float(request.form.get('travel_cost_inr') or 75000),
+                 1 if request.form.get('hostel_included') else 0,
+                 1 if request.form.get('is_featured') else 0,
+                 request.form.get('logo_url', ''),
+                 request.form.get('cover_image_url', ''),
+                 college_id))
+            conn.commit()
+            flash(f"College '{name}' updated!", "success")
+        except Exception as e:
+            logging.error(f"College edit error: {e}")
+            flash(f"Error: {e}", "danger")
+        finally:
+            conn.close()
+        return redirect(f'/colleges/{college["slug"]}')
+
+    conn.close()
+    return render_template('college_form.html', college=college, mode='edit')
+
+
+# ── Admin: Delete College ──
+@app.route('/colleges/admin/delete/<int:college_id>', methods=['POST'])
+@admin_required
+def college_delete(college_id):
+    conn = get_db()
+    try:
+        conn.execute("UPDATE colleges SET is_active = FALSE WHERE id = ?", (college_id,))
+        conn.commit()
+        flash("College removed.", "success")
+    except Exception as e:
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect('/colleges')
+
+
+# ── Admin: Manage Course for a College ──
+@app.route('/colleges/admin/<int:college_id>/course/add', methods=['POST'])
+@admin_required
+def college_course_add(college_id):
+    conn = get_db()
+    try:
+        course_name = request.form.get('course_name', 'MBBS').strip()
+        conn.execute('''INSERT INTO college_courses (college_id, course_name, degree, duration_years,
+            duration_includes, intake_season, seats_available, description, eligibility)
+            VALUES (?,?,?,?,?,?,?,?,?)''',
+            (college_id, course_name,
+             request.form.get('degree', 'MBBS'),
+             int(request.form.get('duration_years') or 6),
+             request.form.get('duration_includes', 'Including Internship'),
+             request.form.get('intake_season', 'Summer'),
+             int(request.form.get('seats_available') or 0),
+             request.form.get('course_description', ''),
+             request.form.get('course_eligibility', '')))
+        conn.commit()
+        flash(f"Course '{course_name}' added!", "success")
+    except Exception as e:
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    college = conn.execute("SELECT slug FROM colleges WHERE id = ?", (college_id,)).fetchone()
+    return redirect(f'/colleges/{college["slug"]}' if college else '/colleges')
+
+
+# ── Admin: Add Fee Structure Row ──
+@app.route('/colleges/admin/course/<int:course_id>/fee/add', methods=['POST'])
+@admin_required
+def college_fee_add(course_id):
+    conn = get_db()
+    try:
+        conn.execute('''INSERT INTO college_fee_structure (course_id, year_label, semester,
+            tuition_fee, hostel_fee, docs_med_checkup, visa_med_insurance, total, total_inr, notes)
+            VALUES (?,?,?,?,?,?,?,?,?,?)''',
+            (course_id,
+             request.form.get('year_label', '1st Year'),
+             request.form.get('semester', '1st Sem'),
+             float(request.form.get('tuition_fee') or 0),
+             float(request.form.get('hostel_fee') or 0),
+             float(request.form.get('docs_med_checkup') or 0),
+             float(request.form.get('visa_med_insurance') or 0),
+             float(request.form.get('total') or 0),
+             float(request.form.get('total_inr') or 0),
+             request.form.get('fee_notes', '')))
+        conn.commit()
+        flash("Fee row added!", "success")
+    except Exception as e:
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(request.referrer or '/colleges')
+
+
+# ── Admin: Delete Fee Row ──
+@app.route('/colleges/admin/fee/delete/<int:fee_id>', methods=['POST'])
+@admin_required
+def college_fee_delete(fee_id):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM college_fee_structure WHERE id = ?", (fee_id,))
+        conn.commit()
+        flash("Fee row deleted.", "success")
+    except Exception as e:
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect(request.referrer or '/colleges')
+
+
+# ── API: Currency Conversion ──
+@app.route('/api/exchange-rates')
+@admin_required
+def api_exchange_rates():
+    from flask import jsonify
+    rates = _get_exchange_rates()
+    return jsonify({'rates': rates, 'base': 'USD'})
+
+
+# ── Admin: Seed Colleges from Data ──
+@app.route('/colleges/admin/seed', methods=['POST'])
+@admin_required
+def college_seed():
+    """Seed colleges from the built-in Russian college data."""
+    conn = get_db()
+    added = 0
+    skipped = 0
+    try:
+        from college_seed_data import RUSSIAN_COLLEGES
+        for c in RUSSIAN_COLLEGES:
+            slug = _make_slug(c['name'])
+            existing = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if existing:
+                skipped += 1
+                continue
+
+            conn.execute('''INSERT INTO colleges (name, slug, category, country, city,
+                established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
+                indian_passouts, currency, full_package_inr_lakhs,
+                mess_charges, consultancy_fee_inr, admin_fee, travel_cost_inr,
+                hostel_included, eligibility)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (c['name'], slug, 'international', c.get('country', 'Russia'), c.get('city', ''),
+                 c.get('established_year', 0), c.get('university_type', 'Government'),
+                 c.get('medium', 'English'),
+                 1 if c.get('nmc_approved') else 0,
+                 1 if c.get('who_approved') else 0,
+                 c.get('indian_passouts', ''),
+                 c.get('currency', 'RUB'),
+                 c.get('full_package_inr_lakhs', 0),
+                 c.get('mess_charges', ''),
+                 c.get('consultancy_fee_inr', 125000),
+                 c.get('admin_fee', '1500 $'),
+                 c.get('travel_cost_inr', 75000),
+                 1 if c.get('hostel_included') else 0,
+                 c.get('eligibility', '')))
+
+            # Get the new college ID
+            new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if new_college:
+                # Add default MBBS course
+                conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                    duration_years, duration_includes, intake_season)
+                    VALUES (?, 'MBBS', 'MBBS', ?, 'Including Internship', 'Summer')''',
+                    (new_college['id'], c.get('duration_years', 6)))
+
+                course = conn.execute(
+                    "SELECT id FROM college_courses WHERE college_id = ? ORDER BY id DESC LIMIT 1",
+                    (new_college['id'],)
+                ).fetchone()
+
+                if course and c.get('fees'):
+                    for fee in c['fees']:
+                        conn.execute('''INSERT INTO college_fee_structure
+                            (course_id, year_label, semester, tuition_fee, hostel_fee,
+                             docs_med_checkup, visa_med_insurance, total, total_inr)
+                            VALUES (?,?,?,?,?,?,?,?,?)''',
+                            (course['id'], fee['year_label'], fee['semester'],
+                             fee.get('tuition', 0), fee.get('hostel', 0),
+                             fee.get('docs', 0), fee.get('visa', 0),
+                             fee.get('total', 0), fee.get('total_inr', 0)))
+            added += 1
+
+        conn.commit()
+        flash(f"Seeded {added} colleges ({skipped} already existed).", "success")
+    except ImportError:
+        flash("Seed data file not found. Upload college_seed_data.py first.", "danger")
+    except Exception as e:
+        logging.error(f"College seed error: {e}")
+        flash(f"Error: {e}", "danger")
+    finally:
+        conn.close()
+    return redirect('/colleges')
+
+
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)

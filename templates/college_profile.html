@@ -1,0 +1,368 @@
+{% extends "base.html" %}
+{% block title %}{{ college.name }} - College Portal{% endblock %}
+{% block content %}
+<div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
+
+    <!-- Back & Admin Actions -->
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
+        <a href="/colleges" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to Colleges</a>
+        <div style="display:flex;gap:0.5rem;">
+            <a href="/colleges/admin/edit/{{ college.id }}" style="background:var(--navy);color:white;text-decoration:none;padding:0.45rem 0.85rem;border-radius:0.35rem;font-size:0.8rem;font-weight:600;">Edit College</a>
+            <form method="POST" action="/colleges/admin/delete/{{ college.id }}" onsubmit="return confirm('Remove this college?');" style="display:inline;">
+                <button type="submit" style="background:#ef4444;color:white;border:none;padding:0.45rem 0.85rem;border-radius:0.35rem;font-size:0.8rem;font-weight:600;cursor:pointer;">Delete</button>
+            </form>
+        </div>
+    </div>
+
+    <!-- Cover / Header Section -->
+    <div style="background:linear-gradient(135deg, var(--navy), var(--navy-light));border-radius:0.85rem 0.85rem 0 0;padding:2rem 2rem 1.5rem;color:white;position:relative;overflow:hidden;">
+        {% if college.cover_image_url %}
+        <img src="{{ college.cover_image_url }}" style="position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;opacity:0.3;">
+        {% endif %}
+        <div style="position:relative;z-index:1;">
+            <div style="display:flex;align-items:center;gap:0.6rem;margin-bottom:0.5rem;">
+                <span style="background:rgba(255,255,255,0.15);padding:3px 10px;border-radius:4px;font-size:0.72rem;font-weight:600;">
+                    {% if college.country == 'Russia' %}🇷🇺{% elif college.country == 'India' %}🇮🇳{% else %}🌍{% endif %} {{ college.country }}
+                </span>
+                {% if college.is_featured %}
+                <span style="background:var(--orange);padding:3px 10px;border-radius:4px;font-size:0.72rem;font-weight:700;">FEATURED</span>
+                {% endif %}
+            </div>
+            <h1 style="margin:0 0 0.4rem 0;font-size:1.7rem;font-weight:800;">{{ college.name }}</h1>
+            <div style="display:flex;gap:1rem;flex-wrap:wrap;font-size:0.88rem;opacity:0.9;">
+                {% if college.city %}<span>📍 {{ college.city }}{% if college.state_or_region %}, {{ college.state_or_region }}{% endif %}</span>{% endif %}
+                {% if college.established_year and college.established_year > 0 %}<span>📅 Est. {{ college.established_year }}</span>{% endif %}
+                {% if college.medium_of_instruction %}<span>🗣️ {{ college.medium_of_instruction }} Medium</span>{% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Info Bar -->
+    <div style="background:white;border:1px solid var(--gray-200);border-top:none;padding:1rem 2rem;display:flex;gap:1.5rem;flex-wrap:wrap;align-items:center;">
+        {% if college.nmc_approved %}
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;font-weight:600;color:#166534;background:#dcfce7;padding:4px 10px;border-radius:4px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            NMC Approved
+        </span>
+        {% endif %}
+        {% if college.who_approved %}
+        <span style="display:inline-flex;align-items:center;gap:4px;font-size:0.8rem;font-weight:600;color:#1e40af;background:#dbeafe;padding:4px 10px;border-radius:4px;">
+            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="20 6 9 17 4 12"/></svg>
+            WHO Approved
+        </span>
+        {% endif %}
+        <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);background:var(--gray-100);padding:4px 10px;border-radius:4px;">{{ college.university_type or 'Government' }}</span>
+        {% if college.indian_passouts %}
+        <span style="font-size:0.8rem;font-weight:600;color:var(--orange-dark);background:var(--orange-light);padding:4px 10px;border-radius:4px;">{{ college.indian_passouts }} Passouts</span>
+        {% endif %}
+        {% if college.full_package_inr_lakhs and college.full_package_inr_lakhs > 0 %}
+        <span style="font-size:0.8rem;font-weight:700;color:var(--navy);background:var(--gray-100);padding:4px 10px;border-radius:4px;">Full Package: ₹{{ '{:,.2f}'.format(college.full_package_inr_lakhs) }} Lac</span>
+        {% endif %}
+    </div>
+
+    <!-- Main Content Grid -->
+    <div style="display:grid;grid-template-columns:1fr 340px;gap:1.25rem;margin-top:1.25rem;">
+
+        <!-- Left Column -->
+        <div>
+            <!-- Overview Card -->
+            {% if college.description %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;margin-bottom:1.25rem;">
+                <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">About {{ college.name }}</h2>
+                <p style="font-size:0.88rem;color:var(--gray-600);line-height:1.7;margin:0;white-space:pre-wrap;">{{ college.description }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Eligibility Card -->
+            {% if college.eligibility %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.5rem;margin-bottom:1.25rem;">
+                <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Eligibility Criteria</h2>
+                <p style="font-size:0.88rem;color:var(--gray-600);line-height:1.7;margin:0;white-space:pre-wrap;">{{ college.eligibility }}</p>
+            </div>
+            {% endif %}
+
+            <!-- Courses & Fee Structure -->
+            {% for course in courses %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;margin-bottom:1.25rem;">
+                <div style="padding:1rem 1.5rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <h2 style="font-size:1rem;font-weight:700;color:var(--navy);margin:0;">{{ course.course_name }} — {{ course.degree }}</h2>
+                        <p style="margin:0.2rem 0 0 0;font-size:0.78rem;color:var(--gray-500);">
+                            {{ course.duration_years }} Years {{ course.duration_includes }} · {{ course.intake_season }} Intake
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Fee Table -->
+                {% set fees = fees_by_course.get(course.id, []) %}
+                {% if fees %}
+                <div style="padding:1rem 1.5rem;">
+                    <h3 style="font-size:0.85rem;font-weight:700;color:var(--navy);margin:0 0 0.7rem 0;text-transform:uppercase;letter-spacing:0.5px;">
+                        Fee Structure
+                        <span style="font-weight:400;color:var(--gray-500);text-transform:none;letter-spacing:0;font-size:0.78rem;margin-left:0.5rem;">
+                            (in {{ college.currency }}{% if college.currency != 'INR' %} · Live INR conversion{% endif %})
+                        </span>
+                    </h3>
+
+                    {% set yr1_fees = [] %}
+                    {% set yr2_fees = [] %}
+                    {% for f in fees %}
+                        {% if '1st' in f.year_label or '1ST' in f.year_label %}
+                            {% if yr1_fees.append(f) %}{% endif %}
+                        {% else %}
+                            {% if yr2_fees.append(f) %}{% endif %}
+                        {% endif %}
+                    {% endfor %}
+
+                    {% if yr1_fees %}
+                    <div style="margin-bottom:1rem;">
+                        <div style="background:var(--navy);color:white;padding:0.5rem 0.8rem;border-radius:0.4rem 0.4rem 0 0;font-size:0.78rem;font-weight:700;">1st Year</div>
+                        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                            <thead>
+                                <tr style="background:var(--gray-50);">
+                                    <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total</th>
+                                    {% if college.currency != 'INR' %}
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">≈ INR</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for f in yr1_fees %}
+                                <tr>
+                                    <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.tuition_fee) if f.tuition_fee else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.docs_med_checkup) if f.docs_med_checkup else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.visa_med_insurance) if f.visa_med_insurance else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.total) if f.total else '-' }}</td>
+                                    {% if college.currency != 'INR' %}
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
+                                        {% if f.total_inr and f.total_inr > 0 %}₹{{ '{:,.0f}'.format(f.total_inr) }}{% elif f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    {% if yr2_fees %}
+                    <div style="margin-bottom:1rem;">
+                        <div style="background:var(--blue);color:white;padding:0.5rem 0.8rem;border-radius:0.4rem 0.4rem 0 0;font-size:0.78rem;font-weight:700;">2nd Year - 6th Year</div>
+                        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                            <thead>
+                                <tr style="background:var(--gray-50);">
+                                    <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total</th>
+                                    {% if college.currency != 'INR' %}
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">≈ INR</th>
+                                    {% endif %}
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {% for f in yr2_fees %}
+                                <tr>
+                                    <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.tuition_fee) if f.tuition_fee else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.docs_med_checkup) if f.docs_med_checkup else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.visa_med_insurance) if f.visa_med_insurance else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.total) if f.total else '-' }}</td>
+                                    {% if college.currency != 'INR' %}
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
+                                        {% if f.total_inr and f.total_inr > 0 %}₹{{ '{:,.0f}'.format(f.total_inr) }}{% elif f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
+                                    </td>
+                                    {% endif %}
+                                </tr>
+                                {% endfor %}
+                            </tbody>
+                        </table>
+                    </div>
+                    {% endif %}
+
+                    <!-- Add Fee Row Form (Admin) -->
+                    <details style="margin-top:0.8rem;">
+                        <summary style="font-size:0.78rem;color:var(--orange);font-weight:600;cursor:pointer;">+ Add Fee Row</summary>
+                        <form method="POST" action="/colleges/admin/course/{{ course.id }}/fee/add" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-top:0.6rem;padding:0.8rem;background:var(--gray-50);border-radius:0.4rem;">
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Year</label>
+                                <select name="year_label" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;">
+                                    <option>1st Year</option><option>2nd-6th Year</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Semester</label>
+                                <select name="semester" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;">
+                                    <option>1st Sem</option><option>2nd Sem</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Tuition</label>
+                                <input type="number" step="0.01" name="tuition_fee" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Hostel</label>
+                                <input type="number" step="0.01" name="hostel_fee" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Docs & Med</label>
+                                <input type="number" step="0.01" name="docs_med_checkup" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Visa & Ins</label>
+                                <input type="number" step="0.01" name="visa_med_insurance" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Total</label>
+                                <input type="number" step="0.01" name="total" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div>
+                                <label style="display:block;font-size:0.7rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Total INR</label>
+                                <input type="number" step="0.01" name="total_inr" value="0" style="width:100%;padding:0.4rem;border:1px solid var(--gray-300);border-radius:0.3rem;font-size:0.8rem;box-sizing:border-box;">
+                            </div>
+                            <div style="grid-column:1/-1;text-align:right;">
+                                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.4rem 1rem;border-radius:0.35rem;font-weight:600;font-size:0.8rem;cursor:pointer;">Add Row</button>
+                            </div>
+                        </form>
+                    </details>
+                </div>
+                {% else %}
+                <div style="padding:1.5rem;text-align:center;color:var(--gray-400);font-size:0.85rem;">No fee structure added yet.</div>
+                {% endif %}
+            </div>
+            {% endfor %}
+
+            {% if not courses %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:2rem;text-align:center;color:var(--gray-500);">
+                <p style="margin:0 0 0.5rem 0;font-weight:600;">No courses added yet</p>
+                <p style="margin:0;font-size:0.85rem;">Add a course using the form on the right.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Right Sidebar -->
+        <div>
+            <!-- Quick Facts Card -->
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Quick Facts</h3>
+                <div style="display:flex;flex-direction:column;gap:0.65rem;">
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Country</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.country }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">City</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.city or '—' }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Established</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.established_year if college.established_year and college.established_year > 0 else '—' }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Type</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.university_type or '—' }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Medium</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.medium_of_instruction }}</span>
+                    </div>
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Fee Currency</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.currency }}</span>
+                    </div>
+                    {% if college.website_url %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Website</span>
+                        <a href="{{ college.website_url }}" target="_blank" style="color:var(--orange);font-weight:600;font-size:0.82rem;">Visit ↗</a>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Additional Costs Card -->
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Additional Costs</h3>
+                <div style="display:flex;flex-direction:column;gap:0.65rem;">
+                    {% if college.travel_cost_inr and college.travel_cost_inr > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Travel (from Delhi)</span>
+                        <span style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(college.travel_cost_inr) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.mess_charges %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Mess Charges (Yr 1)</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.mess_charges }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.consultancy_fee_inr and college.consultancy_fee_inr > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Consultancy Fee</span>
+                        <span style="font-weight:600;color:var(--navy);">₹{{ '{:,.0f}'.format(college.consultancy_fee_inr) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.admin_fee %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Admin Fee (one-time)</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.admin_fee }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Live Exchange Rate Card -->
+            {% if college.currency != 'INR' %}
+            <div style="background:linear-gradient(135deg, var(--orange-light), #fff5eb);border:1px solid var(--orange);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--orange-dark);margin:0 0 0.7rem 0;">💱 Live Exchange Rate</h3>
+                <div style="font-size:0.85rem;color:var(--gray-700);">
+                    {% if college.currency == 'USD' %}
+                    <p style="margin:0 0 0.3rem 0;">1 USD = <strong style="color:var(--navy);">₹{{ '{:,.2f}'.format(rates.get('INR', 85)) }}</strong></p>
+                    {% elif college.currency == 'RUB' %}
+                    <p style="margin:0 0 0.3rem 0;">1 RUB = <strong style="color:var(--navy);">₹{{ '{:,.4f}'.format(rates.get('INR', 85) / rates.get('RUB', 80)) }}</strong></p>
+                    {% endif %}
+                    <p style="margin:0;font-size:0.72rem;color:var(--gray-500);">Rates updated automatically via ExchangeRate API</p>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Add Course Form -->
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;">
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Add Course</h3>
+                <form method="POST" action="/colleges/admin/{{ college.id }}/course/add">
+                    <div style="margin-bottom:0.7rem;">
+                        <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Course Name *</label>
+                        <input type="text" name="course_name" value="MBBS" required style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;">
+                    </div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.5rem;margin-bottom:0.7rem;">
+                        <div>
+                            <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Degree</label>
+                            <input type="text" name="degree" value="MBBS" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;">
+                        </div>
+                        <div>
+                            <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Duration (yrs)</label>
+                            <input type="number" name="duration_years" value="6" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;box-sizing:border-box;">
+                        </div>
+                    </div>
+                    <div style="margin-bottom:0.7rem;">
+                        <label style="display:block;font-size:0.72rem;font-weight:600;color:var(--gray-500);margin-bottom:2px;">Intake Season</label>
+                        <select name="intake_season" style="width:100%;padding:0.45rem 0.6rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.85rem;">
+                            <option>Summer</option><option>Winter</option><option>Both</option>
+                        </select>
+                    </div>
+                    <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.5rem 1rem;border-radius:0.35rem;font-weight:600;font-size:0.82rem;cursor:pointer;width:100%;">Add Course</button>
+                </form>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}

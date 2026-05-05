@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} College - GooCampus{% endblock %}
+{% block content %}
+<div style="max-width:900px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;"><a href="/colleges" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to Colleges</a></div>
+
+    <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;">
+        <div style="padding:1.2rem 1.5rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);">
+            <h1 style="font-size:1.2rem;font-weight:700;color:var(--navy);margin:0;">{{ 'Edit' if mode == 'edit' else 'Add New' }} College</h1>
+        </div>
+
+        <form method="POST" style="padding:1.5rem;">
+            <!-- Basic Info -->
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem 0;padding-bottom:0.5rem;border-bottom:1px solid var(--gray-100);">Basic Information</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div style="grid-column:1/-1;">
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">College Name *</label>
+                        <input type="text" name="name" required value="{{ college.name if college else '' }}" placeholder="e.g. Altai State Medical University" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Category *</label>
+                        <select name="category" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                            <option value="international" {% if college and college.category == 'international' %}selected{% endif %}>International</option>
+                            <option value="indian" {% if college and college.category == 'indian' %}selected{% endif %}>Indian</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Country *</label>
+                        <input type="text" name="country" value="{{ college.country if college else 'Russia' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">State / Region</label>
+                        <input type="text" name="state_or_region" value="{{ college.state_or_region if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">City</label>
+                        <input type="text" name="city" value="{{ college.city if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Established Year</label>
+                        <input type="number" name="established_year" value="{{ college.established_year if college else '' }}" placeholder="e.g. 1954" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">University Type</label>
+                        <select name="university_type" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                            <option value="Government" {% if college and college.university_type == 'Government' %}selected{% endif %}>Government</option>
+                            <option value="Private" {% if college and college.university_type == 'Private' %}selected{% endif %}>Private</option>
+                            <option value="Deemed" {% if college and college.university_type == 'Deemed' %}selected{% endif %}>Deemed</option>
+                            <option value="Autonomous" {% if college and college.university_type == 'Autonomous' %}selected{% endif %}>Autonomous</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Medium of Instruction</label>
+                        <select name="medium_of_instruction" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                            <option value="English" {% if college and college.medium_of_instruction == 'English' %}selected{% endif %}>English</option>
+                            <option value="Hindi" {% if college and college.medium_of_instruction == 'Hindi' %}selected{% endif %}>Hindi</option>
+                            <option value="Bilingual" {% if college and college.medium_of_instruction == 'Bilingual' %}selected{% endif %}>Bilingual</option>
+                            <option value="Local Language" {% if college and college.medium_of_instruction == 'Local Language' %}selected{% endif %}>Local Language</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Indian Passouts</label>
+                        <input type="text" name="indian_passouts" value="{{ college.indian_passouts if college else '' }}" placeholder="e.g. 7500+" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Approvals -->
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem 0;padding-bottom:0.5rem;border-bottom:1px solid var(--gray-100);">Approvals & Recognition</h3>
+                <div style="display:flex;gap:2rem;flex-wrap:wrap;">
+                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.88rem;cursor:pointer;">
+                        <input type="checkbox" name="nmc_approved" {% if college and college.nmc_approved %}checked{% endif %}> NMC Approved
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.88rem;cursor:pointer;">
+                        <input type="checkbox" name="who_approved" {% if college and college.who_approved %}checked{% endif %}> WHO Approved
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.88rem;cursor:pointer;">
+                        <input type="checkbox" name="hostel_included" {% if college and college.hostel_included %}checked{% endif %}> Hostel Included in Tuition
+                    </label>
+                    <label style="display:flex;align-items:center;gap:0.5rem;font-size:0.88rem;cursor:pointer;">
+                        <input type="checkbox" name="is_featured" {% if college and college.is_featured %}checked{% endif %}> Featured College
+                    </label>
+                </div>
+            </div>
+
+            <!-- Fees & Costs -->
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem 0;padding-bottom:0.5rem;border-bottom:1px solid var(--gray-100);">Fee & Cost Information</h3>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Currency</label>
+                        <select name="currency" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
+                            <option value="RUB" {% if college and college.currency == 'RUB' %}selected{% endif %}>RUB (₽)</option>
+                            <option value="USD" {% if college and college.currency == 'USD' %}selected{% endif %}>USD ($)</option>
+                            <option value="INR" {% if college and college.currency == 'INR' %}selected{% endif %}>INR (₹)</option>
+                            <option value="EUR" {% if college and college.currency == 'EUR' %}selected{% endif %}>EUR (€)</option>
+                            <option value="GBP" {% if college and college.currency == 'GBP' %}selected{% endif %}>GBP (£)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Full Package (INR Lakhs)</label>
+                        <input type="number" step="0.01" name="full_package_inr_lakhs" value="{{ college.full_package_inr_lakhs if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Mess Charges</label>
+                        <input type="text" name="mess_charges" value="{{ college.mess_charges if college else '1300 $' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Consultancy Fee (INR)</label>
+                        <input type="number" step="0.01" name="consultancy_fee_inr" value="{{ college.consultancy_fee_inr if college else '125000' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Admin Fee</label>
+                        <input type="text" name="admin_fee" value="{{ college.admin_fee if college else '1500 $' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Travel Cost (INR)</label>
+                        <input type="number" step="0.01" name="travel_cost_inr" value="{{ college.travel_cost_inr if college else '75000' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <!-- Description & URLs -->
+            <div style="margin-bottom:1.5rem;">
+                <h3 style="font-size:0.82rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;margin:0 0 1rem 0;padding-bottom:0.5rem;border-bottom:1px solid var(--gray-100);">Details & Media</h3>
+                <div style="display:grid;grid-template-columns:1fr;gap:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Description</label>
+                        <textarea name="description" rows="3" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ college.description if college else '' }}</textarea>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Eligibility Criteria</label>
+                        <textarea name="eligibility" rows="3" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ college.eligibility if college else 'Students must have passed 10+2 with Physics, Chemistry, and Biology (PCB) with 50% marks (40% for reserved category) and must be NEET qualified as per NMC rules. The student should be at least 17 years old by 31st December of the admission year. No IELTS/TOEFL is required.' }}</textarea>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Facilities</label>
+                        <textarea name="facilities" rows="2" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ college.facilities if college else '' }}</textarea>
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Ranking Info</label>
+                        <input type="text" name="ranking_info" value="{{ college.ranking_info if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Website URL</label>
+                        <input type="url" name="website_url" value="{{ college.website_url if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Logo URL</label>
+                        <input type="url" name="logo_url" value="{{ college.logo_url if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Cover Image URL</label>
+                        <input type="url" name="cover_image_url" value="{{ college.cover_image_url if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-top:1rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Contact Phone</label>
+                        <input type="text" name="contact_phone" value="{{ college.contact_phone if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Contact Email</label>
+                        <input type="email" name="contact_email" value="{{ college.contact_email if college else '' }}" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                    </div>
+                </div>
+            </div>
+
+            <div style="display:flex;gap:0.75rem;justify-content:flex-end;border-top:1px solid var(--gray-100);padding-top:1.2rem;">
+                <a href="/colleges" style="padding:0.55rem 1.2rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;text-decoration:none;color:var(--gray-600);font-weight:500;">Cancel</a>
+                <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.55rem 1.5rem;border-radius:0.4rem;font-weight:600;cursor:pointer;font-size:0.88rem;">{{ 'Update' if mode == 'edit' else 'Add' }} College</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
