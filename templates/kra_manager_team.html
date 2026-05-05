@@ -42,7 +42,7 @@
             <div style="display: flex; gap: 1rem; margin-bottom: 1.5rem; align-items: flex-start;">
                 <!-- Photo -->
                 {% if member.photo_url %}
-                <img src="{{ member.photo_url }}" alt="{{ member.name }}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--gray-200);">
+                <img src="{{ member.photo_url if member.photo_url.startswith('http') else '/static/photos/' ~ member.photo_url }}" alt="{{ member.name }}" style="width: 56px; height: 56px; border-radius: 50%; object-fit: cover; background: var(--gray-200);">
                 {% else %}
                 <div style="width: 56px; height: 56px; border-radius: 50%; background: linear-gradient(135deg, var(--navy), var(--blue)); display: flex; align-items: center; justify-content: center; color: white; font-weight: 700; font-size: 1.2rem;">
                     {{ member.name[0].upper() }}

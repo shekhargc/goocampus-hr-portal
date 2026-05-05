@@ -12,7 +12,7 @@
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.5rem;flex-wrap:wrap;gap:1rem;">
         <div style="display:flex;align-items:center;gap:1rem;">
             {% if member.photo_url %}
-            <img src="{{ member.photo_url }}" alt="" style="width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid var(--gray-100);">
+            <img src="{{ member.photo_url if member.photo_url.startswith('http') else '/static/photos/' ~ member.photo_url }}" alt="" style="width:54px;height:54px;border-radius:50%;object-fit:cover;border:2px solid var(--gray-100);">
             {% else %}
             <div style="width:54px;height:54px;border-radius:50%;background:var(--gray-100);display:flex;align-items:center;justify-content:center;font-weight:700;color:var(--gray-500);font-size:1.1rem;">{{ (member.name or '?')[0]|upper }}</div>
             {% endif %}

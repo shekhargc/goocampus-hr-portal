@@ -24,7 +24,7 @@
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;margin-bottom:1.25rem;">
         <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:1rem;">
             <div style="display:flex;align-items:center;gap:0.7rem;">
-                <img src="{{ t.photo_url or '/static/default-avatar.png' }}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
+                <img src="{{ t.photo_url if t.photo_url and t.photo_url.startswith('http') else '/static/photos/' ~ t.photo_url if t.photo_url else '/static/default-avatar.png' }}" style="width:38px;height:38px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
                 <div>
                     <div style="font-weight:700;color:var(--navy);font-size:0.95rem;">{{ t.name }}</div>
                     <div style="font-size:0.74rem;color:var(--gray-500);">{{ t.emp_code }}</div>

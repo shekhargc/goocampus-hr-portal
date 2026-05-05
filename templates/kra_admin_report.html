@@ -492,7 +492,7 @@
                 <div class="employee-cell">
                   <div class="employee-photo">
                     {% if row.photo_url %}
-                      <img src="{{ row.photo_url }}" alt="{{ row.emp_name }}">
+                      <img src="{{ row.photo_url if row.photo_url.startswith('http') else '/static/photos/' ~ row.photo_url }}" alt="{{ row.emp_name }}">
                     {% else %}
                       {{ row.emp_name[0]|upper }}
                     {% endif %}
