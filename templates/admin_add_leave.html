@@ -30,14 +30,30 @@
             </select>
         </div>
 
-        <div class="form-group">
-            <label for="leave_date">Date</label>
-            <input type="date" id="leave_date" name="leave_date" required>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+            <div class="form-group">
+                <label for="from_date">From Date</label>
+                <input type="date" id="from_date" name="from_date" required>
+            </div>
+            <div class="form-group">
+                <label for="to_date">To Date</label>
+                <input type="date" id="to_date" name="to_date">
+                <small style="color:var(--gray-500);font-size:0.75rem;">Leave blank for single day</small>
+            </div>
         </div>
 
-        <div class="form-group">
-            <label for="day_portion">Duration</label>
+        <div id="single-day-portion" class="form-group">
+            <label for="day_portion">Duration (First / Only Day)</label>
             <select id="day_portion" name="day_portion" required>
+                <option value="full">Full Day (1 day)</option>
+                <option value="first_half">First Half (0.5 day)</option>
+                <option value="second_half">Second Half (0.5 day)</option>
+            </select>
+        </div>
+
+        <div id="last-day-portion" class="form-group" style="display:none;">
+            <label for="last_day_portion">Duration (Last Day)</label>
+            <select id="last_day_portion" name="last_day_portion">
                 <option value="full">Full Day (1 day)</option>
                 <option value="first_half">First Half (0.5 day)</option>
                 <option value="second_half">Second Half (0.5 day)</option>
@@ -55,4 +71,22 @@
         </div>
     </form>
 </div>
+
+<script>
+(function(){
+    var fromDate = document.getElementById('from_date');
+    var toDate = document.getElementById('to_date');
+    var lastDayDiv = document.getElementById('last-day-portion');
+    function toggle(){
+        var f = fromDate.value, t = toDate.value;
+        if(t && t > f){
+            lastDayDiv.style.display = '';
+        } else {
+            lastDayDiv.style.display = 'none';
+        }
+    }
+    fromDate.addEventListener('change', toggle);
+    toDate.addEventListener('change', toggle);
+})();
+</script>
 {% endblock %}

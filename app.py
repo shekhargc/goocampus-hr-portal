@@ -882,6 +882,7 @@ def apply_leave():
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         group_id = str(uuid.uuid4())[:12]
         total_days = 0
+        wfh_cancelled = []
 
         for i, day in enumerate(leave_days):
             date_str = day.strftime('%Y-%m-%d')
@@ -898,13 +899,21 @@ def apply_leave():
             day_val = 0.5 if portion in ['first_half', 'second_half'] else 1.0
             total_days += day_val
 
-            # Check for duplicate
+            # Check for duplicate leave
             existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
                                    (user['id'], date_str, 'rejected')).fetchone()
             if existing:
                 flash(f'You already have a leave record for {date_str}', 'error')
                 conn.close()
                 return render_template('apply_leave.html', user=user)
+
+            # Auto-cancel overlapping WFH requests for this date
+            overlapping_wfh = conn.execute(
+                "SELECT id FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+                (user['id'], date_str, date_str)).fetchall()
+            for wfh in overlapping_wfh:
+                conn.execute("UPDATE wfh_requests SET status = 'cancelled' WHERE id = ?", (wfh['id'],))
+                wfh_cancelled.append(date_str)
 
             conn.execute('''
                 INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, created_at, leave_group_id)
@@ -942,7 +951,10 @@ def apply_leave():
         conn2.close()
 
         day_label = 'day' if total_days == 1 else 'days'
-        flash(f'Leave request submitted for {total_days:.1f} {day_label} ({len(leave_days)} working day{"s" if len(leave_days) > 1 else ""})', 'success')
+        msg = f'Leave request submitted for {total_days:.1f} {day_label} ({len(leave_days)} working day{"s" if len(leave_days) > 1 else ""})'
+        if wfh_cancelled:
+            msg += f'. {len(wfh_cancelled)} overlapping WFH request(s) auto-cancelled.'
+        flash(msg, 'success')
         return redirect(url_for('dashboard'))
 
     return render_template('apply_leave.html', user=user)
@@ -1031,6 +1043,7 @@ def apply_late_leave():
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         group_id = str(uuid.uuid4())[:12]
         total_days = 0
+        wfh_cancelled = []
         combined_reason = f"{reason}\n\n[Late Application Reason]: {late_reason}"
 
         for i, day in enumerate(leave_days):
@@ -1055,6 +1068,14 @@ def apply_late_leave():
                 flash(f'You already have a leave record for {date_str}', 'error')
                 conn.close()
                 return redirect(url_for('apply_late_leave'))
+
+            # Auto-cancel overlapping WFH requests for this date
+            overlapping_wfh = conn.execute(
+                "SELECT id FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+                (user['id'], date_str, date_str)).fetchall()
+            for wfh in overlapping_wfh:
+                conn.execute("UPDATE wfh_requests SET status = 'cancelled' WHERE id = ?", (wfh['id'],))
+                wfh_cancelled.append(date_str)
 
             conn.execute('''
                 INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, is_late, created_at, leave_group_id)
@@ -1094,7 +1115,10 @@ def apply_late_leave():
         conn2.close()
 
         day_label = 'day' if total_days == 1 else 'days'
-        flash(f'Late leave request submitted for {total_days:.1f} {day_label}. Your late leave count has been updated.', 'success')
+        msg = f'Late leave request submitted for {total_days:.1f} {day_label}. Your late leave count has been updated.'
+        if wfh_cancelled:
+            msg += f' {len(wfh_cancelled)} overlapping WFH request(s) auto-cancelled.'
+        flash(msg, 'success')
         return redirect(url_for('dashboard'))
 
     # GET request
@@ -2194,11 +2218,13 @@ def admin_add_leave():
     if request.method == 'POST':
         employee_id = request.form.get('employee_id', '').strip()
         leave_type = request.form.get('leave_type', '').strip()
-        leave_date = request.form.get('leave_date', '').strip()
+        from_date = request.form.get('from_date', '').strip()
+        to_date = request.form.get('to_date', '').strip()
         day_portion = request.form.get('day_portion', 'full').strip()
+        last_day_portion = request.form.get('last_day_portion', 'full').strip()
         reason = request.form.get('reason', '').strip()
 
-        if not employee_id or not leave_type or not leave_date:
+        if not employee_id or not leave_type or not from_date:
             flash('Required fields missing', 'error')
             return render_template('admin_add_leave.html', user=user, employees=employees)
 
@@ -2212,22 +2238,80 @@ def admin_add_leave():
             flash('Invalid leave type', 'error')
             return render_template('admin_add_leave.html', user=user, employees=employees)
 
-        if day_portion not in ['full', 'first_half', 'second_half']:
-            flash('Invalid duration', 'error')
+        if not to_date:
+            to_date = from_date
+
+        from_dt = datetime.strptime(from_date, '%Y-%m-%d')
+        to_dt = datetime.strptime(to_date, '%Y-%m-%d')
+
+        if to_dt < from_dt:
+            flash('To date cannot be before from date', 'error')
             return render_template('admin_add_leave.html', user=user, employees=employees)
 
-        days = 0.5 if day_portion in ['first_half', 'second_half'] else 1.0
+        holidays_db = {row['holiday_date'] for row in conn.execute('SELECT holiday_date FROM holidays').fetchall()}
+
+        # Build working days list (skip weekends + holidays)
+        leave_days = []
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            if current.weekday() < 5 and date_str not in holidays_db:
+                leave_days.append(current)
+            current += timedelta(days=1)
+
+        if not leave_days:
+            flash('No working days in the selected date range (weekends and holidays are excluded)', 'error')
+            conn.close()
+            return render_template('admin_add_leave.html', user=user, employees=employees)
 
         import uuid
+        now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         group_id = str(uuid.uuid4())[:12]
-        conn.execute('''
-            INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, approved_by, approved_at, created_at, leave_group_id)
-            VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)
-        ''', (employee_id, leave_type, leave_date, days, day_portion, reason or '', user['id'], datetime.now().strftime('%Y-%m-%d %H:%M:%S'), datetime.now().strftime('%Y-%m-%d %H:%M:%S'), group_id))
+        total_days = 0
+        wfh_adjusted = 0
+
+        for i, day in enumerate(leave_days):
+            date_str = day.strftime('%Y-%m-%d')
+            is_single = (len(leave_days) == 1)
+            is_last = (i == len(leave_days) - 1 and len(leave_days) > 1)
+
+            if is_single:
+                portion = day_portion if day_portion in ['full', 'first_half', 'second_half'] else 'full'
+            elif is_last:
+                portion = last_day_portion if last_day_portion in ['full', 'first_half', 'second_half'] else 'full'
+            else:
+                portion = 'full'
+
+            day_val = 0.5 if portion in ['first_half', 'second_half'] else 1.0
+
+            # Check for existing leave on this date
+            existing = conn.execute('SELECT id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status != ?',
+                                    (employee_id, date_str, 'rejected')).fetchone()
+            if existing:
+                flash(f'Employee already has a leave record for {date_str} — skipped', 'warning')
+                continue
+
+            # Auto-cancel overlapping WFH
+            overlapping_wfh = conn.execute(
+                "SELECT id, from_date, to_date FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+                (employee_id, date_str, date_str)).fetchall()
+            for wfh in overlapping_wfh:
+                conn.execute("UPDATE wfh_requests SET status = 'cancelled' WHERE id = ?", (wfh['id'],))
+                wfh_adjusted += 1
+
+            total_days += day_val
+            conn.execute('''
+                INSERT INTO leave_records (employee_id, leave_type, leave_date, days, day_portion, reason, status, approved_by, approved_at, created_at, leave_group_id)
+                VALUES (?, ?, ?, ?, ?, ?, 'approved', ?, ?, ?, ?)
+            ''', (employee_id, leave_type, date_str, day_val, portion, reason or '', user['id'], now_str, now_str, group_id))
+
         conn.commit()
         conn.close()
 
-        flash('Leave added successfully', 'success')
+        msg = f'Leave added: {total_days:.1f} day(s) across {len(leave_days)} working day(s)'
+        if wfh_adjusted:
+            msg += f'. {wfh_adjusted} overlapping WFH request(s) auto-cancelled.'
+        flash(msg, 'success')
         return redirect(url_for('admin_dashboard'))
 
     conn.close()
@@ -4588,6 +4672,32 @@ def apply_wfh():
             return redirect(url_for('apply_wfh'))
 
         conn = get_db()
+
+        # Check for overlapping leave records and auto-cancel them
+        from_dt = datetime.strptime(from_date, '%Y-%m-%d')
+        to_dt = datetime.strptime(to_date, '%Y-%m-%d')
+        leave_cancelled = 0
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            # Only cancel leaves that fall on this date and are pending/approved
+            overlapping_leaves = conn.execute(
+                "SELECT id, leave_group_id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('approved','pending')",
+                (user['id'], date_str)).fetchall()
+            for lv in overlapping_leaves:
+                conn.execute("UPDATE leave_records SET status = 'cancelled' WHERE id = ?", (lv['id'],))
+                leave_cancelled += 1
+            current += timedelta(days=1)
+
+        # Check for overlapping WFH (already approved/pending)
+        existing_wfh = conn.execute(
+            "SELECT id FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+            (user['id'], to_date, from_date)).fetchall()
+        if existing_wfh:
+            flash(f'You already have a WFH request overlapping this date range', 'error')
+            conn.close()
+            return redirect(url_for('apply_wfh'))
+
         conn.execute('''
             INSERT INTO wfh_requests (employee_id, from_date, to_date, reason)
             VALUES (?, ?, ?, ?)
@@ -4605,7 +4715,10 @@ def apply_wfh():
         conn.commit()
         conn.close()
 
-        flash('WFH request submitted successfully', 'success')
+        msg = 'WFH request submitted successfully'
+        if leave_cancelled:
+            msg += f'. {leave_cancelled} overlapping leave record(s) auto-cancelled.'
+        flash(msg, 'success')
         return redirect(url_for('my_wfh_requests'))
 
     return render_template('apply_wfh.html', user=user)
