@@ -32,17 +32,59 @@
     </div>
 
     <!-- Search & Filters -->
-    <form method="GET" style="display:flex;gap:0.6rem;margin-bottom:1.5rem;flex-wrap:wrap;align-items:center;">
+    <form method="GET" id="filterForm" style="margin-bottom:1.5rem;">
         <input type="hidden" name="category" value="{{ category }}">
-        <input type="text" name="search" value="{{ search }}" placeholder="Search colleges by name or city..." style="flex:1;min-width:220px;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
-        <select name="country" style="padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;">
-            <option value="">All Countries</option>
-            {% for c in countries %}<option value="{{ c }}" {% if c == country_filter %}selected{% endif %}>{{ c }}</option>{% endfor %}
-        </select>
-        <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
-        {% if search or country_filter %}
-        <a href="/colleges?category={{ category }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;">Clear</a>
-        {% endif %}
+
+        <!-- College search with autocomplete -->
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;margin-bottom:0.7rem;">
+            <div style="position:relative;flex:1;min-width:240px;">
+                <input type="text" name="search" id="collegeSearch" value="{{ search }}" placeholder="Search college by name..." autocomplete="off"
+                    style="width:100%;padding:0.55rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;box-sizing:border-box;">
+                <div id="searchSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 0.4rem 0.4rem;max-height:220px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+            </div>
+            <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1.1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
+            {% if search or country_filter or state_filter or course_filter or fee_min or fee_max %}
+            <a href="/colleges?category={{ category }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset Filters</a>
+            {% endif %}
+        </div>
+
+        <!-- Category-specific filters -->
+        <div style="display:flex;gap:0.6rem;flex-wrap:wrap;align-items:center;">
+            {% if category == 'international' or category == 'all' %}
+            <!-- Country filter -->
+            <select name="country" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.83rem;min-width:140px;">
+                <option value="">All Countries</option>
+                {% for c in countries %}<option value="{{ c }}" {% if c == country_filter %}selected{% endif %}>{{ c }}</option>{% endfor %}
+            </select>
+            {% endif %}
+
+            {% if category == 'international' %}
+            <!-- Fee range in INR (Lakhs) -->
+            <div style="display:flex;align-items:center;gap:0.3rem;">
+                <span style="font-size:0.75rem;color:var(--gray-500);font-weight:600;">Fee ₹ Lac:</span>
+                <input type="number" step="0.5" name="fee_min" value="{{ fee_min }}" placeholder="Min" style="width:70px;padding:0.45rem 0.5rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
+                <span style="color:var(--gray-400);">–</span>
+                <input type="number" step="0.5" name="fee_max" value="{{ fee_max }}" placeholder="Max" style="width:70px;padding:0.45rem 0.5rem;border:1px solid var(--gray-300);border-radius:0.35rem;font-size:0.82rem;">
+            </div>
+            {% endif %}
+
+            {% if category == 'indian' or category == 'all' %}
+            <!-- State filter -->
+            <select name="state" style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.83rem;min-width:140px;">
+                <option value="">All States</option>
+                {% for s in states %}<option value="{{ s }}" {% if s == state_filter %}selected{% endif %}>{{ s }}</option>{% endfor %}
+            </select>
+            {% endif %}
+
+            {% if category == 'indian' %}
+            <!-- Course filter -->
+            <div style="position:relative;">
+                <input type="text" name="course" id="courseSearch" value="{{ course_filter }}" placeholder="Search course..." autocomplete="off"
+                    style="padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.83rem;width:160px;">
+                <div id="courseSuggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 0.4rem 0.4rem;max-height:180px;overflow-y:auto;z-index:50;box-shadow:0 4px 12px rgba(0,0,0,0.1);"></div>
+            </div>
+            {% endif %}
+        </div>
     </form>
 
     <!-- Stats Bar -->
@@ -54,66 +96,58 @@
 
     <!-- College Cards Grid -->
     {% if colleges %}
-    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(340px, 1fr));gap:1.25rem;">
+    <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:1.1rem;">
         {% for c in colleges %}
         <a href="/colleges/{{ c.slug }}" style="text-decoration:none;color:inherit;">
-            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,0.05);transition:box-shadow 0.2s, transform 0.2s;cursor:pointer;" onmouseover="this.style.boxShadow='0 4px 16px rgba(0,0,0,0.1)';this.style.transform='translateY(-2px)'" onmouseout="this.style.boxShadow='0 1px 4px rgba(0,0,0,0.05)';this.style.transform='none'">
-                <!-- Cover Image / Gradient Header -->
-                <div style="height:110px;background:linear-gradient(135deg, var(--navy), var(--navy-light));position:relative;display:flex;align-items:center;justify-content:center;">
-                    {% if c.cover_image_url %}
-                    <img src="{{ c.cover_image_url }}" style="width:100%;height:100%;object-fit:cover;">
-                    {% else %}
-                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="rgba(255,255,255,0.2)" stroke-width="1.5"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
-                    {% endif %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.65rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:box-shadow 0.2s, transform 0.15s;cursor:pointer;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.09)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';this.style.transform='none'">
+                <!-- Name Banner -->
+                <div style="background:linear-gradient(135deg, var(--navy), var(--navy-light));padding:0.75rem 1rem;display:flex;align-items:center;gap:0.5rem;min-height:0;">
+                    <span style="font-size:1.1rem;line-height:1;flex-shrink:0;">{% if c.country == 'Russia' %}🇷🇺{% elif c.country == 'India' %}🇮🇳{% elif c.country == 'United States' %}🇺🇸{% elif c.country == 'United Kingdom' %}🇬🇧{% elif c.country == 'Germany' %}🇩🇪{% elif c.country == 'China' %}🇨🇳{% elif c.country == 'Ukraine' %}🇺🇦{% elif c.country == 'Kazakhstan' %}🇰🇿{% elif c.country == 'Philippines' %}🇵🇭{% elif c.country == 'Bangladesh' %}🇧🇩{% elif c.country == 'Nepal' %}🇳🇵{% elif c.country == 'Georgia' %}🇬🇪{% elif c.country == 'Kyrgyzstan' %}🇰🇬{% elif c.country == 'Uzbekistan' %}🇺🇿{% elif c.country == 'Egypt' %}🇪🇬{% elif c.country == 'Malaysia' %}🇲🇾{% elif c.country == 'Australia' %}🇦🇺{% else %}🌍{% endif %}</span>
+                    <h3 style="margin:0;font-size:0.88rem;font-weight:700;color:white;line-height:1.25;flex:1;">{{ c.name }}</h3>
                     {% if c.is_featured %}
-                    <span style="position:absolute;top:8px;right:8px;background:var(--orange);color:white;font-size:0.65rem;font-weight:700;padding:3px 8px;border-radius:3px;text-transform:uppercase;">Featured</span>
+                    <span style="background:var(--orange);color:white;font-size:0.6rem;font-weight:700;padding:2px 6px;border-radius:3px;text-transform:uppercase;flex-shrink:0;">Featured</span>
                     {% endif %}
-                    <!-- Country flag badge -->
-                    <span style="position:absolute;top:8px;left:8px;background:rgba(0,0,0,0.5);color:white;font-size:0.7rem;font-weight:600;padding:3px 8px;border-radius:3px;">
-                        {% if c.country == 'Russia' %}🇷🇺{% elif c.country == 'India' %}🇮🇳{% else %}🌍{% endif %} {{ c.country }}
-                    </span>
                 </div>
 
-                <div style="padding:1rem 1.2rem;">
-                    <h3 style="margin:0 0 0.4rem 0;font-size:0.95rem;font-weight:700;color:var(--navy);line-height:1.3;">{{ c.name }}</h3>
-                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.6rem;">
+                <div style="padding:0.7rem 1rem 0.85rem;">
+                    <div style="display:flex;gap:0.5rem;flex-wrap:wrap;margin-bottom:0.5rem;">
                         {% if c.city %}
-                        <span style="font-size:0.75rem;color:var(--gray-500);">
-                            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                            {{ c.city }}
+                        <span style="font-size:0.73rem;color:var(--gray-500);">
+                            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:-1px;"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                            {{ c.city }}{% if c.country != 'India' %}, {{ c.country }}{% elif c.state_or_region %}, {{ c.state_or_region }}{% endif %}
                         </span>
                         {% endif %}
                         {% if c.established_year and c.established_year > 0 %}
-                        <span style="font-size:0.75rem;color:var(--gray-500);">Est. {{ c.established_year }}</span>
+                        <span style="font-size:0.73rem;color:var(--gray-500);">Est. {{ c.established_year }}</span>
                         {% endif %}
                     </div>
 
                     <!-- Badges -->
-                    <div style="display:flex;gap:0.35rem;flex-wrap:wrap;margin-bottom:0.7rem;">
+                    <div style="display:flex;gap:0.3rem;flex-wrap:wrap;margin-bottom:0.55rem;">
                         {% if c.nmc_approved %}
-                        <span style="background:#dcfce7;color:#166534;font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">NMC</span>
+                        <span style="background:#dcfce7;color:#166534;font-size:0.62rem;font-weight:600;padding:2px 6px;border-radius:3px;">NMC</span>
                         {% endif %}
                         {% if c.who_approved %}
-                        <span style="background:#dbeafe;color:#1e40af;font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">WHO</span>
+                        <span style="background:#dbeafe;color:#1e40af;font-size:0.62rem;font-weight:600;padding:2px 6px;border-radius:3px;">WHO</span>
                         {% endif %}
-                        <span style="background:var(--gray-100);color:var(--gray-600);font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ c.university_type or 'Government' }}</span>
-                        <span style="background:var(--orange-light);color:var(--orange-dark);font-size:0.65rem;font-weight:600;padding:2px 7px;border-radius:3px;">{{ course_counts.get(c.id, 0) }} Course{{ 's' if course_counts.get(c.id, 0) != 1 }}</span>
+                        <span style="background:var(--gray-100);color:var(--gray-600);font-size:0.62rem;font-weight:600;padding:2px 6px;border-radius:3px;">{{ c.university_type or 'Government' }}</span>
+                        <span style="background:var(--orange-light);color:var(--orange-dark);font-size:0.62rem;font-weight:600;padding:2px 6px;border-radius:3px;">{{ course_counts.get(c.id, 0) }} Course{{ 's' if course_counts.get(c.id, 0) != 1 }}</span>
                     </div>
 
                     <!-- Fee Info -->
-                    <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.6rem;">
+                    <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.5rem;">
                         {% if c.full_package_inr_lakhs and c.full_package_inr_lakhs > 0 %}
                         <div>
-                            <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Full Package</div>
-                            <div style="font-size:1rem;font-weight:800;color:var(--navy);">₹{{ '{:,.2f}'.format(c.full_package_inr_lakhs) }} Lac</div>
+                            <div style="font-size:0.65rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Full Package</div>
+                            <div style="font-size:0.95rem;font-weight:800;color:var(--navy);">₹{{ '{:,.2f}'.format(c.full_package_inr_lakhs) }} Lac</div>
                         </div>
                         {% else %}
                         <div>
-                            <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Medium</div>
-                            <div style="font-size:0.88rem;font-weight:600;color:var(--navy);">{{ c.medium_of_instruction }}</div>
+                            <div style="font-size:0.65rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Medium</div>
+                            <div style="font-size:0.85rem;font-weight:600;color:var(--navy);">{{ c.medium_of_instruction }}</div>
                         </div>
                         {% endif %}
-                        <span style="color:var(--orange);font-size:0.8rem;font-weight:600;">View Profile →</span>
+                        <span style="color:var(--orange);font-size:0.78rem;font-weight:600;">View →</span>
                     </div>
                 </div>
             </div>
@@ -128,4 +162,62 @@
     </div>
     {% endif %}
 </div>
+
+<!-- Autocomplete Script -->
+<script>
+(function() {
+    var allNames = {{ all_college_names | tojson }};
+    var coursesList = {{ courses_list | tojson }};
+
+    // College name autocomplete
+    var searchInput = document.getElementById('collegeSearch');
+    var searchBox = document.getElementById('searchSuggestions');
+    if (searchInput && searchBox) {
+        searchInput.addEventListener('input', function() {
+            var val = this.value.toLowerCase().trim();
+            searchBox.innerHTML = '';
+            if (val.length < 1) { searchBox.style.display = 'none'; return; }
+            var matches = allNames.filter(function(n) { return n.toLowerCase().indexOf(val) !== -1; }).slice(0, 10);
+            if (matches.length === 0) { searchBox.style.display = 'none'; return; }
+            matches.forEach(function(m) {
+                var div = document.createElement('div');
+                div.textContent = m;
+                div.style.cssText = 'padding:0.45rem 0.75rem;font-size:0.83rem;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+                div.onmouseover = function() { this.style.background = '#f9fafb'; };
+                div.onmouseout = function() { this.style.background = 'white'; };
+                div.onclick = function() { searchInput.value = m; searchBox.style.display = 'none'; document.getElementById('filterForm').submit(); };
+                searchBox.appendChild(div);
+            });
+            searchBox.style.display = 'block';
+        });
+        searchInput.addEventListener('blur', function() { setTimeout(function() { searchBox.style.display = 'none'; }, 200); });
+        searchInput.addEventListener('focus', function() { if (this.value.length >= 1) this.dispatchEvent(new Event('input')); });
+    }
+
+    // Course autocomplete
+    var courseInput = document.getElementById('courseSearch');
+    var courseBox = document.getElementById('courseSuggestions');
+    if (courseInput && courseBox) {
+        courseInput.addEventListener('input', function() {
+            var val = this.value.toLowerCase().trim();
+            courseBox.innerHTML = '';
+            if (val.length < 1) { courseBox.style.display = 'none'; return; }
+            var matches = coursesList.filter(function(n) { return n.toLowerCase().indexOf(val) !== -1; }).slice(0, 8);
+            if (matches.length === 0) { courseBox.style.display = 'none'; return; }
+            matches.forEach(function(m) {
+                var div = document.createElement('div');
+                div.textContent = m;
+                div.style.cssText = 'padding:0.45rem 0.75rem;font-size:0.83rem;cursor:pointer;border-bottom:1px solid #f3f4f6;';
+                div.onmouseover = function() { this.style.background = '#f9fafb'; };
+                div.onmouseout = function() { this.style.background = 'white'; };
+                div.onclick = function() { courseInput.value = m; courseBox.style.display = 'none'; document.getElementById('filterForm').submit(); };
+                courseBox.appendChild(div);
+            });
+            courseBox.style.display = 'block';
+        });
+        courseInput.addEventListener('blur', function() { setTimeout(function() { courseBox.style.display = 'none'; }, 200); });
+        courseInput.addEventListener('focus', function() { if (this.value.length >= 1) this.dispatchEvent(new Event('input')); });
+    }
+})();
+</script>
 {% endblock %}

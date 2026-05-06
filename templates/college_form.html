@@ -138,11 +138,20 @@
                     <div>
                         <label style="display:block;font-size:0.78rem;font-weight:600;color:var(--gray-600);margin-bottom:0.3rem;">Currency</label>
                         <select name="currency" style="width:100%;padding:0.55rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.88rem;">
-                            <option value="INR" {% if college and college.currency == 'INR' %}selected{% endif %}>INR (₹)</option>
-                            <option value="RUB" {% if college and college.currency == 'RUB' %}selected{% endif %}>RUB (₽)</option>
-                            <option value="USD" {% if college and college.currency == 'USD' %}selected{% endif %}>USD ($)</option>
-                            <option value="EUR" {% if college and college.currency == 'EUR' %}selected{% endif %}>EUR</option>
-                            <option value="GBP" {% if college and college.currency == 'GBP' %}selected{% endif %}>GBP (£)</option>
+                            <option value="INR" {% if college and college.currency == 'INR' %}selected{% endif %}>INR (₹) - India</option>
+                            <option value="RUB" {% if college and college.currency == 'RUB' %}selected{% endif %}>RUB (₽) - Russia</option>
+                            <option value="GEL" {% if college and college.currency == 'GEL' %}selected{% endif %}>GEL (₾) - Georgia</option>
+                            <option value="USD" {% if college and college.currency == 'USD' %}selected{% endif %}>USD ($) - US Dollar</option>
+                            <option value="AUD" {% if college and college.currency == 'AUD' %}selected{% endif %}>AUD (A$) - Australia</option>
+                            <option value="UZS" {% if college and college.currency == 'UZS' %}selected{% endif %}>UZS (сўм) - Uzbekistan</option>
+                            <option value="EGP" {% if college and college.currency == 'EGP' %}selected{% endif %}>EGP (E£) - Egypt</option>
+                            <option value="MYR" {% if college and college.currency == 'MYR' %}selected{% endif %}>MYR (RM) - Malaysia</option>
+                            <option value="CNY" {% if college and college.currency == 'CNY' %}selected{% endif %}>CNY (¥) - China</option>
+                            <option value="PHP" {% if college and college.currency == 'PHP' %}selected{% endif %}>PHP (₱) - Philippines</option>
+                            <option value="EUR" {% if college and college.currency == 'EUR' %}selected{% endif %}>EUR (€) - Europe</option>
+                            <option value="GBP" {% if college and college.currency == 'GBP' %}selected{% endif %}>GBP (£) - UK</option>
+                            <option value="KZT" {% if college and college.currency == 'KZT' %}selected{% endif %}>KZT (₸) - Kazakhstan</option>
+                            <option value="UAH" {% if college and college.currency == 'UAH' %}selected{% endif %}>UAH (₴) - Ukraine</option>
                         </select>
                     </div>
                     <div>

@@ -4109,7 +4109,7 @@ def reports_annual():
 
 # ─── Forex / Currency Conversion ───
 # Cached FX rates (1 unit of currency → INR). Refreshed every 6 hours.
-SUPPORTED_CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'AED', 'RUB']
+SUPPORTED_CURRENCIES = ['INR', 'USD', 'EUR', 'GBP', 'AUD', 'AED', 'RUB', 'GEL', 'UZS', 'EGP', 'MYR', 'CNY', 'PHP', 'KZT', 'UAH', 'BDT', 'NPR', 'KGS', 'AMD', 'BYN']
 _fx_cache = {'rates': None, 'fetched_at': 0, 'source': 'fallback', 'updated_iso': None}
 
 # Reasonable fallback rates in case the API is unreachable (as of early 2026)
@@ -17314,6 +17314,8 @@ def ensure_college_tables():
                 ('Nepal', 'NP', 'NPR'), ('Georgia', 'GE', 'GEL'),
                 ('Kyrgyzstan', 'KG', 'KGS'), ('Uzbekistan', 'UZ', 'UZS'),
                 ('Armenia', 'AM', 'AMD'), ('Belarus', 'BY', 'BYN'),
+                ('Egypt', 'EG', 'EGP'), ('Malaysia', 'MY', 'MYR'),
+                ('Australia', 'AU', 'AUD'),
             ]:
                 try:
                     conn.execute("INSERT INTO countries (name, code, currency_code) VALUES (?,?,?)",
@@ -17569,6 +17571,18 @@ _auto_import_indian_colleges()
 import time as _time
 _currency_cache = {'rates': {}, 'last_fetch': 0}
 
+# Currency code → symbol mapping (used in templates for dynamic display)
+CURRENCY_SYMBOLS = {
+    'INR': '₹', 'USD': '$', 'EUR': '€', 'GBP': '£', 'RUB': '₽',
+    'AUD': 'A$', 'AED': 'د.إ', 'CNY': '¥', 'UAH': '₴', 'KZT': '₸',
+    'PHP': '₱', 'BDT': '৳', 'NPR': 'रू', 'GEL': '₾', 'KGS': 'сом',
+    'UZS': 'сўм', 'AMD': '֏', 'BYN': 'Br', 'EGP': 'E£', 'MYR': 'RM',
+}
+
+def _currency_sym(code):
+    """Return currency symbol for a code, or the code itself as fallback."""
+    return CURRENCY_SYMBOLS.get((code or 'USD').upper(), code or '$')
+
 def _get_exchange_rates():
     """Fetch exchange rates with 6-hour caching."""
     now = _time.time()
@@ -17592,19 +17606,23 @@ def _get_exchange_rates():
 
 
 def _to_inr(amount, currency, rates):
-    """Convert amount in given currency to INR."""
+    """Convert amount in given currency to INR using live rates.
+    Rates dict is from open.er-api (base USD): rates[X] = how many X per 1 USD.
+    So 1 unit of X in INR = INR_per_USD / X_per_USD."""
     if not amount or not rates:
         return 0
-    currency = currency.upper()
+    currency = (currency or 'INR').upper()
     inr_rate = rates.get('INR', 85.0)
     if currency == 'INR':
         return float(amount)
     elif currency == 'USD':
         return float(amount) * inr_rate
-    elif currency == 'RUB':
-        rub_rate = rates.get('RUB', 80.0)
-        return float(amount) / rub_rate * inr_rate
-    return float(amount)
+    else:
+        # Generic: 1 unit of currency = INR_per_USD / currency_per_USD
+        cur_rate = rates.get(currency)
+        if cur_rate and cur_rate > 0:
+            return float(amount) * (inr_rate / cur_rate)
+        return float(amount)
 
 
 
@@ -17616,6 +17634,10 @@ def colleges_list():
     category = request.args.get('category', 'all')
     search = request.args.get('search', '').strip()
     country = request.args.get('country', '')
+    state_filter = request.args.get('state', '')
+    course_filter = request.args.get('course', '').strip()
+    fee_min = request.args.get('fee_min', '')
+    fee_max = request.args.get('fee_max', '')
 
     query = "SELECT * FROM colleges WHERE is_active = TRUE"
     params = []
@@ -17629,16 +17651,44 @@ def colleges_list():
         query += " AND country = ?"
         params.append(country)
 
+    if state_filter:
+        query += " AND state_or_region = ?"
+        params.append(state_filter)
+
     if search:
         query += " AND (LOWER(name) LIKE ? OR LOWER(city) LIKE ?)"
         params.extend([f'%{search.lower()}%', f'%{search.lower()}%'])
 
+    if fee_min:
+        try:
+            query += " AND full_package_inr_lakhs >= ?"
+            params.append(float(fee_min))
+        except ValueError:
+            pass
+
+    if fee_max:
+        try:
+            query += " AND full_package_inr_lakhs <= ?"
+            params.append(float(fee_max))
+        except ValueError:
+            pass
+
     query += " ORDER BY is_featured DESC, name ASC"
     colleges = conn.execute(query, params).fetchall()
 
-    # Get unique countries for filter
+    # Get unique countries for filter (international only)
     countries = conn.execute(
-        "SELECT DISTINCT country FROM colleges WHERE is_active = TRUE ORDER BY country"
+        "SELECT DISTINCT country FROM colleges WHERE is_active = TRUE AND category = 'international' ORDER BY country"
+    ).fetchall()
+
+    # Get unique states for Indian colleges filter
+    states = conn.execute(
+        "SELECT DISTINCT state_or_region FROM colleges WHERE is_active = TRUE AND category = 'indian' AND state_or_region != '' ORDER BY state_or_region"
+    ).fetchall()
+
+    # Get unique courses for Indian filter
+    courses_list = conn.execute(
+        "SELECT DISTINCT cc.course_name FROM college_courses cc JOIN colleges c ON cc.college_id = c.id WHERE c.is_active = TRUE AND c.category = 'indian' AND cc.is_active = TRUE ORDER BY cc.course_name"
     ).fetchall()
 
     # Get course count per college
@@ -17650,17 +17700,38 @@ def colleges_list():
         ).fetchone()
         course_counts[c['id']] = cnt['cnt'] if cnt else 0
 
+    # Filter by course (post-query since it requires join)
+    if course_filter:
+        college_ids_with_course = conn.execute(
+            "SELECT DISTINCT cc.college_id FROM college_courses cc WHERE cc.is_active = TRUE AND LOWER(cc.course_name) LIKE ?",
+            (f'%{course_filter.lower()}%',)
+        ).fetchall()
+        valid_ids = {r['college_id'] for r in college_ids_with_course}
+        colleges = [c for c in colleges if c['id'] in valid_ids]
+
     # Get exchange rates for INR display
     rates = _get_exchange_rates()
+
+    # All college names for autocomplete
+    all_names = conn.execute(
+        "SELECT name FROM colleges WHERE is_active = TRUE ORDER BY name"
+    ).fetchall()
 
     conn.close()
     return render_template('colleges_list.html',
         colleges=colleges,
         countries=[c['country'] for c in countries],
+        states=[s['state_or_region'] for s in states],
+        courses_list=[c['course_name'] for c in courses_list],
+        all_college_names=[n['name'] for n in all_names],
         course_counts=course_counts,
         category=category,
         search=search,
         country_filter=country,
+        state_filter=state_filter,
+        course_filter=course_filter,
+        fee_min=fee_min,
+        fee_max=fee_max,
         rates=rates,
         to_inr=_to_inr
     )
@@ -17698,7 +17769,8 @@ def college_profile(slug):
         courses=courses,
         fees_by_course=fees_by_course,
         rates=rates,
-        to_inr=_to_inr
+        to_inr=_to_inr,
+        currency_sym=_currency_sym
     )
 
 

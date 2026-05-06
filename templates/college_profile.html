@@ -97,10 +97,11 @@
                 {% set fees = fees_by_course.get(course.id, []) %}
                 {% if fees %}
                 <div style="padding:1rem 1.5rem;">
+                    {% set csym = currency_sym(college.currency) %}
                     <h3 style="font-size:0.85rem;font-weight:700;color:var(--navy);margin:0 0 0.7rem 0;text-transform:uppercase;letter-spacing:0.5px;">
                         Fee Structure
                         <span style="font-weight:400;color:var(--gray-500);text-transform:none;letter-spacing:0;font-size:0.78rem;margin-left:0.5rem;">
-                            (in {{ college.currency }}{% if college.currency != 'INR' %} · Live INR conversion{% endif %})
+                            (in {{ csym }} {{ college.currency }}{% if college.currency != 'INR' %} · INR Total at live rate{% endif %})
                         </span>
                     </h3>
 
@@ -121,13 +122,13 @@
                             <thead>
                                 <tr style="background:var(--gray-50);">
                                     <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total ({{ csym }})</th>
                                     {% if college.currency != 'INR' %}
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">≈ INR</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">INR Total (₹)</th>
                                     {% endif %}
                                 </tr>
                             </thead>
@@ -135,14 +136,14 @@
                                 {% for f in yr1_fees %}
                                 <tr>
                                     <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.tuition_fee) if f.tuition_fee else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.docs_med_checkup) if f.docs_med_checkup else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.visa_med_insurance) if f.visa_med_insurance else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.total) if f.total else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.tuition_fee %}{{ csym }} {{ '{:,.0f}'.format(f.tuition_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ csym }} {{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.docs_med_checkup %}{{ csym }} {{ '{:,.0f}'.format(f.docs_med_checkup) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.visa_med_insurance %}{{ csym }} {{ '{:,.0f}'.format(f.visa_med_insurance) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.total %}{{ csym }} {{ '{:,.0f}'.format(f.total) }}{% else %}-{% endif %}</td>
                                     {% if college.currency != 'INR' %}
                                     <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
-                                        {% if f.total_inr and f.total_inr > 0 %}₹{{ '{:,.0f}'.format(f.total_inr) }}{% elif f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
+                                        {% if f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
                                     </td>
                                     {% endif %}
                                 </tr>
@@ -159,13 +160,13 @@
                             <thead>
                                 <tr style="background:var(--gray-50);">
                                     <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins ({{ csym }})</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total ({{ csym }})</th>
                                     {% if college.currency != 'INR' %}
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">≈ INR</th>
+                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">INR Total (₹)</th>
                                     {% endif %}
                                 </tr>
                             </thead>
@@ -173,14 +174,14 @@
                                 {% for f in yr2_fees %}
                                 <tr>
                                     <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.tuition_fee) if f.tuition_fee else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.docs_med_checkup) if f.docs_med_checkup else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.visa_med_insurance) if f.visa_med_insurance else '-' }}</td>
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ '{:,.0f}'.format(f.total) if f.total else '-' }}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.tuition_fee %}{{ csym }} {{ '{:,.0f}'.format(f.tuition_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ csym }} {{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.docs_med_checkup %}{{ csym }} {{ '{:,.0f}'.format(f.docs_med_checkup) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.visa_med_insurance %}{{ csym }} {{ '{:,.0f}'.format(f.visa_med_insurance) }}{% else %}-{% endif %}</td>
+                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.total %}{{ csym }} {{ '{:,.0f}'.format(f.total) }}{% else %}-{% endif %}</td>
                                     {% if college.currency != 'INR' %}
                                     <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
-                                        {% if f.total_inr and f.total_inr > 0 %}₹{{ '{:,.0f}'.format(f.total_inr) }}{% elif f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
+                                        {% if f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
                                     </td>
                                     {% endif %}
                                 </tr>
@@ -382,10 +383,12 @@
             <div style="background:linear-gradient(135deg, var(--orange-light), #fff5eb);border:1px solid var(--orange);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
                 <h3 style="font-size:0.9rem;font-weight:700;color:var(--orange-dark);margin:0 0 0.7rem 0;">💱 Live Exchange Rate</h3>
                 <div style="font-size:0.85rem;color:var(--gray-700);">
+                    {% set inr_rate = rates.get('INR', 85) %}
+                    {% set cur_rate = rates.get(college.currency, 1) %}
                     {% if college.currency == 'USD' %}
-                    <p style="margin:0 0 0.3rem 0;">1 USD = <strong style="color:var(--navy);">₹{{ '{:,.2f}'.format(rates.get('INR', 85)) }}</strong></p>
-                    {% elif college.currency == 'RUB' %}
-                    <p style="margin:0 0 0.3rem 0;">1 RUB = <strong style="color:var(--navy);">₹{{ '{:,.4f}'.format(rates.get('INR', 85) / rates.get('RUB', 80)) }}</strong></p>
+                    <p style="margin:0 0 0.3rem 0;">1 {{ csym }} {{ college.currency }} = <strong style="color:var(--navy);">₹{{ '{:,.2f}'.format(inr_rate) }}</strong></p>
+                    {% else %}
+                    <p style="margin:0 0 0.3rem 0;">1 {{ csym }} {{ college.currency }} = <strong style="color:var(--navy);">₹{{ '{:,.4f}'.format(inr_rate / cur_rate) }}</strong></p>
                     {% endif %}
                     <p style="margin:0;font-size:0.72rem;color:var(--gray-500);">Rates updated automatically via ExchangeRate API</p>
                 </div>
