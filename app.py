@@ -18032,6 +18032,185 @@ def college_seed():
     return redirect('/colleges')
 
 
+@app.route('/colleges/admin/import-all')
+@admin_required
+def college_import_all():
+    """Import Russian + Indian colleges with per-row error handling."""
+    conn = get_db()
+    results = {'russian_added': 0, 'russian_errors': 0, 'indian_added': 0, 'indian_errors': 0}
+
+    # ── Russian colleges ──
+    try:
+        from college_seed_data import RUSSIAN_COLLEGES
+        for c in RUSSIAN_COLLEGES:
+            try:
+                slug = _make_slug(c['name'])
+                ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if ex:
+                    continue
+
+                conn.execute('''INSERT INTO colleges (name, slug, category, country, city,
+                    established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
+                    indian_passouts, currency, full_package_inr_lakhs,
+                    mess_charges, consultancy_fee_inr, admin_fee, travel_cost_inr,
+                    hostel_included, eligibility)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (c['name'], slug, 'international', c.get('country', 'Russia'), c.get('city', ''),
+                     c.get('established_year', 0), c.get('university_type', 'Government'),
+                     c.get('medium', 'English'),
+                     1 if c.get('nmc_approved') else 0,
+                     1 if c.get('who_approved') else 0,
+                     c.get('indian_passouts', ''),
+                     c.get('currency', 'RUB'),
+                     c.get('full_package_inr_lakhs', 0),
+                     c.get('mess_charges', ''),
+                     c.get('consultancy_fee_inr', 125000),
+                     c.get('admin_fee', '1500 $'),
+                     c.get('travel_cost_inr', 75000),
+                     1 if c.get('hostel_included') else 0,
+                     c.get('eligibility', '')))
+
+                new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if new_college:
+                    conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                        duration_years, duration_includes, intake_season)
+                        VALUES (?, 'MBBS', 'MBBS', ?, 'Including Internship', 'Summer')''',
+                        (new_college['id'], c.get('duration_years', 6)))
+
+                    course = conn.execute(
+                        "SELECT id FROM college_courses WHERE college_id = ? ORDER BY id DESC LIMIT 1",
+                        (new_college['id'],)).fetchone()
+
+                    if course and c.get('fees'):
+                        for fee in c['fees']:
+                            conn.execute('''INSERT INTO college_fee_structure
+                                (course_id, year_label, semester, tuition_fee, hostel_fee,
+                                 docs_med_checkup, visa_med_insurance, total, total_inr)
+                                VALUES (?,?,?,?,?,?,?,?,?)''',
+                                (course['id'], fee['year_label'], fee['semester'],
+                                 fee.get('tuition', 0), fee.get('hostel', 0),
+                                 fee.get('docs', 0), fee.get('visa', 0),
+                                 fee.get('total', 0), fee.get('total_inr', 0)))
+
+                conn.commit()
+                results['russian_added'] += 1
+            except Exception as e:
+                results['russian_errors'] += 1
+                logging.warning(f"Russian import error ({c.get('name', '?')}): {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+    except ImportError:
+        logging.warning("college_seed_data.py not found")
+
+    # ── Indian colleges ──
+    import json
+    json_path = os.path.join(os.path.dirname(__file__), 'indian_colleges_data.json')
+    if os.path.exists(json_path):
+        def safe_int(v):
+            try:
+                if v is None or v == '':
+                    return 0
+                return int(float(str(v).replace(',', '')))
+            except (ValueError, TypeError):
+                return 0
+
+        with open(json_path, 'r') as f:
+            colleges_data = json.load(f)
+
+        # Backfill states/cities first
+        seen_states = set()
+        seen_cities = set()
+        for row in colleges_data:
+            state_name = str(row.get('state') or '').strip()
+            city_name = str(row.get('city') or '').strip()
+            if state_name and state_name not in seen_states:
+                seen_states.add(state_name)
+                exists_st = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
+                if not exists_st:
+                    try:
+                        conn.execute("INSERT INTO states (name, is_active) VALUES (?, TRUE)", (state_name,))
+                        conn.commit()
+                    except Exception:
+                        try: conn.rollback()
+                        except: pass
+
+            if city_name and state_name and (city_name, state_name) not in seen_cities:
+                seen_cities.add((city_name, state_name))
+                state_row = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
+                if state_row:
+                    exists_city = conn.execute("SELECT id FROM cities WHERE name = ? AND state_id = ?",
+                                               (city_name, state_row['id'])).fetchone()
+                    if not exists_city:
+                        try:
+                            conn.execute("INSERT INTO cities (name, state_id, is_active) VALUES (?, ?, TRUE)",
+                                         (city_name, state_row['id']))
+                            conn.commit()
+                        except Exception:
+                            try: conn.rollback()
+                            except: pass
+
+        # Insert colleges
+        for row in colleges_data:
+            name = str(row.get('college_name') or '').strip()
+            if not name:
+                continue
+            try:
+                slug = _make_slug(name)
+                ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if ex:
+                    continue
+
+                state_name = str(row.get('state') or '').strip()
+                city_name = str(row.get('city') or '').strip()
+                college_type = str(row.get('college_type') or 'Government Institute').strip()
+
+                conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
+                    established_year, university_type, nmc_approved, who_approved, currency,
+                    medium_of_instruction, website_url,
+                    university_name, annual_intake, counselling_authority, opd, ipd,
+                    bond_penalty, bed_count, prospects_url)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (name, slug, 'indian', 'India', state_name, city_name,
+                     safe_int(row.get('year_of_inception')),
+                     college_type,
+                     1, 0, 'INR', 'English',
+                     str(row.get('official_website') or '').strip(),
+                     str(row.get('university_name') or '').strip(),
+                     safe_int(row.get('annual_intake')),
+                     str(row.get('counselling_authority') or '').strip(),
+                     safe_int(row.get('opd')),
+                     safe_int(row.get('ipd')),
+                     str(row.get('bond_penalty') or '').strip(),
+                     safe_int(row.get('bed_count')),
+                     str(row.get('prospects') or '').strip()))
+
+                new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if new_college:
+                    course_name = str(row.get('course') or 'MBBS').strip()
+                    course_level = str(row.get('course_level') or 'UG').strip()
+                    conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                        duration_years, duration_includes, intake_season)
+                        VALUES (?, ?, ?, 5, 'Including Internship', 'Summer')''',
+                        (new_college['id'], course_name, course_level))
+
+                conn.commit()
+                results['indian_added'] += 1
+            except Exception as e:
+                results['indian_errors'] += 1
+                logging.warning(f"Indian import error ({name}): {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+    conn.close()
+    flash(f"Import complete: {results['russian_added']} Russian + {results['indian_added']} Indian colleges added. "
+          f"Errors: {results['russian_errors']} Russian, {results['indian_errors']} Indian.", "success")
+    return redirect('/colleges')
+
+
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)
