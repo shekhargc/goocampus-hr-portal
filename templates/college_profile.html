@@ -280,14 +280,71 @@
                         <span style="color:var(--gray-500);">Fee Currency</span>
                         <span style="font-weight:600;color:var(--navy);">{{ college.currency }}</span>
                     </div>
+                    {% if college.university_name %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">University</span>
+                        <span style="font-weight:600;color:var(--navy);text-align:right;max-width:180px;">{{ college.university_name }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.counselling_authority %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Counselling</span>
+                        <span style="font-weight:600;color:var(--navy);text-align:right;max-width:180px;">{{ college.counselling_authority }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.annual_intake and college.annual_intake > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Annual Intake</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ college.annual_intake }} Seats</span>
+                    </div>
+                    {% endif %}
                     {% if college.website_url %}
                     <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
                         <span style="color:var(--gray-500);">Website</span>
                         <a href="{{ college.website_url }}" target="_blank" style="color:var(--orange);font-weight:600;font-size:0.82rem;">Visit ↗</a>
                     </div>
                     {% endif %}
+                    {% if college.prospects_url %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Prospects</span>
+                        <a href="{{ college.prospects_url }}" target="_blank" style="color:var(--orange);font-weight:600;font-size:0.82rem;">View ↗</a>
+                    </div>
+                    {% endif %}
                 </div>
             </div>
+
+            <!-- Hospital Infrastructure Card (Indian colleges) -->
+            {% if college.category == 'indian' and (college.opd or college.ipd or college.bed_count or college.bond_penalty) %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
+                <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Hospital Infrastructure</h3>
+                <div style="display:flex;flex-direction:column;gap:0.65rem;">
+                    {% if college.opd and college.opd > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">OPD (Daily)</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ '{:,}'.format(college.opd) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.ipd and college.ipd > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">IPD (Daily)</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ '{:,}'.format(college.ipd) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.bed_count and college.bed_count > 0 %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Bed Count</span>
+                        <span style="font-weight:600;color:var(--navy);">{{ '{:,}'.format(college.bed_count) }}</span>
+                    </div>
+                    {% endif %}
+                    {% if college.bond_penalty %}
+                    <div style="display:flex;justify-content:space-between;font-size:0.82rem;">
+                        <span style="color:var(--gray-500);">Bond / Penalty</span>
+                        <span style="font-weight:600;color:var(--navy);text-align:right;max-width:180px;">{{ college.bond_penalty }}</span>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            {% endif %}
 
             <!-- Additional Costs Card -->
             <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">

@@ -16985,6 +16985,21 @@ def send_all_attendance_reports():
 #  STATE & CITY  – API + Settings
 # ═══════════════════════════════════════════════════════════════
 
+@app.route('/api/countries')
+@login_required
+def api_countries():
+    """Return all active countries as JSON."""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, name, code, currency_code FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+        return jsonify([{'id': r['id'], 'name': r['name'], 'code': r['code'], 'currency_code': r['currency_code']} for r in rows])
+    except Exception as e:
+        logging.error(f"api_countries: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
 @app.route('/api/states')
 @login_required
 def api_states():
@@ -17278,6 +17293,50 @@ def ensure_college_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # Countries table for college portal
+        conn.execute('''CREATE TABLE IF NOT EXISTS countries (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL UNIQUE,
+            code TEXT DEFAULT '',
+            currency_code TEXT DEFAULT 'USD',
+            is_active BOOLEAN DEFAULT TRUE
+        )''')
+
+        # Seed countries if empty
+        cnt_count = conn.execute("SELECT COUNT(*) as c FROM countries").fetchone()['c']
+        if cnt_count == 0:
+            for cname, ccode, ccur in [
+                ('India', 'IN', 'INR'), ('Russia', 'RU', 'RUB'),
+                ('United States', 'US', 'USD'), ('United Kingdom', 'GB', 'GBP'),
+                ('Germany', 'DE', 'EUR'), ('China', 'CN', 'CNY'),
+                ('Ukraine', 'UA', 'UAH'), ('Kazakhstan', 'KZ', 'KZT'),
+                ('Philippines', 'PH', 'PHP'), ('Bangladesh', 'BD', 'BDT'),
+                ('Nepal', 'NP', 'NPR'), ('Georgia', 'GE', 'GEL'),
+                ('Kyrgyzstan', 'KG', 'KGS'), ('Uzbekistan', 'UZ', 'UZS'),
+                ('Armenia', 'AM', 'AMD'), ('Belarus', 'BY', 'BYN'),
+            ]:
+                try:
+                    conn.execute("INSERT INTO countries (name, code, currency_code) VALUES (?,?,?)",
+                                 (cname, ccode, ccur))
+                except Exception:
+                    pass
+
+        # Add Indian college-specific columns if missing
+        for col, ctype in [
+            ('university_name', 'TEXT DEFAULT \'\''),
+            ('annual_intake', 'INTEGER DEFAULT 0'),
+            ('counselling_authority', 'TEXT DEFAULT \'\''),
+            ('opd', 'INTEGER DEFAULT 0'),
+            ('ipd', 'INTEGER DEFAULT 0'),
+            ('bond_penalty', 'TEXT DEFAULT \'\''),
+            ('bed_count', 'INTEGER DEFAULT 0'),
+            ('prospects_url', 'TEXT DEFAULT \'\''),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE colleges ADD COLUMN {col} {ctype}")
+            except Exception:
+                pass  # column already exists
+
         conn.commit()
         conn.close()
         logging.info("College tables ensured successfully")
@@ -17285,6 +17344,198 @@ def ensure_college_tables():
         logging.error(f"ensure_college_tables: {e}")
 
 ensure_college_tables()
+
+
+def _make_slug(name):
+    """Generate URL-friendly slug from college name."""
+    import re
+    slug = name.lower().strip()
+    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
+    slug = re.sub(r'[\s]+', '-', slug)
+    slug = re.sub(r'-+', '-', slug)
+    return slug.strip('-')
+
+
+def _auto_seed_russian_colleges():
+    """Auto-seed Russian colleges from college_seed_data.py if not already present."""
+    try:
+        from college_seed_data import RUSSIAN_COLLEGES
+    except ImportError:
+        logging.info("college_seed_data.py not found, skipping Russian auto-seed")
+        return
+
+    conn = get_db()
+    try:
+        existing_count = conn.execute("SELECT COUNT(*) AS cnt FROM colleges WHERE country = 'Russia'").fetchone()['cnt']
+        if existing_count >= len(RUSSIAN_COLLEGES):
+            logging.info(f"Russian colleges already seeded ({existing_count} exist), skipping")
+            conn.close()
+            return
+
+        added = 0
+        for c in RUSSIAN_COLLEGES:
+            slug = _make_slug(c['name'])
+            ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if ex:
+                continue
+
+            conn.execute('''INSERT INTO colleges (name, slug, category, country, city,
+                established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
+                indian_passouts, currency, full_package_inr_lakhs,
+                mess_charges, consultancy_fee_inr, admin_fee, travel_cost_inr,
+                hostel_included, eligibility)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (c['name'], slug, 'international', c.get('country', 'Russia'), c.get('city', ''),
+                 c.get('established_year', 0), c.get('university_type', 'Government'),
+                 c.get('medium', 'English'),
+                 1 if c.get('nmc_approved') else 0,
+                 1 if c.get('who_approved') else 0,
+                 c.get('indian_passouts', ''),
+                 c.get('currency', 'RUB'),
+                 c.get('full_package_inr_lakhs', 0),
+                 c.get('mess_charges', ''),
+                 c.get('consultancy_fee_inr', 125000),
+                 c.get('admin_fee', '1500 $'),
+                 c.get('travel_cost_inr', 75000),
+                 1 if c.get('hostel_included') else 0,
+                 c.get('eligibility', '')))
+
+            new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if new_college:
+                conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                    duration_years, duration_includes, intake_season)
+                    VALUES (?, 'MBBS', 'MBBS', ?, 'Including Internship', 'Summer')''',
+                    (new_college['id'], c.get('duration_years', 6)))
+
+                course = conn.execute(
+                    "SELECT id FROM college_courses WHERE college_id = ? ORDER BY id DESC LIMIT 1",
+                    (new_college['id'],)).fetchone()
+
+                if course and c.get('fees'):
+                    for fee in c['fees']:
+                        conn.execute('''INSERT INTO college_fee_structure
+                            (course_id, year_label, semester, tuition_fee, hostel_fee,
+                             docs_med_checkup, visa_med_insurance, total, total_inr)
+                            VALUES (?,?,?,?,?,?,?,?,?)''',
+                            (course['id'], fee['year_label'], fee['semester'],
+                             fee.get('tuition', 0), fee.get('hostel', 0),
+                             fee.get('docs', 0), fee.get('visa', 0),
+                             fee.get('total', 0), fee.get('total_inr', 0)))
+            added += 1
+
+        conn.commit()
+        logging.info(f"Auto-seeded {added} Russian colleges")
+    except Exception as e:
+        logging.error(f"Russian auto-seed error: {e}")
+    finally:
+        conn.close()
+
+_auto_seed_russian_colleges()
+
+
+def _auto_import_indian_colleges():
+    """One-time import of Indian colleges from the embedded data.
+       Runs at startup; skips if Indian colleges already exist."""
+    conn = get_db()
+    try:
+        existing = conn.execute("SELECT COUNT(*) AS cnt FROM colleges WHERE category = 'indian'").fetchone()['cnt']
+        if existing >= 100:
+            logging.info(f"Indian colleges already imported ({existing} exist), skipping")
+            conn.close()
+            return
+    except Exception:
+        conn.close()
+        return
+
+    # Try to read the Excel file
+    excel_path = os.path.join(os.path.dirname(__file__), 'indian_colleges_data.json')
+    if not os.path.exists(excel_path):
+        logging.info("indian_colleges_data.json not found, skipping Indian auto-import")
+        conn.close()
+        return
+
+    import json
+    try:
+        with open(excel_path, 'r') as f:
+            colleges_data = json.load(f)
+
+        added = 0
+        for row in colleges_data:
+            name = (row.get('college_name') or '').strip()
+            if not name:
+                continue
+            slug = _make_slug(name)
+            ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if ex:
+                continue
+
+            # Ensure state exists in states table
+            state_name = (row.get('state') or '').strip()
+            if state_name:
+                exists_st = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
+                if not exists_st:
+                    try:
+                        conn.execute("INSERT INTO states (name, is_active) VALUES (?, TRUE)", (state_name,))
+                    except Exception:
+                        pass
+
+            # Ensure city exists in cities table
+            city_name = (row.get('city') or '').strip()
+            if city_name and state_name:
+                state_row = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
+                if state_row:
+                    exists_city = conn.execute("SELECT id FROM cities WHERE name = ? AND state_id = ?",
+                                               (city_name, state_row['id'])).fetchone()
+                    if not exists_city:
+                        try:
+                            conn.execute("INSERT INTO cities (name, state_id, is_active) VALUES (?, ?, TRUE)",
+                                         (city_name, state_row['id']))
+                        except Exception:
+                            pass
+
+            # Map college_type
+            college_type = (row.get('college_type') or 'Government Institute').strip()
+
+            conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
+                established_year, university_type, nmc_approved, who_approved, currency,
+                medium_of_instruction, website_url,
+                university_name, annual_intake, counselling_authority, opd, ipd,
+                bond_penalty, bed_count, prospects_url)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                (name, slug, 'indian', 'India', state_name, city_name,
+                 int(row.get('year_of_inception') or 0),
+                 college_type,
+                 1, 0, 'INR', 'English',
+                 (row.get('official_website') or '').strip(),
+                 (row.get('university_name') or '').strip(),
+                 int(row.get('annual_intake') or 0),
+                 (row.get('counselling_authority') or '').strip(),
+                 int(row.get('opd') or 0),
+                 int(row.get('ipd') or 0),
+                 (row.get('bond_penalty') or '').strip(),
+                 int(row.get('bed_count') or 0),
+                 (row.get('prospects') or '').strip()))
+
+            # Add MBBS course
+            new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+            if new_college:
+                course_name = (row.get('course') or 'MBBS').strip()
+                course_level = (row.get('course_level') or 'UG').strip()
+                conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                    duration_years, duration_includes, intake_season)
+                    VALUES (?, ?, ?, 5, 'Including Internship', 'Summer')''',
+                    (new_college['id'], course_name, course_level))
+
+            added += 1
+
+        conn.commit()
+        logging.info(f"Auto-imported {added} Indian colleges")
+    except Exception as e:
+        logging.error(f"Indian auto-import error: {e}")
+    finally:
+        conn.close()
+
+_auto_import_indian_colleges()
 
 
 # ── Currency conversion cache ──
@@ -17328,15 +17579,6 @@ def _to_inr(amount, currency, rates):
         return float(amount) / rub_rate * inr_rate
     return float(amount)
 
-
-def _make_slug(name):
-    """Generate URL-friendly slug from college name."""
-    import re
-    slug = name.lower().strip()
-    slug = re.sub(r'[^a-z0-9\s-]', '', slug)
-    slug = re.sub(r'[\s]+', '-', slug)
-    slug = re.sub(r'-+', '-', slug)
-    return slug.strip('-')
 
 
 # ── College List Page ──
@@ -17451,18 +17693,21 @@ def college_add():
             slug = slug + '-' + str(int(_time.time()) % 10000)
 
         category = request.form.get('category', 'international')
+        # City: from dropdown or free text
+        city = request.form.get('city', '').strip() or request.form.get('city_text', '').strip()
         try:
             conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
                 established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
                 indian_passouts, description, eligibility, facilities, ranking_info, website_url,
                 contact_phone, contact_email, currency, full_package_inr_lakhs,
                 mess_charges, consultancy_fee_inr, admin_fee, travel_cost_inr,
-                hostel_included, is_featured, logo_url, cover_image_url)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                hostel_included, is_featured, logo_url, cover_image_url,
+                university_name, annual_intake, counselling_authority, opd, ipd, bond_penalty, bed_count, prospects_url)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
                 (name, slug, category,
-                 request.form.get('country', 'Russia'),
+                 request.form.get('country', ''),
                  request.form.get('state_or_region', ''),
-                 request.form.get('city', ''),
+                 city,
                  int(request.form.get('established_year') or 0),
                  request.form.get('university_type', 'Government'),
                  request.form.get('medium_of_instruction', 'English'),
@@ -17476,16 +17721,24 @@ def college_add():
                  request.form.get('website_url', ''),
                  request.form.get('contact_phone', ''),
                  request.form.get('contact_email', ''),
-                 request.form.get('currency', 'USD'),
+                 request.form.get('currency', 'INR'),
                  float(request.form.get('full_package_inr_lakhs') or 0),
                  request.form.get('mess_charges', ''),
-                 float(request.form.get('consultancy_fee_inr') or 125000),
-                 request.form.get('admin_fee', '1500 $'),
-                 float(request.form.get('travel_cost_inr') or 75000),
+                 float(request.form.get('consultancy_fee_inr') or 0),
+                 request.form.get('admin_fee', ''),
+                 float(request.form.get('travel_cost_inr') or 0),
                  1 if request.form.get('hostel_included') else 0,
                  1 if request.form.get('is_featured') else 0,
                  request.form.get('logo_url', ''),
-                 request.form.get('cover_image_url', '')))
+                 request.form.get('cover_image_url', ''),
+                 request.form.get('university_name', ''),
+                 int(request.form.get('annual_intake') or 0),
+                 request.form.get('counselling_authority', ''),
+                 int(request.form.get('opd') or 0),
+                 int(request.form.get('ipd') or 0),
+                 request.form.get('bond_penalty', ''),
+                 int(request.form.get('bed_count') or 0),
+                 request.form.get('prospects_url', '')))
             conn.commit()
             flash(f"College '{name}' added successfully!", "success")
         except Exception as e:
@@ -17495,7 +17748,12 @@ def college_add():
             conn.close()
         return redirect('/colleges')
 
-    return render_template('college_form.html', college=None, mode='add')
+    conn = get_db()
+    countries = conn.execute("SELECT id, name FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+    states = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY name").fetchall()
+    conn.close()
+    return render_template('college_form.html', college=None, mode='add',
+                           countries=countries, states=states)
 
 
 @app.route('/colleges/admin/edit/<int:college_id>', methods=['GET', 'POST'])
@@ -17511,18 +17769,21 @@ def college_edit(college_id):
     if request.method == 'POST':
         name = request.form.get('name', '').strip()
         try:
+            city = request.form.get('city', '').strip() or request.form.get('city_text', '').strip()
             conn.execute('''UPDATE colleges SET name=?, category=?, country=?, state_or_region=?, city=?,
                 established_year=?, university_type=?, medium_of_instruction=?, nmc_approved=?, who_approved=?,
                 indian_passouts=?, description=?, eligibility=?, facilities=?, ranking_info=?, website_url=?,
                 contact_phone=?, contact_email=?, currency=?, full_package_inr_lakhs=?,
                 mess_charges=?, consultancy_fee_inr=?, admin_fee=?, travel_cost_inr=?,
                 hostel_included=?, is_featured=?, logo_url=?, cover_image_url=?,
+                university_name=?, annual_intake=?, counselling_authority=?, opd=?, ipd=?,
+                bond_penalty=?, bed_count=?, prospects_url=?,
                 updated_at=CURRENT_TIMESTAMP WHERE id=?''',
                 (name,
                  request.form.get('category', 'international'),
-                 request.form.get('country', 'Russia'),
+                 request.form.get('country', ''),
                  request.form.get('state_or_region', ''),
-                 request.form.get('city', ''),
+                 city,
                  int(request.form.get('established_year') or 0),
                  request.form.get('university_type', 'Government'),
                  request.form.get('medium_of_instruction', 'English'),
@@ -17536,16 +17797,24 @@ def college_edit(college_id):
                  request.form.get('website_url', ''),
                  request.form.get('contact_phone', ''),
                  request.form.get('contact_email', ''),
-                 request.form.get('currency', 'USD'),
+                 request.form.get('currency', 'INR'),
                  float(request.form.get('full_package_inr_lakhs') or 0),
                  request.form.get('mess_charges', ''),
-                 float(request.form.get('consultancy_fee_inr') or 125000),
-                 request.form.get('admin_fee', '1500 $'),
-                 float(request.form.get('travel_cost_inr') or 75000),
+                 float(request.form.get('consultancy_fee_inr') or 0),
+                 request.form.get('admin_fee', ''),
+                 float(request.form.get('travel_cost_inr') or 0),
                  1 if request.form.get('hostel_included') else 0,
                  1 if request.form.get('is_featured') else 0,
                  request.form.get('logo_url', ''),
                  request.form.get('cover_image_url', ''),
+                 request.form.get('university_name', ''),
+                 int(request.form.get('annual_intake') or 0),
+                 request.form.get('counselling_authority', ''),
+                 int(request.form.get('opd') or 0),
+                 int(request.form.get('ipd') or 0),
+                 request.form.get('bond_penalty', ''),
+                 int(request.form.get('bed_count') or 0),
+                 request.form.get('prospects_url', ''),
                  college_id))
             conn.commit()
             flash(f"College '{name}' updated!", "success")
@@ -17556,8 +17825,11 @@ def college_edit(college_id):
             conn.close()
         return redirect(f'/colleges/{college["slug"]}')
 
+    countries = conn.execute("SELECT id, name FROM countries WHERE is_active = TRUE ORDER BY name").fetchall()
+    states = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY name").fetchall()
     conn.close()
-    return render_template('college_form.html', college=college, mode='edit')
+    return render_template('college_form.html', college=college, mode='edit',
+                           countries=countries, states=states)
 
 
 # ── Admin: Delete College ──
