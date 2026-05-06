@@ -17459,29 +17459,33 @@ def _auto_import_indian_colleges():
         with open(excel_path, 'r') as f:
             colleges_data = json.load(f)
 
-        added = 0
-        for row in colleges_data:
-            name = (row.get('college_name') or '').strip()
-            if not name:
-                continue
-            slug = _make_slug(name)
-            ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
-            if ex:
-                continue
+        # Safe int conversion
+        def safe_int(v):
+            try:
+                if v is None or v == '':
+                    return 0
+                return int(float(str(v).replace(',', '')))
+            except (ValueError, TypeError):
+                return 0
 
-            # Ensure state exists in states table
-            state_name = (row.get('state') or '').strip()
-            if state_name:
+        # First pass: backfill states and cities
+        seen_states = set()
+        seen_cities = set()
+        for row in colleges_data:
+            state_name = str(row.get('state') or '').strip()
+            city_name = str(row.get('city') or '').strip()
+            if state_name and state_name not in seen_states:
+                seen_states.add(state_name)
                 exists_st = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
                 if not exists_st:
                     try:
                         conn.execute("INSERT INTO states (name, is_active) VALUES (?, TRUE)", (state_name,))
+                        conn.commit()
                     except Exception:
-                        pass
+                        conn.rollback()
 
-            # Ensure city exists in cities table
-            city_name = (row.get('city') or '').strip()
-            if city_name and state_name:
+            if city_name and state_name and (city_name, state_name) not in seen_cities:
+                seen_cities.add((city_name, state_name))
                 state_row = conn.execute("SELECT id FROM states WHERE name = ?", (state_name,)).fetchone()
                 if state_row:
                     exists_city = conn.execute("SELECT id FROM cities WHERE name = ? AND state_id = ?",
@@ -17490,46 +17494,69 @@ def _auto_import_indian_colleges():
                         try:
                             conn.execute("INSERT INTO cities (name, state_id, is_active) VALUES (?, ?, TRUE)",
                                          (city_name, state_row['id']))
+                            conn.commit()
                         except Exception:
-                            pass
+                            conn.rollback()
 
-            # Map college_type
-            college_type = (row.get('college_type') or 'Government Institute').strip()
+        # Second pass: insert colleges
+        added = 0
+        errors = 0
+        for row in colleges_data:
+            name = str(row.get('college_name') or '').strip()
+            if not name:
+                continue
 
-            conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
-                established_year, university_type, nmc_approved, who_approved, currency,
-                medium_of_instruction, website_url,
-                university_name, annual_intake, counselling_authority, opd, ipd,
-                bond_penalty, bed_count, prospects_url)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
-                (name, slug, 'indian', 'India', state_name, city_name,
-                 int(row.get('year_of_inception') or 0),
-                 college_type,
-                 1, 0, 'INR', 'English',
-                 (row.get('official_website') or '').strip(),
-                 (row.get('university_name') or '').strip(),
-                 int(row.get('annual_intake') or 0),
-                 (row.get('counselling_authority') or '').strip(),
-                 int(row.get('opd') or 0),
-                 int(row.get('ipd') or 0),
-                 (row.get('bond_penalty') or '').strip(),
-                 int(row.get('bed_count') or 0),
-                 (row.get('prospects') or '').strip()))
+            try:
+                slug = _make_slug(name)
+                ex = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if ex:
+                    continue
 
-            # Add MBBS course
-            new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
-            if new_college:
-                course_name = (row.get('course') or 'MBBS').strip()
-                course_level = (row.get('course_level') or 'UG').strip()
-                conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
-                    duration_years, duration_includes, intake_season)
-                    VALUES (?, ?, ?, 5, 'Including Internship', 'Summer')''',
-                    (new_college['id'], course_name, course_level))
+                state_name = str(row.get('state') or '').strip()
+                city_name = str(row.get('city') or '').strip()
+                college_type = str(row.get('college_type') or 'Government Institute').strip()
 
-            added += 1
+                conn.execute('''INSERT INTO colleges (name, slug, category, country, state_or_region, city,
+                    established_year, university_type, nmc_approved, who_approved, currency,
+                    medium_of_instruction, website_url,
+                    university_name, annual_intake, counselling_authority, opd, ipd,
+                    bond_penalty, bed_count, prospects_url)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''',
+                    (name, slug, 'indian', 'India', state_name, city_name,
+                     safe_int(row.get('year_of_inception')),
+                     college_type,
+                     1, 0, 'INR', 'English',
+                     str(row.get('official_website') or '').strip(),
+                     str(row.get('university_name') or '').strip(),
+                     safe_int(row.get('annual_intake')),
+                     str(row.get('counselling_authority') or '').strip(),
+                     safe_int(row.get('opd')),
+                     safe_int(row.get('ipd')),
+                     str(row.get('bond_penalty') or '').strip(),
+                     safe_int(row.get('bed_count')),
+                     str(row.get('prospects') or '').strip()))
 
-        conn.commit()
-        logging.info(f"Auto-imported {added} Indian colleges")
+                # Add MBBS course
+                new_college = conn.execute("SELECT id FROM colleges WHERE slug = ?", (slug,)).fetchone()
+                if new_college:
+                    course_name = str(row.get('course') or 'MBBS').strip()
+                    course_level = str(row.get('course_level') or 'UG').strip()
+                    conn.execute('''INSERT INTO college_courses (college_id, course_name, degree,
+                        duration_years, duration_includes, intake_season)
+                        VALUES (?, ?, ?, 5, 'Including Internship', 'Summer')''',
+                        (new_college['id'], course_name, course_level))
+
+                conn.commit()
+                added += 1
+            except Exception as row_err:
+                errors += 1
+                logging.warning(f"Indian import row error ({name}): {row_err}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+        logging.info(f"Auto-imported {added} Indian colleges ({errors} errors)")
     except Exception as e:
         logging.error(f"Indian auto-import error: {e}")
     finally:
