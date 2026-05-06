@@ -1146,18 +1146,17 @@
 
                     <!-- Colleges Dropdown -->
                     <li class="nav-dropdown" id="colleges-dropdown-admin">
-                        <span class="nav-dropdown-toggle {% if request.path.startswith('/colleges') or request.path.startswith('/medical-predictor') %}active{% endif %}" onclick="toggleDropdown('colleges-dropdown-admin', event)">
-                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('colleges-dropdown-admin', event)">
                             Colleges
                             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                         </span>
                         <div class="nav-dropdown-menu" style="left: 0; right: auto;">
                             <div class="nav-dropdown-menu-inner">
-                                <a href="/colleges" class="{% if request.path.startswith('/colleges') %}active{% endif %}">
+                                <a href="/colleges">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
                                     College Portal
                                 </a>
-                                <a href="/medical-predictor" class="{% if request.path.startswith('/medical-predictor') %}active{% endif %}" style="border-top: 1px solid var(--gray-100);">
+                                <a href="/medical-predictor" style="border-top: 1px solid var(--gray-100);">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
                                     Medical Predictor
                                 </a>

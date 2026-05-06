@@ -59,6 +59,27 @@ class DatabaseConnection:
         self.last_cursor = CursorWrapper(cursor, self.is_postgres)
         return self.last_cursor
 
+    def execute_batch(self, sql_template, params_list, page_size=100):
+        """Fast batch insert for PostgreSQL using execute_values, falls back to executemany for SQLite."""
+        if not params_list:
+            return
+
+        if self.is_postgres:
+            from psycopg2.extras import execute_values
+            # Convert "INSERT INTO t (cols) VALUES (?,?,?)" to "INSERT INTO t (cols) VALUES %s"
+            sql = self._convert_to_postgres(sql_template)
+            # Replace VALUES (%s,%s,...) with VALUES %s for execute_values
+            sql = re.sub(r'VALUES\s*\([^)]+\)', 'VALUES %s', sql, flags=re.IGNORECASE)
+            cursor = self.conn.cursor()
+            execute_values(cursor, sql, params_list, page_size=page_size)
+            self.last_cursor = CursorWrapper(cursor, self.is_postgres)
+        else:
+            sql = sql_template
+            cursor = self.conn.cursor()
+            cursor.executemany(sql, params_list)
+            self.last_cursor = CursorWrapper(cursor, self.is_postgres)
+        return self.last_cursor
+
     def _convert_to_postgres(self, sql):
         """Convert SQLite SQL syntax to PostgreSQL."""
         # Convert ? placeholders to %s

@@ -17736,30 +17736,20 @@ def _auto_import_mbbs_cutoffs():
             return
         with open(json_path, 'r') as f:
             rows = json.load(f)
-        added = 0
-        batch = []
-        for r in rows:
-            batch.append((r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]))
-            if len(batch) >= 500:
-                conn.executemany('''INSERT INTO mbbs_cutoffs
-                    (year, institute_name, quota, category, course, fees,
-                     counselling_authority, counselling_body,
-                     round1_rank, round2_rank, round3_rank)
-                    VALUES (?,?,?,?,?,?,?,?,?,?,?)''', batch)
-                added += len(batch)
-                batch = []
-        if batch:
-            conn.executemany('''INSERT INTO mbbs_cutoffs
-                (year, institute_name, quota, category, course, fees,
-                 counselling_authority, counselling_body,
-                 round1_rank, round2_rank, round3_rank)
-                VALUES (?,?,?,?,?,?,?,?,?,?,?)''', batch)
-            added += len(batch)
+        all_tuples = [tuple(r) for r in rows]
+        insert_sql = '''INSERT INTO mbbs_cutoffs
+            (year, institute_name, quota, category, course, fees,
+             counselling_authority, counselling_body,
+             round1_rank, round2_rank, round3_rank)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)'''
+        conn.execute_batch(insert_sql, all_tuples, page_size=500)
         conn.commit()
         conn.close()
-        logging.info(f"Auto-imported {added} MBBS cutoff rows")
+        logging.info(f"Auto-imported {len(all_tuples)} MBBS cutoff rows")
     except Exception as e:
         logging.error(f"_auto_import_mbbs_cutoffs: {e}")
+        import traceback
+        traceback.print_exc()
 
 _auto_import_mbbs_cutoffs()
 
@@ -18047,18 +18037,23 @@ def _to_inr(amount, currency, rates):
 @admin_required
 def medical_predictor():
     user = get_user()
-    conn = get_db()
-    # Get filter options
-    authorities = conn.execute(
-        "SELECT DISTINCT counselling_authority FROM mbbs_cutoffs ORDER BY counselling_authority"
-    ).fetchall()
-    years = conn.execute(
-        "SELECT DISTINCT year FROM mbbs_cutoffs ORDER BY year DESC"
-    ).fetchall()
-    conn.close()
-    states = [a['counselling_authority'] for a in authorities if a['counselling_authority'] != 'All India / MCC']
+    states = []
+    year_list = []
+    try:
+        conn = get_db()
+        authorities = conn.execute(
+            "SELECT DISTINCT counselling_authority FROM mbbs_cutoffs ORDER BY counselling_authority"
+        ).fetchall()
+        years = conn.execute(
+            "SELECT DISTINCT year FROM mbbs_cutoffs ORDER BY year DESC"
+        ).fetchall()
+        conn.close()
+        states = [a['counselling_authority'] for a in authorities if a['counselling_authority'] != 'All India / MCC']
+        year_list = [y['year'] for y in years]
+    except Exception as e:
+        logging.error(f"medical_predictor route: {e}")
     return render_template('medical_predictor.html', user=user,
-                           states=states, years=[y['year'] for y in years])
+                           states=states, years=year_list)
 
 
 @app.route('/api/predictor/filters')
