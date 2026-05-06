@@ -136,10 +136,11 @@
 
                     <!-- Fee Info -->
                     <div style="display:flex;justify-content:space-between;align-items:center;border-top:1px solid var(--gray-100);padding-top:0.5rem;">
-                        {% if c.full_package_inr_lakhs and c.full_package_inr_lakhs > 0 %}
+                        {% set pkg = live_package.get(c.id, 0) %}
+                        {% if pkg and pkg > 0 %}
                         <div>
-                            <div style="font-size:0.65rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Full Package</div>
-                            <div style="font-size:0.95rem;font-weight:800;color:var(--navy);">₹{{ '{:,.2f}'.format(c.full_package_inr_lakhs) }} Lac</div>
+                            <div style="font-size:0.65rem;color:var(--gray-500);text-transform:uppercase;font-weight:600;">Full Package{% if c.category == 'international' %} <span style="font-size:0.55rem;font-weight:400;">(live ₹)</span>{% endif %}</div>
+                            <div style="font-size:0.95rem;font-weight:800;color:var(--navy);">₹{{ '{:,.2f}'.format(pkg) }} Lac</div>
                         </div>
                         {% else %}
                         <div>

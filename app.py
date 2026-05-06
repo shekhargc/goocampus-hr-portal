@@ -17659,20 +17659,7 @@ def colleges_list():
         query += " AND (LOWER(name) LIKE ? OR LOWER(city) LIKE ?)"
         params.extend([f'%{search.lower()}%', f'%{search.lower()}%'])
 
-    if fee_min:
-        try:
-            query += " AND full_package_inr_lakhs >= ?"
-            params.append(float(fee_min))
-        except ValueError:
-            pass
-
-    if fee_max:
-        try:
-            query += " AND full_package_inr_lakhs <= ?"
-            params.append(float(fee_max))
-        except ValueError:
-            pass
-
+    # Fee range filtering is done post-query using live conversion
     query += " ORDER BY is_featured DESC, name ASC"
     colleges = conn.execute(query, params).fetchall()
 
@@ -17712,6 +17699,60 @@ def colleges_list():
     # Get exchange rates for INR display
     rates = _get_exchange_rates()
 
+    # Compute live full_package_inr_lakhs for international colleges
+    # Sum all fee structure totals, multiply by number of applicable years, convert to INR
+    live_package = {}
+    for c in colleges:
+        if c['category'] == 'international' and c['currency'] and c['currency'] != 'INR':
+            # Get all fee rows for this college's courses
+            fee_total_rows = conn.execute(
+                """SELECT fs.year_label, fs.total FROM college_fee_structure fs
+                   JOIN college_courses cc ON fs.course_id = cc.id
+                   WHERE cc.college_id = ? AND cc.is_active = TRUE
+                   ORDER BY cc.id LIMIT 20""",
+                (c['id'],)
+            ).fetchall()
+            if fee_total_rows:
+                # Calculate full package: 1st year fees + (recurring × remaining years)
+                yr1_total = 0
+                recurring_sem = 0
+                for row in fee_total_rows:
+                    yr = (row['year_label'] or '').lower()
+                    t = float(row['total'] or 0)
+                    if '1st' in yr:
+                        yr1_total += t
+                    else:
+                        recurring_sem = t  # per-semester amount for remaining years
+                # For a 6-year course: yr1 + recurring_sem * 2sems * 5years
+                # Get duration from first course
+                dur_row = conn.execute(
+                    "SELECT duration_years FROM college_courses WHERE college_id = ? AND is_active = TRUE LIMIT 1",
+                    (c['id'],)
+                ).fetchone()
+                dur = dur_row['duration_years'] if dur_row else 6
+                remaining = max(dur - 1, 0)
+                total_foreign = yr1_total + (recurring_sem * 2 * remaining)
+                total_inr = _to_inr(total_foreign, c['currency'], rates)
+                live_package[c['id']] = round(total_inr / 100000, 2)  # in lakhs
+            else:
+                live_package[c['id']] = float(c['full_package_inr_lakhs'] or 0)
+        else:
+            live_package[c['id']] = float(c['full_package_inr_lakhs'] or 0)
+
+    # Apply fee range filter on live computed values
+    if fee_min:
+        try:
+            mn = float(fee_min)
+            colleges = [c for c in colleges if live_package.get(c['id'], 0) >= mn]
+        except ValueError:
+            pass
+    if fee_max:
+        try:
+            mx = float(fee_max)
+            colleges = [c for c in colleges if live_package.get(c['id'], 0) <= mx]
+        except ValueError:
+            pass
+
     # All college names for autocomplete
     all_names = conn.execute(
         "SELECT name FROM colleges WHERE is_active = TRUE ORDER BY name"
@@ -17725,6 +17766,7 @@ def colleges_list():
         courses_list=[c['course_name'] for c in courses_list],
         all_college_names=[n['name'] for n in all_names],
         course_counts=course_counts,
+        live_package=live_package,
         category=category,
         search=search,
         country_filter=country,
@@ -17763,11 +17805,39 @@ def college_profile(slug):
         fees_by_course[course['id']] = fees
 
     rates = _get_exchange_rates()
+
+    # Compute live full package in INR lakhs
+    live_package_lakhs = 0
+    if college['category'] == 'international' and college['currency'] and college['currency'] != 'INR':
+        all_fee_rows = []
+        for cid, flist in fees_by_course.items():
+            all_fee_rows.extend(flist)
+        if all_fee_rows:
+            yr1_total = 0
+            recurring_sem = 0
+            for row in all_fee_rows:
+                yr = (row['year_label'] or '').lower()
+                t = float(row['total'] or 0)
+                if '1st' in yr:
+                    yr1_total += t
+                else:
+                    recurring_sem = t
+            dur = courses[0]['duration_years'] if courses else 6
+            remaining = max(dur - 1, 0)
+            total_foreign = yr1_total + (recurring_sem * 2 * remaining)
+            total_inr = _to_inr(total_foreign, college['currency'], rates)
+            live_package_lakhs = round(total_inr / 100000, 2)
+        else:
+            live_package_lakhs = float(college['full_package_inr_lakhs'] or 0)
+    else:
+        live_package_lakhs = float(college['full_package_inr_lakhs'] or 0)
+
     conn.close()
     return render_template('college_profile.html',
         college=college,
         courses=courses,
         fees_by_course=fees_by_course,
+        live_package_lakhs=live_package_lakhs,
         rates=rates,
         to_inr=_to_inr,
         currency_sym=_currency_sym

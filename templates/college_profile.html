@@ -55,8 +55,8 @@
         {% if college.indian_passouts %}
         <span style="font-size:0.8rem;font-weight:600;color:var(--orange-dark);background:var(--orange-light);padding:4px 10px;border-radius:4px;">{{ college.indian_passouts }} Passouts</span>
         {% endif %}
-        {% if college.full_package_inr_lakhs and college.full_package_inr_lakhs > 0 %}
-        <span style="font-size:0.8rem;font-weight:700;color:var(--navy);background:var(--gray-100);padding:4px 10px;border-radius:4px;">Full Package: ₹{{ '{:,.2f}'.format(college.full_package_inr_lakhs) }} Lac</span>
+        {% if live_package_lakhs and live_package_lakhs > 0 %}
+        <span style="font-size:0.8rem;font-weight:700;color:var(--navy);background:var(--gray-100);padding:4px 10px;border-radius:4px;">Full Package: ₹{{ '{:,.2f}'.format(live_package_lakhs) }} Lac{% if college.category == 'international' %} <span style="font-size:0.65rem;font-weight:400;">(live rate)</span>{% endif %}</span>
         {% endif %}
     </div>
 
