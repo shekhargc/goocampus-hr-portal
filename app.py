@@ -18032,6 +18032,73 @@ def college_seed():
     return redirect('/colleges')
 
 
+@app.route('/colleges/admin/debug-import')
+@admin_required
+def college_debug_import():
+    """Debug route: try inserting one Russian college and return detailed error."""
+    conn = get_db()
+    try:
+        # Check if tables exist
+        tables_info = {}
+        for tbl in ['colleges', 'college_courses', 'college_fee_structure', 'countries', 'states', 'cities']:
+            try:
+                cnt = conn.execute(f"SELECT COUNT(*) as cnt FROM {tbl}").fetchone()
+                tables_info[tbl] = cnt['cnt']
+            except Exception as e:
+                tables_info[tbl] = f"ERROR: {e}"
+
+        # Try to import college_seed_data
+        seed_info = "not loaded"
+        try:
+            from college_seed_data import RUSSIAN_COLLEGES
+            seed_info = f"loaded, {len(RUSSIAN_COLLEGES)} colleges"
+        except ImportError as e:
+            seed_info = f"ImportError: {e}"
+
+        # Check indian_colleges_data.json
+        import json as _json
+        json_path = os.path.join(os.path.dirname(__file__), 'indian_colleges_data.json')
+        json_info = f"exists={os.path.exists(json_path)}"
+        if os.path.exists(json_path):
+            with open(json_path, 'r') as f:
+                data = _json.load(f)
+            json_info += f", rows={len(data)}"
+
+        # Try inserting one test college
+        test_result = "not attempted"
+        try:
+            test_slug = 'debug-test-college-' + str(int(_time.time()))
+            conn.execute('''INSERT INTO colleges (name, slug, category, country, city,
+                established_year, university_type, medium_of_instruction, nmc_approved, who_approved,
+                currency)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)''',
+                ('Debug Test College', test_slug, 'international', 'Russia', 'Moscow',
+                 2000, 'Government', 'English', 1, 1, 'RUB'))
+            conn.commit()
+            test_result = "SUCCESS - inserted"
+            # Clean up
+            conn.execute("DELETE FROM colleges WHERE slug = ?", (test_slug,))
+            conn.commit()
+            test_result += " and cleaned up"
+        except Exception as e:
+            test_result = f"FAILED: {e}"
+            try:
+                conn.rollback()
+            except:
+                pass
+
+        conn.close()
+        return jsonify({
+            'tables': tables_info,
+            'seed_data': seed_info,
+            'json_data': json_info,
+            'test_insert': test_result
+        })
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)})
+
+
 @app.route('/colleges/admin/import-all')
 @admin_required
 def college_import_all():
