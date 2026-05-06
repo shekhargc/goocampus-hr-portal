@@ -278,7 +278,7 @@
         </thead>
         <tbody>
             {% for leave in leaves %}
-            <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail({{ leave.id }})">
+            <tr class="{% if leave.is_late %}is-late{% endif %}" onclick="openLeaveDetail('{{ leave.group_id }}')">
                 <td>
                     <div class="emp-cell">
                         {% if leave.photo_src %}
@@ -295,14 +295,18 @@
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-600);">{{ leave.department or '—' }}</td>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date|format_date }}
+                    {% if leave.date_from == leave.date_to %}
+                        {{ leave.date_from|format_date }}
+                    {% else %}
+                        {{ leave.date_from|format_date }}<br><span style="color:var(--gray-400);font-weight:400;font-size:0.75rem;">to</span> {{ leave.date_to|format_date }}
+                    {% endif %}
                     {% if leave.is_late %}<br><span class="late-badge">Late</span>{% endif %}
                     {% if leave.original_id %}<br><span class="modified-badge">Re-applied</span>{% endif %}
                 </td>
                 <td><span class="type-badge">{{ leave.leave_type.capitalize() }}</span></td>
                 <td style="white-space: nowrap; font-size: 0.82rem; color: var(--gray-600);">
-                    {{ leave.days }} day{{ 's' if leave.days != 1 else '' }}
-                    {% if leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
+                    {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
+                    {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
                 </td>
                 <td class="reason-cell">
                     <div class="reason-text">{{ leave.reason_main or '—' }}</div>
@@ -338,8 +342,14 @@
 const TODAY_STR = {{ today|tojson }};
 const LEAVE_REQUESTS = {
     {% for leave in leaves %}
-    "{{ leave.id }}": {
+    {{ leave.group_id|tojson }}: {
         id: {{ leave.id }},
+        group_id: {{ leave.group_id|tojson }},
+        group_ids: {{ leave.group_ids|tojson }},
+        group_count: {{ leave.group_count }},
+        group_total_days: {{ leave.group_total_days }},
+        date_from: {{ (leave.date_from|format_date)|tojson }},
+        date_to: {{ (leave.date_to|format_date)|tojson }},
         name: {{ (leave.employee_name or '')|tojson }},
         emp_code: {{ (leave.emp_code or '')|tojson }},
         department: {{ (leave.department or '')|tojson }},
@@ -380,6 +390,14 @@ function openLeaveDetail(reqId) {
         ? `<img src="${escapeHtml(r.photo_src)}" class="emp-avatar-lg" alt="" onerror="this.outerHTML='<div class=\\'emp-avatar-lg-ph\\'>${initials(r.name)}</div>'">`
         : `<div class="emp-avatar-lg-ph">${initials(r.name)}</div>`;
 
+    const dateLabel = (r.date_from === r.date_to)
+        ? escapeHtml(r.date_from)
+        : `${escapeHtml(r.date_from)} → ${escapeHtml(r.date_to)}`;
+
+    const durationLabel = r.group_count > 1
+        ? `${r.group_total_days} day${r.group_total_days !== 1 ? 's' : ''} (${r.group_count} working days)`
+        : `${escapeHtml(dayPortionLabel(r.day_portion))} (${r.days})`;
+
     let html = `
         <div class="drawer-emp">
             ${avatar}
@@ -399,13 +417,13 @@ function openLeaveDetail(reqId) {
                 <div class="label">Leave Type</div>
                 <div class="value"><span class="type-badge">${escapeHtml((r.leave_type || '').replace(/^./, c => c.toUpperCase()))}</span></div>
             </div>
-            <div class="drawer-field">
-                <div class="label">Leave Date</div>
-                <div class="value">${escapeHtml(r.leave_date || '—')}</div>
+            <div class="drawer-field${r.date_from !== r.date_to ? ' full' : ''}">
+                <div class="label">Leave Date${r.group_count > 1 ? 's' : ''}</div>
+                <div class="value">${dateLabel}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">Duration</div>
-                <div class="value">${escapeHtml(dayPortionLabel(r.day_portion))} (${r.days})</div>
+                <div class="value">${durationLabel}</div>
             </div>
             <div class="drawer-field">
                 <div class="label">Applied On</div>
@@ -441,15 +459,21 @@ function openLeaveDetail(reqId) {
     html += `</div>`;
     body.innerHTML = html;
 
-    // Actions: edit (if future and not retrieved/modified) + delete
+    // Actions: edit (if single & future) + delete (for each record in group)
     let actionsHtml = '';
-    const canEdit = (r.leave_date >= TODAY_STR) && (r.status !== 'retrieved') && (r.status !== 'modified');
-    if (canEdit) {
-        actionsHtml += `<a href="/edit-leave/${r.id}" class="btn-action btn-edit">Edit</a>`;
+    if (r.group_count === 1) {
+        const canEdit = (r.leave_date >= TODAY_STR) && (r.status !== 'retrieved') && (r.status !== 'modified');
+        if (canEdit) {
+            actionsHtml += `<a href="/edit-leave/${r.id}" class="btn-action btn-edit">Edit</a>`;
+        }
     }
+    const delLabel = r.group_count > 1 ? `Delete all ${r.group_count} records` : `Delete`;
+    const delConfirm = r.group_count > 1
+        ? `Delete all ${r.group_count} leave records for ${escapeHtml(r.name)} (${escapeHtml(r.date_from)} to ${escapeHtml(r.date_to)})?`
+        : `Delete this leave entry for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date)}?`;
     actionsHtml += `
-        <form method="POST" action="/admin/delete-leave/${r.id}" style="flex:1;" onsubmit="return confirm('Delete this leave entry for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date)}?');">
-            <button type="submit" class="btn-action btn-delete" style="width:100%;">Delete</button>
+        <form method="POST" action="/admin/delete-leave/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}" style="flex:1;" onsubmit="return confirm('${delConfirm}');">
+            <button type="submit" class="btn-action btn-delete" style="width:100%;">${delLabel}</button>
         </form>
     `;
     actions.innerHTML = actionsHtml;

@@ -86,13 +86,17 @@
             <tbody>
                 {% for leave in leaves[:10] %}
                 <tr>
-                    <td>{{ leave.leave_date|format_date }}</td>
+                    <td style="white-space: nowrap;">
+                        {% if leave.date_from == leave.date_to %}
+                            {{ leave.date_from|format_date }}
+                        {% else %}
+                            {{ leave.date_from|format_date }}<br><span style="color:var(--gray-400);font-size:0.75rem;">to</span> {{ leave.date_to|format_date }}
+                        {% endif %}
+                    </td>
                     <td>{{ leave.leave_type.capitalize() }}</td>
                     <td>
-                        {% if leave.day_portion == 'first_half' %}First Half
-                        {% elif leave.day_portion == 'second_half' %}Second Half
-                        {% else %}Full Day
-                        {% endif %}
+                        {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
+                        {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
                     </td>
                     <td>
                         {% if leave.status == 'pending' %}
@@ -104,8 +108,8 @@
                         {% endif %}
                     </td>
                     <td>
-                        <form method="POST" action="/admin/delete-leave/{{ leave.id }}" style="display: inline;">
-                            <button type="submit" class="button button-danger button-small" onclick="return confirm('Delete this leave record?');">Delete</button>
+                        <form method="POST" action="/admin/delete-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display: inline;">
+                            <button type="submit" class="button button-danger button-small" onclick="return confirm('Delete this leave record{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}?');">Delete</button>
                         </form>
                     </td>
                 </tr>

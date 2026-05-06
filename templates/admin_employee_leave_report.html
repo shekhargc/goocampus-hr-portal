@@ -218,7 +218,7 @@
 <div class="report-panel">
     <div class="report-panel-header">
         <div class="report-panel-title">All Leave Records — {{ selected_emp.name }}</div>
-        <span style="font-size: 0.88rem; color: var(--gray-500);">{{ all_leaves | length }} records</span>
+        <span style="font-size: 0.88rem; color: var(--gray-500);">{{ all_leaves | length }} application{{ 's' if all_leaves|length != 1 else '' }}</span>
     </div>
     {% if all_leaves %}
     <div style="overflow-x: auto;">
@@ -236,7 +236,11 @@
             {% for leave in all_leaves %}
             <tr{% if leave.status == 'retrieved' %} style="opacity: 0.6;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.5;"{% endif %}>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date|format_date }}
+                    {% if leave.date_from == leave.date_to %}
+                        {{ leave.date_from|format_date }}
+                    {% else %}
+                        {{ leave.date_from|format_date }}<br><span style="color:var(--gray-400);font-weight:400;font-size:0.75rem;">to</span> {{ leave.date_to|format_date }}
+                    {% endif %}
                     {% if leave.original_id %}
                     <div style="font-size: 0.72rem; color: #3B82F6; margin-top: 0.2rem;">Modified leave</div>
                     {% endif %}
@@ -251,12 +255,12 @@
                     {% endif %}
                 </td>
                 <td>
-                    {% if leave.day_portion == 'first_half' %}First Half
-                    {% elif leave.day_portion == 'second_half' %}Second Half
-                    {% else %}Full Day{% endif %}
+                    {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
+                    {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
                 </td>
                 <td style="color: var(--gray-600); max-width: 300px;">
-                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ leave.reason or '—' }}</div>
+                    {% set reason_raw = leave.reason or '' %}
+                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">{{ reason_raw.split('\n\n[Late Application Reason]:')[0] if '\n\n[Late Application Reason]:' in reason_raw else (reason_raw or '—') }}</div>
                 </td>
                 <td>
                     {% if leave.status == 'pending' %}

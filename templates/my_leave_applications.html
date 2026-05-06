@@ -186,7 +186,11 @@
             {% for leave in leaves %}
             <tr{% if leave.is_late %} class="late-row"{% endif %}{% if leave.status == 'retrieved' %} style="opacity: 0.55;"{% endif %}{% if leave.status == 'modified' %} style="opacity: 0.45;"{% endif %}>
                 <td style="font-weight: 600; color: var(--navy); white-space: nowrap;">
-                    {{ leave.leave_date|format_date }}
+                    {% if leave.date_from == leave.date_to %}
+                        {{ leave.date_from|format_date }}
+                    {% else %}
+                        {{ leave.date_from|format_date }}<br><span style="color:var(--gray-400);font-weight:400;font-size:0.75rem;">to</span> {{ leave.date_to|format_date }}
+                    {% endif %}
                     {% if leave.is_late %}
                     <br><span class="late-badge">Late</span>
                     {% endif %}
@@ -204,12 +208,12 @@
                     {% endif %}
                 </td>
                 <td style="white-space: nowrap;">
-                    {% if leave.day_portion == 'first_half' %}First Half
-                    {% elif leave.day_portion == 'second_half' %}Second Half
-                    {% else %}Full Day{% endif %}
+                    {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
+                    {% if leave.group_count == 1 and leave.day_portion in ['first_half', 'second_half'] %}(Half){% endif %}
                 </td>
                 <td class="reason-cell">
-                    <div class="reason-text">{{ leave.reason.split('\n\n[Late Application Reason]:')[0] if leave.reason and '\n\n[Late Application Reason]:' in (leave.reason or '') else (leave.reason or '—') }}</div>
+                    {% set reason_raw = leave.reason or '' %}
+                    <div class="reason-text">{{ reason_raw.split('\n\n[Late Application Reason]:')[0] if '\n\n[Late Application Reason]:' in reason_raw else (reason_raw or '—') }}</div>
                     {% if leave.modification_reason %}
                     <div class="sub-reason" style="color: #D97706;">Mod: {{ leave.modification_reason[:80] }}{% if leave.modification_reason|length > 80 %}...{% endif %}</div>
                     {% endif %}
@@ -233,11 +237,13 @@
                 <td style="white-space: nowrap;">
                     {% if leave.status not in ('retrieved', 'modified') %}
                     <div class="action-btns">
-                        {% if leave.leave_date >= today %}
+                        {% if leave.group_count == 1 and leave.leave_date >= today %}
                         <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0;">Edit</a>
                         {% endif %}
                         <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm btn-retrieve">Retrieve</button>
+                        {% if leave.group_count == 1 %}
                         <a href="/modify-leave/{{ leave.id }}" class="btn-sm btn-modify">Modify</a>
+                        {% endif %}
                     </div>
                     {% else %}
                     <span style="color: var(--gray-400); font-size: 0.78rem;">—</span>
@@ -247,10 +253,10 @@
             {% if leave.status not in ('retrieved', 'modified') %}
             <tr id="ret-{{ leave.id }}" style="display: none; background: #F9FAFB;">
                 <td colspan="7">
-                    <form method="POST" action="/retrieve-leave/{{ leave.id }}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.3rem 0;">
+                    <form method="POST" action="/cancel-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.3rem 0;">
                         <input type="text" name="retrieve_reason" placeholder="Reason for retrieving this leave..." required
                                style="flex: 1; padding: 0.4rem 0.7rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
-                        <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm</button>
+                        <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}</button>
                         <button type="button" onclick="document.getElementById('ret-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Cancel</button>
                     </form>
                 </td>

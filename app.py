@@ -1802,13 +1802,40 @@ def my_leave_report():
         })
 
     # All leave records for the FY
-    all_leaves = conn.execute('''
-        SELECT * FROM leave_records
+    all_leaves_raw = conn.execute('''
+        SELECT *, leave_group_id FROM leave_records
         WHERE employee_id = ?
         AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
              OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
         ORDER BY leave_date DESC
     ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchall()
+
+    # Group by leave_group_id
+    from collections import OrderedDict
+    all_groups = OrderedDict()
+    for r in all_leaves_raw:
+        d = dict(r)
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in all_groups:
+            all_groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_ids': [d['id']],
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = all_groups[gid]
+            g['group_ids'].append(d['id'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    all_leaves = list(all_groups.values())
 
     # Days taken - with type breakdown
     total_taken = sum(m['total'] for m in monthly_leave_data)
@@ -2070,11 +2097,38 @@ def admin_employee_detail(emp_id):
         conn.close()
         return redirect(url_for('admin_dashboard'))
 
-    leaves = conn.execute('''
-        SELECT * FROM leave_records
+    leaves_raw = conn.execute('''
+        SELECT *, leave_group_id FROM leave_records
         WHERE employee_id = ?
         ORDER BY leave_date DESC
     ''', (emp_id,)).fetchall()
+
+    # Group by leave_group_id
+    from collections import OrderedDict
+    leave_groups = OrderedDict()
+    for r in leaves_raw:
+        d = dict(r)
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in leave_groups:
+            leave_groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_ids': [d['id']],
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = leave_groups[gid]
+            g['group_ids'].append(d['id'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    leaves = list(leave_groups.values())
 
     # Calculate balance
     emp_data = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (emp_id,)).fetchone()
@@ -2490,6 +2544,17 @@ def admin_reset_passwords():
 @admin_required
 def delete_leave(leave_id):
     conn = get_db()
+
+    # Support group delete via ?group_id=xxx
+    group_id = request.args.get('group_id', '').strip()
+
+    if group_id and not group_id.startswith('single_'):
+        # Delete entire group
+        deleted = conn.execute('DELETE FROM leave_records WHERE leave_group_id = ?', (group_id,)).rowcount
+        conn.commit()
+        conn.close()
+        flash(f'{deleted} leave record(s) deleted', 'success')
+        return redirect(request.referrer or url_for('admin_dashboard'))
 
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
     if not leave:
@@ -3711,13 +3776,39 @@ def admin_employee_leave_report():
                     'balance': running_balance
                 })
 
-            all_leaves = conn.execute('''
-                SELECT * FROM leave_records
+            all_leaves_raw = conn.execute('''
+                SELECT *, leave_group_id FROM leave_records
                 WHERE employee_id = ?
                 AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
                      OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
                 ORDER BY leave_date DESC
             ''', (selected_emp_id, str(fy_year), str(fy_year + 1))).fetchall()
+
+            from collections import OrderedDict
+            all_groups = OrderedDict()
+            for r in all_leaves_raw:
+                d = dict(r)
+                gid = d.get('leave_group_id') or f"single_{d['id']}"
+                if gid not in all_groups:
+                    all_groups[gid] = {
+                        **d,
+                        'group_id': gid,
+                        'group_ids': [d['id']],
+                        'group_total_days': d['days'],
+                        'group_count': 1,
+                        'date_from': d['leave_date'],
+                        'date_to': d['leave_date'],
+                    }
+                else:
+                    g = all_groups[gid]
+                    g['group_ids'].append(d['id'])
+                    g['group_total_days'] += d['days']
+                    g['group_count'] += 1
+                    if d['leave_date'] < g['date_from']:
+                        g['date_from'] = d['leave_date']
+                    if d['leave_date'] > g['date_to']:
+                        g['date_to'] = d['leave_date']
+            all_leaves = list(all_groups.values())
 
             total_taken = sum(m['total'] for m in monthly_leave_data)
             annual_total = sum(m['annual'] for m in monthly_leave_data)
@@ -6035,6 +6126,7 @@ def admin_leave_applications():
                lr.day_portion, lr.reason, lr.status, lr.is_late,
                lr.original_id, lr.modification_reason, lr.original_reason,
                lr.approved_by, lr.approved_at, lr.created_at,
+               lr.leave_group_id,
                e.name        AS employee_name,
                e.emp_code    AS emp_code,
                e.department  AS department,
@@ -6071,7 +6163,7 @@ def admin_leave_applications():
     leaves_raw = conn.execute(query, params).fetchall()
 
     # Enrich rows
-    leaves = []
+    enriched = []
     for r in leaves_raw:
         d = dict(r)
         p = d.get('photo_url') or ''
@@ -6084,14 +6176,42 @@ def admin_leave_applications():
         else:
             d['reason_main'] = raw
             d['late_reason'] = ''
-        leaves.append(d)
+        enriched.append(d)
+
+    # Group by leave_group_id for display
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for d in enriched:
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in groups:
+            groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_ids': [d['id']],
+                'group_dates': [d['leave_date']],
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = groups[gid]
+            g['group_ids'].append(d['id'])
+            g['group_dates'].append(d['leave_date'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    leaves = list(groups.values())
 
     # Get employee list for filter dropdown
     employees = conn.execute(
         "SELECT id, name, emp_code FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name"
     ).fetchall()
 
-    # Summary counts
+    # Summary counts (on grouped entries)
     total = len(leaves)
     pending_count = sum(1 for l in leaves if l['status'] == 'pending')
     approved_count = sum(1 for l in leaves if l['status'] == 'approved')
@@ -6125,7 +6245,7 @@ def my_leave_applications():
     f_to = request.args.get('to_date', '').strip()
 
     query = '''
-        SELECT lr.*, e.name, e.emp_code, e.department
+        SELECT lr.*, lr.leave_group_id, e.name, e.emp_code, e.department
         FROM leave_records lr
         JOIN employees e ON lr.employee_id = e.id
         WHERE lr.employee_id = ?
@@ -6147,7 +6267,36 @@ def my_leave_applications():
 
     query += " ORDER BY lr.leave_date DESC, lr.created_at DESC"
 
-    leaves = conn.execute(query, params).fetchall()
+    leaves_raw = conn.execute(query, params).fetchall()
+
+    # Group by leave_group_id
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for r in leaves_raw:
+        d = dict(r)
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in groups:
+            groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_ids': [d['id']],
+                'group_dates': [d['leave_date']],
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = groups[gid]
+            g['group_ids'].append(d['id'])
+            g['group_dates'].append(d['leave_date'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    leaves = list(groups.values())
 
     total = len(leaves)
     pending_count = sum(1 for l in leaves if l['status'] == 'pending')
@@ -6210,6 +6359,7 @@ def team_leave_applications():
                lr.day_portion, lr.reason, lr.status, lr.is_late,
                lr.original_id, lr.modification_reason, lr.original_reason,
                lr.approved_by, lr.approved_at, lr.created_at,
+               lr.leave_group_id,
                e.name        AS employee_name,
                e.emp_code    AS emp_code,
                e.department  AS department,
@@ -6260,6 +6410,34 @@ def team_leave_applications():
             d['reason_main'] = raw
             d['late_reason'] = ''
         leaves.append(d)
+
+    # Group by leave_group_id
+    from collections import OrderedDict
+    groups = OrderedDict()
+    for d in leaves:
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in groups:
+            groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_ids': [d['id']],
+                'group_dates': [d['leave_date']],
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = groups[gid]
+            g['group_ids'].append(d['id'])
+            g['group_dates'].append(d['leave_date'])
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+    leaves = list(groups.values())
 
     # Get team member names for filter
     team_members = conn.execute(
