@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Portal &mdash; GooCampus CRM</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange: #F58220; --orange-dark: #D96E0E; --orange-light: #FFF3E6;
+            --navy: #1B2A4A; --navy-dark: #0F1B33; --navy-light: #2A3F66;
+            --white: #FFFFFF; --gray-50: #F8FAFC; --gray-200: #E2E8F0;
+            --gray-500: #64748B; --gray-800: #1E293B;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; }
+        .navbar {
+            background: var(--navy); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .navbar-inner {
+            max-width: 1440px; margin: 0 auto; padding: 0 3rem;
+            display: flex; justify-content: space-between; align-items: center; height: 70px;
+        }
+        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: white; }
+        .navbar-brand-text { font-weight: 700; font-size: 1.25rem; color: white; }
+        .navbar-brand-text .goo { color: var(--orange); }
+        .navbar-nav { display: flex; gap: 0.25rem; align-items: center; list-style: none; }
+        .navbar-nav a {
+            color: rgba(255,255,255,0.75); text-decoration: none; font-size: 0.9rem; font-weight: 500;
+            padding: 0.55rem 1.1rem; border-radius: 0.5rem; transition: all 0.2s;
+        }
+        .navbar-nav a:hover { color: white; background: rgba(255,255,255,0.1); }
+        .navbar-nav .nav-logout { background: rgba(255,255,255,0.1); }
+        .main { max-width: 1200px; margin: 0 auto; padding: 2rem 3rem; }
+        .welcome-card {
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
+            border-radius: 1rem; padding: 3rem; color: white; margin-bottom: 2rem;
+            position: relative; overflow: hidden;
+        }
+        .welcome-card::before {
+            content: ''; position: absolute; top: -40%; right: -10%; width: 400px; height: 400px;
+            border-radius: 50%; background: radial-gradient(circle, rgba(245,130,32,0.15) 0%, transparent 70%);
+        }
+        .welcome-card h1 { font-size: 1.75rem; font-weight: 700; position: relative; z-index: 1; }
+        .welcome-card h1 span { color: var(--orange); }
+        .welcome-card p { color: rgba(255,255,255,0.7); font-size: 1rem; position: relative; z-index: 1; margin-top: 0.5rem; }
+        .info-card {
+            background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem; padding: 2.5rem; text-align: center;
+        }
+        .info-card h3 { font-size: 1.15rem; font-weight: 600; color: var(--navy); margin-bottom: 0.75rem; }
+        .info-card p { color: var(--gray-500); font-size: 0.95rem; line-height: 1.7; max-width: 480px; margin: 0 auto; }
+        .footer { background: var(--navy-dark); color: rgba(255,255,255,0.4); text-align: center; padding: 1.25rem; font-size: 0.78rem; margin-top: 4rem; }
+        .footer span { color: var(--orange); }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-inner">
+            <a href="/partner/dashboard" class="navbar-brand">
+                <img src="/static/logo-white.png" alt="GooCampus" style="height: 52px; object-fit: contain;">
+                <div class="navbar-brand-text"><span class="goo">Goo</span>Campus <span style="font-weight: 400; font-size: 0.85rem; opacity: 0.6;">Partner Portal</span></div>
+            </a>
+            <ul class="navbar-nav">
+                <li><a href="/logout" class="nav-logout">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+    <div class="main">
+        <div class="welcome-card">
+            <h1>Welcome, <span>{{ partner_name }}</span></h1>
+            <p>Your GooCampus partner portal dashboard</p>
+        </div>
+        <div class="info-card">
+            <h3>Partner Portal Coming Soon</h3>
+            <p>Your dedicated portal is being set up. You'll soon have access to partner resources, college data, student referral tracking, and more. Contact GooCampus for further information.</p>
+        </div>
+    </div>
+    <footer class="footer">
+        &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &middot; All rights reserved
+    </footer>
+</body>
+</html>

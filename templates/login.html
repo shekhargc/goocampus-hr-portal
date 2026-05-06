@@ -285,6 +285,46 @@
         }
         .login-btn:active { transform: translateY(0); }
 
+        /* ===== LOGIN TABS ===== */
+        .login-tabs {
+            display: flex;
+            border-bottom: 2px solid var(--gray-200);
+            margin-bottom: 1.5rem;
+        }
+        .login-tab {
+            flex: 1;
+            padding: 0.75rem 0.5rem;
+            text-align: center;
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: var(--gray-400);
+            cursor: pointer;
+            border-bottom: 3px solid transparent;
+            margin-bottom: -2px;
+            transition: all 0.2s;
+            background: none;
+            border-top: none;
+            border-left: none;
+            border-right: none;
+            font-family: inherit;
+        }
+        .login-tab:hover { color: var(--gray-700); }
+        .login-tab.active {
+            color: var(--orange);
+            border-bottom-color: var(--orange);
+        }
+        .login-form-panel { display: none; }
+        .login-form-panel.active { display: block; }
+        .forgot-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            color: var(--gray-500);
+            font-size: 0.85rem;
+            text-decoration: none;
+        }
+        .forgot-link:hover { color: var(--orange); }
+
         .alert {
             padding: 0.85rem 1.1rem;
             margin-bottom: 1.5rem;
@@ -633,8 +673,14 @@
             <!-- Login Form -->
             <div class="login-card">
                 <div class="login-card-header">
-                    <h2 class="login-card-title">Employee Sign In</h2>
-                    <p class="login-card-subtitle">Access your CRM portal account</p>
+                    <h2 class="login-card-title">Sign In</h2>
+                    <p class="login-card-subtitle">Access your GooCampus portal</p>
+                </div>
+
+                <!-- Login Tabs -->
+                <div class="login-tabs">
+                    <button class="login-tab {% if not active_tab or active_tab == 'employee' %}active{% endif %}" onclick="switchLoginTab('employee')">GC Team</button>
+                    <button class="login-tab {% if active_tab == 'partner' %}active{% endif %}" onclick="switchLoginTab('partner')">Partners</button>
                 </div>
 
                 {% with messages = get_flashed_messages(with_categories=true) %}
@@ -645,17 +691,37 @@
                     {% endif %}
                 {% endwith %}
 
-                <form method="POST">
-                    <div class="form-group">
-                        <label for="emp_code">Employee Code</label>
-                        <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required autofocus>
-                    </div>
-                    <div class="form-group">
-                        <label for="password">Password</label>
-                        <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
-                    </div>
-                    <button type="submit" class="login-btn">Sign In</button>
-                </form>
+                <!-- GC Team Login -->
+                <div id="panel-employee" class="login-form-panel {% if not active_tab or active_tab == 'employee' %}active{% endif %}">
+                    <form method="POST" action="/login">
+                        <div class="form-group">
+                            <label for="emp_code">Employee Code</label>
+                            <input type="text" id="emp_code" name="emp_code" class="form-input" placeholder="Enter your employee code" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="password">Password</label>
+                            <input type="password" id="password" name="password" class="form-input" placeholder="Enter your password" required>
+                        </div>
+                        <button type="submit" class="login-btn">Sign In</button>
+                    </form>
+                    <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                </div>
+
+                <!-- Partner Login -->
+                <div id="panel-partner" class="login-form-panel {% if active_tab == 'partner' %}active{% endif %}">
+                    <form method="POST" action="/partner-login">
+                        <div class="form-group">
+                            <label for="partner_email">Email Address</label>
+                            <input type="email" id="partner_email" name="partner_email" class="form-input" placeholder="Enter your partner email" required>
+                        </div>
+                        <div class="form-group">
+                            <label for="partner_password">Password</label>
+                            <input type="password" id="partner_password" name="partner_password" class="form-input" placeholder="Enter your password" required>
+                        </div>
+                        <button type="submit" class="login-btn">Partner Sign In</button>
+                    </form>
+                    <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+                </div>
             </div>
         </div>
     </section>
@@ -827,6 +893,20 @@
     </footer>
 
     <script>
+        // Tab switching
+        function switchLoginTab(tab) {
+            document.querySelectorAll('.login-tab').forEach(function(t) { t.classList.remove('active'); });
+            document.querySelectorAll('.login-form-panel').forEach(function(p) { p.classList.remove('active'); });
+            document.getElementById('panel-' + tab).classList.add('active');
+            // Highlight the clicked tab
+            var tabs = document.querySelectorAll('.login-tab');
+            if (tab === 'employee') tabs[0].classList.add('active');
+            else tabs[1].classList.add('active');
+            // Focus first input
+            var firstInput = document.querySelector('#panel-' + tab + ' input');
+            if (firstInput) firstInput.focus();
+        }
+
         // Smooth scroll for anchor links
         document.querySelectorAll('a[href^="#"]').forEach(function(anchor) {
             anchor.addEventListener('click', function(e) {

@@ -2,9 +2,11 @@ import os
 import re
 import hashlib
 import logging
+import secrets
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
+from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
@@ -335,7 +337,171 @@ def change_password():
 
     return render_template('change_password.html', user=user)
 
+
+# ─── FORGOT PASSWORD FLOW ───
+def _get_serializer():
+    return URLSafeTimedSerializer(app.secret_key)
+
+@app.route('/forgot-password', methods=['GET', 'POST'])
+def forgot_password():
+    if request.method == 'POST':
+        login_type = request.form.get('login_type', 'employee')
+        identifier = request.form.get('identifier', '').strip()
+
+        if not identifier:
+            flash('Please enter your employee code or email', 'error')
+            return render_template('forgot_password.html')
+
+        conn = get_db()
+
+        if login_type == 'partner':
+            # Partner reset — lookup by email
+            partner = conn.execute(
+                "SELECT id, company_name, email FROM partners WHERE email = ? AND status = 'Active'",
+                (identifier,)
+            ).fetchone()
+            conn.close()
+            if partner and partner['email']:
+                token = _get_serializer().dumps({'type': 'partner', 'id': partner['id']}, salt='password-reset')
+                base_url = request.host_url.rstrip('/')
+                reset_link = f"{base_url}/reset-password/{token}"
+                from email_utils import send_email
+                html_body = f'''
+                <div style="font-family: 'Inter', Arial, sans-serif; max-width: 520px; margin: 0 auto;">
+                    <div style="background: #1B2A4A; padding: 1.5rem 2rem; border-radius: 0.75rem 0.75rem 0 0;">
+                        <h2 style="color: #F58220; margin: 0; font-size: 1.25rem;">GooCampus CRM</h2>
+                    </div>
+                    <div style="background: #ffffff; padding: 2rem; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 0.75rem 0.75rem;">
+                        <p style="color: #334155;">Hi <strong>{partner["company_name"]}</strong>,</p>
+                        <p style="color: #475569;">We received a request to reset your partner portal password. Click the button below to set a new password:</p>
+                        <p style="text-align: center; margin: 1.5rem 0;">
+                            <a href="{reset_link}" style="background: #F58220; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; display: inline-block;">Reset Password</a>
+                        </p>
+                        <p style="color: #94A3B8; font-size: 0.85rem;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>
+                    </div>
+                </div>
+                '''
+                send_email([partner['email']], 'Reset Your GooCampus Partner Password', html_body)
+        else:
+            # Employee reset — lookup by emp_code
+            user = conn.execute(
+                "SELECT id, name, email, emp_code FROM employees WHERE emp_code = ? AND is_active = 1",
+                (identifier,)
+            ).fetchone()
+            conn.close()
+            if user and user['email']:
+                token = _get_serializer().dumps({'type': 'employee', 'id': user['id']}, salt='password-reset')
+                base_url = request.host_url.rstrip('/')
+                reset_link = f"{base_url}/reset-password/{token}"
+                from email_utils import send_email
+                html_body = f'''
+                <div style="font-family: 'Inter', Arial, sans-serif; max-width: 520px; margin: 0 auto;">
+                    <div style="background: #1B2A4A; padding: 1.5rem 2rem; border-radius: 0.75rem 0.75rem 0 0;">
+                        <h2 style="color: #F58220; margin: 0; font-size: 1.25rem;">GooCampus CRM</h2>
+                    </div>
+                    <div style="background: #ffffff; padding: 2rem; border: 1px solid #E2E8F0; border-top: none; border-radius: 0 0 0.75rem 0.75rem;">
+                        <p style="color: #334155;">Hi <strong>{user["name"]}</strong>,</p>
+                        <p style="color: #475569;">We received a request to reset your CRM password. Click the button below to set a new password:</p>
+                        <p style="text-align: center; margin: 1.5rem 0;">
+                            <a href="{reset_link}" style="background: #F58220; color: white; padding: 0.75rem 2rem; border-radius: 0.5rem; text-decoration: none; font-weight: 600; display: inline-block;">Reset Password</a>
+                        </p>
+                        <p style="color: #94A3B8; font-size: 0.85rem;">This link expires in 1 hour. If you didn't request this, ignore this email.</p>
+                    </div>
+                </div>
+                '''
+                send_email([user['email']], 'Reset Your GooCampus CRM Password', html_body)
+
+        # Always show success (don't reveal whether account exists)
+        flash('If an account with that identifier exists, a reset link has been sent to the registered email.', 'success')
+        return render_template('forgot_password.html')
+
+    return render_template('forgot_password.html')
+
+
+@app.route('/reset-password/<token>', methods=['GET', 'POST'])
+def reset_password(token):
+    try:
+        data = _get_serializer().loads(token, salt='password-reset', max_age=3600)
+    except SignatureExpired:
+        flash('This reset link has expired. Please request a new one.', 'error')
+        return redirect(url_for('forgot_password'))
+    except BadSignature:
+        flash('Invalid reset link.', 'error')
+        return redirect(url_for('forgot_password'))
+
+    user_type = data.get('type', 'employee')
+    user_id = data['id']
+
+    if request.method == 'POST':
+        new_password = request.form.get('new_password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+
+        if not new_password or not confirm_password:
+            flash('Both fields are required', 'error')
+            return render_template('reset_password.html', token=token)
+
+        if new_password != confirm_password:
+            flash('Passwords do not match', 'error')
+            return render_template('reset_password.html', token=token)
+
+        if len(new_password) < 4:
+            flash('Password must be at least 4 characters', 'error')
+            return render_template('reset_password.html', token=token)
+
+        conn = get_db()
+        if user_type == 'partner':
+            conn.execute('UPDATE partners SET password_hash = ? WHERE id = ?', (hash_password(new_password), user_id))
+        else:
+            conn.execute('UPDATE employees SET password = ? WHERE id = ?', (hash_password(new_password), user_id))
+        conn.commit()
+        conn.close()
+
+        flash('Password reset successfully! You can now log in with your new password.', 'success')
+        return redirect(url_for('login'))
+
+    return render_template('reset_password.html', token=token)
+
+
+# ─── PARTNER LOGIN ───
+@app.route('/partner-login', methods=['POST'])
+def partner_login():
+    email = request.form.get('partner_email', '').strip()
+    password = request.form.get('partner_password', '').strip()
+
+    if not email or not password:
+        flash('Email and password are required', 'error')
+        return render_template('login.html', active_tab='partner')
+
+    conn = get_db()
+    partner = conn.execute(
+        "SELECT * FROM partners WHERE email = ? AND status = 'Active'",
+        (email,)
+    ).fetchone()
+    conn.close()
+
+    if partner and partner['password_hash'] and partner['password_hash'] == hash_password(password):
+        session['user_id'] = partner['id']
+        session['is_partner'] = True
+        session['partner_name'] = partner['company_name']
+        session['partner_email'] = partner['email']
+        flash('Login successful', 'success')
+        return redirect(url_for('partner_dashboard_view'))
+    else:
+        flash('Invalid credentials or account inactive', 'error')
+        return render_template('login.html', active_tab='partner')
+
+
+@app.route('/partner/dashboard')
+def partner_dashboard_view():
+    if not session.get('is_partner'):
+        flash('Please log in as a partner', 'error')
+        return redirect(url_for('login'))
+    return render_template('partner_portal.html',
+                         partner_name=session.get('partner_name', 'Partner'))
+
+
 @app.route('/dashboard')
+
 @login_required
 def dashboard():
     """Main CRM dashboard for all users (admin and employees)"""
@@ -19017,6 +19183,152 @@ def college_import_all():
     flash(f"Import complete: {results['russian_added']} Russian + {results['indian_added']} Indian colleges added. "
           f"Errors: {results['russian_errors']} Russian, {results['indian_errors']} Indian.", "success")
     return redirect('/colleges')
+
+
+# ─── SECTION VISIBILITY CONTROL ───
+
+def ensure_section_permissions_table():
+    """Create section_permissions table for admin visibility control."""
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS section_permissions (
+            id SERIAL PRIMARY KEY,
+            section_key TEXT NOT NULL,
+            section_label TEXT NOT NULL,
+            menu_group TEXT NOT NULL DEFAULT 'Other',
+            is_admin_only INTEGER DEFAULT 0,
+            allowed_roles TEXT DEFAULT '',
+            allowed_emp_codes TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # Seed default sections if empty
+        count = conn.execute("SELECT COUNT(*) as c FROM section_permissions").fetchone()['c']
+        if count == 0:
+            defaults = [
+                ('dashboard', 'Dashboard', 'Main', 0, '', '', 1, 1),
+                ('hr_leave', 'Leave Management', 'HR', 0, '', '', 1, 10),
+                ('hr_attendance', 'Attendance / Time Log', 'HR', 0, '', '', 1, 11),
+                ('hr_employees', 'Employee Directory', 'HR', 0, '', '', 1, 12),
+                ('hr_wfh', 'Work From Home', 'HR', 0, '', '', 1, 13),
+                ('sales_meetings', 'Meetings', 'Sales', 0, '', '', 1, 20),
+                ('sales_projects', 'Projects', 'Sales', 0, '', '', 1, 21),
+                ('sales_partners', 'Partners', 'Sales', 0, '', '', 1, 22),
+                ('sales_news', 'Sales News', 'Sales', 0, '', '', 1, 23),
+                ('ops_plab', 'PLAB Operations', 'Operations', 0, '', '', 1, 30),
+                ('ops_visa', 'Visa & Travel', 'Operations', 0, '', '', 1, 31),
+                ('ops_pathway', 'PLAB Pathway Dashboard', 'Operations', 0, '', '', 1, 32),
+                ('finance_budget', 'Budget', 'Finance', 1, '', '', 1, 40),
+                ('finance_revenue', 'Revenue', 'Finance', 1, '', '', 1, 41),
+                ('company_org', 'Org Chart', 'Company', 0, '', '', 1, 50),
+                ('company_holidays', 'Holidays', 'Company', 0, '', '', 1, 51),
+                ('company_calendar', 'Calendar', 'Company', 0, '', '', 1, 52),
+                ('company_settings', 'State & City Settings', 'Company', 1, '', '', 1, 53),
+                ('company_reset_pw', 'Reset Passwords', 'Company', 1, '', '', 1, 54),
+                ('company_section_ctrl', 'Section Visibility', 'Company', 1, '', '', 1, 55),
+                ('colleges_portal', 'College Portal', 'Colleges', 0, '', '', 1, 60),
+                ('colleges_predictor', 'Medical Predictor', 'Colleges', 0, '', '', 1, 61),
+            ]
+            for d in defaults:
+                conn.execute('''INSERT INTO section_permissions
+                    (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, is_active, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', d)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_section_permissions_table: {e}")
+
+# Run on startup
+ensure_section_permissions_table()
+
+
+@app.route('/admin/section-visibility')
+@login_required
+def section_visibility():
+    user = get_user()
+    if not user.get('is_admin'):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db()
+    sections = conn.execute("SELECT * FROM section_permissions ORDER BY sort_order, section_key").fetchall()
+    sections = [dict(s) for s in sections]
+
+    # Group by menu_group
+    groups = {}
+    for s in sections:
+        g = s['menu_group']
+        if g not in groups:
+            groups[g] = []
+        groups[g].append(s)
+
+    # Get all employees for the selector
+    employees = conn.execute("SELECT emp_code, name, department FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    employees = [dict(e) for e in employees]
+    conn.close()
+
+    return render_template('section_visibility.html', user=user, groups=groups, employees=employees)
+
+
+@app.route('/api/section-permissions/<int:section_id>', methods=['PUT'])
+@login_required
+def update_section_permission(section_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('''UPDATE section_permissions
+        SET is_admin_only = ?, allowed_roles = ?, allowed_emp_codes = ?, is_active = ?
+        WHERE id = ?''',
+        (data.get('is_admin_only', 0),
+         data.get('allowed_roles', ''),
+         data.get('allowed_emp_codes', ''),
+         data.get('is_active', 1),
+         section_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/section-permissions', methods=['POST'])
+@login_required
+def add_section_permission():
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('''INSERT INTO section_permissions (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, is_active, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+        (data.get('section_key', ''),
+         data.get('section_label', ''),
+         data.get('menu_group', 'Other'),
+         data.get('is_admin_only', 0),
+         data.get('allowed_roles', ''),
+         data.get('allowed_emp_codes', ''),
+         data.get('is_active', 1),
+         data.get('sort_order', 99)))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/section-permissions/<int:section_id>', methods=['DELETE'])
+@login_required
+def delete_section_permission(section_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    conn = get_db()
+    conn.execute("DELETE FROM section_permissions WHERE id = ?", (section_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
 
 
 if __name__ == '__main__':

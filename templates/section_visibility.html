@@ -1,0 +1,541 @@
+{% extends "base.html" %}
+{% block title %}Section Visibility Control{% endblock %}
+
+{% block extra_css %}
+<style>
+    .sv-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .sv-header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .sv-header p {
+        color: var(--gray-500);
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+    .sv-group {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        margin-bottom: 1.25rem;
+        overflow: hidden;
+    }
+    .sv-group-header {
+        background: var(--gray-50);
+        padding: 0.75rem 1.25rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--navy);
+        border-bottom: 1px solid var(--gray-200);
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .sv-group-badge {
+        background: var(--orange-light);
+        color: var(--orange);
+        font-size: 0.75rem;
+        font-weight: 600;
+        padding: 0.15rem 0.5rem;
+        border-radius: 1rem;
+    }
+    .sv-row {
+        display: grid;
+        grid-template-columns: 2fr 1fr 1fr 1.5fr 100px;
+        gap: 1rem;
+        align-items: center;
+        padding: 0.85rem 1.25rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.9rem;
+    }
+    .sv-row:last-child { border-bottom: none; }
+    .sv-label {
+        font-weight: 500;
+        color: var(--gray-800);
+    }
+    .sv-key {
+        font-size: 0.8rem;
+        color: var(--gray-400);
+        font-family: monospace;
+    }
+    .sv-toggle {
+        position: relative;
+        width: 44px;
+        height: 24px;
+        display: inline-block;
+    }
+    .sv-toggle input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .sv-toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: var(--gray-300);
+        border-radius: 24px;
+        transition: 0.3s;
+    }
+    .sv-toggle-slider::before {
+        content: '';
+        position: absolute;
+        height: 18px;
+        width: 18px;
+        left: 3px;
+        bottom: 3px;
+        background: white;
+        border-radius: 50%;
+        transition: 0.3s;
+    }
+    .sv-toggle input:checked + .sv-toggle-slider {
+        background: var(--orange);
+    }
+    .sv-toggle input:checked + .sv-toggle-slider::before {
+        transform: translateX(20px);
+    }
+    .sv-select {
+        padding: 0.4rem 0.6rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        font-family: inherit;
+        font-size: 0.85rem;
+        background: white;
+        color: var(--gray-700);
+    }
+    .sv-emp-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.35rem;
+        min-height: 28px;
+    }
+    .sv-emp-tag {
+        background: var(--blue-light);
+        color: var(--blue-dark);
+        font-size: 0.75rem;
+        padding: 0.15rem 0.5rem;
+        border-radius: 0.3rem;
+        display: flex;
+        align-items: center;
+        gap: 0.3rem;
+    }
+    .sv-emp-tag-x {
+        cursor: pointer;
+        font-weight: 700;
+        font-size: 0.85rem;
+        color: var(--gray-400);
+    }
+    .sv-emp-tag-x:hover { color: var(--danger); }
+    .sv-actions {
+        display: flex;
+        gap: 0.4rem;
+    }
+    .sv-btn-del {
+        background: none;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        padding: 0.3rem 0.5rem;
+        cursor: pointer;
+        color: var(--gray-400);
+        transition: all 0.2s;
+    }
+    .sv-btn-del:hover {
+        border-color: var(--danger);
+        color: var(--danger);
+    }
+    .sv-add-btn {
+        background: var(--orange);
+        color: white;
+        border: none;
+        border-radius: 0.5rem;
+        padding: 0.6rem 1.25rem;
+        cursor: pointer;
+        font-weight: 600;
+        font-size: 0.9rem;
+        font-family: inherit;
+        transition: background 0.2s;
+    }
+    .sv-add-btn:hover { background: var(--orange-dark); }
+    /* Add emp dropdown */
+    .sv-emp-add {
+        position: relative;
+        display: inline-block;
+    }
+    .sv-emp-input {
+        padding: 0.35rem 0.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        font-size: 0.82rem;
+        width: 140px;
+        font-family: inherit;
+    }
+    .sv-emp-input:focus {
+        outline: none;
+        border-color: var(--orange);
+    }
+    .sv-emp-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        max-height: 160px;
+        overflow-y: auto;
+        z-index: 50;
+        width: 200px;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .sv-emp-dropdown.show { display: block; }
+    .sv-emp-dropdown-item {
+        padding: 0.4rem 0.6rem;
+        cursor: pointer;
+        font-size: 0.82rem;
+        color: var(--gray-700);
+    }
+    .sv-emp-dropdown-item:hover { background: var(--orange-light); }
+    /* Modal */
+    .sv-modal-overlay {
+        display: none;
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.4);
+        z-index: 1000;
+        align-items: center;
+        justify-content: center;
+    }
+    .sv-modal-overlay.show { display: flex; }
+    .sv-modal {
+        background: white;
+        border-radius: 0.75rem;
+        padding: 2rem;
+        width: 90%;
+        max-width: 480px;
+        box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+    }
+    .sv-modal h3 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: var(--navy);
+        margin-bottom: 1.25rem;
+    }
+    .sv-modal .form-group {
+        margin-bottom: 1rem;
+    }
+    .sv-modal .form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: var(--gray-700);
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .sv-modal .form-input {
+        width: 100%;
+        padding: 0.6rem 0.8rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        font-family: inherit;
+        font-size: 0.9rem;
+    }
+    .sv-modal .form-input:focus {
+        outline: none;
+        border-color: var(--orange);
+    }
+    .sv-modal-btns {
+        display: flex;
+        gap: 0.75rem;
+        justify-content: flex-end;
+        margin-top: 1.5rem;
+    }
+    .sv-modal-btns button {
+        padding: 0.55rem 1.25rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.9rem;
+        cursor: pointer;
+        font-family: inherit;
+        border: none;
+    }
+    .sv-btn-cancel { background: var(--gray-100); color: var(--gray-600); }
+    .sv-btn-save { background: var(--orange); color: white; }
+    .sv-btn-save:hover { background: var(--orange-dark); }
+
+    .sv-toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: var(--navy);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        z-index: 2000;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s;
+    }
+    .sv-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @media (max-width: 768px) {
+        .sv-row {
+            grid-template-columns: 1fr;
+            gap: 0.5rem;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="sv-header">
+    <div>
+        <h1>Section Visibility Control</h1>
+        <p>Control which menu sections and pages are visible to each user or role</p>
+    </div>
+    <button class="sv-add-btn" onclick="openAddModal()">+ Add Section</button>
+</div>
+
+{% for group_name, sections in groups.items() %}
+<div class="sv-group">
+    <div class="sv-group-header">
+        {{ group_name }}
+        <span class="sv-group-badge">{{ sections|length }}</span>
+    </div>
+    <div style="overflow-x: auto;">
+        <!-- Column headers -->
+        <div class="sv-row" style="font-weight: 600; font-size: 0.8rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.3px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+            <div>Section</div>
+            <div>Active</div>
+            <div>Admin Only</div>
+            <div>Allowed Employees</div>
+            <div>Actions</div>
+        </div>
+        {% for s in sections %}
+        <div class="sv-row" id="row-{{ s.id }}">
+            <div>
+                <div class="sv-label">{{ s.section_label }}</div>
+                <div class="sv-key">{{ s.section_key }}</div>
+            </div>
+            <div>
+                <label class="sv-toggle">
+                    <input type="checkbox" {% if s.is_active %}checked{% endif %}
+                           onchange="updateSection({{ s.id }}, this.parentElement.parentElement.parentElement)">
+                    <span class="sv-toggle-slider"></span>
+                </label>
+            </div>
+            <div>
+                <label class="sv-toggle">
+                    <input type="checkbox" {% if s.is_admin_only %}checked{% endif %}
+                           onchange="updateSection({{ s.id }}, this.parentElement.parentElement.parentElement)">
+                    <span class="sv-toggle-slider"></span>
+                </label>
+            </div>
+            <div>
+                <div class="sv-emp-tags" id="tags-{{ s.id }}">
+                    {% for code in s.allowed_emp_codes.split(',') if code.strip() %}
+                    <span class="sv-emp-tag">
+                        {{ code.strip() }}
+                        <span class="sv-emp-tag-x" onclick="removeEmpCode({{ s.id }}, '{{ code.strip() }}')">&times;</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="sv-emp-add" style="margin-top: 0.35rem;">
+                    <input type="text" class="sv-emp-input" placeholder="Add employee..."
+                           oninput="filterEmps(this, {{ s.id }})" onfocus="filterEmps(this, {{ s.id }})">
+                    <div class="sv-emp-dropdown" id="emp-dd-{{ s.id }}"></div>
+                </div>
+            </div>
+            <div class="sv-actions">
+                <button class="sv-btn-del" onclick="deleteSection({{ s.id }})" title="Delete">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+
+<!-- Add Section Modal -->
+<div class="sv-modal-overlay" id="addModal">
+    <div class="sv-modal">
+        <h3>Add New Section</h3>
+        <div class="form-group">
+            <label>Section Key</label>
+            <input type="text" class="form-input" id="newKey" placeholder="e.g. sales_reports">
+        </div>
+        <div class="form-group">
+            <label>Display Label</label>
+            <input type="text" class="form-input" id="newLabel" placeholder="e.g. Sales Reports">
+        </div>
+        <div class="form-group">
+            <label>Menu Group</label>
+            <input type="text" class="form-input" id="newGroup" placeholder="e.g. Sales, HR, Company" list="groupList">
+            <datalist id="groupList">
+                {% for g in groups.keys() %}<option value="{{ g }}">{% endfor %}
+            </datalist>
+        </div>
+        <div class="form-group">
+            <label>Sort Order</label>
+            <input type="number" class="form-input" id="newSort" value="99">
+        </div>
+        <div class="sv-modal-btns">
+            <button class="sv-btn-cancel" onclick="closeAddModal()">Cancel</button>
+            <button class="sv-btn-save" onclick="addSection()">Add Section</button>
+        </div>
+    </div>
+</div>
+
+<div class="sv-toast" id="toast">Saved</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script>
+var ALL_EMPLOYEES = {{ employees|tojson }};
+
+function showToast(msg) {
+    var t = document.getElementById('toast');
+    t.textContent = msg || 'Saved';
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+function getRowData(row) {
+    var toggles = row.querySelectorAll('.sv-toggle input');
+    var tags = row.querySelectorAll('.sv-emp-tag');
+    var codes = [];
+    tags.forEach(function(t) {
+        var txt = t.childNodes[0].textContent.trim();
+        if (txt) codes.push(txt);
+    });
+    return {
+        is_active: toggles[0].checked ? 1 : 0,
+        is_admin_only: toggles[1].checked ? 1 : 0,
+        allowed_emp_codes: codes.join(','),
+        allowed_roles: ''
+    };
+}
+
+function updateSection(id, row) {
+    var data = getRowData(row);
+    fetch('/api/section-permissions/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function() { showToast('Updated'); });
+}
+
+function removeEmpCode(sectionId, code) {
+    var row = document.getElementById('row-' + sectionId);
+    var tagsDiv = document.getElementById('tags-' + sectionId);
+    // Remove the tag
+    var allTags = tagsDiv.querySelectorAll('.sv-emp-tag');
+    allTags.forEach(function(t) {
+        if (t.childNodes[0].textContent.trim() === code) t.remove();
+    });
+    updateSection(sectionId, row);
+}
+
+function addEmpCode(sectionId, code) {
+    var tagsDiv = document.getElementById('tags-' + sectionId);
+    // Check if already exists
+    var existing = tagsDiv.querySelectorAll('.sv-emp-tag');
+    for (var i = 0; i < existing.length; i++) {
+        if (existing[i].childNodes[0].textContent.trim() === code) return;
+    }
+    var span = document.createElement('span');
+    span.className = 'sv-emp-tag';
+    span.innerHTML = code + ' <span class="sv-emp-tag-x" onclick="removeEmpCode(' + sectionId + ', \'' + code + '\')">&times;</span>';
+    tagsDiv.appendChild(span);
+    var row = document.getElementById('row-' + sectionId);
+    updateSection(sectionId, row);
+    // Clear input and hide dropdown
+    var dd = document.getElementById('emp-dd-' + sectionId);
+    dd.classList.remove('show');
+    dd.previousElementSibling.value = '';
+}
+
+function filterEmps(input, sectionId) {
+    var val = input.value.trim().toLowerCase();
+    var dd = document.getElementById('emp-dd-' + sectionId);
+    dd.innerHTML = '';
+    var filtered = ALL_EMPLOYEES.filter(function(e) {
+        return e.name.toLowerCase().indexOf(val) > -1 || e.emp_code.toLowerCase().indexOf(val) > -1;
+    }).slice(0, 8);
+    if (filtered.length === 0) {
+        dd.classList.remove('show');
+        return;
+    }
+    filtered.forEach(function(e) {
+        var div = document.createElement('div');
+        div.className = 'sv-emp-dropdown-item';
+        div.textContent = e.emp_code + ' — ' + e.name;
+        div.onclick = function() { addEmpCode(sectionId, e.emp_code); };
+        dd.appendChild(div);
+    });
+    dd.classList.add('show');
+}
+
+function deleteSection(id) {
+    if (!confirm('Delete this section permission?')) return;
+    fetch('/api/section-permissions/' + id, { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        document.getElementById('row-' + id).remove();
+        showToast('Deleted');
+    });
+}
+
+function openAddModal() { document.getElementById('addModal').classList.add('show'); }
+function closeAddModal() { document.getElementById('addModal').classList.remove('show'); }
+
+function addSection() {
+    var data = {
+        section_key: document.getElementById('newKey').value.trim(),
+        section_label: document.getElementById('newLabel').value.trim(),
+        menu_group: document.getElementById('newGroup').value.trim(),
+        sort_order: parseInt(document.getElementById('newSort').value) || 99,
+        is_admin_only: 0,
+        is_active: 1,
+        allowed_roles: '',
+        allowed_emp_codes: ''
+    };
+    if (!data.section_key || !data.section_label) {
+        alert('Key and label are required');
+        return;
+    }
+    fetch('/api/section-permissions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function() {
+        closeAddModal();
+        showToast('Added — reloading...');
+        setTimeout(function() { location.reload(); }, 800);
+    });
+}
+
+// Close dropdowns on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.classList.contains('sv-emp-input')) {
+        document.querySelectorAll('.sv-emp-dropdown').forEach(function(d) {
+            d.classList.remove('show');
+        });
+    }
+});
+</script>
+{% endblock %}
