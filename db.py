@@ -49,6 +49,16 @@ class DatabaseConnection:
         self.last_cursor = CursorWrapper(cursor, self.is_postgres)
         return self.last_cursor
 
+    def executemany(self, sql, params_list):
+        """Execute SQL for each set of params in the list."""
+        if self.is_postgres:
+            sql = self._convert_to_postgres(sql)
+
+        cursor = self.conn.cursor()
+        cursor.executemany(sql, params_list)
+        self.last_cursor = CursorWrapper(cursor, self.is_postgres)
+        return self.last_cursor
+
     def _convert_to_postgres(self, sql):
         """Convert SQLite SQL syntax to PostgreSQL."""
         # Convert ? placeholders to %s
