@@ -273,7 +273,7 @@
             </div>
             <div class="filter-group">
                 <label>College</label>
-                <input type="text" id="state-browse-inst" placeholder="Search college name...">
+                <input type="text" id="state-browse-inst" placeholder="Type to search..." oninput="autoSearch('state')">
             </div>
             <div class="filter-group">
                 <label>Quota</label>
@@ -337,7 +337,7 @@
             </div>
             <div class="filter-group">
                 <label>College</label>
-                <input type="text" id="mcc-browse-inst" placeholder="Search college name...">
+                <input type="text" id="mcc-browse-inst" placeholder="Type to search..." oninput="autoSearch('mcc')">
             </div>
             <div class="filter-group">
                 <label>Quota</label>
@@ -591,6 +591,16 @@ function rankCell(rank, userRank) {
 function escHtml(s) {
     if (!s) return '';
     return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Auto-search on typing (debounced 400ms, min 2 chars) ── */
+var _autoTimers = {};
+function autoSearch(tab) {
+    var inputId = tab + '-browse-inst';
+    var val = document.getElementById(inputId).value.trim();
+    clearTimeout(_autoTimers[tab]);
+    if (val.length < 2) return;
+    _autoTimers[tab] = setTimeout(function() { browseSearch(tab); }, 400);
 }
 
 /* ── Import cutoff data ── */
