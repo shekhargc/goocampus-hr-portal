@@ -17693,6 +17693,23 @@ def ensure_college_tables():
             except Exception:
                 pass  # column already exists
 
+        # MBBS Cut-off predictor table
+        conn.execute('''CREATE TABLE IF NOT EXISTS mbbs_cutoffs (
+            id SERIAL PRIMARY KEY,
+            year INTEGER NOT NULL,
+            institute_name TEXT NOT NULL,
+            quota TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            course TEXT DEFAULT 'MBBS',
+            fees NUMERIC(12,2) DEFAULT 0,
+            counselling_authority TEXT DEFAULT '',
+            counselling_body TEXT DEFAULT '',
+            round1_rank INTEGER,
+            round2_rank INTEGER,
+            round3_rank INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         conn.commit()
         conn.close()
         logging.info("College tables ensured successfully")
@@ -17700,6 +17717,51 @@ def ensure_college_tables():
         logging.error(f"ensure_college_tables: {e}")
 
 ensure_college_tables()
+
+
+def _auto_import_mbbs_cutoffs():
+    """Auto-import MBBS cut-off data from JSON if table is empty."""
+    try:
+        conn = get_db()
+        existing = conn.execute("SELECT COUNT(*) as c FROM mbbs_cutoffs").fetchone()['c']
+        if existing > 0:
+            logging.info(f"MBBS cutoffs already imported ({existing} rows), skipping")
+            conn.close()
+            return
+        import json, os
+        json_path = os.path.join(os.path.dirname(__file__), 'mbbs_cutoff_data.json')
+        if not os.path.exists(json_path):
+            logging.info("mbbs_cutoff_data.json not found, skipping cutoff import")
+            conn.close()
+            return
+        with open(json_path, 'r') as f:
+            rows = json.load(f)
+        added = 0
+        batch = []
+        for r in rows:
+            batch.append((r[0], r[1], r[2], r[3], r[4], r[5], r[6], r[7], r[8], r[9], r[10]))
+            if len(batch) >= 500:
+                conn.executemany('''INSERT INTO mbbs_cutoffs
+                    (year, institute_name, quota, category, course, fees,
+                     counselling_authority, counselling_body,
+                     round1_rank, round2_rank, round3_rank)
+                    VALUES (?,?,?,?,?,?,?,?,?,?,?)''', batch)
+                added += len(batch)
+                batch = []
+        if batch:
+            conn.executemany('''INSERT INTO mbbs_cutoffs
+                (year, institute_name, quota, category, course, fees,
+                 counselling_authority, counselling_body,
+                 round1_rank, round2_rank, round3_rank)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?)''', batch)
+            added += len(batch)
+        conn.commit()
+        conn.close()
+        logging.info(f"Auto-imported {added} MBBS cutoff rows")
+    except Exception as e:
+        logging.error(f"_auto_import_mbbs_cutoffs: {e}")
+
+_auto_import_mbbs_cutoffs()
 
 
 def _make_slug(name):
@@ -17978,6 +18040,144 @@ def _to_inr(amount, currency, rates):
             return float(amount) * (inr_rate / cur_rate)
         return float(amount)
 
+
+
+# ── Medical Predictor ──
+@app.route('/medical-predictor')
+@admin_required
+def medical_predictor():
+    user = get_user()
+    conn = get_db()
+    # Get filter options
+    authorities = conn.execute(
+        "SELECT DISTINCT counselling_authority FROM mbbs_cutoffs ORDER BY counselling_authority"
+    ).fetchall()
+    years = conn.execute(
+        "SELECT DISTINCT year FROM mbbs_cutoffs ORDER BY year DESC"
+    ).fetchall()
+    conn.close()
+    states = [a['counselling_authority'] for a in authorities if a['counselling_authority'] != 'All India / MCC']
+    return render_template('medical_predictor.html', user=user,
+                           states=states, years=[y['year'] for y in years])
+
+
+@app.route('/api/predictor/filters')
+@admin_required
+def predictor_filters():
+    """Return dynamic filter options based on selected authority + year."""
+    conn = get_db()
+    authority = request.args.get('authority', '').strip()
+    year = request.args.get('year', '').strip()
+
+    conditions = []
+    params = []
+    if authority:
+        conditions.append("counselling_authority = ?")
+        params.append(authority)
+    if year:
+        conditions.append("year = ?")
+        params.append(int(year))
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    quotas = conn.execute(
+        f"SELECT DISTINCT quota FROM mbbs_cutoffs {where} ORDER BY quota", params
+    ).fetchall()
+    categories = conn.execute(
+        f"SELECT DISTINCT category FROM mbbs_cutoffs {where} ORDER BY category", params
+    ).fetchall()
+    institutes = conn.execute(
+        f"SELECT DISTINCT institute_name FROM mbbs_cutoffs {where} ORDER BY institute_name", params
+    ).fetchall()
+    conn.close()
+
+    return jsonify({
+        'quotas': [q['quota'] for q in quotas],
+        'categories': [c['category'] for c in categories],
+        'institutes': [i['institute_name'] for i in institutes],
+    })
+
+
+@app.route('/api/predictor/search')
+@admin_required
+def predictor_search():
+    """Search cut-off data with filters. Returns JSON."""
+    conn = get_db()
+    authority = request.args.get('authority', '').strip()
+    year = request.args.get('year', '').strip()
+    quota = request.args.get('quota', '').strip()
+    category = request.args.get('category', '').strip()
+    institute = request.args.get('institute', '').strip()
+    rank = request.args.get('rank', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = 50
+
+    conditions = []
+    params = []
+
+    if authority:
+        conditions.append("counselling_authority = ?")
+        params.append(authority)
+    if year:
+        conditions.append("year = ?")
+        params.append(int(year))
+    if quota:
+        conditions.append("quota = ?")
+        params.append(quota)
+    if category:
+        conditions.append("category = ?")
+        params.append(category)
+    if institute:
+        conditions.append("LOWER(institute_name) LIKE LOWER(?)")
+        params.append(f"%{institute}%")
+    if rank:
+        # Show colleges where user's rank is <= any round's cutoff rank
+        rank_val = int(rank)
+        conditions.append("(round1_rank >= ? OR round2_rank >= ? OR round3_rank >= ?)")
+        params.extend([rank_val, rank_val, rank_val])
+
+    where = "WHERE " + " AND ".join(conditions) if conditions else ""
+
+    # Count total
+    count_params = list(params)
+    total = conn.execute(f"SELECT COUNT(*) as c FROM mbbs_cutoffs {where}", count_params).fetchone()['c']
+
+    # Fetch page
+    offset = (page - 1) * per_page
+    query_params = list(params)
+    query_params.extend([per_page, offset])
+    rows = conn.execute(f'''
+        SELECT institute_name, quota, category, fees, counselling_authority,
+               counselling_body, round1_rank, round2_rank, round3_rank, year
+        FROM mbbs_cutoffs {where}
+        ORDER BY round1_rank ASC NULLS LAST, institute_name ASC
+        LIMIT ? OFFSET ?
+    ''', query_params).fetchall()
+
+    conn.close()
+
+    results = []
+    for r in rows:
+        results.append({
+            'institute': r['institute_name'],
+            'quota': r['quota'],
+            'category': r['category'],
+            'fees': float(r['fees'] or 0),
+            'authority': r['counselling_authority'],
+            'body': r['counselling_body'],
+            'r1': r['round1_rank'],
+            'r2': r['round2_rank'],
+            'r3': r['round3_rank'],
+            'year': r['year'],
+        })
+
+    return jsonify({
+        'results': results,
+        'total': total,
+        'page': page,
+        'per_page': per_page,
+        'total_pages': (total + per_page - 1) // per_page,
+    })
 
 
 # ── College List Page ──

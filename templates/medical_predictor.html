@@ -1,0 +1,590 @@
+{% extends "base.html" %}
+
+{% block title %}MBBS Medical Predictor - GooCampus{% endblock %}
+
+{% block extra_css %}
+<style>
+    .predictor-tabs {
+        display: flex; gap: 0; margin-bottom: 1.5rem;
+        background: white; border-radius: 0.75rem; overflow: hidden;
+        border: 1px solid var(--gray-200); box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .predictor-tab {
+        flex: 1; padding: 1rem 1.5rem; text-align: center;
+        font-weight: 700; font-size: 0.95rem; cursor: pointer;
+        color: var(--gray-500); border: none; background: transparent;
+        transition: all 0.2s; border-bottom: 3px solid transparent;
+    }
+    .predictor-tab:hover { background: var(--gray-50); color: var(--navy); }
+    .predictor-tab.active { color: var(--navy); background: var(--orange-light); border-bottom-color: var(--orange); }
+    .predictor-tab svg { vertical-align: -2px; margin-right: 6px; }
+
+    .tab-panel { display: none; }
+    .tab-panel.active { display: block; }
+
+    .predict-card {
+        background: linear-gradient(135deg, var(--navy) 0%, #2d4a7a 100%);
+        border-radius: 0.85rem; padding: 2rem; margin-bottom: 1.5rem;
+        color: white; position: relative; overflow: hidden;
+    }
+    .predict-card::after {
+        content: ''; position: absolute; top: -30px; right: -30px;
+        width: 120px; height: 120px; border-radius: 50%;
+        background: rgba(245,130,32,0.15);
+    }
+    .predict-card h2 { font-size: 1.3rem; font-weight: 700; margin: 0 0 0.25rem; }
+    .predict-card p { font-size: 0.88rem; opacity: 0.8; margin: 0 0 1.25rem; }
+
+    .predict-form {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+        position: relative; z-index: 1;
+    }
+    .predict-field { display: flex; flex-direction: column; gap: 0.3rem; }
+    .predict-field label {
+        font-size: 0.72rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.5px; opacity: 0.8;
+    }
+    .predict-field input, .predict-field select {
+        padding: 0.55rem 0.75rem; border: 1px solid rgba(255,255,255,0.25);
+        border-radius: 0.4rem; font-size: 0.9rem; min-width: 150px;
+        background: rgba(255,255,255,0.12); color: white;
+    }
+    .predict-field input::placeholder { color: rgba(255,255,255,0.5); }
+    .predict-field input:focus, .predict-field select:focus {
+        outline: none; border-color: var(--orange);
+        box-shadow: 0 0 0 2px rgba(245,130,32,0.3);
+    }
+    .predict-field select option { color: var(--navy); background: white; }
+    .btn-predict {
+        padding: 0.55rem 1.5rem; border: none; border-radius: 0.4rem;
+        background: var(--orange); color: white; font-weight: 700;
+        font-size: 0.9rem; cursor: pointer; white-space: nowrap;
+    }
+    .btn-predict:hover { background: #e0741a; }
+
+    .year-tabs {
+        display: flex; gap: 0; margin-bottom: 1rem;
+    }
+    .year-tab {
+        padding: 0.5rem 1.25rem; font-size: 0.85rem; font-weight: 600;
+        border: 1px solid var(--gray-300); cursor: pointer;
+        background: white; color: var(--gray-600); transition: all 0.15s;
+    }
+    .year-tab:first-child { border-radius: 0.4rem 0 0 0.4rem; }
+    .year-tab:last-child { border-radius: 0 0.4rem 0.4rem 0; }
+    .year-tab.active { background: var(--navy); color: white; border-color: var(--navy); }
+
+    .filter-bar {
+        display: flex; flex-wrap: wrap; gap: 0.75rem; align-items: flex-end;
+        background: white; padding: 1.25rem; border-radius: 0.75rem;
+        border: 1px solid var(--gray-200); margin-bottom: 1rem;
+    }
+    .filter-group { display: flex; flex-direction: column; gap: 0.3rem; flex: 1; min-width: 160px; }
+    .filter-group label {
+        font-size: 0.72rem; font-weight: 700; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.5px;
+    }
+    .filter-group input, .filter-group select {
+        padding: 0.5rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.85rem;
+        background: white; color: var(--navy);
+    }
+    .filter-group input:focus, .filter-group select:focus {
+        outline: none; border-color: var(--orange);
+        box-shadow: 0 0 0 2px rgba(245,130,32,0.15);
+    }
+    .filter-actions { display: flex; gap: 0.5rem; align-items: flex-end; }
+    .btn-filter {
+        padding: 0.5rem 1rem; border: none; border-radius: 0.4rem;
+        font-size: 0.85rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-search { background: var(--orange); color: white; }
+    .btn-search:hover { background: #e0741a; }
+    .btn-clear { background: var(--gray-200); color: var(--gray-600); }
+    .btn-clear:hover { background: var(--gray-300); }
+
+    .results-header {
+        display: flex; justify-content: space-between; align-items: center;
+        margin-bottom: 0.75rem;
+    }
+    .results-count { font-size: 0.88rem; color: var(--gray-500); }
+    .results-count strong { color: var(--navy); }
+
+    .cutoff-table { width: 100%; border-collapse: separate; border-spacing: 0; }
+    .cutoff-table th {
+        background: var(--navy); color: white; padding: 0.7rem 0.85rem;
+        font-size: 0.75rem; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.3px; position: sticky; top: 0; z-index: 5;
+        text-align: left; white-space: nowrap;
+    }
+    .cutoff-table th:first-child { border-radius: 0.5rem 0 0 0; }
+    .cutoff-table th:last-child { border-radius: 0 0.5rem 0 0; }
+    .cutoff-table td {
+        padding: 0.6rem 0.85rem; border-bottom: 1px solid var(--gray-100);
+        font-size: 0.85rem; vertical-align: middle;
+    }
+    .cutoff-table tbody tr:hover { background: #FFF7ED; }
+    .cutoff-table .rank-cell {
+        font-weight: 700; font-size: 0.88rem; text-align: center;
+    }
+    .cutoff-table .rank-cell.eligible { color: var(--success); background: rgba(16,185,129,0.06); }
+    .cutoff-table .rank-cell.not-eligible { color: var(--gray-400); }
+    .cutoff-table .inst-name { font-weight: 600; color: var(--navy); max-width: 300px; }
+    .cutoff-table .quota-badge {
+        display: inline-block; padding: 0.15rem 0.5rem; border-radius: 9999px;
+        font-size: 0.7rem; font-weight: 600; background: var(--gray-100);
+        color: var(--gray-700); white-space: nowrap;
+    }
+    .cutoff-table .fee-cell { font-weight: 600; color: var(--navy); white-space: nowrap; }
+
+    .pagination {
+        display: flex; justify-content: center; gap: 0.35rem;
+        margin-top: 1rem; flex-wrap: wrap;
+    }
+    .pagination button {
+        padding: 0.4rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.35rem; background: white; color: var(--gray-600);
+        font-size: 0.82rem; cursor: pointer;
+    }
+    .pagination button:hover { background: var(--gray-100); }
+    .pagination button.active { background: var(--navy); color: white; border-color: var(--navy); }
+    .pagination button:disabled { opacity: 0.4; cursor: not-allowed; }
+
+    .empty-results {
+        text-align: center; padding: 3rem 2rem; color: var(--gray-400);
+    }
+    .empty-results svg { margin-bottom: 0.75rem; opacity: 0.3; }
+
+    .loading-spinner {
+        text-align: center; padding: 2rem; color: var(--gray-400);
+    }
+    .loading-spinner::after {
+        content: ''; display: inline-block; width: 24px; height: 24px;
+        border: 3px solid var(--gray-200); border-top-color: var(--orange);
+        border-radius: 50%; animation: spin 0.8s linear infinite;
+        vertical-align: middle; margin-left: 0.5rem;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .stat-pills { display: flex; gap: 0.75rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .stat-pill {
+        display: flex; align-items: center; gap: 0.5rem;
+        padding: 0.5rem 1rem; border-radius: 0.5rem;
+        border: 1px solid var(--gray-200); background: white;
+        font-size: 0.82rem; color: var(--gray-600);
+    }
+    .stat-pill .count { font-size: 1rem; font-weight: 700; color: var(--navy); }
+
+    @media (max-width: 768px) {
+        .predict-form { flex-direction: column; }
+        .predict-field input, .predict-field select { min-width: 100%; }
+        .filter-bar { flex-direction: column; }
+        .filter-group { min-width: 100%; }
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>MBBS Medical Predictor</h1>
+    <p>Find your best college based on NEET rank, quota, and category cut-offs</p>
+</div>
+
+<!-- Main Tabs: State vs All India -->
+<div class="predictor-tabs">
+    <button class="predictor-tab active" onclick="switchMainTab('state')" id="tab-state">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        State Counselling
+    </button>
+    <button class="predictor-tab" onclick="switchMainTab('mcc')" id="tab-mcc">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
+        All India / MCC
+    </button>
+</div>
+
+<!-- ===== STATE TAB ===== -->
+<div class="tab-panel active" id="panel-state">
+    <!-- Predict Section -->
+    <div class="predict-card">
+        <h2>Predict My Colleges — State Counselling</h2>
+        <p>Enter your NEET rank to see which state-counselling colleges you may qualify for</p>
+        <div class="predict-form">
+            <div class="predict-field">
+                <label>Your NEET Rank</label>
+                <input type="number" id="state-rank" placeholder="e.g. 50000" min="1">
+            </div>
+            <div class="predict-field">
+                <label>State</label>
+                <select id="state-predict-state" onchange="loadFilters('state')">
+                    <option value="">Select State</option>
+                    {% for s in states %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="predict-field">
+                <label>Year</label>
+                <select id="state-predict-year" onchange="loadFilters('state')">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if loop.first %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="predict-field">
+                <label>Quota</label>
+                <select id="state-predict-quota"><option value="">All Quotas</option></select>
+            </div>
+            <div class="predict-field">
+                <label>Category</label>
+                <select id="state-predict-category"><option value="">All Categories</option></select>
+            </div>
+            <button class="btn-predict" onclick="predictColleges('state')">Predict</button>
+        </div>
+    </div>
+
+    <!-- Year Tabs + Browse Section -->
+    <div class="card" style="padding: 1.25rem;">
+        <h3 style="margin: 0 0 1rem; font-size: 1.05rem; font-weight: 700; color: var(--navy);">Browse State Cut-offs</h3>
+        <div class="filter-bar" style="margin-bottom: 1rem;">
+            <div class="filter-group">
+                <label>Year</label>
+                <select id="state-browse-year" onchange="loadFilters('state-browse')">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if loop.first %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>State</label>
+                <select id="state-browse-state" onchange="loadFilters('state-browse')">
+                    <option value="">All States</option>
+                    {% for s in states %}
+                    <option value="{{ s }}">{{ s }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>College</label>
+                <input type="text" id="state-browse-inst" placeholder="Search college name...">
+            </div>
+            <div class="filter-group">
+                <label>Quota</label>
+                <select id="state-browse-quota"><option value="">All Quotas</option></select>
+            </div>
+            <div class="filter-group">
+                <label>Category</label>
+                <select id="state-browse-category"><option value="">All Categories</option></select>
+            </div>
+            <div class="filter-actions">
+                <button class="btn-filter btn-search" onclick="browseSearch('state')">Search</button>
+                <button class="btn-filter btn-clear" onclick="clearBrowse('state')">Clear</button>
+            </div>
+        </div>
+        <div id="state-results"></div>
+    </div>
+</div>
+
+<!-- ===== MCC TAB ===== -->
+<div class="tab-panel" id="panel-mcc">
+    <!-- Predict Section -->
+    <div class="predict-card" style="background: linear-gradient(135deg, #1e3a5f 0%, #2d5a8a 100%);">
+        <h2>Predict My Colleges — All India / MCC</h2>
+        <p>Enter your NEET rank to see which MCC / All India Quota colleges you may qualify for</p>
+        <div class="predict-form">
+            <div class="predict-field">
+                <label>Your NEET Rank</label>
+                <input type="number" id="mcc-rank" placeholder="e.g. 50000" min="1">
+            </div>
+            <div class="predict-field">
+                <label>Year</label>
+                <select id="mcc-predict-year" onchange="loadFilters('mcc')">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if loop.first %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="predict-field">
+                <label>Quota</label>
+                <select id="mcc-predict-quota"><option value="">All Quotas</option></select>
+            </div>
+            <div class="predict-field">
+                <label>Category</label>
+                <select id="mcc-predict-category"><option value="">All Categories</option></select>
+            </div>
+            <button class="btn-predict" onclick="predictColleges('mcc')">Predict</button>
+        </div>
+    </div>
+
+    <!-- Browse Section -->
+    <div class="card" style="padding: 1.25rem;">
+        <h3 style="margin: 0 0 1rem; font-size: 1.05rem; font-weight: 700; color: var(--navy);">Browse MCC / All India Cut-offs</h3>
+        <div class="filter-bar" style="margin-bottom: 1rem;">
+            <div class="filter-group">
+                <label>Year</label>
+                <select id="mcc-browse-year" onchange="loadFilters('mcc-browse')">
+                    {% for y in years %}
+                    <option value="{{ y }}" {% if loop.first %}selected{% endif %}>{{ y }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-group">
+                <label>College</label>
+                <input type="text" id="mcc-browse-inst" placeholder="Search college name...">
+            </div>
+            <div class="filter-group">
+                <label>Quota</label>
+                <select id="mcc-browse-quota"><option value="">All Quotas</option></select>
+            </div>
+            <div class="filter-group">
+                <label>Category</label>
+                <select id="mcc-browse-category"><option value="">All Categories</option></select>
+            </div>
+            <div class="filter-actions">
+                <button class="btn-filter btn-search" onclick="browseSearch('mcc')">Search</button>
+                <button class="btn-filter btn-clear" onclick="clearBrowse('mcc')">Clear</button>
+            </div>
+        </div>
+        <div id="mcc-results"></div>
+    </div>
+</div>
+
+<script>
+/* ── Tab switching ── */
+function switchMainTab(tab) {
+    document.querySelectorAll('.predictor-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    document.getElementById('tab-' + tab).classList.add('active');
+    document.getElementById('panel-' + tab).classList.add('active');
+}
+
+/* ── Dynamic filter loading ── */
+function loadFilters(mode) {
+    var authority = '', year = '';
+    if (mode === 'state') {
+        authority = document.getElementById('state-predict-state').value;
+        year = document.getElementById('state-predict-year').value;
+    } else if (mode === 'state-browse') {
+        authority = document.getElementById('state-browse-state').value;
+        year = document.getElementById('state-browse-year').value;
+    } else if (mode === 'mcc') {
+        authority = 'All India / MCC';
+        year = document.getElementById('mcc-predict-year').value;
+    } else if (mode === 'mcc-browse') {
+        authority = 'All India / MCC';
+        year = document.getElementById('mcc-browse-year').value;
+    }
+
+    // Don't load state filters if no authority for state modes
+    if ((mode === 'state' || mode === 'state-browse') && !authority) {
+        // Clear quotas/categories
+        var qSel = mode === 'state' ? 'state-predict-quota' : 'state-browse-quota';
+        var cSel = mode === 'state' ? 'state-predict-category' : 'state-browse-category';
+        document.getElementById(qSel).innerHTML = '<option value="">All Quotas</option>';
+        document.getElementById(cSel).innerHTML = '<option value="">All Categories</option>';
+        return;
+    }
+
+    var params = new URLSearchParams();
+    if (authority) params.set('authority', authority);
+    if (year) params.set('year', year);
+
+    fetch('/api/predictor/filters?' + params.toString())
+        .then(r => r.json())
+        .then(data => {
+            var qId, cId;
+            if (mode === 'state') { qId = 'state-predict-quota'; cId = 'state-predict-category'; }
+            else if (mode === 'state-browse') { qId = 'state-browse-quota'; cId = 'state-browse-category'; }
+            else if (mode === 'mcc') { qId = 'mcc-predict-quota'; cId = 'mcc-predict-category'; }
+            else { qId = 'mcc-browse-quota'; cId = 'mcc-browse-category'; }
+
+            var qSel = document.getElementById(qId);
+            var cSel = document.getElementById(cId);
+            qSel.innerHTML = '<option value="">All Quotas</option>';
+            data.quotas.forEach(q => { qSel.innerHTML += '<option value="' + escHtml(q) + '">' + escHtml(q) + '</option>'; });
+            cSel.innerHTML = '<option value="">All Categories</option>';
+            data.categories.forEach(c => { cSel.innerHTML += '<option value="' + escHtml(c) + '">' + escHtml(c) + '</option>'; });
+        });
+}
+
+/* ── Predict mode ── */
+function predictColleges(tab) {
+    var params = new URLSearchParams();
+    if (tab === 'state') {
+        var rank = document.getElementById('state-rank').value;
+        var state = document.getElementById('state-predict-state').value;
+        var year = document.getElementById('state-predict-year').value;
+        var quota = document.getElementById('state-predict-quota').value;
+        var category = document.getElementById('state-predict-category').value;
+        if (!rank) { alert('Please enter your NEET rank'); return; }
+        if (!state) { alert('Please select a state'); return; }
+        params.set('rank', rank);
+        params.set('authority', state);
+        params.set('year', year);
+        if (quota) params.set('quota', quota);
+        if (category) params.set('category', category);
+    } else {
+        var rank = document.getElementById('mcc-rank').value;
+        var year = document.getElementById('mcc-predict-year').value;
+        var quota = document.getElementById('mcc-predict-quota').value;
+        var category = document.getElementById('mcc-predict-category').value;
+        if (!rank) { alert('Please enter your NEET rank'); return; }
+        params.set('rank', rank);
+        params.set('authority', 'All India / MCC');
+        params.set('year', year);
+        if (quota) params.set('quota', quota);
+        if (category) params.set('category', category);
+    }
+    params.set('page', '1');
+    currentPredictTab = tab;
+    currentPredictParams = params;
+    fetchAndRender(tab, params, parseInt(tab === 'state' ? document.getElementById('state-rank').value : document.getElementById('mcc-rank').value));
+}
+
+/* ── Browse mode ── */
+function browseSearch(tab) {
+    var params = new URLSearchParams();
+    if (tab === 'state') {
+        var year = document.getElementById('state-browse-year').value;
+        var state = document.getElementById('state-browse-state').value;
+        var inst = document.getElementById('state-browse-inst').value;
+        var quota = document.getElementById('state-browse-quota').value;
+        var category = document.getElementById('state-browse-category').value;
+        params.set('year', year);
+        if (state) params.set('authority', state);
+        else {
+            // Exclude MCC from state browse — get all states
+            // We'll handle this server-side by NOT setting authority
+        }
+        if (inst) params.set('institute', inst);
+        if (quota) params.set('quota', quota);
+        if (category) params.set('category', category);
+        // Exclude MCC results from state tab
+        if (!state) {
+            // Fetch without authority but we need to exclude MCC
+            // The server will return all — we handle by not setting authority
+        }
+    } else {
+        var year = document.getElementById('mcc-browse-year').value;
+        var inst = document.getElementById('mcc-browse-inst').value;
+        var quota = document.getElementById('mcc-browse-quota').value;
+        var category = document.getElementById('mcc-browse-category').value;
+        params.set('year', year);
+        params.set('authority', 'All India / MCC');
+        if (inst) params.set('institute', inst);
+        if (quota) params.set('quota', quota);
+        if (category) params.set('category', category);
+    }
+    params.set('page', '1');
+    currentBrowseTab = tab;
+    currentBrowseParams = params;
+    fetchAndRender(tab, params, 0);
+}
+
+function clearBrowse(tab) {
+    if (tab === 'state') {
+        document.getElementById('state-browse-state').value = '';
+        document.getElementById('state-browse-inst').value = '';
+        document.getElementById('state-browse-quota').innerHTML = '<option value="">All Quotas</option>';
+        document.getElementById('state-browse-category').innerHTML = '<option value="">All Categories</option>';
+        document.getElementById('state-results').innerHTML = '';
+    } else {
+        document.getElementById('mcc-browse-inst').value = '';
+        document.getElementById('mcc-browse-quota').innerHTML = '<option value="">All Quotas</option>';
+        document.getElementById('mcc-browse-category').innerHTML = '<option value="">All Categories</option>';
+        document.getElementById('mcc-results').innerHTML = '';
+    }
+}
+
+var currentPredictTab = '', currentPredictParams = null;
+var currentBrowseTab = '', currentBrowseParams = null;
+
+/* ── Fetch + Render results ── */
+function fetchAndRender(tab, params, userRank) {
+    var containerId = tab + '-results';
+    var container = document.getElementById(containerId);
+    container.innerHTML = '<div class="loading-spinner">Loading results</div>';
+
+    fetch('/api/predictor/search?' + params.toString())
+        .then(r => r.json())
+        .then(data => {
+            if (data.total === 0) {
+                container.innerHTML = '<div class="empty-results"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/></svg><p>No results found. Try adjusting your filters.</p></div>';
+                return;
+            }
+
+            var html = '<div class="results-header"><div class="results-count">Showing <strong>' + data.results.length + '</strong> of <strong>' + data.total.toLocaleString() + '</strong> results</div></div>';
+
+            html += '<div style="overflow-x:auto;"><table class="cutoff-table"><thead><tr>';
+            html += '<th>College</th><th>Quota</th><th>Category</th><th>Fees (₹)</th>';
+            html += '<th style="text-align:center;">R1</th><th style="text-align:center;">R2</th><th style="text-align:center;">R3</th>';
+            if (tab === 'state') html += '<th>State</th>';
+            html += '</tr></thead><tbody>';
+
+            data.results.forEach(function(r) {
+                html += '<tr>';
+                html += '<td class="inst-name">' + escHtml(r.institute) + '</td>';
+                html += '<td><span class="quota-badge">' + escHtml(r.quota) + '</span></td>';
+                html += '<td style="font-size:0.82rem;font-weight:600;">' + escHtml(r.category) + '</td>';
+                html += '<td class="fee-cell">' + (r.fees ? '₹' + Number(r.fees).toLocaleString('en-IN') : '—') + '</td>';
+                html += rankCell(r.r1, userRank);
+                html += rankCell(r.r2, userRank);
+                html += rankCell(r.r3, userRank);
+                if (tab === 'state') html += '<td style="font-size:0.8rem;color:var(--gray-500);">' + escHtml(r.authority) + '</td>';
+                html += '</tr>';
+            });
+
+            html += '</tbody></table></div>';
+
+            // Pagination
+            if (data.total_pages > 1) {
+                html += '<div class="pagination">';
+                html += '<button ' + (data.page <= 1 ? 'disabled' : '') + ' onclick="goPage(\'' + tab + '\',' + (data.page - 1) + ',' + userRank + ')">&laquo; Prev</button>';
+                var startP = Math.max(1, data.page - 3);
+                var endP = Math.min(data.total_pages, data.page + 3);
+                for (var p = startP; p <= endP; p++) {
+                    html += '<button class="' + (p === data.page ? 'active' : '') + '" onclick="goPage(\'' + tab + '\',' + p + ',' + userRank + ')">' + p + '</button>';
+                }
+                html += '<button ' + (data.page >= data.total_pages ? 'disabled' : '') + ' onclick="goPage(\'' + tab + '\',' + (data.page + 1) + ',' + userRank + ')">Next &raquo;</button>';
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        })
+        .catch(function(err) {
+            container.innerHTML = '<div class="empty-results"><p>Error loading results. Please try again.</p></div>';
+        });
+}
+
+function goPage(tab, page, userRank) {
+    // Determine if this was predict or browse based on userRank
+    var params;
+    if (userRank > 0 && currentPredictTab === tab && currentPredictParams) {
+        params = currentPredictParams;
+    } else if (currentBrowseTab === tab && currentBrowseParams) {
+        params = currentBrowseParams;
+    } else {
+        return;
+    }
+    params.set('page', page);
+    fetchAndRender(tab, params, userRank);
+}
+
+function rankCell(rank, userRank) {
+    if (rank === null || rank === undefined) return '<td class="rank-cell not-eligible">—</td>';
+    var cls = 'rank-cell';
+    if (userRank > 0 && userRank <= rank) cls += ' eligible';
+    return '<td class="' + cls + '">' + Number(rank).toLocaleString('en-IN') + '</td>';
+}
+
+function escHtml(s) {
+    if (!s) return '';
+    return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+
+/* ── Init: load MCC filters on page load ── */
+document.addEventListener('DOMContentLoaded', function() {
+    loadFilters('mcc');
+    loadFilters('mcc-browse');
+});
+</script>
+{% endblock %}
