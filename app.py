@@ -436,19 +436,37 @@ def dashboard():
     ''', (today,)).fetchall()
 
     # Recent activities (combine from different tables)
+    from collections import OrderedDict
     recent_activities = []
 
-    # Recent leaves
+    # Recent leaves (grouped by leave_group_id)
     try:
-        recent_leaves_act = conn.execute('''
-            SELECT lr.leave_date as date, e.name, lr.leave_type, lr.status, lr.created_at
+        recent_leaves_act_raw = conn.execute('''
+            SELECT lr.leave_date as date, lr.leave_group_id, lr.days, e.name, lr.leave_type, lr.status, lr.created_at
             FROM leave_records lr JOIN employees e ON lr.employee_id = e.id
-            ORDER BY lr.created_at DESC LIMIT 5
+            ORDER BY lr.created_at DESC
         ''').fetchall()
-        for l in recent_leaves_act:
+        seen_groups_act = OrderedDict()
+        for r in recent_leaves_act_raw:
+            gid = r['leave_group_id'] or f"single_act_{r['date']}"
+            if gid not in seen_groups_act:
+                seen_groups_act[gid] = {'name': r['name'], 'leave_type': r['leave_type'], 'status': r['status'],
+                                        'created_at': r['created_at'], 'total_days': r['days'],
+                                        'date_from': r['date'], 'date_to': r['date']}
+            else:
+                g = seen_groups_act[gid]
+                g['total_days'] += r['days']
+                if r['date'] < g['date_from']:
+                    g['date_from'] = r['date']
+                if r['date'] > g['date_to']:
+                    g['date_to'] = r['date']
+            if len(seen_groups_act) >= 5:
+                break
+        for l in list(seen_groups_act.values())[:5]:
+            date_label = l['date_from'] if l['date_from'] == l['date_to'] else f"{l['date_from']} to {l['date_to']}"
             recent_activities.append({
                 'type': 'leave',
-                'title': f"{l['name']} - {l['leave_type'].capitalize()} Leave",
+                'title': f"{l['name']} - {l['leave_type'].capitalize()} Leave ({l['total_days']} day{'s' if l['total_days'] != 1 else ''})",
                 'subtitle': f"Status: {l['status'].capitalize()}",
                 'time_ago': str(l['created_at'])[:10] if l['created_at'] else '',
                 'icon_color': 'var(--orange)'
@@ -532,17 +550,37 @@ def dashboard():
     my_recent_activity = []
     if user['emp_code'] != 'admin':
         try:
-            my_leaves_recent = conn.execute('''
-                SELECT lr.leave_date as date, lr.leave_type, lr.status, lr.created_at, lr.day_portion
+            my_leaves_recent_raw = conn.execute('''
+                SELECT lr.leave_date as date, lr.leave_type, lr.status, lr.created_at, lr.day_portion,
+                       lr.leave_group_id, lr.days
                 FROM leave_records lr
                 WHERE lr.employee_id = ?
-                ORDER BY lr.created_at DESC LIMIT 6
+                ORDER BY lr.created_at DESC
             ''', (user['id'],)).fetchall()
-            for l in my_leaves_recent:
+            my_leave_groups = OrderedDict()
+            for r in my_leaves_recent_raw:
+                gid = r['leave_group_id'] or f"single_my_{r['date']}"
+                if gid not in my_leave_groups:
+                    my_leave_groups[gid] = {'leave_type': r['leave_type'], 'status': r['status'],
+                                            'created_at': r['created_at'], 'day_portion': r['day_portion'],
+                                            'total_days': r['days'],
+                                            'date_from': r['date'], 'date_to': r['date']}
+                else:
+                    g = my_leave_groups[gid]
+                    g['total_days'] += r['days']
+                    if r['date'] < g['date_from']:
+                        g['date_from'] = r['date']
+                    if r['date'] > g['date_to']:
+                        g['date_to'] = r['date']
+                if len(my_leave_groups) >= 6:
+                    break
+            for l in list(my_leave_groups.values())[:6]:
+                date_label = l['date_from'] if l['date_from'] == l['date_to'] else f"{l['date_from']} to {l['date_to']}"
+                duration_label = f"{l['total_days']} day{'s' if l['total_days'] != 1 else ''}"
                 my_recent_activity.append({
                     'type': 'leave',
-                    'title': f"{l['leave_type'].capitalize()} Leave - {l['date']}",
-                    'subtitle': f"Status: {l['status'].capitalize()} | {'Full Day' if l['day_portion'] == 'full_day' else 'Half Day'}",
+                    'title': f"{l['leave_type'].capitalize()} Leave - {date_label}",
+                    'subtitle': f"Status: {l['status'].capitalize()} | {duration_label}",
                     'time_ago': str(l['created_at'])[:10] if l['created_at'] else '',
                     'icon_color': '#10B981' if l['status'] == 'approved' else '#F59E0B' if l['status'] == 'pending' else '#EF4444'
                 })
@@ -1899,12 +1937,37 @@ def hr_dashboard():
         ORDER BY e.name
     ''', (today,)).fetchall()
 
-    # Recent leave applications
-    recent = conn.execute('''
-        SELECT lr.*, e.name, e.emp_code, e.photo_url FROM leave_records lr
+    # Recent leave applications (grouped by leave_group_id)
+    recent_raw = conn.execute('''
+        SELECT lr.*, lr.leave_group_id, e.name, e.emp_code, e.photo_url FROM leave_records lr
         JOIN employees e ON lr.employee_id = e.id
-        ORDER BY lr.created_at DESC LIMIT 10
+        ORDER BY lr.created_at DESC
     ''').fetchall()
+    from collections import OrderedDict
+    recent_groups = OrderedDict()
+    for r in recent_raw:
+        d = dict(r)
+        gid = d.get('leave_group_id') or f"single_{d['id']}"
+        if gid not in recent_groups:
+            recent_groups[gid] = {
+                **d,
+                'group_id': gid,
+                'group_total_days': d['days'],
+                'group_count': 1,
+                'date_from': d['leave_date'],
+                'date_to': d['leave_date'],
+            }
+        else:
+            g = recent_groups[gid]
+            g['group_total_days'] += d['days']
+            g['group_count'] += 1
+            if d['leave_date'] < g['date_from']:
+                g['date_from'] = d['leave_date']
+            if d['leave_date'] > g['date_to']:
+                g['date_to'] = d['leave_date']
+        if len(recent_groups) >= 10:
+            break
+    recent = list(recent_groups.values())[:10]
 
     # Total departments
     total_depts = len(departments)

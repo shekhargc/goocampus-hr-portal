@@ -263,8 +263,14 @@
                 {% endif %}
                 <div class="leave-info">
                     <div class="leave-name">{{ leave.name }}</div>
-                    <div class="leave-detail">{{ leave.leave_date|format_date }} &middot; {{ leave.leave_type | capitalize }} &middot;
-                        {% if leave.day_portion == 'first_half' %}First Half{% elif leave.day_portion == 'second_half' %}Second Half{% else %}Full Day{% endif %}
+                    <div class="leave-detail">
+                        {% if leave.date_from == leave.date_to %}
+                            {{ leave.date_from|format_date }}
+                        {% else %}
+                            {{ leave.date_from|format_date }} &ndash; {{ leave.date_to|format_date }}
+                        {% endif %}
+                        &middot; {{ leave.leave_type | capitalize }} &middot;
+                        {{ leave.group_total_days }} day{{ 's' if leave.group_total_days != 1 else '' }}
                     </div>
                 </div>
                 {% if leave.status == 'pending' %}
