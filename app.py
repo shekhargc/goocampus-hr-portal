@@ -18056,6 +18056,45 @@ def medical_predictor():
                            states=states, years=year_list)
 
 
+@app.route('/api/predictor/import', methods=['POST'])
+@admin_required
+def predictor_import():
+    """Manually trigger MBBS cutoff data import from JSON."""
+    try:
+        conn = get_db()
+        existing = conn.execute("SELECT COUNT(*) as c FROM mbbs_cutoffs").fetchone()['c']
+        if existing > 0:
+            # Clear existing data for re-import
+            conn.execute("DELETE FROM mbbs_cutoffs")
+            conn.commit()
+
+        import json as _json
+        json_path = os.path.join(os.path.dirname(__file__), 'mbbs_cutoff_data.json')
+        if not os.path.exists(json_path):
+            conn.close()
+            return jsonify({'success': False, 'error': 'mbbs_cutoff_data.json not found on server'}), 404
+
+        with open(json_path, 'r') as f:
+            rows = _json.load(f)
+
+        all_tuples = [tuple(r) for r in rows]
+        insert_sql = '''INSERT INTO mbbs_cutoffs
+            (year, institute_name, quota, category, course, fees,
+             counselling_authority, counselling_body,
+             round1_rank, round2_rank, round3_rank)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?)'''
+        conn.execute_batch(insert_sql, all_tuples, page_size=500)
+        conn.commit()
+        conn.close()
+        logging.info(f"Manual import: {len(all_tuples)} MBBS cutoff rows imported")
+        return jsonify({'success': True, 'imported': len(all_tuples)})
+    except Exception as e:
+        logging.error(f"predictor_import: {e}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/predictor/filters')
 @admin_required
 def predictor_filters():
