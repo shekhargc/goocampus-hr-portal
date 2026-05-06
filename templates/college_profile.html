@@ -430,7 +430,8 @@
             </div>
             {% endif %}
 
-            <!-- Additional Costs Card -->
+            <!-- Additional Costs Card (international only) -->
+            {% if college.category != 'indian' %}
             <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;margin-bottom:1.25rem;">
                 <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 1rem 0;">Additional Costs</h3>
                 <div style="display:flex;flex-direction:column;gap:0.65rem;">
@@ -460,6 +461,7 @@
                     {% endif %}
                 </div>
             </div>
+            {% endif %}
 
             <!-- Live Exchange Rate Card -->
             {% if college.currency != 'INR' %}
