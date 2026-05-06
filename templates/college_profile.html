@@ -81,6 +81,84 @@
             </div>
             {% endif %}
 
+            <!-- NEET Cut-off Data -->
+            {% if cutoffs %}
+            <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;margin-bottom:1.25rem;">
+                <div style="padding:1rem 1.5rem;background:linear-gradient(135deg, var(--navy), #2d4a7a);color:white;display:flex;justify-content:space-between;align-items:center;">
+                    <div>
+                        <h2 style="font-size:1rem;font-weight:700;margin:0;">NEET MBBS Cut-off Ranks</h2>
+                        <p style="margin:0.2rem 0 0 0;font-size:0.78rem;opacity:0.8;">Closing ranks across all quotas and categories</p>
+                    </div>
+                    <a href="/medical-predictor" style="background:rgba(255,255,255,0.15);color:white;text-decoration:none;padding:0.35rem 0.75rem;border-radius:0.3rem;font-size:0.75rem;font-weight:600;">Open Predictor</a>
+                </div>
+
+                <!-- Year Tabs -->
+                {% if cutoff_years|length > 1 %}
+                <div style="display:flex;border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+                    {% for cy in cutoff_years %}
+                    <button class="cutoff-yr-tab{% if loop.first %} active{% endif %}" onclick="switchCutoffYear({{ cy }})" id="cutoff-tab-{{ cy }}"
+                        style="flex:1;padding:0.6rem;text-align:center;font-size:0.85rem;font-weight:700;border:none;cursor:pointer;background:{% if loop.first %}white{% else %}transparent{% endif %};color:{% if loop.first %}var(--navy){% else %}var(--gray-500){% endif %};border-bottom:{% if loop.first %}2px solid var(--orange){% else %}2px solid transparent{% endif %};transition:all 0.15s;">
+                        {{ cy }}
+                    </button>
+                    {% endfor %}
+                </div>
+                {% endif %}
+
+                <!-- Cut-off Tables per Year -->
+                {% for cy in cutoff_years %}
+                <div class="cutoff-yr-panel{% if loop.first %} active{% endif %}" id="cutoff-panel-{{ cy }}" style="{% if not loop.first %}display:none;{% endif %}padding:1rem 1.5rem;">
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                        <thead>
+                            <tr style="background:var(--gray-50);">
+                                <th style="padding:0.5rem;text-align:left;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Quota</th>
+                                <th style="padding:0.5rem;text-align:left;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Category</th>
+                                <th style="padding:0.5rem;text-align:center;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Round 1</th>
+                                <th style="padding:0.5rem;text-align:center;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Round 2</th>
+                                <th style="padding:0.5rem;text-align:center;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Round 3</th>
+                                <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border-bottom:2px solid var(--gray-200);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.3px;">Fees</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set prev_quota = [None] %}
+                            {% for c in cutoffs if c.year == cy %}
+                            <tr style="border-bottom:1px solid var(--gray-100);{% if c.quota != prev_quota[0] and not loop.first %}border-top:2px solid var(--gray-200);{% endif %}">
+                                <td style="padding:0.45rem 0.5rem;font-weight:{% if c.quota != prev_quota[0] %}600{% else %}400{% endif %};color:{% if c.quota != prev_quota[0] %}var(--navy){% else %}var(--gray-400){% endif %};font-size:0.8rem;">{% if c.quota != prev_quota[0] %}{{ c.quota }}{% endif %}</td>
+                                <td style="padding:0.45rem 0.5rem;"><span style="background:var(--gray-100);padding:2px 8px;border-radius:9999px;font-size:0.72rem;font-weight:600;color:var(--gray-700);">{{ c.category }}</span></td>
+                                <td style="padding:0.45rem 0.5rem;text-align:center;font-weight:700;font-size:0.85rem;color:{% if c.round1_rank %}var(--orange){% else %}var(--gray-300){% endif %};">{{ '{:,}'.format(c.round1_rank) if c.round1_rank else '—' }}</td>
+                                <td style="padding:0.45rem 0.5rem;text-align:center;font-weight:700;font-size:0.85rem;color:{% if c.round2_rank %}var(--orange){% else %}var(--gray-300){% endif %};">{{ '{:,}'.format(c.round2_rank) if c.round2_rank else '—' }}</td>
+                                <td style="padding:0.45rem 0.5rem;text-align:center;font-weight:700;font-size:0.85rem;color:{% if c.round3_rank %}var(--orange){% else %}var(--gray-300){% endif %};">{{ '{:,}'.format(c.round3_rank) if c.round3_rank else '—' }}</td>
+                                <td style="padding:0.45rem 0.5rem;text-align:right;font-weight:600;color:var(--navy);font-size:0.82rem;white-space:nowrap;">{% if c.fees %}₹{{ '{:,.0f}'.format(c.fees) }}{% else %}—{% endif %}</td>
+                                {% if prev_quota.append(c.quota) %}{% endif %}{% if prev_quota|length > 2 %}{% if prev_quota.pop(0) or true %}{% endif %}{% endif %}
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endfor %}
+            </div>
+
+            <script>
+            function switchCutoffYear(year) {
+                document.querySelectorAll('.cutoff-yr-tab').forEach(function(t) {
+                    t.style.background = 'transparent';
+                    t.style.color = 'var(--gray-500)';
+                    t.style.borderBottom = '2px solid transparent';
+                });
+                document.querySelectorAll('.cutoff-yr-panel').forEach(function(p) {
+                    p.style.display = 'none';
+                });
+                var tab = document.getElementById('cutoff-tab-' + year);
+                if (tab) {
+                    tab.style.background = 'white';
+                    tab.style.color = 'var(--navy)';
+                    tab.style.borderBottom = '2px solid var(--orange)';
+                }
+                var panel = document.getElementById('cutoff-panel-' + year);
+                if (panel) panel.style.display = 'block';
+            }
+            </script>
+            {% endif %}
+
             <!-- Courses & Fee Structure -->
             {% for course in courses %}
             <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;margin-bottom:1.25rem;">

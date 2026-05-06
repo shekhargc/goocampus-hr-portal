@@ -127,7 +127,7 @@
     .cutoff-table .rank-cell {
         font-weight: 700; font-size: 0.88rem; text-align: center;
     }
-    .cutoff-table .rank-cell.eligible { color: var(--success); background: rgba(16,185,129,0.06); }
+    .cutoff-table .rank-cell.eligible { color: var(--orange); background: rgba(245,130,32,0.08); }
     .cutoff-table .rank-cell.not-eligible { color: var(--gray-400); }
     .cutoff-table .inst-name { font-weight: 600; color: var(--navy); max-width: 300px; }
     .cutoff-table .quota-badge {
@@ -530,7 +530,11 @@ function fetchAndRender(tab, params, userRank) {
 
             data.results.forEach(function(r) {
                 html += '<tr>';
-                html += '<td class="inst-name">' + escHtml(r.institute) + '</td>';
+                if (r.slug) {
+                    html += '<td class="inst-name"><a href="/colleges/' + escHtml(r.slug) + '" style="color:var(--navy);text-decoration:none;" onmouseover="this.style.color=\'var(--orange)\'" onmouseout="this.style.color=\'var(--navy)\'">' + escHtml(r.institute) + '</a></td>';
+                } else {
+                    html += '<td class="inst-name">' + escHtml(r.institute) + '</td>';
+                }
                 html += '<td><span class="quota-badge">' + escHtml(r.quota) + '</span></td>';
                 html += '<td style="font-size:0.82rem;font-weight:600;">' + escHtml(r.category) + '</td>';
                 html += '<td class="fee-cell">' + (r.fees ? '₹' + Number(r.fees).toLocaleString('en-IN') : '—') + '</td>';

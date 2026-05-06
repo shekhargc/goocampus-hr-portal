@@ -18205,12 +18205,24 @@ def predictor_search():
         LIMIT ? OFFSET ?
     ''', query_params).fetchall()
 
+    # Build slug lookup for linking to college profiles
+    inst_names = list(set(r['institute_name'] for r in rows))
+    slug_map = {}
+    if inst_names:
+        for name in inst_names:
+            slug_row = conn.execute(
+                "SELECT slug FROM colleges WHERE name = ? LIMIT 1", (name,)
+            ).fetchone()
+            if slug_row:
+                slug_map[name] = slug_row['slug']
+
     conn.close()
 
     results = []
     for r in rows:
         results.append({
             'institute': r['institute_name'],
+            'slug': slug_map.get(r['institute_name'], ''),
             'quota': r['quota'],
             'category': r['category'],
             'fees': float(r['fees'] or 0),
@@ -18404,6 +18416,19 @@ def college_profile(slug):
     else:
         live_package_lakhs = float(college['full_package_inr_lakhs'] or 0)
 
+    # Fetch MBBS cut-off data for this college (matching by name)
+    cutoffs = []
+    cutoff_years = []
+    try:
+        cutoff_rows = conn.execute(
+            "SELECT * FROM mbbs_cutoffs WHERE institute_name = ? ORDER BY year DESC, quota, category",
+            (college['name'],)
+        ).fetchall()
+        cutoffs = [dict(r) for r in cutoff_rows]
+        cutoff_years = sorted(set(c['year'] for c in cutoffs), reverse=True)
+    except Exception:
+        pass
+
     conn.close()
     return render_template('college_profile.html',
         college=college,
@@ -18412,7 +18437,9 @@ def college_profile(slug):
         live_package_lakhs=live_package_lakhs,
         rates=rates,
         to_inr=_to_inr,
-        currency_sym=_currency_sym
+        currency_sym=_currency_sym,
+        cutoffs=cutoffs,
+        cutoff_years=cutoff_years
     )
 
 
