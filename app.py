@@ -17700,40 +17700,21 @@ def colleges_list():
     rates = _get_exchange_rates()
 
     # Compute live full_package_inr_lakhs for international colleges
-    # Sum all fee structure totals, multiply by number of applicable years, convert to INR
+    # Sum all fee structure row totals (each year/sem is its own row), convert to INR
     live_package = {}
     for c in colleges:
         if c['category'] == 'international' and c['currency'] and c['currency'] != 'INR':
-            # Get all fee rows for this college's courses
-            fee_total_rows = conn.execute(
-                """SELECT fs.year_label, fs.total FROM college_fee_structure fs
+            fee_sum = conn.execute(
+                """SELECT COALESCE(SUM(fs.total), 0) as grand_total
+                   FROM college_fee_structure fs
                    JOIN college_courses cc ON fs.course_id = cc.id
-                   WHERE cc.college_id = ? AND cc.is_active = TRUE
-                   ORDER BY cc.id LIMIT 20""",
+                   WHERE cc.college_id = ? AND cc.is_active = TRUE""",
                 (c['id'],)
-            ).fetchall()
-            if fee_total_rows:
-                # Calculate full package: 1st year fees + (recurring × remaining years)
-                yr1_total = 0
-                recurring_sem = 0
-                for row in fee_total_rows:
-                    yr = (row['year_label'] or '').lower()
-                    t = float(row['total'] or 0)
-                    if '1st' in yr:
-                        yr1_total += t
-                    else:
-                        recurring_sem = t  # per-semester amount for remaining years
-                # For a 6-year course: yr1 + recurring_sem * 2sems * 5years
-                # Get duration from first course
-                dur_row = conn.execute(
-                    "SELECT duration_years FROM college_courses WHERE college_id = ? AND is_active = TRUE LIMIT 1",
-                    (c['id'],)
-                ).fetchone()
-                dur = dur_row['duration_years'] if dur_row else 6
-                remaining = max(dur - 1, 0)
-                total_foreign = yr1_total + (recurring_sem * 2 * remaining)
+            ).fetchone()
+            total_foreign = float(fee_sum['grand_total'] or 0)
+            if total_foreign > 0:
                 total_inr = _to_inr(total_foreign, c['currency'], rates)
-                live_package[c['id']] = round(total_inr / 100000, 2)  # in lakhs
+                live_package[c['id']] = round(total_inr / 100000, 2)
             else:
                 live_package[c['id']] = float(c['full_package_inr_lakhs'] or 0)
         else:
@@ -17806,25 +17787,11 @@ def college_profile(slug):
 
     rates = _get_exchange_rates()
 
-    # Compute live full package in INR lakhs
+    # Compute live full package in INR lakhs (sum all fee rows, convert to INR)
     live_package_lakhs = 0
     if college['category'] == 'international' and college['currency'] and college['currency'] != 'INR':
-        all_fee_rows = []
-        for cid, flist in fees_by_course.items():
-            all_fee_rows.extend(flist)
-        if all_fee_rows:
-            yr1_total = 0
-            recurring_sem = 0
-            for row in all_fee_rows:
-                yr = (row['year_label'] or '').lower()
-                t = float(row['total'] or 0)
-                if '1st' in yr:
-                    yr1_total += t
-                else:
-                    recurring_sem = t
-            dur = courses[0]['duration_years'] if courses else 6
-            remaining = max(dur - 1, 0)
-            total_foreign = yr1_total + (recurring_sem * 2 * remaining)
+        total_foreign = sum(float(f['total'] or 0) for flist in fees_by_course.values() for f in flist)
+        if total_foreign > 0:
             total_inr = _to_inr(total_foreign, college['currency'], rates)
             live_package_lakhs = round(total_inr / 100000, 2)
         else:

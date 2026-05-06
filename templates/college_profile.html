@@ -105,91 +105,67 @@
                         </span>
                     </h3>
 
-                    {% set yr1_fees = [] %}
-                    {% set yr2_fees = [] %}
+                    <!-- Build ordered list of unique year labels -->
+                    {% set year_labels = [] %}
                     {% for f in fees %}
-                        {% if '1st' in f.year_label or '1ST' in f.year_label %}
-                            {% if yr1_fees.append(f) %}{% endif %}
-                        {% else %}
-                            {% if yr2_fees.append(f) %}{% endif %}
+                        {% if f.year_label not in year_labels %}
+                            {% if year_labels.append(f.year_label) %}{% endif %}
                         {% endif %}
                     {% endfor %}
 
-                    {% if yr1_fees %}
-                    <div style="margin-bottom:1rem;">
-                        <div style="background:var(--navy);color:white;padding:0.5rem 0.8rem;border-radius:0.4rem 0.4rem 0 0;font-size:0.78rem;font-weight:700;">1st Year</div>
-                        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                            <thead>
-                                <tr style="background:var(--gray-50);">
-                                    <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total ({{ csym }})</th>
-                                    {% if college.currency != 'INR' %}
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">INR Total (₹)</th>
-                                    {% endif %}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for f in yr1_fees %}
-                                <tr>
-                                    <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.tuition_fee %}{{ csym }} {{ '{:,.0f}'.format(f.tuition_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ csym }} {{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.docs_med_checkup %}{{ csym }} {{ '{:,.0f}'.format(f.docs_med_checkup) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.visa_med_insurance %}{{ csym }} {{ '{:,.0f}'.format(f.visa_med_insurance) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.total %}{{ csym }} {{ '{:,.0f}'.format(f.total) }}{% else %}-{% endif %}</td>
-                                    {% if college.currency != 'INR' %}
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
-                                        {% if f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
-                                    </td>
-                                    {% endif %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endif %}
-
-                    {% if yr2_fees %}
-                    <div style="margin-bottom:1rem;">
-                        <div style="background:var(--blue);color:white;padding:0.5rem 0.8rem;border-radius:0.4rem 0.4rem 0 0;font-size:0.78rem;font-weight:700;">2nd Year - 6th Year</div>
-                        <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                            <thead>
-                                <tr style="background:var(--gray-50);">
-                                    <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Semester</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Docs & Med ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Visa & Ins ({{ csym }})</th>
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total ({{ csym }})</th>
-                                    {% if college.currency != 'INR' %}
-                                    <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">INR Total (₹)</th>
-                                    {% endif %}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {% for f in yr2_fees %}
-                                <tr>
-                                    <td style="padding:0.5rem;font-weight:600;color:var(--navy);border:1px solid var(--gray-200);">{{ f.semester }}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.tuition_fee %}{{ csym }} {{ '{:,.0f}'.format(f.tuition_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Included{% elif f.hostel_fee %}{{ csym }} {{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.docs_med_checkup %}{{ csym }} {{ '{:,.0f}'.format(f.docs_med_checkup) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.visa_med_insurance %}{{ csym }} {{ '{:,.0f}'.format(f.visa_med_insurance) }}{% else %}-{% endif %}</td>
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.total %}{{ csym }} {{ '{:,.0f}'.format(f.total) }}{% else %}-{% endif %}</td>
-                                    {% if college.currency != 'INR' %}
-                                    <td style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
-                                        {% if f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% else %}-{% endif %}
-                                    </td>
-                                    {% endif %}
-                                </tr>
-                                {% endfor %}
-                            </tbody>
-                        </table>
-                    </div>
-                    {% endif %}
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;margin-bottom:0.5rem;">
+                        <thead>
+                            <tr style="background:var(--gray-50);">
+                                <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Year</th>
+                                <th style="padding:0.5rem;text-align:left;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Sem</th>
+                                <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Tuition ({{ csym }})</th>
+                                <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Hostel ({{ csym }})</th>
+                                <th style="padding:0.5rem;text-align:right;font-weight:600;color:var(--gray-600);border:1px solid var(--gray-200);">Other ({{ csym }})</th>
+                                <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);">Total ({{ csym }})</th>
+                                {% if college.currency != 'INR' %}
+                                <th style="padding:0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);">INR Total (₹)</th>
+                                {% endif %}
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% set grand_total = [0] %}
+                            {% set grand_inr = [0] %}
+                            {% for yl in year_labels %}
+                            {% set yr_fees = [] %}
+                            {% for f in fees %}{% if f.year_label == yl %}{% if yr_fees.append(f) %}{% endif %}{% endif %}{% endfor %}
+                            {% for f in yr_fees %}
+                            <tr style="{% if '1st' in yl %}background:#f0f7ff;{% endif %}">
+                                {% if loop.first %}
+                                <td rowspan="{{ yr_fees|length }}" style="padding:0.5rem;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);vertical-align:middle;background:{% if '1st' in yl %}var(--navy);color:white{% else %}var(--gray-50){% endif %};">
+                                    <span style="{% if '1st' in yl %}color:white{% endif %}">{{ yl }}</span>
+                                </td>
+                                {% endif %}
+                                <td style="padding:0.4rem 0.5rem;font-weight:500;color:var(--gray-600);border:1px solid var(--gray-200);">{{ f.semester }}</td>
+                                <td style="padding:0.4rem 0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.tuition_fee %}{{ csym }}{{ '{:,.0f}'.format(f.tuition_fee) }}{% else %}-{% endif %}</td>
+                                <td style="padding:0.4rem 0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if college.hostel_included and f.hostel_fee == 0 %}Incl{% elif f.hostel_fee %}{{ csym }}{{ '{:,.0f}'.format(f.hostel_fee) }}{% else %}-{% endif %}</td>
+                                <td style="padding:0.4rem 0.5rem;text-align:right;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% set other = (f.docs_med_checkup or 0) + (f.visa_med_insurance or 0) %}{% if other %}{{ csym }}{{ '{:,.0f}'.format(other) }}{% else %}-{% endif %}</td>
+                                <td style="padding:0.4rem 0.5rem;text-align:right;font-weight:700;color:var(--navy);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{% if f.total %}{{ csym }}{{ '{:,.0f}'.format(f.total) }}{% else %}-{% endif %}</td>
+                                {% if college.currency != 'INR' %}
+                                <td style="padding:0.4rem 0.5rem;text-align:right;font-weight:700;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">
+                                    {% if f.total %}₹{{ '{:,.0f}'.format(to_inr(f.total, college.currency, rates)) }}{% if grand_total.append(grand_total.pop() + (f.total or 0)) %}{% endif %}{% if grand_inr.append(grand_inr.pop() + to_inr(f.total, college.currency, rates)) %}{% endif %}{% else %}-{% endif %}
+                                </td>
+                                {% else %}
+                                {% if f.total %}{% if grand_total.append(grand_total.pop() + (f.total or 0)) %}{% endif %}{% endif %}
+                                {% endif %}
+                            </tr>
+                            {% endfor %}
+                            {% endfor %}
+                        </tbody>
+                        {% if college.currency != 'INR' %}
+                        <tfoot>
+                            <tr style="background:var(--navy);">
+                                <td colspan="5" style="padding:0.5rem;font-weight:700;color:white;border:1px solid var(--gray-200);">Grand Total (Full Course)</td>
+                                <td style="padding:0.5rem;text-align:right;font-weight:800;color:white;border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;">{{ csym }}{{ '{:,.0f}'.format(grand_total[0]) }}</td>
+                                <td style="padding:0.5rem;text-align:right;font-weight:800;color:var(--orange);border:1px solid var(--gray-200);font-variant-numeric:tabular-nums;background:var(--navy);">₹{{ '{:,.0f}'.format(grand_inr[0]) }}</td>
+                            </tr>
+                        </tfoot>
+                        {% endif %}
+                    </table>
 
                     <!-- Add Fee Row Form (Admin) -->
                     <details style="margin-top:0.8rem;">
