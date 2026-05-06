@@ -18062,9 +18062,26 @@ def predictor_import():
     """Manually trigger MBBS cutoff data import from JSON."""
     try:
         conn = get_db()
+        # Ensure table exists
+        conn.execute('''CREATE TABLE IF NOT EXISTS mbbs_cutoffs (
+            id SERIAL PRIMARY KEY,
+            year INTEGER NOT NULL,
+            institute_name TEXT NOT NULL,
+            quota TEXT DEFAULT '',
+            category TEXT DEFAULT '',
+            course TEXT DEFAULT 'MBBS',
+            fees NUMERIC(12,2) DEFAULT 0,
+            counselling_authority TEXT DEFAULT '',
+            counselling_body TEXT DEFAULT '',
+            round1_rank INTEGER,
+            round2_rank INTEGER,
+            round3_rank INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.commit()
+
         existing = conn.execute("SELECT COUNT(*) as c FROM mbbs_cutoffs").fetchone()['c']
         if existing > 0:
-            # Clear existing data for re-import
             conn.execute("DELETE FROM mbbs_cutoffs")
             conn.commit()
 
