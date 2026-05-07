@@ -497,7 +497,7 @@ def partner_dashboard_view():
     if not session.get('is_partner'):
         flash('Please log in as a partner', 'error')
         return redirect(url_for('login'))
-    partner_id = session.get('partner_id')
+    partner_id = session.get('user_id')
     conn = get_db()
 
     # Partner info
@@ -523,6 +523,132 @@ def partner_dashboard_view():
                          team_count=len(team_members),
                          team_members=team_members,
                          recent_leads=recent_leads)
+
+
+@app.route('/partner/profile', methods=['GET', 'POST'])
+def partner_profile():
+    """Partner profile view and edit."""
+    if not session.get('is_partner'):
+        flash('Please log in as a partner', 'error')
+        return redirect(url_for('login'))
+
+    partner_id = session.get('user_id')
+    conn = get_db()
+
+    if request.method == 'POST':
+        try:
+            company_name = request.form.get('company_name', '').strip()
+            contact_person = request.form.get('contact_person', '').strip()
+            phone = request.form.get('phone', '').strip()
+            website = request.form.get('website', '').strip()
+            address = request.form.get('address', '').strip()
+            city = request.form.get('city', '').strip()
+            state = request.form.get('state', '').strip()
+            country = request.form.get('country', '').strip()
+
+            conn.execute('''UPDATE partners SET
+                company_name = ?, contact_person = ?, phone = ?, website = ?,
+                address = ?, city = ?, state = ?, country = ?
+                WHERE id = ?''',
+                (company_name, contact_person, phone, website, address, city, state, country, partner_id))
+
+            # Handle password change
+            new_password = request.form.get('new_password', '').strip()
+            confirm_password = request.form.get('confirm_password', '').strip()
+            if new_password:
+                if len(new_password) < 6:
+                    conn.close()
+                    flash('Password must be at least 6 characters', 'error')
+                    return redirect(url_for('partner_profile'))
+                if new_password != confirm_password:
+                    conn.close()
+                    flash('Passwords do not match', 'error')
+                    return redirect(url_for('partner_profile'))
+                conn.execute('UPDATE partners SET password_hash = ? WHERE id = ?',
+                           (hash_password(new_password), partner_id))
+
+            # Handle team member updates
+            team_ids = request.form.getlist('team_id[]')
+            team_names = request.form.getlist('team_name[]')
+            team_emails = request.form.getlist('team_email[]')
+            team_designations = request.form.getlist('team_designation[]')
+            team_phones = request.form.getlist('team_phone[]')
+
+            # Delete removed team members
+            existing_ids = [int(tid) for tid in team_ids if tid]
+            if existing_ids:
+                placeholders = ','.join(['?' for _ in existing_ids])
+                conn.execute(f'DELETE FROM partner_team_members WHERE partner_id = ? AND id NOT IN ({placeholders})',
+                           [partner_id] + existing_ids)
+            else:
+                conn.execute('DELETE FROM partner_team_members WHERE partner_id = ?', (partner_id,))
+
+            # Update existing and add new team members
+            for i, name in enumerate(team_names):
+                if not name.strip():
+                    continue
+                tid = team_ids[i] if i < len(team_ids) else ''
+                email = team_emails[i].strip() if i < len(team_emails) else ''
+                designation = team_designations[i].strip() if i < len(team_designations) else ''
+                phone_tm = team_phones[i].strip() if i < len(team_phones) else ''
+
+                if tid:
+                    conn.execute('''UPDATE partner_team_members SET name = ?, email = ?, designation = ?, phone = ?
+                        WHERE id = ? AND partner_id = ?''',
+                        (name.strip(), email, designation, phone_tm, int(tid), partner_id))
+                else:
+                    conn.execute('''INSERT INTO partner_team_members (partner_id, name, email, designation, phone, created_at)
+                        VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)''',
+                        (partner_id, name.strip(), email, designation, phone_tm))
+
+            conn.commit()
+
+            # Update session name
+            if company_name:
+                session['partner_name'] = company_name
+
+            flash('Profile updated successfully', 'success')
+        except Exception as e:
+            conn.rollback()
+            logging.error(f"partner_profile update: {e}")
+            flash(f'Error updating profile: {e}', 'error')
+        finally:
+            conn.close()
+        return redirect(url_for('partner_profile'))
+
+    # GET: load partner data
+    partner = conn.execute('SELECT * FROM partners WHERE id = ?', (partner_id,)).fetchone()
+    team_members = conn.execute(
+        'SELECT * FROM partner_team_members WHERE partner_id = ? ORDER BY created_at',
+        (partner_id,)
+    ).fetchall()
+
+    # Get states for dropdown
+    states = conn.execute('SELECT DISTINCT name FROM states ORDER BY name').fetchall()
+    states = [s['name'] for s in states]
+
+    conn.close()
+
+    return render_template('partner_profile.html',
+                         partner=partner,
+                         team_members=team_members,
+                         states=states)
+
+
+@app.route('/partner/profile/cities')
+def partner_profile_cities():
+    """API to get cities for a state (for partner profile form)."""
+    state = request.args.get('state', '')
+    if not state:
+        return jsonify([])
+    conn = get_db()
+    state_row = conn.execute('SELECT id FROM states WHERE name = ?', (state,)).fetchone()
+    if not state_row:
+        conn.close()
+        return jsonify([])
+    cities = conn.execute('SELECT name FROM cities WHERE state_id = ? ORDER BY name', (state_row['id'],)).fetchall()
+    conn.close()
+    return jsonify([c['name'] for c in cities])
 
 
 @app.route('/dashboard')
@@ -17503,48 +17629,6 @@ def partner_add_b2b_lead():
     except Exception as e:
         logging.error(f"partner_add_b2b_lead: {e}")
         return jsonify({'error': str(e)}), 500
-
-
-@app.route('/partner/dashboard')
-def partner_dashboard_updated():
-    """Updated partner dashboard with leads and team info."""
-    if not session.get('is_partner'):
-        flash('Please log in as a partner', 'error')
-        return redirect(url_for('login'))
-
-    partner_id = session.get('user_id')
-    conn = get_db()
-
-    partner = conn.execute('SELECT * FROM partners WHERE id = ?', (partner_id,)).fetchone()
-
-    student_leads_count = conn.execute(
-        'SELECT COUNT(*) as c FROM partner_leads WHERE partner_id = ?',
-        (partner_id,)
-    ).fetchone()['c']
-
-    b2b_leads_count = conn.execute(
-        'SELECT COUNT(*) as c FROM partner_b2b_leads WHERE partner_id = ?',
-        (partner_id,)
-    ).fetchone()['c']
-
-    team_members = conn.execute(
-        'SELECT id, name, designation, email, phone FROM partner_team_members WHERE partner_id = ? ORDER BY created_at',
-        (partner_id,)
-    ).fetchall()
-
-    products = conn.execute(
-        'SELECT ps.id, ps.name FROM products_services ps JOIN partner_products pp ON ps.id = pp.product_id WHERE pp.partner_id = ? ORDER BY ps.name',
-        (partner_id,)
-    ).fetchall()
-
-    conn.close()
-
-    return render_template('partner_dashboard_updated.html',
-                         partner=partner,
-                         student_leads_count=student_leads_count,
-                         b2b_leads_count=b2b_leads_count,
-                         team_members=team_members,
-                         products=products)
 
 
 def ensure_attendance_table():
