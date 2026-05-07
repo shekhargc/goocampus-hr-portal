@@ -17073,15 +17073,22 @@ def partner_onboard_submit(token):
             UPDATE partner_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?
         ''', (invitation['id'],))
 
-        # Create notification
-        conn.execute('''
-            INSERT INTO notifications (type, title, message, created_at)
-            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
-        ''', (
-            'partner_registration',
-            f'New Partner Registration: {company_name}',
-            f'Partner {company_name} has completed onboarding. Contact: {contact_person}'
-        ))
+        # Create notification for admins (wrap in try/except so it doesn't block registration)
+        try:
+            # Get first admin employee_id to use as notification target
+            admin_row = conn.execute("SELECT id FROM employees WHERE is_admin = TRUE ORDER BY id LIMIT 1").fetchone()
+            admin_id = admin_row['id'] if admin_row else 1
+            conn.execute('''
+                INSERT INTO notifications (employee_id, type, title, message, created_at)
+                VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
+            ''', (
+                admin_id,
+                'partner_registration',
+                f'New Partner Registration: {company_name}',
+                f'Partner {company_name} has completed onboarding. Contact: {contact_person}'
+            ))
+        except Exception as e:
+            logging.error(f"Failed to create partner registration notification: {e}")
 
         conn.commit()
 
