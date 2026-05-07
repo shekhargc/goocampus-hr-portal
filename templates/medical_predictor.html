@@ -283,6 +283,14 @@
                 <label>Category</label>
                 <select id="state-browse-category"><option value="">All Categories</option></select>
             </div>
+            <div class="filter-group" style="min-width:120px;flex:0.5;">
+                <label>Min Fees (₹)</label>
+                <input type="number" id="state-browse-fee-min" placeholder="e.g. 50000" min="0">
+            </div>
+            <div class="filter-group" style="min-width:120px;flex:0.5;">
+                <label>Max Fees (₹)</label>
+                <input type="number" id="state-browse-fee-max" placeholder="e.g. 500000" min="0">
+            </div>
             <div class="filter-actions">
                 <button class="btn-filter btn-search" onclick="browseSearch('state')">Search</button>
                 <button class="btn-filter btn-clear" onclick="clearBrowse('state')">Clear</button>
@@ -346,6 +354,14 @@
             <div class="filter-group">
                 <label>Category</label>
                 <select id="mcc-browse-category"><option value="">All Categories</option></select>
+            </div>
+            <div class="filter-group" style="min-width:120px;flex:0.5;">
+                <label>Min Fees (₹)</label>
+                <input type="number" id="mcc-browse-fee-min" placeholder="e.g. 50000" min="0">
+            </div>
+            <div class="filter-group" style="min-width:120px;flex:0.5;">
+                <label>Max Fees (₹)</label>
+                <input type="number" id="mcc-browse-fee-max" placeholder="e.g. 500000" min="0">
             </div>
             <div class="filter-actions">
                 <button class="btn-filter btn-search" onclick="browseSearch('mcc')">Search</button>
@@ -457,30 +473,29 @@ function browseSearch(tab) {
         var inst = document.getElementById('state-browse-inst').value;
         var quota = document.getElementById('state-browse-quota').value;
         var category = document.getElementById('state-browse-category').value;
+        var feeMin = document.getElementById('state-browse-fee-min').value;
+        var feeMax = document.getElementById('state-browse-fee-max').value;
         params.set('year', year);
         if (state) params.set('authority', state);
-        else {
-            // Exclude MCC from state browse — get all states
-            // We'll handle this server-side by NOT setting authority
-        }
         if (inst) params.set('institute', inst);
         if (quota) params.set('quota', quota);
         if (category) params.set('category', category);
-        // Exclude MCC results from state tab
-        if (!state) {
-            // Fetch without authority but we need to exclude MCC
-            // The server will return all — we handle by not setting authority
-        }
+        if (feeMin) params.set('fee_min', feeMin);
+        if (feeMax) params.set('fee_max', feeMax);
     } else {
         var year = document.getElementById('mcc-browse-year').value;
         var inst = document.getElementById('mcc-browse-inst').value;
         var quota = document.getElementById('mcc-browse-quota').value;
         var category = document.getElementById('mcc-browse-category').value;
+        var feeMin = document.getElementById('mcc-browse-fee-min').value;
+        var feeMax = document.getElementById('mcc-browse-fee-max').value;
         params.set('year', year);
         params.set('authority', 'All India / MCC');
         if (inst) params.set('institute', inst);
         if (quota) params.set('quota', quota);
         if (category) params.set('category', category);
+        if (feeMin) params.set('fee_min', feeMin);
+        if (feeMax) params.set('fee_max', feeMax);
     }
     params.set('page', '1');
     currentBrowseTab = tab;
@@ -494,11 +509,15 @@ function clearBrowse(tab) {
         document.getElementById('state-browse-inst').value = '';
         document.getElementById('state-browse-quota').innerHTML = '<option value="">All Quotas</option>';
         document.getElementById('state-browse-category').innerHTML = '<option value="">All Categories</option>';
+        document.getElementById('state-browse-fee-min').value = '';
+        document.getElementById('state-browse-fee-max').value = '';
         document.getElementById('state-results').innerHTML = '';
     } else {
         document.getElementById('mcc-browse-inst').value = '';
         document.getElementById('mcc-browse-quota').innerHTML = '<option value="">All Quotas</option>';
         document.getElementById('mcc-browse-category').innerHTML = '<option value="">All Categories</option>';
+        document.getElementById('mcc-browse-fee-min').value = '';
+        document.getElementById('mcc-browse-fee-max').value = '';
         document.getElementById('mcc-results').innerHTML = '';
     }
 }

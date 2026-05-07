@@ -18417,6 +18417,8 @@ def predictor_search():
     category = request.args.get('category', '').strip()
     institute = request.args.get('institute', '').strip()
     rank = request.args.get('rank', '').strip()
+    fee_min = request.args.get('fee_min', '').strip()
+    fee_max = request.args.get('fee_max', '').strip()
     page = int(request.args.get('page', 1))
     per_page = 50
 
@@ -18443,6 +18445,12 @@ def predictor_search():
         rank_val = int(rank)
         conditions.append("(round1_rank >= ? OR round2_rank >= ? OR round3_rank >= ?)")
         params.extend([rank_val, rank_val, rank_val])
+    if fee_min:
+        conditions.append("fees >= ?")
+        params.append(float(fee_min))
+    if fee_max:
+        conditions.append("fees <= ?")
+        params.append(float(fee_max))
 
     where = "WHERE " + " AND ".join(conditions) if conditions else ""
 
