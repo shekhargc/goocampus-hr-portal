@@ -6,179 +6,341 @@
     <title>Partner Registration - GooCampus</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
         :root {
             --orange: #F58220;
+            --orange-light: #FFF3E6;
             --orange-dark: #D96E0E;
             --navy: #1B2A4A;
             --navy-dark: #0F1B33;
+            --navy-light: #2A3F6A;
             --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
             --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
             --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
             --gray-800: #1E293B;
-            --success-green: #10B981;
+            --success: #10B981;
+            --success-light: #ECFDF5;
+            --error: #EF4444;
+            --error-light: #FEF2F2;
+            --white: #FFFFFF;
+            --shadow-sm: 0 1px 2px rgba(0,0,0,0.05);
+            --shadow-md: 0 4px 6px -1px rgba(0,0,0,0.1), 0 2px 4px -2px rgba(0,0,0,0.1);
+            --shadow-lg: 0 10px 15px -3px rgba(0,0,0,0.1), 0 4px 6px -4px rgba(0,0,0,0.1);
+            --shadow-xl: 0 20px 25px -5px rgba(0,0,0,0.1), 0 8px 10px -6px rgba(0,0,0,0.1);
+            --radius: 10px;
+            --radius-lg: 16px;
         }
 
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-
-        html, body {
-            height: 100%;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        html { height: 100%; scroll-behavior: smooth; }
 
         body {
-            font-family: 'Inter', sans-serif;
-            background-color: var(--gray-50);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+            background: linear-gradient(135deg, #F0F4FF 0%, #F8FAFC 50%, #FFF8F0 100%);
             color: var(--gray-800);
             line-height: 1.6;
+            min-height: 100vh;
         }
 
-        /* Navbar */
+        /* ─── Navbar ─── */
         .navbar {
-            background-color: white;
-            border-bottom: 1px solid var(--gray-200);
-            padding: 1rem 2rem;
-            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+            background: var(--navy-dark);
+            padding: 0 2rem;
+            height: 64px;
+            display: flex;
+            align-items: center;
+            position: sticky;
+            top: 0;
+            z-index: 100;
+            box-shadow: 0 2px 10px rgba(15, 27, 51, 0.3);
         }
-
-        .navbar-container {
+        .navbar-inner {
             max-width: 1200px;
+            width: 100%;
             margin: 0 auto;
             display: flex;
             align-items: center;
-            gap: 1rem;
+            justify-content: space-between;
         }
-
-        .navbar-logo {
-            display: flex;
-            align-items: center;
-        }
-
         .navbar-logo img {
-            height: 48px;
+            height: 40px;
             width: auto;
+            filter: brightness(0) invert(1);
         }
-
-        .navbar-title {
-            font-size: 1rem;
-            color: var(--gray-800);
+        .navbar-badge {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            background: rgba(255,255,255,0.08);
+            border: 1px solid rgba(255,255,255,0.12);
+            padding: 6px 14px;
+            border-radius: 20px;
+            color: rgba(255,255,255,0.85);
+            font-size: 0.82rem;
             font-weight: 500;
-            margin-left: auto;
+            letter-spacing: 0.02em;
+        }
+        .navbar-badge i {
+            color: var(--orange);
+            font-size: 0.75rem;
         }
 
-        /* Main Container */
-        .main-container {
-            min-height: calc(100vh - 60px);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-        }
-
-        .form-card {
-            background-color: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
-            max-width: 800px;
-            width: 100%;
-            padding: 2.5rem;
-        }
-
-        .form-header {
+        /* ─── Hero Banner ─── */
+        .hero-banner {
+            background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy) 60%, var(--navy-light) 100%);
+            padding: 3rem 2rem 5rem;
             text-align: center;
-            margin-bottom: 2rem;
+            position: relative;
+            overflow: hidden;
         }
-
-        .form-header h1 {
-            font-size: 1.75rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.5rem;
+        .hero-banner::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -50%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle at 30% 50%, rgba(245,130,32,0.08) 0%, transparent 50%),
+                        radial-gradient(circle at 70% 30%, rgba(255,255,255,0.03) 0%, transparent 40%);
+            pointer-events: none;
         }
-
-        .form-header p {
-            color: var(--gray-500);
-            font-size: 0.95rem;
+        .hero-content {
+            position: relative;
+            max-width: 600px;
+            margin: 0 auto;
         }
-
-        /* Form Sections */
-        .form-section {
-            margin-bottom: 2.5rem;
-            padding-bottom: 2rem;
-            border-bottom: 1px solid var(--gray-200);
-        }
-
-        .form-section:last-of-type {
-            border-bottom: none;
-            margin-bottom: 0;
-            padding-bottom: 0;
-        }
-
-        .section-title {
-            font-size: 1.1rem;
-            font-weight: 600;
-            color: var(--navy);
-            margin-bottom: 1.5rem;
-            display: flex;
-            align-items: center;
-            gap: 0.5rem;
-        }
-
-        .section-number {
+        .hero-icon {
+            width: 56px;
+            height: 56px;
+            background: rgba(245,130,32,0.15);
+            border: 1px solid rgba(245,130,32,0.25);
+            border-radius: 14px;
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            width: 28px;
-            height: 28px;
-            background-color: var(--orange);
-            color: white;
+            margin-bottom: 1.25rem;
+        }
+        .hero-icon i {
+            font-size: 1.4rem;
+            color: var(--orange);
+        }
+        .hero-content h1 {
+            font-size: 1.75rem;
+            font-weight: 800;
+            color: var(--white);
+            margin-bottom: 0.5rem;
+            letter-spacing: -0.02em;
+        }
+        .hero-content p {
+            color: rgba(255,255,255,0.6);
+            font-size: 0.95rem;
+            font-weight: 400;
+        }
+
+        /* ─── Progress Steps ─── */
+        .progress-bar {
+            max-width: 720px;
+            margin: -28px auto 0;
+            padding: 0 2rem;
+            position: relative;
+            z-index: 10;
+        }
+        .progress-steps {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-lg);
+            padding: 20px 28px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0;
+        }
+        .step-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            flex: 1;
+            cursor: pointer;
+            transition: all 0.3s;
+        }
+        .step-item:not(:last-child)::after {
+            content: '';
+            flex: 1;
+            height: 2px;
+            background: var(--gray-200);
+            margin: 0 8px;
+            border-radius: 1px;
+            transition: background 0.4s;
+        }
+        .step-item.active:not(:last-child)::after,
+        .step-item.done:not(:last-child)::after {
+            background: var(--orange);
+        }
+        .step-circle {
+            width: 34px;
+            height: 34px;
             border-radius: 50%;
-            font-size: 0.85rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.8rem;
+            font-weight: 700;
+            flex-shrink: 0;
+            transition: all 0.3s;
+            background: var(--gray-100);
+            color: var(--gray-400);
+            border: 2px solid var(--gray-200);
+        }
+        .step-item.active .step-circle {
+            background: var(--orange);
+            color: var(--white);
+            border-color: var(--orange);
+            box-shadow: 0 0 0 4px rgba(245,130,32,0.15);
+        }
+        .step-item.done .step-circle {
+            background: var(--success);
+            color: var(--white);
+            border-color: var(--success);
+        }
+        .step-item.done .step-circle .step-num { display: none; }
+        .step-item.done .step-circle .step-check { display: inline; }
+        .step-circle .step-check { display: none; font-size: 0.75rem; }
+        .step-label {
+            display: none;
+            font-size: 0.78rem;
             font-weight: 600;
+            color: var(--gray-400);
+            white-space: nowrap;
+        }
+        .step-item.active .step-label {
+            color: var(--navy);
+        }
+        .step-item.done .step-label {
+            color: var(--success);
+        }
+        @media (min-width: 640px) {
+            .step-label { display: block; }
+            .step-item { flex: unset; }
+            .step-item:not(:last-child)::after { min-width: 40px; }
         }
 
-        /* Form Groups */
-        .form-group {
+        /* ─── Form Container ─── */
+        .form-outer {
+            max-width: 760px;
+            margin: 2rem auto 3rem;
+            padding: 0 1.25rem;
+        }
+
+        /* ─── Section Cards ─── */
+        .section-card {
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            box-shadow: var(--shadow-md);
+            padding: 2rem 2rem 1.75rem;
             margin-bottom: 1.5rem;
+            border: 1px solid rgba(226,232,240,0.6);
+            transition: box-shadow 0.3s, border-color 0.3s;
+            display: none;
+        }
+        .section-card.active {
+            display: block;
+            animation: fadeSlideIn 0.35s ease-out;
+        }
+        @keyframes fadeSlideIn {
+            from { opacity: 0; transform: translateY(12px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        .section-card:hover {
+            box-shadow: var(--shadow-lg);
+        }
+        .section-header {
+            display: flex;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 1.75rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .section-icon {
+            width: 40px;
+            height: 40px;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1rem;
+            flex-shrink: 0;
+        }
+        .section-icon.company { background: #EFF6FF; color: #3B82F6; }
+        .section-icon.team { background: #F0FDF4; color: #22C55E; }
+        .section-icon.address { background: #FFF7ED; color: #F97316; }
+        .section-icon.password { background: #FAF5FF; color: #A855F7; }
+        .section-header-text h2 {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--navy);
+            letter-spacing: -0.01em;
+        }
+        .section-header-text p {
+            font-size: 0.82rem;
+            color: var(--gray-500);
+            margin-top: 2px;
         }
 
+        /* ─── Form Elements ─── */
         .form-row {
             display: grid;
             grid-template-columns: 1fr 1fr;
-            gap: 1.5rem;
+            gap: 1.25rem;
         }
-
-        .form-row.full {
-            grid-template-columns: 1fr;
+        .form-row.full { grid-template-columns: 1fr; }
+        @media (max-width: 600px) {
+            .form-row { grid-template-columns: 1fr; }
         }
-
-        .form-row.three-cols {
-            grid-template-columns: repeat(3, 1fr);
-        }
-
-        @media (max-width: 640px) {
-            .form-row {
-                grid-template-columns: 1fr;
-            }
-
-            .form-row.three-cols {
-                grid-template-columns: 1fr;
-            }
-        }
+        .form-group { margin-bottom: 1.25rem; }
+        .form-group:last-child { margin-bottom: 0; }
 
         label {
             display: block;
-            font-size: 0.95rem;
+            font-size: 0.82rem;
+            font-weight: 600;
+            color: var(--gray-700);
+            margin-bottom: 6px;
+            letter-spacing: 0.01em;
+        }
+        .required { color: var(--error); margin-left: 2px; }
+        .optional-tag {
+            font-size: 0.72rem;
             font-weight: 500;
-            color: var(--gray-800);
-            margin-bottom: 0.5rem;
+            color: var(--gray-400);
+            background: var(--gray-50);
+            padding: 1px 6px;
+            border-radius: 4px;
+            margin-left: 6px;
         }
 
-        .required {
+        .input-wrapper {
+            position: relative;
+        }
+        .input-wrapper i {
+            position: absolute;
+            left: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            font-size: 0.85rem;
+            color: var(--gray-400);
+            pointer-events: none;
+            transition: color 0.2s;
+        }
+        .input-wrapper input:focus + i,
+        .input-wrapper select:focus + i {
             color: var(--orange);
         }
 
@@ -186,827 +348,1003 @@
         input[type="email"],
         input[type="tel"],
         input[type="url"],
+        input[type="password"],
         select,
         textarea {
             width: 100%;
-            padding: 0.75rem;
-            border: 1px solid var(--gray-200);
-            border-radius: 6px;
+            padding: 10px 12px;
+            border: 1.5px solid var(--gray-200);
+            border-radius: 8px;
             font-family: 'Inter', sans-serif;
-            font-size: 0.95rem;
+            font-size: 0.9rem;
             color: var(--gray-800);
-            transition: border-color 0.2s, box-shadow 0.2s;
+            background: var(--white);
+            transition: all 0.2s;
+            appearance: none;
+            -webkit-appearance: none;
         }
-
-        input[type="text"]:focus,
-        input[type="email"]:focus,
-        input[type="tel"]:focus,
-        input[type="url"]:focus,
-        select:focus,
-        textarea:focus {
+        .input-wrapper input,
+        .input-wrapper select {
+            padding-left: 38px;
+        }
+        select {
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' fill='none' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+            background-repeat: no-repeat;
+            background-position: right 12px center;
+            padding-right: 32px;
+            cursor: pointer;
+        }
+        input:focus, select:focus, textarea:focus {
             outline: none;
             border-color: var(--orange);
-            box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+            box-shadow: 0 0 0 3px rgba(245,130,32,0.1);
         }
-
-        input[type="text"]:disabled,
-        input[type="email"]:disabled {
-            background-color: var(--gray-50);
+        input:disabled, select:disabled {
+            background: var(--gray-50);
             color: var(--gray-500);
             cursor: not-allowed;
+            border-color: var(--gray-200);
         }
-
         textarea {
             resize: vertical;
             min-height: 80px;
+            padding: 10px 12px;
+        }
+        input::placeholder, textarea::placeholder {
+            color: var(--gray-400);
+            font-weight: 400;
         }
 
-        /* Team Members Section */
+        /* ─── Password Strength ─── */
+        .password-strength {
+            display: flex;
+            gap: 4px;
+            margin-top: 8px;
+        }
+        .strength-bar {
+            height: 3px;
+            flex: 1;
+            border-radius: 2px;
+            background: var(--gray-200);
+            transition: background 0.3s;
+        }
+        .strength-bar.filled.weak { background: var(--error); }
+        .strength-bar.filled.medium { background: #F59E0B; }
+        .strength-bar.filled.strong { background: var(--success); }
+        .strength-text {
+            font-size: 0.72rem;
+            margin-top: 4px;
+            font-weight: 500;
+        }
+        .strength-text.weak { color: var(--error); }
+        .strength-text.medium { color: #F59E0B; }
+        .strength-text.strong { color: var(--success); }
+
+        /* ─── Password Toggle ─── */
+        .password-toggle {
+            position: absolute;
+            right: 12px;
+            top: 50%;
+            transform: translateY(-50%);
+            cursor: pointer;
+            color: var(--gray-400);
+            font-size: 0.85rem;
+            pointer-events: all;
+            z-index: 2;
+            transition: color 0.2s;
+        }
+        .password-toggle:hover { color: var(--gray-600); }
+
+        /* ─── Team Members ─── */
         .team-members-container {
             display: flex;
             flex-direction: column;
-            gap: 1rem;
+            gap: 12px;
         }
-
-        .team-member-row {
-            background-color: var(--gray-50);
+        .team-member-card {
+            background: var(--gray-50);
             border: 1px solid var(--gray-200);
-            border-radius: 6px;
+            border-radius: var(--radius);
             padding: 1.25rem;
+            position: relative;
+            transition: border-color 0.2s;
+        }
+        .team-member-card:hover {
+            border-color: var(--gray-300);
+        }
+        .team-member-card .member-number {
+            position: absolute;
+            top: -8px;
+            left: 16px;
+            background: var(--navy);
+            color: var(--white);
+            font-size: 0.68rem;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 10px;
+            letter-spacing: 0.04em;
+        }
+        .team-grid {
             display: grid;
-            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            grid-template-columns: 1fr 1fr;
             gap: 1rem;
-            align-items: flex-end;
         }
-
-        @media (max-width: 1024px) {
-            .team-member-row {
-                grid-template-columns: 1fr 1fr;
-                gap: 1rem;
-            }
-
-            .team-member-row .form-group:nth-child(3),
-            .team-member-row .form-group:nth-child(4) {
-                margin-top: 1rem;
-                grid-column: auto;
-            }
+        @media (max-width: 600px) {
+            .team-grid { grid-template-columns: 1fr; }
         }
+        .team-member-card .form-group { margin-bottom: 0; }
 
-        @media (max-width: 640px) {
-            .team-member-row {
-                grid-template-columns: 1fr;
-            }
-
-            .team-member-row .form-group:nth-child(3),
-            .team-member-row .form-group:nth-child(4) {
-                margin-top: 0;
-            }
-        }
-
-        .team-member-row .form-group {
-            margin-bottom: 0;
-        }
-
-        .team-member-row label {
-            font-size: 0.85rem;
-        }
-
-        .remove-team-btn {
-            padding: 0.5rem 0.75rem;
-            background-color: #FEE2E2;
-            color: #DC2626;
-            border: 1px solid #FECACA;
-            border-radius: 6px;
+        .remove-member-btn {
+            position: absolute;
+            top: 12px;
+            right: 12px;
+            width: 28px;
+            height: 28px;
+            border-radius: 50%;
+            border: none;
+            background: var(--error-light);
+            color: var(--error);
             cursor: pointer;
-            font-size: 0.85rem;
-            font-weight: 500;
-            transition: all 0.2s;
-            height: 38px;
             display: flex;
             align-items: center;
             justify-content: center;
-            white-space: nowrap;
-        }
-
-        .remove-team-btn:hover {
-            background-color: #FCA5A5;
-            color: white;
-        }
-
-        .add-team-btn {
-            margin-top: 1rem;
-            padding: 0.75rem 1.25rem;
-            background-color: var(--gray-50);
-            color: var(--navy);
-            border: 1px dashed var(--gray-200);
-            border-radius: 6px;
-            cursor: pointer;
-            font-size: 0.95rem;
-            font-weight: 500;
+            font-size: 0.75rem;
             transition: all 0.2s;
-            font-family: 'Inter', sans-serif;
+        }
+        .remove-member-btn:hover {
+            background: var(--error);
+            color: var(--white);
         }
 
-        .add-team-btn:hover {
-            background-color: var(--gray-200);
-            border-color: var(--gray-500);
-        }
-
-        /* Address Section - City Dropdown */
-        .autocomplete-list {
-            position: absolute;
-            background-color: white;
-            border: 1px solid var(--gray-200);
-            border-top: none;
-            border-radius: 0 0 6px 6px;
-            max-height: 200px;
-            overflow-y: auto;
-            width: 100%;
-            z-index: 10;
-            display: none;
-        }
-
-        .autocomplete-list.show {
-            display: block;
-        }
-
-        .autocomplete-item {
-            padding: 0.75rem;
-            cursor: pointer;
-            color: var(--gray-800);
-            font-size: 0.95rem;
-            transition: background-color 0.2s;
-        }
-
-        .autocomplete-item:hover {
-            background-color: var(--gray-50);
-        }
-
-        .autocomplete-wrapper {
-            position: relative;
-        }
-
-        /* Form Actions */
-        .form-actions {
+        .add-member-btn {
             display: flex;
-            gap: 1rem;
-            margin-top: 2.5rem;
+            align-items: center;
             justify-content: center;
+            gap: 8px;
+            margin-top: 12px;
+            padding: 10px 16px;
+            background: var(--white);
+            color: var(--navy);
+            border: 1.5px dashed var(--gray-300);
+            border-radius: var(--radius);
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 600;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
         }
+        .add-member-btn:hover {
+            border-color: var(--orange);
+            color: var(--orange);
+            background: var(--orange-light);
+        }
+        .add-member-btn i { font-size: 0.8rem; }
 
+        /* ─── Navigation Buttons ─── */
+        .form-nav {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 1.75rem;
+            padding-top: 1.25rem;
+            border-top: 1px solid var(--gray-100);
+        }
         .btn {
-            padding: 0.875rem 2rem;
-            border-radius: 6px;
-            font-size: 0.95rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 11px 24px;
+            border-radius: 8px;
+            font-size: 0.88rem;
             font-weight: 600;
             cursor: pointer;
-            transition: all 0.2s;
+            transition: all 0.25s;
             border: none;
             font-family: 'Inter', sans-serif;
+            letter-spacing: 0.01em;
         }
-
-        .btn-primary {
-            background-color: var(--orange);
-            color: white;
+        .btn i { font-size: 0.78rem; }
+        .btn-back {
+            background: var(--white);
+            color: var(--gray-600);
+            border: 1.5px solid var(--gray-200);
         }
-
-        .btn-primary:hover {
-            background-color: var(--orange-dark);
+        .btn-back:hover {
+            border-color: var(--gray-400);
+            color: var(--navy);
+            background: var(--gray-50);
+        }
+        .btn-next {
+            background: var(--navy);
+            color: var(--white);
+        }
+        .btn-next:hover {
+            background: var(--navy-light);
             transform: translateY(-1px);
-            box-shadow: 0 4px 12px rgba(245, 130, 32, 0.3);
+            box-shadow: 0 4px 12px rgba(27,42,74,0.25);
         }
-
-        .btn-primary:disabled {
-            background-color: var(--gray-500);
+        .btn-submit {
+            background: linear-gradient(135deg, var(--orange) 0%, var(--orange-dark) 100%);
+            color: var(--white);
+            padding: 12px 32px;
+            font-size: 0.92rem;
+        }
+        .btn-submit:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px rgba(245,130,32,0.35);
+        }
+        .btn-submit:disabled {
+            opacity: 0.6;
             cursor: not-allowed;
             transform: none;
             box-shadow: none;
         }
+        .btn-submit .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.7s linear infinite;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
-        .btn-secondary {
-            background-color: transparent;
-            color: var(--navy);
-            border: 1px solid var(--gray-200);
+        /* ─── Error Messages ─── */
+        .error-message {
+            color: var(--error);
+            font-size: 0.78rem;
+            margin-top: 4px;
+            display: none;
+            font-weight: 500;
+        }
+        .error-message.show { display: flex; align-items: center; gap: 4px; }
+        .error-message i { font-size: 0.7rem; }
+        .form-group.error input,
+        .form-group.error select,
+        .form-group.error textarea {
+            border-color: var(--error);
+        }
+        .form-group.error input:focus,
+        .form-group.error select:focus,
+        .form-group.error textarea:focus {
+            box-shadow: 0 0 0 3px rgba(239,68,68,0.1);
         }
 
-        .btn-secondary:hover {
-            background-color: var(--gray-50);
-            border-color: var(--navy);
+        /* ─── Flash Messages ─── */
+        .flash-message {
+            max-width: 760px;
+            margin: 1rem auto 0;
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            font-size: 0.85rem;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .flash-message.error {
+            background: var(--error-light);
+            color: var(--error);
+            border: 1px solid #FEE2E2;
+        }
+        .flash-message.success {
+            background: var(--success-light);
+            color: var(--success);
+            border: 1px solid #D1FAE5;
         }
 
-        /* Success Modal */
+        /* ─── Success Modal ─── */
         .modal-overlay {
             display: none;
             position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background-color: rgba(0, 0, 0, 0.5);
+            inset: 0;
+            background: rgba(15,27,51,0.6);
+            backdrop-filter: blur(4px);
             z-index: 1000;
             align-items: center;
             justify-content: center;
         }
-
-        .modal-overlay.show {
-            display: flex;
-        }
-
+        .modal-overlay.show { display: flex; }
         .modal-content {
-            background-color: white;
-            border-radius: 8px;
-            padding: 2.5rem;
-            max-width: 500px;
+            background: var(--white);
+            border-radius: var(--radius-lg);
+            padding: 3rem 2.5rem;
+            max-width: 440px;
+            width: 90%;
             text-align: center;
-            box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
-            animation: slideUp 0.3s ease-out;
+            box-shadow: var(--shadow-xl);
+            animation: modalIn 0.35s cubic-bezier(0.16, 1, 0.3, 1);
         }
-
-        @keyframes slideUp {
-            from {
-                opacity: 0;
-                transform: translateY(20px);
-            }
-            to {
-                opacity: 1;
-                transform: translateY(0);
-            }
+        @keyframes modalIn {
+            from { opacity: 0; transform: scale(0.9) translateY(20px); }
+            to { opacity: 1; transform: scale(1) translateY(0); }
         }
-
-        .checkmark-icon {
-            width: 64px;
-            height: 64px;
-            background-color: var(--success-green);
+        .modal-check {
+            width: 72px;
+            height: 72px;
+            background: linear-gradient(135deg, var(--success), #059669);
             border-radius: 50%;
             display: flex;
             align-items: center;
             justify-content: center;
             margin: 0 auto 1.5rem;
-            animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            animation: popCheck 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55) 0.1s both;
         }
-
-        @keyframes popIn {
-            0% {
-                transform: scale(0);
-            }
-            50% {
-                transform: scale(1.1);
-            }
-            100% {
-                transform: scale(1);
-            }
+        @keyframes popCheck {
+            0% { transform: scale(0); }
+            60% { transform: scale(1.15); }
+            100% { transform: scale(1); }
         }
-
-        .checkmark-icon svg {
-            width: 40px;
-            height: 40px;
-            stroke: white;
-            stroke-width: 3;
-            fill: none;
-            stroke-linecap: round;
-            stroke-linejoin: round;
+        .modal-check i {
+            font-size: 2rem;
+            color: var(--white);
         }
-
-        .checkmark-icon svg .check-path {
-            stroke-dasharray: 48;
-            stroke-dashoffset: 48;
-            animation: checkmark 0.5s ease-out 0.2s forwards;
-        }
-
-        @keyframes checkmark {
-            to {
-                stroke-dashoffset: 0;
-            }
-        }
-
-        .modal-title {
-            font-size: 1.5rem;
-            font-weight: 700;
+        .modal-content h2 {
+            font-size: 1.35rem;
+            font-weight: 800;
             color: var(--navy);
-            margin-bottom: 0.75rem;
+            margin-bottom: 0.5rem;
         }
-
-        .modal-message {
-            font-size: 0.95rem;
+        .modal-content p {
             color: var(--gray-500);
-            margin-bottom: 1.5rem;
+            font-size: 0.9rem;
             line-height: 1.6;
+            margin-bottom: 1.75rem;
         }
-
-        .modal-close-btn {
-            padding: 0.75rem 1.5rem;
-            background-color: var(--orange);
-            color: white;
+        .modal-btn {
+            padding: 11px 28px;
+            background: var(--orange);
+            color: var(--white);
             border: none;
-            border-radius: 6px;
+            border-radius: 8px;
             cursor: pointer;
-            font-weight: 600;
-            font-size: 0.95rem;
-            transition: all 0.2s;
+            font-weight: 700;
+            font-size: 0.9rem;
             font-family: 'Inter', sans-serif;
+            transition: all 0.2s;
         }
+        .modal-btn:hover { background: var(--orange-dark); }
 
-        .modal-close-btn:hover {
-            background-color: var(--orange-dark);
+        /* ─── Footer ─── */
+        .footer {
+            text-align: center;
+            padding: 1.5rem;
+            color: var(--gray-400);
+            font-size: 0.78rem;
         }
-
-        /* Loading State */
-        .loading {
-            position: relative;
-            pointer-events: none;
-            opacity: 0.6;
+        .footer a {
+            color: var(--gray-500);
+            text-decoration: none;
+            font-weight: 500;
         }
-
-        .spinner {
-            display: inline-block;
-            width: 16px;
-            height: 16px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 0.8s linear infinite;
-            margin-right: 0.5rem;
-        }
-
-        @keyframes spin {
-            to {
-                transform: rotate(360deg);
-            }
-        }
-
-        /* Error Messages */
-        .error-message {
-            color: #DC2626;
-            font-size: 0.85rem;
-            margin-top: 0.25rem;
-            display: none;
-        }
-
-        .error-message.show {
-            display: block;
-        }
-
-        .form-group.error input,
-        .form-group.error select,
-        .form-group.error textarea {
-            border-color: #DC2626;
-        }
-
-        .form-group.error input:focus,
-        .form-group.error select:focus,
-        .form-group.error textarea:focus {
-            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
-        }
+        .footer a:hover { color: var(--orange); }
     </style>
 </head>
 <body>
     <!-- Navbar -->
     <nav class="navbar">
-        <div class="navbar-container">
-            <div class="navbar-logo"><img src="/static/logo-full.png" alt="GooCampus"></div>
-            <div class="navbar-title">Partner Registration</div>
+        <div class="navbar-inner">
+            <div class="navbar-logo">
+                <img src="/static/logo-full.png" alt="GooCampus">
+            </div>
+            <div class="navbar-badge">
+                <i class="fas fa-shield-halved"></i>
+                Partner Registration
+            </div>
         </div>
     </nav>
 
-    <!-- Main Content -->
-    <div class="main-container">
-        <div class="form-card">
-            <div class="form-header">
-                <h1>Complete Your Registration</h1>
-                <p>Welcome to GooCampus. Please fill in your details to get started.</p>
+    <!-- Hero Banner -->
+    <div class="hero-banner">
+        <div class="hero-content">
+            <div class="hero-icon">
+                <i class="fas fa-handshake"></i>
             </div>
+            <h1>Join the GooCampus Partner Network</h1>
+            <p>Complete your registration to start managing students and growing your business with us.</p>
+        </div>
+    </div>
 
-            <form id="partnerForm" method="POST" action="/partner/onboard/{{ invitation.token }}">
-                <!-- Section 1: Company Details -->
-                <div class="form-section">
-                    <h2 class="section-title">
-                        <span class="section-number">1</span>
-                        Company Details
-                    </h2>
+    <!-- Progress Steps -->
+    <div class="progress-bar">
+        <div class="progress-steps">
+            <div class="step-item active" data-step="1" onclick="goToStep(1)">
+                <div class="step-circle">
+                    <span class="step-num">1</span>
+                    <i class="fas fa-check step-check"></i>
+                </div>
+                <span class="step-label">Company</span>
+            </div>
+            <div class="step-item" data-step="2" onclick="goToStep(2)">
+                <div class="step-circle">
+                    <span class="step-num">2</span>
+                    <i class="fas fa-check step-check"></i>
+                </div>
+                <span class="step-label">Team</span>
+            </div>
+            <div class="step-item" data-step="3" onclick="goToStep(3)">
+                <div class="step-circle">
+                    <span class="step-num">3</span>
+                    <i class="fas fa-check step-check"></i>
+                </div>
+                <span class="step-label">Address</span>
+            </div>
+            <div class="step-item" data-step="4" onclick="goToStep(4)">
+                <div class="step-circle">
+                    <span class="step-num">4</span>
+                    <i class="fas fa-check step-check"></i>
+                </div>
+                <span class="step-label">Password</span>
+            </div>
+        </div>
+    </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="companyName">Company Name <span class="required">*</span></label>
-                            <input type="text" id="companyName" name="company_name"
-                                   value="{{ invitation.name or '' }}" required>
-                            <div class="error-message"></div>
-                        </div>
-                        <div class="form-group">
-                            <label for="contactPerson">Contact Person <span class="required">*</span></label>
-                            <input type="text" id="contactPerson" name="contact_person" required>
-                            <div class="error-message"></div>
-                        </div>
+    <!-- Flash Messages -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            {% for category, message in messages %}
+                <div class="flash-message {{ category }}">
+                    <i class="fas fa-{{ 'circle-exclamation' if category == 'error' else 'circle-check' }}"></i>
+                    {{ message }}
+                </div>
+            {% endfor %}
+        {% endif %}
+    {% endwith %}
+
+    <!-- Form -->
+    <div class="form-outer">
+        <form id="partnerForm" method="POST" action="/partner/onboard/{{ invitation.token }}">
+
+            <!-- Step 1: Company Details -->
+            <div class="section-card active" data-section="1">
+                <div class="section-header">
+                    <div class="section-icon company"><i class="fas fa-building"></i></div>
+                    <div class="section-header-text">
+                        <h2>Company Details</h2>
+                        <p>Tell us about your organization</p>
                     </div>
+                </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="email">Email <span class="required">*</span></label>
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="companyName">Company Name <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="text" id="companyName" name="company_name"
+                                   value="{{ invitation.name or '' }}" required placeholder="Your company name">
+                            <i class="fas fa-building"></i>
+                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="contactPerson">Contact Person <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="text" id="contactPerson" name="contact_person" required placeholder="Full name">
+                            <i class="fas fa-user"></i>
+                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="email">Email <span class="required">*</span></label>
+                        <div class="input-wrapper">
                             <input type="email" id="email" name="email"
                                    value="{{ invitation.email or '' }}" readonly>
-                            <div class="error-message"></div>
+                            <i class="fas fa-envelope"></i>
                         </div>
-                        <div class="form-group">
-                            <label for="phone">Phone <span class="required">*</span></label>
-                            <input type="tel" id="phone" name="phone" pattern="[0-9\s\-\+\(\)]{10,}" required>
-                            <div class="error-message"></div>
-                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
-
-                    <div class="form-row full">
-                        <div class="form-group">
-                            <label for="website">Website <span style="color: var(--gray-500);">(Optional)</span></label>
-                            <input type="url" id="website" name="website">
-                            <div class="error-message"></div>
+                    <div class="form-group">
+                        <label for="phone">Phone <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="tel" id="phone" name="phone" pattern="[0-9\s\-\+\(\)]{10,}" required placeholder="10-digit phone number">
+                            <i class="fas fa-phone"></i>
                         </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
                 </div>
 
-                <!-- Section 2: Team Members -->
-                <div class="form-section">
-                    <h2 class="section-title">
-                        <span class="section-number">2</span>
-                        Team Members
-                    </h2>
-
-                    <div class="team-members-container" id="teamMembersContainer">
-                        <!-- Team member rows will be added here by JavaScript -->
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label for="website">Website <span class="optional-tag">Optional</span></label>
+                        <div class="input-wrapper">
+                            <input type="url" id="website" name="website" placeholder="https://www.example.com">
+                            <i class="fas fa-globe"></i>
+                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
-
-                    <button type="button" class="add-team-btn" id="addTeamBtn">+ Add Team Member</button>
                 </div>
 
-                <!-- Section 3: Address Details -->
-                <div class="form-section">
-                    <h2 class="section-title">
-                        <span class="section-number">3</span>
-                        Address Details
-                    </h2>
+                <div class="form-nav">
+                    <div></div>
+                    <button type="button" class="btn btn-next" onclick="nextStep()">
+                        Continue <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
 
-                    <div class="form-row full">
-                        <div class="form-group">
-                            <label for="address">Address <span class="required">*</span></label>
-                            <textarea id="address" name="address" required></textarea>
-                            <div class="error-message"></div>
-                        </div>
+            <!-- Step 2: Team Members -->
+            <div class="section-card" data-section="2">
+                <div class="section-header">
+                    <div class="section-icon team"><i class="fas fa-users"></i></div>
+                    <div class="section-header-text">
+                        <h2>Team Members</h2>
+                        <p>Add your team who will use the portal</p>
                     </div>
+                </div>
 
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="state">State <span class="required">*</span></label>
+                <div class="team-members-container" id="teamMembersContainer">
+                    <!-- Filled by JS -->
+                </div>
+
+                <button type="button" class="add-member-btn" id="addTeamBtn">
+                    <i class="fas fa-plus"></i> Add Another Member
+                </button>
+
+                <div class="form-nav">
+                    <button type="button" class="btn btn-back" onclick="prevStep()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" class="btn btn-next" onclick="nextStep()">
+                        Continue <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 3: Address Details -->
+            <div class="section-card" data-section="3">
+                <div class="section-header">
+                    <div class="section-icon address"><i class="fas fa-location-dot"></i></div>
+                    <div class="section-header-text">
+                        <h2>Address Details</h2>
+                        <p>Where is your office located?</p>
+                    </div>
+                </div>
+
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label for="address">Street Address <span class="required">*</span></label>
+                        <textarea id="address" name="address" required placeholder="Building name, street, area..."></textarea>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="state">State <span class="required">*</span></label>
+                        <div class="input-wrapper">
                             <select id="state" name="state" required>
                                 <option value="">Select State</option>
                             </select>
-                            <div class="error-message"></div>
+                            <i class="fas fa-map"></i>
                         </div>
-                        <div class="form-group">
-                            <label for="city">City <span class="required">*</span></label>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="city">City <span class="required">*</span></label>
+                        <div class="input-wrapper">
                             <select id="city" name="city" required disabled>
                                 <option value="">Select State first</option>
                             </select>
-                            <div class="error-message"></div>
+                            <i class="fas fa-city"></i>
                         </div>
-                    </div>
-
-                    <div class="form-row full">
-                        <div class="form-group">
-                            <label for="country">Country <span class="required">*</span></label>
-                            <input type="text" id="country" name="country" value="India" readonly>
-                            <div class="error-message"></div>
-                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
                 </div>
 
-                <!-- Section 4: Create Password -->
-                <div class="form-section">
-                    <h2 class="section-title">
-                        <span class="section-number">4</span>
-                        Create Password
-                    </h2>
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="password">Password <span class="required">*</span></label>
-                            <input type="password" id="password" name="password" minlength="6" required
-                                   placeholder="Minimum 6 characters">
-                            <div class="error-message"></div>
+                <div class="form-row full">
+                    <div class="form-group">
+                        <label for="country">Country <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="text" id="country" name="country" value="India" readonly>
+                            <i class="fas fa-flag"></i>
                         </div>
-                        <div class="form-group">
-                            <label for="confirmPassword">Confirm Password <span class="required">*</span></label>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                </div>
+
+                <div class="form-nav">
+                    <button type="button" class="btn btn-back" onclick="prevStep()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="button" class="btn btn-next" onclick="nextStep()">
+                        Continue <i class="fas fa-arrow-right"></i>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Step 4: Create Password -->
+            <div class="section-card" data-section="4">
+                <div class="section-header">
+                    <div class="section-icon password"><i class="fas fa-lock"></i></div>
+                    <div class="section-header-text">
+                        <h2>Create Password</h2>
+                        <p>Secure your account with a strong password</p>
+                    </div>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="password">Password <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <input type="password" id="password" name="password" minlength="6" required
+                                   placeholder="Min. 6 characters">
+                            <i class="fas fa-lock"></i>
+                            <span class="password-toggle" onclick="togglePassword('password', this)">
+                                <i class="fas fa-eye"></i>
+                            </span>
+                        </div>
+                        <div class="password-strength" id="strengthBars">
+                            <div class="strength-bar"></div>
+                            <div class="strength-bar"></div>
+                            <div class="strength-bar"></div>
+                            <div class="strength-bar"></div>
+                        </div>
+                        <div class="strength-text" id="strengthText"></div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="confirmPassword">Confirm Password <span class="required">*</span></label>
+                        <div class="input-wrapper">
                             <input type="password" id="confirmPassword" name="confirm_password" minlength="6" required
                                    placeholder="Re-enter password">
-                            <div class="error-message"></div>
+                            <i class="fas fa-lock"></i>
+                            <span class="password-toggle" onclick="togglePassword('confirmPassword', this)">
+                                <i class="fas fa-eye"></i>
+                            </span>
                         </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
                     </div>
                 </div>
 
-                <!-- Form Actions -->
-                <div class="form-actions">
-                    <button type="submit" class="btn btn-primary" id="submitBtn">Submit Registration</button>
-                    <button type="reset" class="btn btn-secondary">Clear Form</button>
+                <div class="form-nav">
+                    <button type="button" class="btn btn-back" onclick="prevStep()">
+                        <i class="fas fa-arrow-left"></i> Back
+                    </button>
+                    <button type="submit" class="btn btn-submit" id="submitBtn">
+                        <i class="fas fa-rocket"></i> Complete Registration
+                    </button>
                 </div>
-            </form>
-        </div>
+            </div>
+
+        </form>
+    </div>
+
+    <!-- Footer -->
+    <div class="footer">
+        &copy; {{ "now" | strftime("%Y") if "now" | strftime is defined else "2026" }} GooCampus Edu Solutions Pvt Ltd &middot;
+        <a href="https://goocampus.in" target="_blank">goocampus.in</a>
     </div>
 
     <!-- Success Modal -->
     <div class="modal-overlay" id="successModal">
         <div class="modal-content">
-            <div class="checkmark-icon">
-                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                    <polyline class="check-path" points="20 6 9 17 4 12"></polyline>
-                </svg>
+            <div class="modal-check">
+                <i class="fas fa-check"></i>
             </div>
-            <h2 class="modal-title">Welcome to GooCampus Partner Network!</h2>
-            <p class="modal-message">Your registration is complete. Our team will review your details shortly.</p>
-            <button type="button" class="modal-close-btn" id="closeModalBtn">Continue</button>
+            <h2>Welcome Aboard!</h2>
+            <p>Your registration is complete. Our team will review your details and activate your partner account shortly.</p>
+            <button type="button" class="modal-btn" id="closeModalBtn">
+                Go to Dashboard <i class="fas fa-arrow-right" style="margin-left:6px;font-size:0.8rem"></i>
+            </button>
         </div>
     </div>
 
     <script>
-        // Initialize form
-        document.addEventListener('DOMContentLoaded', function() {
-            initializeTeamMembers();
-            loadStates();
-            setupEventListeners();
-        });
+        // ─── State Machine ───
+        let currentStep = 1;
+        const totalSteps = 4;
 
-        // Team Members Management
-        function initializeTeamMembers() {
-            const container = document.getElementById('teamMembersContainer');
-            container.innerHTML = '';
-            addTeamMemberRow();
-        }
-
-        function addTeamMemberRow() {
-            const container = document.getElementById('teamMembersContainer');
-            const rowIndex = container.children.length;
-
-            const row = document.createElement('div');
-            row.className = 'team-member-row';
-            row.dataset.index = rowIndex;
-
-            row.innerHTML = `
-                <div class="form-group">
-                    <label>Name</label>
-                    <input type="text" name="team_name[]" placeholder="Full Name">
-                    <div class="error-message"></div>
-                </div>
-                <div class="form-group">
-                    <label>Designation</label>
-                    <input type="text" name="team_designation[]" placeholder="Job Title">
-                    <div class="error-message"></div>
-                </div>
-                <div class="form-group">
-                    <label>Email</label>
-                    <input type="email" name="team_email[]" placeholder="Email Address">
-                    <div class="error-message"></div>
-                </div>
-                <div class="form-group">
-                    <label>Phone</label>
-                    <input type="tel" name="team_phone[]" placeholder="Phone Number">
-                    <div class="error-message"></div>
-                </div>
-                ${rowIndex > 0 ? `<button type="button" class="remove-team-btn" onclick="removeTeamMemberRow(${rowIndex})">Remove</button>` : ''}
-            `;
-
-            container.appendChild(row);
-        }
-
-        function removeTeamMemberRow(index) {
-            const container = document.getElementById('teamMembersContainer');
-            const row = container.querySelector(`[data-index="${index}"]`);
-            if (row) {
-                row.remove();
-            }
-        }
-
-        document.getElementById('addTeamBtn')?.addEventListener('click', function(e) {
-            e.preventDefault();
-            addTeamMemberRow();
-        });
-
-        // Load States
-        function loadStates() {
-            const stateSelect = document.getElementById('state');
-
-            fetch('/partner/api/states')
-                .then(response => response.json())
-                .then(data => {
-                    if (Array.isArray(data)) {
-                        data.forEach(state => {
-                            const option = document.createElement('option');
-                            option.value = state.name;
-                            option.dataset.id = state.id;
-                            option.textContent = state.name;
-                            stateSelect.appendChild(option);
-                        });
-                    }
-                })
-                .catch(error => {
-                    console.error('Error loading states:', error);
-                });
-        }
-
-        // Load cities when state changes
-        document.getElementById('state')?.addEventListener('change', function() {
-            const citySelect = document.getElementById('city');
-            const selectedOption = this.options[this.selectedIndex];
-            const stateId = selectedOption?.dataset?.id;
-
-            // Reset city
-            citySelect.innerHTML = '<option value="">Loading cities...</option>';
-            citySelect.disabled = true;
-
-            if (!this.value || !stateId) {
-                citySelect.innerHTML = '<option value="">Select State first</option>';
-                return;
-            }
-
-            fetch(`/partner/api/cities?state_id=${stateId}`)
-                .then(response => response.json())
-                .then(data => {
-                    citySelect.innerHTML = '<option value="">Select City</option>';
-                    if (Array.isArray(data)) {
-                        data.forEach(city => {
-                            const option = document.createElement('option');
-                            option.value = city.name;
-                            option.textContent = city.name;
-                            citySelect.appendChild(option);
-                        });
-                    }
-                    citySelect.disabled = false;
-                })
-                .catch(error => {
-                    console.error('Error loading cities:', error);
-                    citySelect.innerHTML = '<option value="">Error loading cities</option>';
-                });
-        });
-
-        // Form Submission
-        document.getElementById('partnerForm').addEventListener('submit', function(e) {
-            e.preventDefault();
-
-            // Clear previous errors
-            document.querySelectorAll('.form-group.error').forEach(group => {
-                group.classList.remove('error');
-                group.querySelector('.error-message').classList.remove('show');
+        function updateUI() {
+            // Cards
+            document.querySelectorAll('.section-card').forEach(card => {
+                card.classList.toggle('active', parseInt(card.dataset.section) === currentStep);
             });
-
-            // Validate form
-            if (!validateForm()) {
-                return;
-            }
-
-            // Show loading state
-            const submitBtn = document.getElementById('submitBtn');
-            const originalText = submitBtn.textContent;
-            submitBtn.disabled = true;
-            submitBtn.innerHTML = '<span class="spinner"></span>Submitting...';
-
-            // Submit form
-            const formData = new FormData(this);
-
-            fetch(this.action, {
-                method: 'POST',
-                body: formData,
-                headers: {
-                    'Accept': 'application/json'
-                }
-            })
-            .then(response => {
-                if (response.ok) {
-                    // Show success modal
-                    showSuccessModal();
-
-                    // Reset form
-                    document.getElementById('partnerForm').reset();
-                    initializeTeamMembers();
-                } else {
-                    return response.json().then(data => {
-                        throw new Error(data.error || 'Registration failed');
-                    });
-                }
-            })
-            .catch(error => {
-                console.error('Error:', error);
-                submitBtn.disabled = false;
-                submitBtn.textContent = originalText;
-                alert('Error submitting form: ' + error.message);
+            // Steps
+            document.querySelectorAll('.step-item').forEach(item => {
+                const step = parseInt(item.dataset.step);
+                item.classList.remove('active', 'done');
+                if (step === currentStep) item.classList.add('active');
+                else if (step < currentStep) item.classList.add('done');
             });
-        });
+            // Scroll to top of form
+            document.querySelector('.progress-bar').scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
 
-        function validateForm() {
+        function validateCurrentStep() {
+            const section = document.querySelector(`.section-card[data-section="${currentStep}"]`);
             let isValid = true;
-            const form = document.getElementById('partnerForm');
 
-            // Validate required fields
-            form.querySelectorAll('[required]').forEach(field => {
+            // Clear errors
+            section.querySelectorAll('.form-group.error').forEach(g => {
+                g.classList.remove('error');
+                g.querySelector('.error-message').classList.remove('show');
+            });
+
+            // Required fields
+            section.querySelectorAll('[required]').forEach(field => {
                 if (!field.value.trim()) {
-                    const group = field.closest('.form-group');
-                    group.classList.add('error');
-                    group.querySelector('.error-message').textContent = 'This field is required';
-                    group.querySelector('.error-message').classList.add('show');
+                    showFieldError(field, 'This field is required');
                     isValid = false;
                 }
             });
 
-            // Validate email format
-            const emailField = document.getElementById('email');
-            if (emailField.value && !isValidEmail(emailField.value)) {
-                const group = emailField.closest('.form-group');
-                group.classList.add('error');
-                group.querySelector('.error-message').textContent = 'Please enter a valid email';
-                group.querySelector('.error-message').classList.add('show');
-                isValid = false;
-            }
-
-            // Validate password match
-            const password = document.getElementById('password');
-            const confirmPassword = document.getElementById('confirmPassword');
-            if (password.value && confirmPassword.value && password.value !== confirmPassword.value) {
-                const group = confirmPassword.closest('.form-group');
-                group.classList.add('error');
-                group.querySelector('.error-message').textContent = 'Passwords do not match';
-                group.querySelector('.error-message').classList.add('show');
-                isValid = false;
-            }
-            if (password.value && password.value.length < 6) {
-                const group = password.closest('.form-group');
-                group.classList.add('error');
-                group.querySelector('.error-message').textContent = 'Password must be at least 6 characters';
-                group.querySelector('.error-message').classList.add('show');
-                isValid = false;
-            }
-
-            // Validate team member emails
-            form.querySelectorAll('input[name="team_email[]"]').forEach(field => {
-                if (field.value.trim() && !isValidEmail(field.value)) {
-                    const group = field.closest('.form-group');
-                    group.classList.add('error');
-                    group.querySelector('.error-message').textContent = 'Please enter a valid email';
-                    group.querySelector('.error-message').classList.add('show');
+            // Email validation on step 1
+            if (currentStep === 1) {
+                const phone = section.querySelector('#phone');
+                if (phone && phone.value && !/^[\d\s\-\+\(\)]{10,}$/.test(phone.value)) {
+                    showFieldError(phone, 'Enter a valid phone number');
                     isValid = false;
                 }
-            });
+            }
+
+            // Team email validation on step 2
+            if (currentStep === 2) {
+                section.querySelectorAll('input[name="team_email[]"]').forEach(field => {
+                    if (field.value.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(field.value)) {
+                        showFieldError(field, 'Enter a valid email address');
+                        isValid = false;
+                    }
+                });
+            }
+
+            // Password validation on step 4
+            if (currentStep === 4) {
+                const pw = document.getElementById('password');
+                const cpw = document.getElementById('confirmPassword');
+                if (pw.value && pw.value.length < 6) {
+                    showFieldError(pw, 'Password must be at least 6 characters');
+                    isValid = false;
+                }
+                if (pw.value && cpw.value && pw.value !== cpw.value) {
+                    showFieldError(cpw, 'Passwords do not match');
+                    isValid = false;
+                }
+            }
 
             return isValid;
         }
 
-        function isValidEmail(email) {
-            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            return re.test(email);
+        function showFieldError(field, msg) {
+            const group = field.closest('.form-group');
+            group.classList.add('error');
+            const errEl = group.querySelector('.error-message');
+            const span = errEl.querySelector('span');
+            if (span) span.textContent = msg;
+            else errEl.textContent = msg;
+            errEl.classList.add('show');
         }
 
-        function showSuccessModal() {
-            const modal = document.getElementById('successModal');
-            modal.classList.add('show');
+        function nextStep() {
+            if (!validateCurrentStep()) return;
+            if (currentStep < totalSteps) {
+                currentStep++;
+                updateUI();
+            }
+        }
+        function prevStep() {
+            if (currentStep > 1) {
+                currentStep--;
+                updateUI();
+            }
+        }
+        function goToStep(step) {
+            // Only allow going to completed steps or current
+            if (step < currentStep) {
+                currentStep = step;
+                updateUI();
+            }
+        }
 
-            // Auto-close after 3 seconds
-            const autoCloseTimer = setTimeout(() => {
-                closeSuccessModal();
-            }, 3000);
+        // ─── Team Members ───
+        function initializeTeamMembers() {
+            const c = document.getElementById('teamMembersContainer');
+            c.innerHTML = '';
+            addTeamMemberRow();
+        }
 
-            // Manual close button
-            document.getElementById('closeModalBtn')?.addEventListener('click', function() {
-                clearTimeout(autoCloseTimer);
-                closeSuccessModal();
+        function addTeamMemberRow() {
+            const c = document.getElementById('teamMembersContainer');
+            const idx = c.children.length;
+            const card = document.createElement('div');
+            card.className = 'team-member-card';
+            card.dataset.index = idx;
+            card.innerHTML = `
+                <span class="member-number">MEMBER ${idx + 1}</span>
+                ${idx > 0 ? `<button type="button" class="remove-member-btn" onclick="removeMember(${idx})"><i class="fas fa-times"></i></button>` : ''}
+                <div class="team-grid">
+                    <div class="form-group">
+                        <label>Full Name</label>
+                        <div class="input-wrapper">
+                            <input type="text" name="team_name[]" placeholder="John Doe">
+                            <i class="fas fa-user"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Designation</label>
+                        <div class="input-wrapper">
+                            <input type="text" name="team_designation[]" placeholder="Manager">
+                            <i class="fas fa-briefcase"></i>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>Email</label>
+                        <div class="input-wrapper">
+                            <input type="email" name="team_email[]" placeholder="john@company.com">
+                            <i class="fas fa-envelope"></i>
+                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
+                    <div class="form-group">
+                        <label>Phone</label>
+                        <div class="input-wrapper">
+                            <input type="tel" name="team_phone[]" placeholder="9876543210">
+                            <i class="fas fa-phone"></i>
+                        </div>
+                    </div>
+                </div>
+            `;
+            c.appendChild(card);
+        }
+
+        function removeMember(idx) {
+            const card = document.querySelector(`.team-member-card[data-index="${idx}"]`);
+            if (card) {
+                card.style.animation = 'fadeSlideIn 0.25s ease reverse';
+                setTimeout(() => card.remove(), 200);
+            }
+        }
+
+        // ─── Password ───
+        function togglePassword(id, toggleEl) {
+            const input = document.getElementById(id);
+            const icon = toggleEl.querySelector('i');
+            if (input.type === 'password') {
+                input.type = 'text';
+                icon.classList.replace('fa-eye', 'fa-eye-slash');
+            } else {
+                input.type = 'password';
+                icon.classList.replace('fa-eye-slash', 'fa-eye');
+            }
+        }
+
+        function checkPasswordStrength(pw) {
+            let score = 0;
+            if (pw.length >= 6) score++;
+            if (pw.length >= 8) score++;
+            if (/[A-Z]/.test(pw) && /[a-z]/.test(pw)) score++;
+            if (/\d/.test(pw) && /[^A-Za-z0-9]/.test(pw)) score++;
+
+            const bars = document.querySelectorAll('#strengthBars .strength-bar');
+            const text = document.getElementById('strengthText');
+            const levels = ['', 'weak', 'medium', 'medium', 'strong'];
+            const labels = ['', 'Weak', 'Fair', 'Good', 'Strong'];
+
+            bars.forEach((bar, i) => {
+                bar.className = 'strength-bar';
+                if (i < score) bar.classList.add('filled', levels[score]);
             });
+            text.className = 'strength-text ' + (levels[score] || '');
+            text.textContent = pw ? (labels[score] || '') : '';
         }
 
-        function closeSuccessModal() {
-            const modal = document.getElementById('successModal');
-            modal.classList.remove('show');
-
-            // Redirect after modal closes
-            setTimeout(() => {
-                window.location.href = '/partner/dashboard';
-            }, 500);
-        }
-
-        // Debounce utility
-        function debounce(func, delay) {
-            let timeoutId;
-            return function(...args) {
-                clearTimeout(timeoutId);
-                timeoutId = setTimeout(() => func.apply(this, args), delay);
-            };
-        }
-
-        // Setup event listeners for error clearing
-        function setupEventListeners() {
-            document.querySelectorAll('input, select, textarea').forEach(field => {
-                field.addEventListener('focus', function() {
-                    const group = this.closest('.form-group');
-                    if (group) {
-                        group.classList.remove('error');
-                        const errorMsg = group.querySelector('.error-message');
-                        if (errorMsg) {
-                            errorMsg.classList.remove('show');
-                        }
+        // ─── Load States ───
+        function loadStates() {
+            fetch('/partner/api/states')
+                .then(r => r.json())
+                .then(data => {
+                    const sel = document.getElementById('state');
+                    if (Array.isArray(data)) {
+                        data.forEach(s => {
+                            const opt = document.createElement('option');
+                            opt.value = s.name;
+                            opt.dataset.id = s.id;
+                            opt.textContent = s.name;
+                            sel.appendChild(opt);
+                        });
                     }
+                })
+                .catch(e => console.error('Error loading states:', e));
+        }
+
+        // ─── Init ───
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTeamMembers();
+            loadStates();
+
+            // Add team member
+            document.getElementById('addTeamBtn').addEventListener('click', e => {
+                e.preventDefault();
+                addTeamMemberRow();
+            });
+
+            // State → City cascade
+            document.getElementById('state').addEventListener('change', function() {
+                const citySelect = document.getElementById('city');
+                const stateId = this.options[this.selectedIndex]?.dataset?.id;
+
+                citySelect.innerHTML = '<option value="">Loading...</option>';
+                citySelect.disabled = true;
+
+                if (!this.value || !stateId) {
+                    citySelect.innerHTML = '<option value="">Select State first</option>';
+                    return;
+                }
+
+                fetch(`/partner/api/cities?state_id=${stateId}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        citySelect.innerHTML = '<option value="">Select City</option>';
+                        if (Array.isArray(data)) {
+                            data.forEach(c => {
+                                const opt = document.createElement('option');
+                                opt.value = c.name;
+                                opt.textContent = c.name;
+                                citySelect.appendChild(opt);
+                            });
+                        }
+                        citySelect.disabled = false;
+                    })
+                    .catch(e => {
+                        console.error('Error loading cities:', e);
+                        citySelect.innerHTML = '<option value="">Error loading cities</option>';
+                    });
+            });
+
+            // Password strength meter
+            document.getElementById('password').addEventListener('input', function() {
+                checkPasswordStrength(this.value);
+            });
+
+            // Clear errors on focus
+            document.addEventListener('focusin', function(e) {
+                const group = e.target.closest('.form-group');
+                if (group) {
+                    group.classList.remove('error');
+                    const err = group.querySelector('.error-message');
+                    if (err) err.classList.remove('show');
+                }
+            });
+
+            // Form submission
+            document.getElementById('partnerForm').addEventListener('submit', function(e) {
+                e.preventDefault();
+                if (!validateCurrentStep()) return;
+
+                const btn = document.getElementById('submitBtn');
+                const orig = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> Submitting...';
+
+                fetch(this.action, {
+                    method: 'POST',
+                    body: new FormData(this),
+                    headers: { 'Accept': 'application/json' }
+                })
+                .then(response => {
+                    if (response.ok) {
+                        document.getElementById('successModal').classList.add('show');
+                    } else {
+                        return response.json().then(data => {
+                            throw new Error(data.error || 'Registration failed');
+                        });
+                    }
+                })
+                .catch(error => {
+                    btn.disabled = false;
+                    btn.innerHTML = orig;
+                    alert('Error: ' + error.message);
                 });
             });
-        }
+
+            // Modal close
+            document.getElementById('closeModalBtn').addEventListener('click', function() {
+                document.getElementById('successModal').classList.remove('show');
+                setTimeout(() => { window.location.href = '/partner/dashboard'; }, 300);
+            });
+        });
     </script>
 </body>
 </html>
