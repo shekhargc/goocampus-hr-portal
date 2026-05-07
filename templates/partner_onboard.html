@@ -433,6 +433,7 @@
             transition: color 0.2s;
         }
         .password-toggle:hover { color: var(--gray-600); }
+        .password-toggle i { pointer-events: auto; }
 
         /* ─── Team Members ─── */
         .team-members-container {
@@ -845,20 +846,7 @@
                     </div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="partnerType">Partner Type <span class="required">*</span></label>
-                        <div class="input-wrapper">
-                            <select id="partnerType" name="partner_type" required>
-                                <option value="">Select Type</option>
-                                <option value="Channel Partner">Channel Partner</option>
-                                <option value="Marketing Partner">Marketing Partner</option>
-                                <option value="Consultant">Consultant</option>
-                            </select>
-                            <i class="fas fa-handshake"></i>
-                        </div>
-                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
-                    </div>
+                <div class="form-row full">
                     <div class="form-group">
                         <label for="website">Website <span class="optional-tag">Optional</span></label>
                         <div class="input-wrapper">

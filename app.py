@@ -17006,11 +17006,11 @@ def partner_onboard_submit(token):
         password = request.form.get('password', '').strip()
         confirm_password = request.form.get('confirm_password', '').strip()
 
-        if not company_name or not contact_person or not partner_type:
+        if not company_name or not contact_person:
             conn.close()
             if is_ajax:
-                return jsonify({'error': 'Required fields: company name, contact person, partner type'}), 400
-            flash('Required fields: company name, contact person, partner type', 'error')
+                return jsonify({'error': 'Required fields: company name, contact person'}), 400
+            flash('Required fields: company name, contact person', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
         if not password or len(password) < 6:
