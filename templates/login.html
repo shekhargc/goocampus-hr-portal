@@ -142,6 +142,16 @@
         .navbar-nav .nav-login:hover {
             background: var(--orange-dark);
         }
+        .navbar-nav .nav-partner-login {
+            background: transparent;
+            border: 2px solid var(--orange);
+            color: var(--orange);
+            padding: 0.45rem 1.1rem;
+        }
+        .navbar-nav .nav-partner-login:hover {
+            background: var(--orange);
+            color: white;
+        }
 
         /* ===== HERO ===== */
         .hero {
@@ -643,7 +653,8 @@
             <ul class="navbar-nav">
                 <li><a href="#features">Features</a></li>
                 <li><a href="#about">About</a></li>
-                <li><a href="#login" class="nav-login">Employee Login</a></li>
+                <li><a href="#login" class="nav-login" onclick="setTimeout(function(){switchLoginTab('employee')},400)">Employee Login</a></li>
+                <li><a href="#login" class="nav-login nav-partner-login" onclick="setTimeout(function(){switchLoginTab('partner')},400)">Partner Login</a></li>
             </ul>
         </div>
     </nav>
@@ -873,6 +884,7 @@
                     <li><a href="#features">Features</a></li>
                     <li><a href="#about">About</a></li>
                     <li><a href="#login">Employee Login</a></li>
+                    <li><a href="#login" onclick="setTimeout(function(){switchLoginTab('partner')},400)">Partner Login</a></li>
                     <li><a href="mailto:info@goocampus.in">Contact Us</a></li>
                 </ul>
             </div>
