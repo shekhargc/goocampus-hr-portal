@@ -103,7 +103,10 @@
                         {% endif %}
                     </td>
                     <td>
-                        <button type="button" class="button button-small button-secondary" onclick="resendInvitation('{{ invitation.id }}')">Resend</button>
+                        <div style="display: flex; gap: 0.4rem;">
+                            <button type="button" class="button button-small button-secondary" onclick="resendInvitation('{{ invitation.id }}')">Resend</button>
+                            <button type="button" class="button button-small" style="background: var(--danger, #EF4444); color: white; font-size: 0.78rem;" onclick="deleteInvitation('{{ invitation.id }}', '{{ invitation.name }}')">Delete</button>
+                        </div>
                     </td>
                 </tr>
                 {% endfor %}
@@ -277,6 +280,30 @@
             showToast('Invite link copied to clipboard!', 'success');
         }).catch(err => {
             showToast('Failed to copy. Please try again.', 'error');
+        });
+    }
+
+    function deleteInvitation(invitationId, name) {
+        if (!confirm(`Delete invitation for "${name}"? This will also remove any associated partner account and OTPs.`)) {
+            return;
+        }
+
+        fetch(`/partners/invitations/${invitationId}/delete`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                showToast('Invitation deleted successfully!', 'success');
+                setTimeout(() => location.reload(), 1000);
+            } else {
+                throw new Error('Failed to delete');
+            }
+        })
+        .catch(error => {
+            showToast('Error deleting invitation. Please try again.', 'error');
         });
     }
 

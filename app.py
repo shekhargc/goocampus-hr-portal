@@ -16494,9 +16494,10 @@ def partners_edit(pid):
 @app.route('/partners/<int:pid>/delete', methods=['POST'])
 @admin_required
 def partners_delete(pid):
-    """Delete a partner (admin only)."""
+    """Delete a partner and related data (admin only)."""
     conn = get_db()
     try:
+        conn.execute('DELETE FROM partner_team_members WHERE partner_id = ?', (pid,))
         conn.execute('DELETE FROM partners WHERE id = ?', (pid,))
         conn.commit()
         conn.close()
@@ -16694,6 +16695,57 @@ def partner_invitations_create():
         if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
             return jsonify({'error': str(e)}), 500
         flash(f'Error creating invitation: {e}', 'error')
+
+    return redirect(url_for('partner_invitations_list'))
+
+
+@app.route('/partners/invitations/<int:inv_id>/delete', methods=['POST'])
+@login_required
+def partner_invitation_delete(inv_id):
+    """Delete a partner invitation and its associated partner profile (admin only)."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['role'] not in ('Admin', 'Super Admin'):
+        conn.close()
+        flash('Only admins can delete invitations', 'error')
+        return redirect(url_for('partner_invitations_list'))
+
+    try:
+        # Get invitation to find associated partner
+        invitation = conn.execute('SELECT id, email FROM partner_invitations WHERE id = ?', (inv_id,)).fetchone()
+        if not invitation:
+            conn.close()
+            flash('Invitation not found', 'error')
+            return redirect(url_for('partner_invitations_list'))
+
+        # Delete associated partner and team members if they exist
+        partner = conn.execute('SELECT id FROM partners WHERE invitation_id = ?', (inv_id,)).fetchone()
+        if partner:
+            conn.execute('DELETE FROM partner_team_members WHERE partner_id = ?', (partner['id'],))
+            conn.execute('DELETE FROM partners WHERE id = ?', (partner['id'],))
+
+        # Delete OTPs
+        conn.execute('DELETE FROM partner_otps WHERE email = ?', (invitation['email'],))
+
+        # Delete the invitation
+        conn.execute('DELETE FROM partner_invitations WHERE id = ?', (inv_id,))
+        conn.commit()
+        conn.close()
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True}), 200
+
+        flash('Invitation and associated data deleted successfully', 'success')
+    except Exception as e:
+        logging.error(f"partner_invitation_delete: {e}")
+        conn.rollback()
+        conn.close()
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': str(e)}), 500
+
+        flash(f'Error deleting invitation: {e}', 'error')
 
     return redirect(url_for('partner_invitations_list'))
 
