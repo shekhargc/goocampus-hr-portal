@@ -19,6 +19,53 @@
         font-size: 0.9rem;
         margin-top: 0.25rem;
     }
+
+    /* ── Tabs ── */
+    .sv-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid var(--gray-200);
+    }
+    .sv-tab {
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--gray-500);
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.2s;
+        background: none;
+        border-top: none;
+        border-left: none;
+        border-right: none;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .sv-tab:hover { color: var(--navy); }
+    .sv-tab.active {
+        color: var(--orange);
+        border-bottom-color: var(--orange);
+    }
+    .sv-tab-badge {
+        background: var(--gray-100);
+        color: var(--gray-500);
+        font-size: 0.75rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 1rem;
+        font-weight: 600;
+    }
+    .sv-tab.active .sv-tab-badge {
+        background: var(--orange-light);
+        color: var(--orange);
+    }
+    .sv-tab-panel { display: none; }
+    .sv-tab-panel.active { display: block; }
+
+    /* ── Groups and rows ── */
     .sv-group {
         background: white;
         border: 1px solid var(--gray-200);
@@ -45,16 +92,29 @@
         padding: 0.15rem 0.5rem;
         border-radius: 1rem;
     }
-    .sv-row {
+
+    /* Team row: Section | Active | Admin Only | Departments | Employees | Actions */
+    .sv-row-team {
         display: grid;
-        grid-template-columns: 2fr 1fr 1fr 1.5fr 100px;
-        gap: 1rem;
+        grid-template-columns: 1.8fr 80px 90px 1.2fr 1.5fr 70px;
+        gap: 0.75rem;
         align-items: center;
         padding: 0.85rem 1.25rem;
         border-bottom: 1px solid var(--gray-100);
         font-size: 0.9rem;
     }
-    .sv-row:last-child { border-bottom: none; }
+    /* Partner row: Section | Active | Allowed Partners | Actions */
+    .sv-row-partner {
+        display: grid;
+        grid-template-columns: 2fr 80px 2.5fr 70px;
+        gap: 0.75rem;
+        align-items: center;
+        padding: 0.85rem 1.25rem;
+        border-bottom: 1px solid var(--gray-100);
+        font-size: 0.9rem;
+    }
+    .sv-row-team:last-child, .sv-row-partner:last-child { border-bottom: none; }
+
     .sv-label {
         font-weight: 500;
         color: var(--gray-800);
@@ -109,29 +169,85 @@
         background: white;
         color: var(--gray-700);
     }
-    .sv-emp-tags {
+
+    /* Tags (shared by emp codes, departments, partner IDs) */
+    .sv-tags {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.35rem;
-        min-height: 28px;
+        gap: 0.3rem;
+        min-height: 26px;
     }
-    .sv-emp-tag {
-        background: var(--blue-light);
-        color: var(--blue-dark);
-        font-size: 0.75rem;
-        padding: 0.15rem 0.5rem;
+    .sv-tag {
+        font-size: 0.73rem;
+        padding: 0.12rem 0.45rem;
         border-radius: 0.3rem;
         display: flex;
         align-items: center;
-        gap: 0.3rem;
+        gap: 0.25rem;
+        white-space: nowrap;
     }
-    .sv-emp-tag-x {
+    .sv-tag-emp {
+        background: var(--blue-light, #e8f0fe);
+        color: var(--blue-dark, #1a56db);
+    }
+    .sv-tag-dept {
+        background: #f0fdf4;
+        color: #166534;
+    }
+    .sv-tag-partner {
+        background: #fef3c7;
+        color: #92400e;
+    }
+    .sv-tag-x {
         cursor: pointer;
         font-weight: 700;
         font-size: 0.85rem;
         color: var(--gray-400);
+        line-height: 1;
     }
-    .sv-emp-tag-x:hover { color: var(--danger); }
+    .sv-tag-x:hover { color: var(--danger); }
+
+    /* Inline add input */
+    .sv-add-inline {
+        position: relative;
+        display: inline-block;
+        margin-top: 0.3rem;
+    }
+    .sv-add-input {
+        padding: 0.3rem 0.5rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        font-size: 0.8rem;
+        width: 130px;
+        font-family: inherit;
+    }
+    .sv-add-input:focus {
+        outline: none;
+        border-color: var(--orange);
+    }
+    .sv-dropdown {
+        position: absolute;
+        top: 100%;
+        left: 0;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        max-height: 180px;
+        overflow-y: auto;
+        z-index: 50;
+        width: 220px;
+        display: none;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    }
+    .sv-dropdown.show { display: block; }
+    .sv-dropdown-item {
+        padding: 0.4rem 0.6rem;
+        cursor: pointer;
+        font-size: 0.82rem;
+        color: var(--gray-700);
+    }
+    .sv-dropdown-item:hover { background: var(--orange-light); }
+
     .sv-actions {
         display: flex;
         gap: 0.4rem;
@@ -162,45 +278,8 @@
         transition: background 0.2s;
     }
     .sv-add-btn:hover { background: var(--orange-dark); }
-    /* Add emp dropdown */
-    .sv-emp-add {
-        position: relative;
-        display: inline-block;
-    }
-    .sv-emp-input {
-        padding: 0.35rem 0.5rem;
-        border: 1px solid var(--gray-200);
-        border-radius: 0.4rem;
-        font-size: 0.82rem;
-        width: 140px;
-        font-family: inherit;
-    }
-    .sv-emp-input:focus {
-        outline: none;
-        border-color: var(--orange);
-    }
-    .sv-emp-dropdown {
-        position: absolute;
-        top: 100%;
-        left: 0;
-        background: white;
-        border: 1px solid var(--gray-200);
-        border-radius: 0.4rem;
-        max-height: 160px;
-        overflow-y: auto;
-        z-index: 50;
-        width: 200px;
-        display: none;
-        box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-    }
-    .sv-emp-dropdown.show { display: block; }
-    .sv-emp-dropdown-item {
-        padding: 0.4rem 0.6rem;
-        cursor: pointer;
-        font-size: 0.82rem;
-        color: var(--gray-700);
-    }
-    .sv-emp-dropdown-item:hover { background: var(--orange-light); }
+    .sv-header-btns { display: flex; gap: 0.5rem; }
+
     /* Modal */
     .sv-modal-overlay {
         display: none;
@@ -288,11 +367,16 @@
         transform: translateY(0);
     }
 
-    @media (max-width: 768px) {
-        .sv-row {
-            grid-template-columns: 1fr;
-            gap: 0.5rem;
-        }
+    .sv-empty {
+        text-align: center;
+        padding: 2rem;
+        color: var(--gray-400);
+        font-size: 0.9rem;
+    }
+
+    @media (max-width: 900px) {
+        .sv-row-team { grid-template-columns: 1fr; gap: 0.5rem; }
+        .sv-row-partner { grid-template-columns: 1fr; gap: 0.5rem; }
     }
 </style>
 {% endblock %}
@@ -301,11 +385,27 @@
 <div class="sv-header">
     <div>
         <h1>Section Visibility Control</h1>
-        <p>Control which menu sections and pages are visible to each user or role</p>
+        <p>Control which sections are visible to team members and partners</p>
     </div>
-    <button class="sv-add-btn" onclick="openAddModal()">+ Add Section</button>
+    <div class="sv-header-btns">
+        <button class="sv-add-btn" id="btnAddSection" onclick="openAddModal()">+ Add Section</button>
+    </div>
 </div>
 
+<!-- Tabs -->
+<div class="sv-tabs">
+    <button class="sv-tab active" onclick="switchTab('team', this)">
+        GC Team
+        <span class="sv-tab-badge">{{ groups|length }} groups</span>
+    </button>
+    <button class="sv-tab" onclick="switchTab('partners', this)">
+        Partners
+        <span class="sv-tab-badge">{{ partner_groups|length }} groups</span>
+    </button>
+</div>
+
+<!-- ═══════════ GC TEAM TAB ═══════════ -->
+<div class="sv-tab-panel active" id="panel-team">
 {% for group_name, sections in groups.items() %}
 <div class="sv-group">
     <div class="sv-group-header">
@@ -313,16 +413,16 @@
         <span class="sv-group-badge">{{ sections|length }}</span>
     </div>
     <div style="overflow-x: auto;">
-        <!-- Column headers -->
-        <div class="sv-row" style="font-weight: 600; font-size: 0.8rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.3px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+        <div class="sv-row-team" style="font-weight: 600; font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.3px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
             <div>Section</div>
             <div>Active</div>
             <div>Admin Only</div>
-            <div>Allowed Employees</div>
+            <div>Departments</div>
+            <div>Employees</div>
             <div>Actions</div>
         </div>
         {% for s in sections %}
-        <div class="sv-row" id="row-{{ s.id }}">
+        <div class="sv-row-team" id="team-row-{{ s.id }}">
             <div>
                 <div class="sv-label">{{ s.section_label }}</div>
                 <div class="sv-key">{{ s.section_key }}</div>
@@ -330,34 +430,51 @@
             <div>
                 <label class="sv-toggle">
                     <input type="checkbox" {% if s.is_active %}checked{% endif %}
-                           onchange="updateSection({{ s.id }}, this.parentElement.parentElement.parentElement)">
+                           onchange="updateTeamSection({{ s.id }})">
                     <span class="sv-toggle-slider"></span>
                 </label>
             </div>
             <div>
                 <label class="sv-toggle">
                     <input type="checkbox" {% if s.is_admin_only %}checked{% endif %}
-                           onchange="updateSection({{ s.id }}, this.parentElement.parentElement.parentElement)">
+                           onchange="updateTeamSection({{ s.id }})">
                     <span class="sv-toggle-slider"></span>
                 </label>
             </div>
+            <!-- Departments -->
             <div>
-                <div class="sv-emp-tags" id="tags-{{ s.id }}">
-                    {% for code in s.allowed_emp_codes.split(',') if code.strip() %}
-                    <span class="sv-emp-tag">
-                        {{ code.strip() }}
-                        <span class="sv-emp-tag-x" onclick="removeEmpCode({{ s.id }}, '{{ code.strip() }}')">&times;</span>
+                <div class="sv-tags" id="dept-tags-{{ s.id }}">
+                    {% for dept in s.allowed_departments.split(',') if dept.strip() %}
+                    <span class="sv-tag sv-tag-dept">
+                        {{ dept.strip() }}
+                        <span class="sv-tag-x" onclick="removeDept({{ s.id }}, '{{ dept.strip() }}')">&times;</span>
                     </span>
                     {% endfor %}
                 </div>
-                <div class="sv-emp-add" style="margin-top: 0.35rem;">
-                    <input type="text" class="sv-emp-input" placeholder="Add employee..."
+                <div class="sv-add-inline">
+                    <input type="text" class="sv-add-input" placeholder="Add dept..."
+                           oninput="filterDepts(this, {{ s.id }})" onfocus="filterDepts(this, {{ s.id }})">
+                    <div class="sv-dropdown" id="dept-dd-{{ s.id }}"></div>
+                </div>
+            </div>
+            <!-- Employees -->
+            <div>
+                <div class="sv-tags" id="emp-tags-{{ s.id }}">
+                    {% for code in s.allowed_emp_codes.split(',') if code.strip() %}
+                    <span class="sv-tag sv-tag-emp">
+                        {{ code.strip() }}
+                        <span class="sv-tag-x" onclick="removeEmpCode({{ s.id }}, '{{ code.strip() }}')">&times;</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="sv-add-inline">
+                    <input type="text" class="sv-add-input" placeholder="Add employee..."
                            oninput="filterEmps(this, {{ s.id }})" onfocus="filterEmps(this, {{ s.id }})">
-                    <div class="sv-emp-dropdown" id="emp-dd-{{ s.id }}"></div>
+                    <div class="sv-dropdown" id="emp-dd-{{ s.id }}"></div>
                 </div>
             </div>
             <div class="sv-actions">
-                <button class="sv-btn-del" onclick="deleteSection({{ s.id }})" title="Delete">
+                <button class="sv-btn-del" onclick="deleteTeamSection({{ s.id }})" title="Delete">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
                 </button>
             </div>
@@ -366,33 +483,121 @@
     </div>
 </div>
 {% endfor %}
+{% if not groups %}
+<div class="sv-empty">No team sections configured yet. Click "+ Add Section" to create one.</div>
+{% endif %}
+</div>
 
-<!-- Add Section Modal -->
-<div class="sv-modal-overlay" id="addModal">
+<!-- ═══════════ PARTNERS TAB ═══════════ -->
+<div class="sv-tab-panel" id="panel-partners">
+{% for group_name, sections in partner_groups.items() %}
+<div class="sv-group">
+    <div class="sv-group-header">
+        {{ group_name }}
+        <span class="sv-group-badge">{{ sections|length }}</span>
+    </div>
+    <div style="overflow-x: auto;">
+        <div class="sv-row-partner" style="font-weight: 600; font-size: 0.78rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.3px; background: var(--gray-50); border-bottom: 1px solid var(--gray-200);">
+            <div>Section</div>
+            <div>Active</div>
+            <div>Allowed Partners</div>
+            <div>Actions</div>
+        </div>
+        {% for s in sections %}
+        <div class="sv-row-partner" id="partner-row-{{ s.id }}">
+            <div>
+                <div class="sv-label">{{ s.section_label }}</div>
+                <div class="sv-key">{{ s.section_key }}</div>
+            </div>
+            <div>
+                <label class="sv-toggle">
+                    <input type="checkbox" {% if s.is_active %}checked{% endif %}
+                           onchange="updatePartnerSection({{ s.id }})">
+                    <span class="sv-toggle-slider"></span>
+                </label>
+            </div>
+            <div>
+                <div class="sv-tags" id="partner-tags-{{ s.id }}">
+                    {% for pid in s.allowed_partner_ids.split(',') if pid.strip() %}
+                    <span class="sv-tag sv-tag-partner" data-pid="{{ pid.strip() }}">
+                        {{ pid.strip() }}
+                        <span class="sv-tag-x" onclick="removePartner({{ s.id }}, '{{ pid.strip() }}')">&times;</span>
+                    </span>
+                    {% endfor %}
+                </div>
+                <div class="sv-add-inline">
+                    <input type="text" class="sv-add-input" placeholder="Add partner..."
+                           oninput="filterPartners(this, {{ s.id }})" onfocus="filterPartners(this, {{ s.id }})">
+                    <div class="sv-dropdown" id="partner-dd-{{ s.id }}"></div>
+                </div>
+                <div style="font-size: 0.72rem; color: var(--gray-400); margin-top: 0.2rem;">
+                    Leave empty = visible to all partners
+                </div>
+            </div>
+            <div class="sv-actions">
+                <button class="sv-btn-del" onclick="deletePartnerSection({{ s.id }})" title="Delete">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/></svg>
+                </button>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+{% endfor %}
+{% if not partner_groups %}
+<div class="sv-empty">No partner sections configured yet. Click "+ Add Section" to create one.</div>
+{% endif %}
+</div>
+
+<!-- ═══════════ ADD TEAM SECTION MODAL ═══════════ -->
+<div class="sv-modal-overlay" id="addTeamModal">
     <div class="sv-modal">
-        <h3>Add New Section</h3>
+        <h3>Add Team Section</h3>
         <div class="form-group">
             <label>Section Key</label>
-            <input type="text" class="form-input" id="newKey" placeholder="e.g. sales_reports">
+            <input type="text" class="form-input" id="newTeamKey" placeholder="e.g. sales_reports">
         </div>
         <div class="form-group">
             <label>Display Label</label>
-            <input type="text" class="form-input" id="newLabel" placeholder="e.g. Sales Reports">
+            <input type="text" class="form-input" id="newTeamLabel" placeholder="e.g. Sales Reports">
         </div>
         <div class="form-group">
             <label>Menu Group</label>
-            <input type="text" class="form-input" id="newGroup" placeholder="e.g. Sales, HR, Company" list="groupList">
-            <datalist id="groupList">
+            <input type="text" class="form-input" id="newTeamGroup" placeholder="e.g. Sales, HR, Company" list="teamGroupList">
+            <datalist id="teamGroupList">
                 {% for g in groups.keys() %}<option value="{{ g }}">{% endfor %}
             </datalist>
         </div>
         <div class="form-group">
             <label>Sort Order</label>
-            <input type="number" class="form-input" id="newSort" value="99">
+            <input type="number" class="form-input" id="newTeamSort" value="99">
         </div>
         <div class="sv-modal-btns">
-            <button class="sv-btn-cancel" onclick="closeAddModal()">Cancel</button>
-            <button class="sv-btn-save" onclick="addSection()">Add Section</button>
+            <button class="sv-btn-cancel" onclick="closeModal('addTeamModal')">Cancel</button>
+            <button class="sv-btn-save" onclick="addTeamSection()">Add Section</button>
+        </div>
+    </div>
+</div>
+
+<!-- ═══════════ ADD PARTNER SECTION MODAL ═══════════ -->
+<div class="sv-modal-overlay" id="addPartnerModal">
+    <div class="sv-modal">
+        <h3>Add Partner Section</h3>
+        <div class="form-group">
+            <label>Section Key</label>
+            <input type="text" class="form-input" id="newPartnerKey" placeholder="e.g. partner_invoices">
+        </div>
+        <div class="form-group">
+            <label>Display Label</label>
+            <input type="text" class="form-input" id="newPartnerLabel" placeholder="e.g. Invoices">
+        </div>
+        <div class="form-group">
+            <label>Sort Order</label>
+            <input type="number" class="form-input" id="newPartnerSort" value="99">
+        </div>
+        <div class="sv-modal-btns">
+            <button class="sv-btn-cancel" onclick="closeModal('addPartnerModal')">Cancel</button>
+            <button class="sv-btn-save" onclick="addPartnerSection()">Add Section</button>
         </div>
     </div>
 </div>
@@ -404,6 +609,20 @@
 {% block extra_js %}
 <script>
 var ALL_EMPLOYEES = {{ employees|tojson }};
+var ALL_DEPARTMENTS = {{ departments|tojson }};
+var ALL_PARTNERS = {{ partners|tojson }};
+var currentTab = 'team';
+
+// Build partner name lookup
+var PARTNER_NAMES = {};
+ALL_PARTNERS.forEach(function(p) { PARTNER_NAMES[String(p.id)] = p.company_name; });
+
+// Replace raw partner IDs with names on load
+document.querySelectorAll('.sv-tag-partner[data-pid]').forEach(function(tag) {
+    var pid = tag.getAttribute('data-pid');
+    var name = PARTNER_NAMES[pid];
+    if (name) tag.childNodes[0].textContent = name + ' ';
+});
 
 function showToast(msg) {
     var t = document.getElementById('toast');
@@ -412,24 +631,55 @@ function showToast(msg) {
     setTimeout(function() { t.classList.remove('show'); }, 2000);
 }
 
-function getRowData(row) {
+// ── Tab switching ──
+function switchTab(tab, btn) {
+    currentTab = tab;
+    document.querySelectorAll('.sv-tab').forEach(function(t) { t.classList.remove('active'); });
+    btn.classList.add('active');
+    document.querySelectorAll('.sv-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('panel-' + tab).classList.add('active');
+}
+
+function openAddModal() {
+    if (currentTab === 'team') {
+        document.getElementById('addTeamModal').classList.add('show');
+    } else {
+        document.getElementById('addPartnerModal').classList.add('show');
+    }
+}
+function closeModal(id) { document.getElementById(id).classList.remove('show'); }
+
+
+// ══════════════════════════════════════════
+// ── TEAM SECTION FUNCTIONS ──
+// ══════════════════════════════════════════
+
+function getTeamRowData(row) {
     var toggles = row.querySelectorAll('.sv-toggle input');
-    var tags = row.querySelectorAll('.sv-emp-tag');
-    var codes = [];
-    tags.forEach(function(t) {
+    var empTags = row.querySelectorAll('#emp-tags-' + row.id.replace('team-row-', '') + ' .sv-tag-emp');
+    var deptTags = row.querySelectorAll('#dept-tags-' + row.id.replace('team-row-', '') + ' .sv-tag-dept');
+    var empCodes = [];
+    empTags.forEach(function(t) {
         var txt = t.childNodes[0].textContent.trim();
-        if (txt) codes.push(txt);
+        if (txt) empCodes.push(txt);
+    });
+    var depts = [];
+    deptTags.forEach(function(t) {
+        var txt = t.childNodes[0].textContent.trim();
+        if (txt) depts.push(txt);
     });
     return {
         is_active: toggles[0].checked ? 1 : 0,
         is_admin_only: toggles[1].checked ? 1 : 0,
-        allowed_emp_codes: codes.join(','),
+        allowed_emp_codes: empCodes.join(','),
+        allowed_departments: depts.join(','),
         allowed_roles: ''
     };
 }
 
-function updateSection(id, row) {
-    var data = getRowData(row);
+function updateTeamSection(id) {
+    var row = document.getElementById('team-row-' + id);
+    var data = getTeamRowData(row);
     fetch('/api/section-permissions/' + id, {
         method: 'PUT',
         headers: {'Content-Type': 'application/json'},
@@ -438,31 +688,26 @@ function updateSection(id, row) {
     .then(function() { showToast('Updated'); });
 }
 
+// ── Employee tags ──
 function removeEmpCode(sectionId, code) {
-    var row = document.getElementById('row-' + sectionId);
-    var tagsDiv = document.getElementById('tags-' + sectionId);
-    // Remove the tag
-    var allTags = tagsDiv.querySelectorAll('.sv-emp-tag');
-    allTags.forEach(function(t) {
+    var tagsDiv = document.getElementById('emp-tags-' + sectionId);
+    tagsDiv.querySelectorAll('.sv-tag-emp').forEach(function(t) {
         if (t.childNodes[0].textContent.trim() === code) t.remove();
     });
-    updateSection(sectionId, row);
+    updateTeamSection(sectionId);
 }
 
 function addEmpCode(sectionId, code) {
-    var tagsDiv = document.getElementById('tags-' + sectionId);
-    // Check if already exists
-    var existing = tagsDiv.querySelectorAll('.sv-emp-tag');
+    var tagsDiv = document.getElementById('emp-tags-' + sectionId);
+    var existing = tagsDiv.querySelectorAll('.sv-tag-emp');
     for (var i = 0; i < existing.length; i++) {
         if (existing[i].childNodes[0].textContent.trim() === code) return;
     }
     var span = document.createElement('span');
-    span.className = 'sv-emp-tag';
-    span.innerHTML = code + ' <span class="sv-emp-tag-x" onclick="removeEmpCode(' + sectionId + ', \'' + code + '\')">&times;</span>';
+    span.className = 'sv-tag sv-tag-emp';
+    span.innerHTML = code + ' <span class="sv-tag-x" onclick="removeEmpCode(' + sectionId + ', \'' + code + '\')">&times;</span>';
     tagsDiv.appendChild(span);
-    var row = document.getElementById('row-' + sectionId);
-    updateSection(sectionId, row);
-    // Clear input and hide dropdown
+    updateTeamSection(sectionId);
     var dd = document.getElementById('emp-dd-' + sectionId);
     dd.classList.remove('show');
     dd.previousElementSibling.value = '';
@@ -472,67 +717,206 @@ function filterEmps(input, sectionId) {
     var val = input.value.trim().toLowerCase();
     var dd = document.getElementById('emp-dd-' + sectionId);
     dd.innerHTML = '';
+    if (val.length < 1) { dd.classList.remove('show'); return; }
     var filtered = ALL_EMPLOYEES.filter(function(e) {
         return e.name.toLowerCase().indexOf(val) > -1 || e.emp_code.toLowerCase().indexOf(val) > -1;
     }).slice(0, 8);
-    if (filtered.length === 0) {
-        dd.classList.remove('show');
-        return;
-    }
+    if (filtered.length === 0) { dd.classList.remove('show'); return; }
     filtered.forEach(function(e) {
         var div = document.createElement('div');
-        div.className = 'sv-emp-dropdown-item';
-        div.textContent = e.emp_code + ' — ' + e.name;
+        div.className = 'sv-dropdown-item';
+        div.textContent = e.emp_code + ' — ' + e.name + (e.department ? ' (' + e.department + ')' : '');
         div.onclick = function() { addEmpCode(sectionId, e.emp_code); };
         dd.appendChild(div);
     });
     dd.classList.add('show');
 }
 
-function deleteSection(id) {
+// ── Department tags ──
+function removeDept(sectionId, dept) {
+    var tagsDiv = document.getElementById('dept-tags-' + sectionId);
+    tagsDiv.querySelectorAll('.sv-tag-dept').forEach(function(t) {
+        if (t.childNodes[0].textContent.trim() === dept) t.remove();
+    });
+    updateTeamSection(sectionId);
+}
+
+function addDept(sectionId, dept) {
+    var tagsDiv = document.getElementById('dept-tags-' + sectionId);
+    var existing = tagsDiv.querySelectorAll('.sv-tag-dept');
+    for (var i = 0; i < existing.length; i++) {
+        if (existing[i].childNodes[0].textContent.trim() === dept) return;
+    }
+    var span = document.createElement('span');
+    span.className = 'sv-tag sv-tag-dept';
+    span.innerHTML = dept + ' <span class="sv-tag-x" onclick="removeDept(' + sectionId + ', \'' + dept.replace(/'/g, "\\'") + '\')">&times;</span>';
+    tagsDiv.appendChild(span);
+    updateTeamSection(sectionId);
+    var dd = document.getElementById('dept-dd-' + sectionId);
+    dd.classList.remove('show');
+    dd.previousElementSibling.value = '';
+}
+
+function filterDepts(input, sectionId) {
+    var val = input.value.trim().toLowerCase();
+    var dd = document.getElementById('dept-dd-' + sectionId);
+    dd.innerHTML = '';
+    var filtered = ALL_DEPARTMENTS.filter(function(d) {
+        return d.toLowerCase().indexOf(val) > -1;
+    }).slice(0, 10);
+    if (filtered.length === 0) { dd.classList.remove('show'); return; }
+    filtered.forEach(function(d) {
+        var div = document.createElement('div');
+        div.className = 'sv-dropdown-item';
+        div.textContent = d;
+        div.onclick = function() { addDept(sectionId, d); };
+        dd.appendChild(div);
+    });
+    dd.classList.add('show');
+}
+
+function deleteTeamSection(id) {
     if (!confirm('Delete this section permission?')) return;
     fetch('/api/section-permissions/' + id, { method: 'DELETE' })
     .then(function(r) { return r.json(); })
     .then(function() {
-        document.getElementById('row-' + id).remove();
+        document.getElementById('team-row-' + id).remove();
         showToast('Deleted');
     });
 }
 
-function openAddModal() { document.getElementById('addModal').classList.add('show'); }
-function closeAddModal() { document.getElementById('addModal').classList.remove('show'); }
-
-function addSection() {
+function addTeamSection() {
     var data = {
-        section_key: document.getElementById('newKey').value.trim(),
-        section_label: document.getElementById('newLabel').value.trim(),
-        menu_group: document.getElementById('newGroup').value.trim(),
-        sort_order: parseInt(document.getElementById('newSort').value) || 99,
-        is_admin_only: 0,
-        is_active: 1,
-        allowed_roles: '',
-        allowed_emp_codes: ''
+        section_key: document.getElementById('newTeamKey').value.trim(),
+        section_label: document.getElementById('newTeamLabel').value.trim(),
+        menu_group: document.getElementById('newTeamGroup').value.trim(),
+        sort_order: parseInt(document.getElementById('newTeamSort').value) || 99,
+        is_admin_only: 0, is_active: 1, allowed_roles: '', allowed_emp_codes: '', allowed_departments: ''
     };
-    if (!data.section_key || !data.section_label) {
-        alert('Key and label are required');
-        return;
-    }
+    if (!data.section_key || !data.section_label) { alert('Key and label are required'); return; }
     fetch('/api/section-permissions', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(data)
     }).then(function(r) { return r.json(); })
     .then(function() {
-        closeAddModal();
+        closeModal('addTeamModal');
         showToast('Added — reloading...');
         setTimeout(function() { location.reload(); }, 800);
     });
 }
 
-// Close dropdowns on outside click
+
+// ══════════════════════════════════════════
+// ── PARTNER SECTION FUNCTIONS ──
+// ══════════════════════════════════════════
+
+function getPartnerRowData(row) {
+    var sectionId = row.id.replace('partner-row-', '');
+    var toggle = row.querySelector('.sv-toggle input');
+    var tags = row.querySelectorAll('#partner-tags-' + sectionId + ' .sv-tag-partner');
+    var pids = [];
+    tags.forEach(function(t) {
+        var pid = t.getAttribute('data-pid');
+        if (pid) pids.push(pid);
+    });
+    return {
+        is_active: toggle.checked ? 1 : 0,
+        allowed_partner_ids: pids.join(',')
+    };
+}
+
+function updatePartnerSection(id) {
+    var row = document.getElementById('partner-row-' + id);
+    var data = getPartnerRowData(row);
+    fetch('/api/partner-section-permissions/' + id, {
+        method: 'PUT',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function() { showToast('Updated'); });
+}
+
+function removePartner(sectionId, pid) {
+    var tagsDiv = document.getElementById('partner-tags-' + sectionId);
+    tagsDiv.querySelectorAll('.sv-tag-partner').forEach(function(t) {
+        if (t.getAttribute('data-pid') === String(pid)) t.remove();
+    });
+    updatePartnerSection(sectionId);
+}
+
+function addPartnerTag(sectionId, pid, name) {
+    var tagsDiv = document.getElementById('partner-tags-' + sectionId);
+    var existing = tagsDiv.querySelectorAll('.sv-tag-partner');
+    for (var i = 0; i < existing.length; i++) {
+        if (existing[i].getAttribute('data-pid') === String(pid)) return;
+    }
+    var span = document.createElement('span');
+    span.className = 'sv-tag sv-tag-partner';
+    span.setAttribute('data-pid', pid);
+    span.innerHTML = name + ' <span class="sv-tag-x" onclick="removePartner(' + sectionId + ', \'' + pid + '\')">&times;</span>';
+    tagsDiv.appendChild(span);
+    updatePartnerSection(sectionId);
+    var dd = document.getElementById('partner-dd-' + sectionId);
+    dd.classList.remove('show');
+    dd.previousElementSibling.value = '';
+}
+
+function filterPartners(input, sectionId) {
+    var val = input.value.trim().toLowerCase();
+    var dd = document.getElementById('partner-dd-' + sectionId);
+    dd.innerHTML = '';
+    if (val.length < 1) { dd.classList.remove('show'); return; }
+    var filtered = ALL_PARTNERS.filter(function(p) {
+        return p.company_name.toLowerCase().indexOf(val) > -1 ||
+               (p.contact_person && p.contact_person.toLowerCase().indexOf(val) > -1);
+    }).slice(0, 8);
+    if (filtered.length === 0) { dd.classList.remove('show'); return; }
+    filtered.forEach(function(p) {
+        var div = document.createElement('div');
+        div.className = 'sv-dropdown-item';
+        div.textContent = p.company_name + (p.partner_type ? ' (' + p.partner_type + ')' : '');
+        div.onclick = function() { addPartnerTag(sectionId, p.id, p.company_name); };
+        dd.appendChild(div);
+    });
+    dd.classList.add('show');
+}
+
+function deletePartnerSection(id) {
+    if (!confirm('Delete this partner section permission?')) return;
+    fetch('/api/partner-section-permissions/' + id, { method: 'DELETE' })
+    .then(function(r) { return r.json(); })
+    .then(function() {
+        document.getElementById('partner-row-' + id).remove();
+        showToast('Deleted');
+    });
+}
+
+function addPartnerSection() {
+    var data = {
+        section_key: document.getElementById('newPartnerKey').value.trim(),
+        section_label: document.getElementById('newPartnerLabel').value.trim(),
+        menu_group: 'Partner Portal',
+        sort_order: parseInt(document.getElementById('newPartnerSort').value) || 99,
+        is_active: 1, allowed_partner_ids: ''
+    };
+    if (!data.section_key || !data.section_label) { alert('Key and label are required'); return; }
+    fetch('/api/partner-section-permissions', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(data)
+    }).then(function(r) { return r.json(); })
+    .then(function() {
+        closeModal('addPartnerModal');
+        showToast('Added — reloading...');
+        setTimeout(function() { location.reload(); }, 800);
+    });
+}
+
+// ── Close dropdowns on outside click ──
 document.addEventListener('click', function(e) {
-    if (!e.target.classList.contains('sv-emp-input')) {
-        document.querySelectorAll('.sv-emp-dropdown').forEach(function(d) {
+    if (!e.target.classList.contains('sv-add-input')) {
+        document.querySelectorAll('.sv-dropdown').forEach(function(d) {
             d.classList.remove('show');
         });
     }

@@ -20372,41 +20372,81 @@ def ensure_section_permissions_table():
             is_admin_only INTEGER DEFAULT 0,
             allowed_roles TEXT DEFAULT '',
             allowed_emp_codes TEXT DEFAULT '',
+            allowed_departments TEXT DEFAULT '',
             is_active INTEGER DEFAULT 1,
             sort_order INTEGER DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Add allowed_departments column if missing (migration for existing DBs)
+        try:
+            conn.execute("SELECT allowed_departments FROM section_permissions LIMIT 1")
+        except Exception:
+            conn.rollback()
+            conn.execute("ALTER TABLE section_permissions ADD COLUMN allowed_departments TEXT DEFAULT ''")
+            conn.commit()
+
         # Seed default sections if empty
         count = conn.execute("SELECT COUNT(*) as c FROM section_permissions").fetchone()['c']
         if count == 0:
             defaults = [
-                ('dashboard', 'Dashboard', 'Main', 0, '', '', 1, 1),
-                ('hr_leave', 'Leave Management', 'HR', 0, '', '', 1, 10),
-                ('hr_attendance', 'Attendance / Time Log', 'HR', 0, '', '', 1, 11),
-                ('hr_employees', 'Employee Directory', 'HR', 0, '', '', 1, 12),
-                ('hr_wfh', 'Work From Home', 'HR', 0, '', '', 1, 13),
-                ('sales_meetings', 'Meetings', 'Sales', 0, '', '', 1, 20),
-                ('sales_projects', 'Projects', 'Sales', 0, '', '', 1, 21),
-                ('sales_partners', 'Partners', 'Sales', 0, '', '', 1, 22),
-                ('sales_news', 'Sales News', 'Sales', 0, '', '', 1, 23),
-                ('ops_plab', 'PLAB Operations', 'Operations', 0, '', '', 1, 30),
-                ('ops_visa', 'Visa & Travel', 'Operations', 0, '', '', 1, 31),
-                ('ops_pathway', 'PLAB Pathway Dashboard', 'Operations', 0, '', '', 1, 32),
-                ('finance_budget', 'Budget', 'Finance', 1, '', '', 1, 40),
-                ('finance_revenue', 'Revenue', 'Finance', 1, '', '', 1, 41),
-                ('company_org', 'Org Chart', 'Company', 0, '', '', 1, 50),
-                ('company_holidays', 'Holidays', 'Company', 0, '', '', 1, 51),
-                ('company_calendar', 'Calendar', 'Company', 0, '', '', 1, 52),
-                ('company_settings', 'State & City Settings', 'Company', 1, '', '', 1, 53),
-                ('company_reset_pw', 'Reset Passwords', 'Company', 1, '', '', 1, 54),
-                ('company_section_ctrl', 'Section Visibility', 'Company', 1, '', '', 1, 55),
-                ('colleges_portal', 'College Portal', 'Colleges', 0, '', '', 1, 60),
-                ('colleges_predictor', 'Medical Predictor', 'Colleges', 0, '', '', 1, 61),
+                ('dashboard', 'Dashboard', 'Main', 0, '', '', '', 1, 1),
+                ('hr_leave', 'Leave Management', 'HR', 0, '', '', '', 1, 10),
+                ('hr_attendance', 'Attendance / Time Log', 'HR', 0, '', '', '', 1, 11),
+                ('hr_employees', 'Employee Directory', 'HR', 0, '', '', '', 1, 12),
+                ('hr_wfh', 'Work From Home', 'HR', 0, '', '', '', 1, 13),
+                ('sales_meetings', 'Meetings', 'Sales', 0, '', '', '', 1, 20),
+                ('sales_projects', 'Projects', 'Sales', 0, '', '', '', 1, 21),
+                ('sales_partners', 'Partners', 'Sales', 0, '', '', '', 1, 22),
+                ('sales_news', 'Sales News', 'Sales', 0, '', '', '', 1, 23),
+                ('ops_plab', 'PLAB Operations', 'Operations', 0, '', '', '', 1, 30),
+                ('ops_visa', 'Visa & Travel', 'Operations', 0, '', '', '', 1, 31),
+                ('ops_pathway', 'PLAB Pathway Dashboard', 'Operations', 0, '', '', '', 1, 32),
+                ('finance_budget', 'Budget', 'Finance', 1, '', '', '', 1, 40),
+                ('finance_revenue', 'Revenue', 'Finance', 1, '', '', '', 1, 41),
+                ('company_org', 'Org Chart', 'Company', 0, '', '', '', 1, 50),
+                ('company_holidays', 'Holidays', 'Company', 0, '', '', '', 1, 51),
+                ('company_calendar', 'Calendar', 'Company', 0, '', '', '', 1, 52),
+                ('company_settings', 'State & City Settings', 'Company', 1, '', '', '', 1, 53),
+                ('company_reset_pw', 'Reset Passwords', 'Company', 1, '', '', '', 1, 54),
+                ('company_section_ctrl', 'Section Visibility', 'Company', 1, '', '', '', 1, 55),
+                ('colleges_portal', 'College Portal', 'Colleges', 0, '', '', '', 1, 60),
+                ('colleges_predictor', 'Medical Predictor', 'Colleges', 0, '', '', '', 1, 61),
             ]
             for d in defaults:
                 conn.execute('''INSERT INTO section_permissions
-                    (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, is_active, sort_order)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)''', d)
+                    (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, allowed_departments, is_active, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''', d)
+
+        # ── Partner section permissions table ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_section_permissions (
+            id SERIAL PRIMARY KEY,
+            section_key TEXT NOT NULL,
+            section_label TEXT NOT NULL,
+            menu_group TEXT NOT NULL DEFAULT 'Partner Portal',
+            allowed_partner_ids TEXT DEFAULT '',
+            is_active INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # Seed default partner sections if empty
+        pcount = conn.execute("SELECT COUNT(*) as c FROM partner_section_permissions").fetchone()['c']
+        if pcount == 0:
+            partner_defaults = [
+                ('partner_dashboard', 'Dashboard', 'Partner Portal', '', 1, 1),
+                ('partner_student_leads', 'Student Leads', 'Partner Portal', '', 1, 2),
+                ('partner_b2b_leads', 'School/College Leads', 'Partner Portal', '', 1, 3),
+                ('partner_team', 'Team Members', 'Partner Portal', '', 1, 4),
+                ('partner_products', 'Products & Services', 'Partner Portal', '', 1, 5),
+                ('partner_commissions', 'Commissions', 'Partner Portal', '', 1, 6),
+                ('partner_reports', 'Reports', 'Partner Portal', '', 1, 7),
+                ('partner_college_portal', 'College Portal', 'Partner Portal', '', 1, 8),
+                ('partner_medical_predictor', 'Medical Predictor', 'Partner Portal', '', 1, 9),
+            ]
+            for d in partner_defaults:
+                conn.execute('''INSERT INTO partner_section_permissions
+                    (section_key, section_label, menu_group, allowed_partner_ids, is_active, sort_order)
+                    VALUES (?, ?, ?, ?, ?, ?)''', d)
+
         conn.commit()
         conn.close()
     except Exception as e:
@@ -20425,6 +20465,7 @@ def section_visibility():
         return redirect(url_for('dashboard'))
 
     conn = get_db()
+    # Team sections
     sections = conn.execute("SELECT * FROM section_permissions ORDER BY sort_order, section_key").fetchall()
     sections = [dict(s) for s in sections]
 
@@ -20436,12 +20477,34 @@ def section_visibility():
             groups[g] = []
         groups[g].append(s)
 
+    # Partner sections
+    partner_sections = conn.execute("SELECT * FROM partner_section_permissions ORDER BY sort_order, section_key").fetchall()
+    partner_sections = [dict(s) for s in partner_sections]
+
+    # Group partner sections
+    partner_groups = {}
+    for s in partner_sections:
+        g = s['menu_group']
+        if g not in partner_groups:
+            partner_groups[g] = []
+        partner_groups[g].append(s)
+
     # Get all employees for the selector
     employees = conn.execute("SELECT emp_code, name, department FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
     employees = [dict(e) for e in employees]
+
+    # Get unique departments
+    departments = sorted(set(e['department'] for e in employees if e.get('department') and e['department'].strip()))
+
+    # Get all partners for the selector
+    partners = conn.execute("SELECT id, company_name, contact_person, partner_type FROM partners ORDER BY company_name").fetchall()
+    partners = [dict(p) for p in partners]
+
     conn.close()
 
-    return render_template('section_visibility.html', user=user, groups=groups, employees=employees)
+    return render_template('section_visibility.html', user=user, groups=groups,
+                         partner_groups=partner_groups, employees=employees,
+                         departments=departments, partners=partners)
 
 
 @app.route('/api/section-permissions/<int:section_id>', methods=['PUT'])
@@ -20454,11 +20517,12 @@ def update_section_permission(section_id):
     data = request.get_json()
     conn = get_db()
     conn.execute('''UPDATE section_permissions
-        SET is_admin_only = ?, allowed_roles = ?, allowed_emp_codes = ?, is_active = ?
+        SET is_admin_only = ?, allowed_roles = ?, allowed_emp_codes = ?, allowed_departments = ?, is_active = ?
         WHERE id = ?''',
         (data.get('is_admin_only', 0),
          data.get('allowed_roles', ''),
          data.get('allowed_emp_codes', ''),
+         data.get('allowed_departments', ''),
          data.get('is_active', 1),
          section_id))
     conn.commit()
@@ -20475,14 +20539,15 @@ def add_section_permission():
 
     data = request.get_json()
     conn = get_db()
-    conn.execute('''INSERT INTO section_permissions (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, is_active, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+    conn.execute('''INSERT INTO section_permissions (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, allowed_departments, is_active, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
         (data.get('section_key', ''),
          data.get('section_label', ''),
          data.get('menu_group', 'Other'),
          data.get('is_admin_only', 0),
          data.get('allowed_roles', ''),
          data.get('allowed_emp_codes', ''),
+         data.get('allowed_departments', ''),
          data.get('is_active', 1),
          data.get('sort_order', 99)))
     conn.commit()
@@ -20499,6 +20564,65 @@ def delete_section_permission(section_id):
 
     conn = get_db()
     conn.execute("DELETE FROM section_permissions WHERE id = ?", (section_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Partner Section Permission APIs ──
+
+@app.route('/api/partner-section-permissions/<int:section_id>', methods=['PUT'])
+@login_required
+def update_partner_section_permission(section_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('''UPDATE partner_section_permissions
+        SET allowed_partner_ids = ?, is_active = ?
+        WHERE id = ?''',
+        (data.get('allowed_partner_ids', ''),
+         data.get('is_active', 1),
+         section_id))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/partner-section-permissions', methods=['POST'])
+@login_required
+def add_partner_section_permission():
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    data = request.get_json()
+    conn = get_db()
+    conn.execute('''INSERT INTO partner_section_permissions
+        (section_key, section_label, menu_group, allowed_partner_ids, is_active, sort_order)
+        VALUES (?, ?, ?, ?, ?, ?)''',
+        (data.get('section_key', ''),
+         data.get('section_label', ''),
+         data.get('menu_group', 'Partner Portal'),
+         data.get('allowed_partner_ids', ''),
+         data.get('is_active', 1),
+         data.get('sort_order', 99)))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/api/partner-section-permissions/<int:section_id>', methods=['DELETE'])
+@login_required
+def delete_partner_section_permission(section_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+
+    conn = get_db()
+    conn.execute("DELETE FROM partner_section_permissions WHERE id = ?", (section_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
