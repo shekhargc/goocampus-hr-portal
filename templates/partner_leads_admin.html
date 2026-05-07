@@ -1,0 +1,703 @@
+{% extends "base.html" %}
+
+{% block title %}Partner Student Leads - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<style>
+  :root {
+    --orange: #F58220;
+    --orange-dark: #D96E0E;
+    --orange-light: #FFF3E6;
+    --navy: #1B2A4A;
+    --navy-dark: #0F1B33;
+    --navy-light: #2A3F66;
+    --gray-50: #F8FAFC;
+    --gray-200: #E2E8F0;
+    --gray-300: #CBD5E1;
+    --gray-500: #64748B;
+    --gray-800: #1E293B;
+    --success: #10B981;
+    --danger: #EF4444;
+  }
+
+  .page-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 32px;
+  }
+
+  .page-title {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .count-badge {
+    background-color: var(--navy);
+    color: white;
+    padding: 8px 16px;
+    border-radius: 20px;
+    font-size: 14px;
+    font-weight: 600;
+  }
+
+  .filter-bar {
+    background: white;
+    padding: 20px;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    margin-bottom: 24px;
+    display: flex;
+    gap: 16px;
+    align-items: flex-end;
+    flex-wrap: wrap;
+  }
+
+  .filter-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    flex: 1;
+    min-width: 200px;
+  }
+
+  .filter-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--gray-800);
+  }
+
+  .filter-group select,
+  .filter-group input {
+    padding: 10px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+  }
+
+  .filter-group input:focus,
+  .filter-group select:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px var(--orange-light);
+  }
+
+  .btn-clear {
+    padding: 10px 16px;
+    background: var(--gray-200);
+    color: var(--gray-800);
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-clear:hover {
+    background: var(--gray-300);
+  }
+
+  .table-container {
+    background: white;
+    border-radius: 8px;
+    border: 1px solid var(--gray-200);
+    overflow: hidden;
+  }
+
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+
+  thead {
+    background: var(--gray-50);
+    border-bottom: 2px solid var(--gray-200);
+  }
+
+  th {
+    padding: 14px 16px;
+    text-align: left;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gray-800);
+    text-transform: uppercase;
+  }
+
+  tbody tr {
+    border-bottom: 1px solid var(--gray-200);
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+
+  tbody tr:hover {
+    background: var(--orange-light);
+  }
+
+  td {
+    padding: 14px 16px;
+    font-size: 14px;
+    color: var(--gray-800);
+  }
+
+  .contact-cell {
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--gray-500);
+  }
+
+  .contact-cell strong {
+    display: block;
+    color: var(--gray-800);
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 600;
+  }
+
+  .badge-new {
+    background: #DBEAFE;
+    color: #1E40AF;
+  }
+
+  .badge-contacted {
+    background: var(--orange-light);
+    color: var(--orange-dark);
+  }
+
+  .badge-qualified {
+    background: #DCFCE7;
+    color: #166534;
+  }
+
+  .badge-converted {
+    background: #E0E7FF;
+    color: var(--navy-dark);
+  }
+
+  .badge-lost {
+    background: #FEE2E2;
+    color: #991B1B;
+  }
+
+  .drawer-overlay {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 999;
+  }
+
+  .drawer-overlay.active {
+    display: block;
+  }
+
+  .drawer {
+    position: fixed;
+    right: 0;
+    top: 0;
+    bottom: 0;
+    width: 520px;
+    background: white;
+    box-shadow: -2px 0 8px rgba(0, 0, 0, 0.15);
+    z-index: 1000;
+    overflow-y: auto;
+    transform: translateX(100%);
+    transition: transform 0.3s ease;
+  }
+
+  .drawer.active {
+    transform: translateX(0);
+  }
+
+  .drawer-header {
+    padding: 20px;
+    border-bottom: 1px solid var(--gray-200);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .drawer-title {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--navy);
+  }
+
+  .drawer-close {
+    background: none;
+    border: none;
+    font-size: 24px;
+    cursor: pointer;
+    color: var(--gray-500);
+  }
+
+  .drawer-close:hover {
+    color: var(--navy);
+  }
+
+  .drawer-content {
+    padding: 20px;
+  }
+
+  .detail-section {
+    margin-bottom: 24px;
+  }
+
+  .section-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--gray-800);
+    text-transform: uppercase;
+    margin-bottom: 12px;
+    border-bottom: 2px solid var(--gray-200);
+    padding-bottom: 8px;
+  }
+
+  .detail-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 14px;
+  }
+
+  .detail-label {
+    color: var(--gray-500);
+    font-weight: 600;
+  }
+
+  .detail-value {
+    color: var(--gray-800);
+    text-align: right;
+    flex: 1;
+    margin-left: 16px;
+  }
+
+  .status-change-group {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+
+  .status-change-group select {
+    flex: 1;
+    padding: 10px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+  }
+
+  .btn-update {
+    padding: 10px 16px;
+    background: var(--orange);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-update:hover {
+    background: var(--orange-dark);
+  }
+
+  .note-section {
+    margin-bottom: 24px;
+  }
+
+  .note-textarea {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--gray-300);
+    border-radius: 6px;
+    font-size: 14px;
+    font-family: inherit;
+    resize: vertical;
+    min-height: 80px;
+  }
+
+  .note-textarea:focus {
+    outline: none;
+    border-color: var(--orange);
+    box-shadow: 0 0 0 3px var(--orange-light);
+  }
+
+  .btn-add-note {
+    width: 100%;
+    padding: 10px;
+    background: var(--success);
+    color: white;
+    border: none;
+    border-radius: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+
+  .btn-add-note:hover {
+    background: #059669;
+  }
+
+  .activity-log {
+    margin-top: 24px;
+  }
+
+  .activity-item {
+    padding: 12px;
+    border-left: 3px solid var(--orange);
+    background: var(--gray-50);
+    border-radius: 4px;
+    margin-bottom: 12px;
+    font-size: 13px;
+  }
+
+  .activity-action {
+    font-weight: 700;
+    color: var(--navy);
+    margin-bottom: 4px;
+  }
+
+  .activity-details {
+    color: var(--gray-500);
+    margin-bottom: 4px;
+  }
+
+  .activity-date {
+    font-size: 12px;
+    color: var(--gray-500);
+  }
+
+  .empty-state {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--gray-500);
+  }
+
+  .empty-state-icon {
+    font-size: 48px;
+    margin-bottom: 16px;
+  }
+
+  .empty-state-text {
+    font-size: 16px;
+    margin-bottom: 8px;
+  }
+</style>
+
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Partner Student Leads</h1>
+  </div>
+  <div class="count-badge" id="total-count">{{ leads|length }} Total</div>
+</div>
+
+<div class="filter-bar">
+  <div class="filter-group" style="flex: 0 0 auto; min-width: 250px;">
+    <label for="filter-partner">Partner</label>
+    <select id="filter-partner">
+      <option value="">All Partners</option>
+      {% for partner in partners %}
+      <option value="{{ partner.id }}" {% if partner.id == selected_partner %}selected{% endif %}>{{ partner.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filter-group" style="flex: 0 0 auto; min-width: 200px;">
+    <label for="filter-status">Status</label>
+    <select id="filter-status">
+      <option value="">All Statuses</option>
+      {% for status in lead_statuses %}
+      <option value="{{ status }}" {% if status == selected_status %}selected{% endif %}>{{ status|capitalize }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <div class="filter-group" style="flex: 1; min-width: 250px;">
+    <label for="filter-search">Search</label>
+    <input type="text" id="filter-search" placeholder="College name or student name...">
+  </div>
+
+  <button class="btn-clear" id="clear-filters">Clear Filters</button>
+</div>
+
+<div class="table-container">
+  <table id="leads-table">
+    <thead>
+      <tr>
+        <th>Student Name</th>
+        <th>Contact</th>
+        <th>City/State</th>
+        <th>Interested In</th>
+        <th>Status</th>
+        <th>Partner</th>
+        <th>Date</th>
+      </tr>
+    </thead>
+    <tbody id="leads-tbody">
+      {% for lead in leads %}
+      <tr class="lead-row" data-lead-id="{{ lead.id }}">
+        <td>{{ lead.student_name }}</td>
+        <td class="contact-cell">
+          <strong>{{ lead.student_email }}</strong>
+          {{ lead.student_phone }}
+        </td>
+        <td>{{ lead.city }}, {{ lead.state }}</td>
+        <td>{{ lead.interested_products }}</td>
+        <td>
+          <span class="badge badge-{{ lead.status|lower|replace(' ', '-') }}">{{ lead.status|capitalize }}</span>
+        </td>
+        <td>{{ lead.partner_name }}</td>
+        <td>{{ lead.created_at|strftime('%b %d, %Y') if lead.created_at else 'N/A' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% if not leads %}
+  <div class="empty-state">
+    <div class="empty-state-icon">📭</div>
+    <div class="empty-state-text">No student leads found</div>
+    <div style="font-size: 13px;">Adjust your filters to see available leads</div>
+  </div>
+  {% endif %}
+</div>
+
+<div class="drawer-overlay" id="drawer-overlay"></div>
+<div class="drawer" id="lead-drawer">
+  <div class="drawer-header">
+    <h2 class="drawer-title" id="drawer-title">Lead Details</h2>
+    <button class="drawer-close" id="drawer-close">&times;</button>
+  </div>
+  <div class="drawer-content" id="drawer-content">
+    <!-- Populated by JavaScript -->
+  </div>
+</div>
+
+<script>
+  let allLeads = {{ leads|tojson }};
+  let filteredLeads = [...allLeads];
+  let searchTimeout;
+
+  const filterPartner = document.getElementById('filter-partner');
+  const filterStatus = document.getElementById('filter-status');
+  const filterSearch = document.getElementById('filter-search');
+  const clearFiltersBtn = document.getElementById('clear-filters');
+  const drawerOverlay = document.getElementById('drawer-overlay');
+  const drawer = document.getElementById('lead-drawer');
+  const drawerClose = document.getElementById('drawer-close');
+  const leadsTbody = document.getElementById('leads-tbody');
+  const totalCountBadge = document.getElementById('total-count');
+
+  function applyFilters() {
+    filteredLeads = allLeads.filter(lead => {
+      const partnerMatch = !filterPartner.value || lead.partner_name === filterPartner.value;
+      const statusMatch = !filterStatus.value || lead.status === filterStatus.value;
+      const searchMatch = !filterSearch.value ||
+        lead.student_name.toLowerCase().includes(filterSearch.value.toLowerCase()) ||
+        lead.student_email.toLowerCase().includes(filterSearch.value.toLowerCase());
+      return partnerMatch && statusMatch && searchMatch;
+    });
+    renderTable();
+  }
+
+  function renderTable() {
+    if (filteredLeads.length === 0) {
+      leadsTbody.innerHTML = '<tr><td colspan="7" style="text-align: center; padding: 40px;"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">No student leads found</div><div style="font-size: 13px;">Adjust your filters to see available leads</div></div></td></tr>';
+    } else {
+      leadsTbody.innerHTML = filteredLeads.map(lead => `
+        <tr class="lead-row" data-lead-id="${lead.id}">
+          <td>${lead.student_name}</td>
+          <td class="contact-cell">
+            <strong>${lead.student_email}</strong>
+            ${lead.student_phone}
+          </td>
+          <td>${lead.city}, ${lead.state}</td>
+          <td>${lead.interested_products}</td>
+          <td>
+            <span class="badge badge-${lead.status.toLowerCase().replace(/\s+/g, '-')}">
+              ${lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+            </span>
+          </td>
+          <td>${lead.partner_name}</td>
+          <td>${new Date(lead.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+        </tr>
+      `).join('');
+      attachRowListeners();
+    }
+    totalCountBadge.textContent = `${filteredLeads.length} Total`;
+  }
+
+  function attachRowListeners() {
+    document.querySelectorAll('.lead-row').forEach(row => {
+      row.addEventListener('click', () => openDrawer(row.dataset.leadId));
+    });
+  }
+
+  function openDrawer(leadId) {
+    const lead = allLeads.find(l => l.id == leadId);
+    if (!lead) return;
+
+    const drawerContent = document.getElementById('drawer-content');
+    const statusBadgeClass = `badge-${lead.status.toLowerCase().replace(/\s+/g, '-')}`;
+
+    drawerContent.innerHTML = `
+      <div class="detail-section">
+        <div class="section-title">Lead Information</div>
+        <div class="detail-row">
+          <span class="detail-label">Name</span>
+          <span class="detail-value">${lead.student_name}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Email</span>
+          <span class="detail-value"><a href="mailto:${lead.student_email}">${lead.student_email}</a></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Phone</span>
+          <span class="detail-value"><a href="tel:${lead.student_phone}">${lead.student_phone}</a></span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">City</span>
+          <span class="detail-value">${lead.city}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">State</span>
+          <span class="detail-value">${lead.state}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Products</span>
+          <span class="detail-value">${lead.interested_products}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Partner</span>
+          <span class="detail-value">${lead.partner_name}</span>
+        </div>
+        <div class="detail-row">
+          <span class="detail-label">Date Added</span>
+          <span class="detail-value">${new Date(lead.created_at).toLocaleDateString()}</span>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="section-title">Status Management</div>
+        <div class="status-change-group">
+          <select id="status-select">
+            <option value="new" ${lead.status === 'new' ? 'selected' : ''}>New</option>
+            <option value="contacted" ${lead.status === 'contacted' ? 'selected' : ''}>Contacted</option>
+            <option value="qualified" ${lead.status === 'qualified' ? 'selected' : ''}>Qualified</option>
+            <option value="converted" ${lead.status === 'converted' ? 'selected' : ''}>Converted</option>
+            <option value="lost" ${lead.status === 'lost' ? 'selected' : ''}>Lost</option>
+          </select>
+          <button class="btn-update" onclick="updateLeadStatus(${lead.id})">Update</button>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="section-title">Add Note</div>
+        <div class="note-section">
+          <textarea class="note-textarea" id="note-input" placeholder="Add a note about this lead..."></textarea>
+          <button class="btn-add-note" onclick="addNote(${lead.id})">Add Note</button>
+        </div>
+      </div>
+
+      <div class="detail-section">
+        <div class="section-title">Activity Log</div>
+        <div class="activity-log" id="activity-log">
+          ${lead.notes ? `<div class="activity-item">
+            <div class="activity-action">Note Added</div>
+            <div class="activity-details">${lead.notes}</div>
+            <div class="activity-date">${new Date(lead.created_at).toLocaleDateString()}</div>
+          </div>` : '<div style="color: var(--gray-500); font-size: 13px;">No activity yet</div>'}
+        </div>
+      </div>
+    `;
+
+    document.getElementById('drawer-title').textContent = lead.student_name;
+    drawer.classList.add('active');
+    drawerOverlay.classList.add('active');
+  }
+
+  function closeDrawer() {
+    drawer.classList.remove('active');
+    drawerOverlay.classList.remove('active');
+  }
+
+  function updateLeadStatus(leadId) {
+    const newStatus = document.getElementById('status-select').value;
+    fetch(`/api/partner-leads/${leadId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ status: newStatus })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Update failed');
+      const lead = allLeads.find(l => l.id == leadId);
+      if (lead) lead.status = newStatus;
+      applyFilters();
+      closeDrawer();
+    })
+    .catch(error => alert('Error updating lead: ' + error.message));
+  }
+
+  function addNote(leadId) {
+    const noteText = document.getElementById('note-input').value.trim();
+    if (!noteText) {
+      alert('Please enter a note');
+      return;
+    }
+
+    fetch(`/api/partner-leads/${leadId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ notes: noteText })
+    })
+    .then(response => {
+      if (!response.ok) throw new Error('Failed to add note');
+      const lead = allLeads.find(l => l.id == leadId);
+      if (lead) {
+        lead.notes = noteText;
+        openDrawer(leadId);
+      }
+    })
+    .catch(error => alert('Error adding note: ' + error.message));
+  }
+
+  // Filter event listeners with debouncing for search
+  filterPartner.addEventListener('change', applyFilters);
+  filterStatus.addEventListener('change', applyFilters);
+
+  filterSearch.addEventListener('input', () => {
+    clearTimeout(searchTimeout);
+    if (filterSearch.value.length >= 2 || filterSearch.value.length === 0) {
+      searchTimeout = setTimeout(applyFilters, 400);
+    }
+  });
+
+  clearFiltersBtn.addEventListener('click', () => {
+    filterPartner.value = '';
+    filterStatus.value = '';
+    filterSearch.value = '';
+    applyFilters();
+  });
+
+  drawerClose.addEventListener('click', closeDrawer);
+  drawerOverlay.addEventListener('click', closeDrawer);
+
+  // Initialize
+  attachRowListeners();
+</script>
+{% endblock %}

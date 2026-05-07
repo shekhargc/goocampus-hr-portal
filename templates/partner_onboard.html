@@ -1,0 +1,1005 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Registration - GooCampus</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange: #F58220;
+            --orange-dark: #D96E0E;
+            --navy: #1B2A4A;
+            --navy-dark: #0F1B33;
+            --gray-50: #F8FAFC;
+            --gray-200: #E2E8F0;
+            --gray-500: #64748B;
+            --gray-800: #1E293B;
+            --success-green: #10B981;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        html, body {
+            height: 100%;
+        }
+
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: var(--gray-50);
+            color: var(--gray-800);
+            line-height: 1.6;
+        }
+
+        /* Navbar */
+        .navbar {
+            background-color: white;
+            border-bottom: 1px solid var(--gray-200);
+            padding: 1rem 2rem;
+            box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+        }
+
+        .navbar-container {
+            max-width: 1200px;
+            margin: 0 auto;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+        }
+
+        .navbar-logo {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+        }
+
+        .navbar-logo span {
+            color: var(--orange);
+        }
+
+        .navbar-title {
+            font-size: 1rem;
+            color: var(--gray-800);
+            font-weight: 500;
+            margin-left: auto;
+        }
+
+        /* Main Container */
+        .main-container {
+            min-height: calc(100vh - 60px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem;
+        }
+
+        .form-card {
+            background-color: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+            max-width: 800px;
+            width: 100%;
+            padding: 2.5rem;
+        }
+
+        .form-header {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+
+        .form-header h1 {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-header p {
+            color: var(--gray-500);
+            font-size: 0.95rem;
+        }
+
+        /* Form Sections */
+        .form-section {
+            margin-bottom: 2.5rem;
+            padding-bottom: 2rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+
+        .form-section:last-of-type {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--navy);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .section-number {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 28px;
+            height: 28px;
+            background-color: var(--orange);
+            color: white;
+            border-radius: 50%;
+            font-size: 0.85rem;
+            font-weight: 600;
+        }
+
+        /* Form Groups */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+        }
+
+        .form-row.full {
+            grid-template-columns: 1fr;
+        }
+
+        .form-row.three-cols {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        @media (max-width: 640px) {
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .form-row.three-cols {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        label {
+            display: block;
+            font-size: 0.95rem;
+            font-weight: 500;
+            color: var(--gray-800);
+            margin-bottom: 0.5rem;
+        }
+
+        .required {
+            color: var(--orange);
+        }
+
+        input[type="text"],
+        input[type="email"],
+        input[type="tel"],
+        input[type="url"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 0.75rem;
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            font-family: 'Inter', sans-serif;
+            font-size: 0.95rem;
+            color: var(--gray-800);
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        input[type="text"]:focus,
+        input[type="email"]:focus,
+        input[type="tel"]:focus,
+        input[type="url"]:focus,
+        select:focus,
+        textarea:focus {
+            outline: none;
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(245, 130, 32, 0.1);
+        }
+
+        input[type="text"]:disabled,
+        input[type="email"]:disabled {
+            background-color: var(--gray-50);
+            color: var(--gray-500);
+            cursor: not-allowed;
+        }
+
+        textarea {
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        /* Team Members Section */
+        .team-members-container {
+            display: flex;
+            flex-direction: column;
+            gap: 1rem;
+        }
+
+        .team-member-row {
+            background-color: var(--gray-50);
+            border: 1px solid var(--gray-200);
+            border-radius: 6px;
+            padding: 1.25rem;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 1fr auto;
+            gap: 1rem;
+            align-items: flex-end;
+        }
+
+        @media (max-width: 1024px) {
+            .team-member-row {
+                grid-template-columns: 1fr 1fr;
+                gap: 1rem;
+            }
+
+            .team-member-row .form-group:nth-child(3),
+            .team-member-row .form-group:nth-child(4) {
+                margin-top: 1rem;
+                grid-column: auto;
+            }
+        }
+
+        @media (max-width: 640px) {
+            .team-member-row {
+                grid-template-columns: 1fr;
+            }
+
+            .team-member-row .form-group:nth-child(3),
+            .team-member-row .form-group:nth-child(4) {
+                margin-top: 0;
+            }
+        }
+
+        .team-member-row .form-group {
+            margin-bottom: 0;
+        }
+
+        .team-member-row label {
+            font-size: 0.85rem;
+        }
+
+        .remove-team-btn {
+            padding: 0.5rem 0.75rem;
+            background-color: #FEE2E2;
+            color: #DC2626;
+            border: 1px solid #FECACA;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            height: 38px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            white-space: nowrap;
+        }
+
+        .remove-team-btn:hover {
+            background-color: #FCA5A5;
+            color: white;
+        }
+
+        .add-team-btn {
+            margin-top: 1rem;
+            padding: 0.75rem 1.25rem;
+            background-color: var(--gray-50);
+            color: var(--navy);
+            border: 1px dashed var(--gray-200);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 500;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .add-team-btn:hover {
+            background-color: var(--gray-200);
+            border-color: var(--gray-500);
+        }
+
+        /* Address Section - City Dropdown */
+        .autocomplete-list {
+            position: absolute;
+            background-color: white;
+            border: 1px solid var(--gray-200);
+            border-top: none;
+            border-radius: 0 0 6px 6px;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 100%;
+            z-index: 10;
+            display: none;
+        }
+
+        .autocomplete-list.show {
+            display: block;
+        }
+
+        .autocomplete-item {
+            padding: 0.75rem;
+            cursor: pointer;
+            color: var(--gray-800);
+            font-size: 0.95rem;
+            transition: background-color 0.2s;
+        }
+
+        .autocomplete-item:hover {
+            background-color: var(--gray-50);
+        }
+
+        .autocomplete-wrapper {
+            position: relative;
+        }
+
+        /* Form Actions */
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            margin-top: 2.5rem;
+            justify-content: center;
+        }
+
+        .btn {
+            padding: 0.875rem 2rem;
+            border-radius: 6px;
+            font-size: 0.95rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.2s;
+            border: none;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .btn-primary {
+            background-color: var(--orange);
+            color: white;
+        }
+
+        .btn-primary:hover {
+            background-color: var(--orange-dark);
+            transform: translateY(-1px);
+            box-shadow: 0 4px 12px rgba(245, 130, 32, 0.3);
+        }
+
+        .btn-primary:disabled {
+            background-color: var(--gray-500);
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+
+        .btn-secondary {
+            background-color: transparent;
+            color: var(--navy);
+            border: 1px solid var(--gray-200);
+        }
+
+        .btn-secondary:hover {
+            background-color: var(--gray-50);
+            border-color: var(--navy);
+        }
+
+        /* Success Modal */
+        .modal-overlay {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .modal-overlay.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background-color: white;
+            border-radius: 8px;
+            padding: 2.5rem;
+            max-width: 500px;
+            text-align: center;
+            box-shadow: 0 20px 25px rgba(0, 0, 0, 0.15);
+            animation: slideUp 0.3s ease-out;
+        }
+
+        @keyframes slideUp {
+            from {
+                opacity: 0;
+                transform: translateY(20px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+
+        .checkmark-icon {
+            width: 64px;
+            height: 64px;
+            background-color: var(--success-green);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            animation: popIn 0.4s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+        }
+
+        @keyframes popIn {
+            0% {
+                transform: scale(0);
+            }
+            50% {
+                transform: scale(1.1);
+            }
+            100% {
+                transform: scale(1);
+            }
+        }
+
+        .checkmark-icon svg {
+            width: 40px;
+            height: 40px;
+            stroke: white;
+            stroke-width: 3;
+            fill: none;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+        }
+
+        .checkmark-icon svg .check-path {
+            stroke-dasharray: 48;
+            stroke-dashoffset: 48;
+            animation: checkmark 0.5s ease-out 0.2s forwards;
+        }
+
+        @keyframes checkmark {
+            to {
+                stroke-dashoffset: 0;
+            }
+        }
+
+        .modal-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.75rem;
+        }
+
+        .modal-message {
+            font-size: 0.95rem;
+            color: var(--gray-500);
+            margin-bottom: 1.5rem;
+            line-height: 1.6;
+        }
+
+        .modal-close-btn {
+            padding: 0.75rem 1.5rem;
+            background-color: var(--orange);
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: 600;
+            font-size: 0.95rem;
+            transition: all 0.2s;
+            font-family: 'Inter', sans-serif;
+        }
+
+        .modal-close-btn:hover {
+            background-color: var(--orange-dark);
+        }
+
+        /* Loading State */
+        .loading {
+            position: relative;
+            pointer-events: none;
+            opacity: 0.6;
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: white;
+            animation: spin 0.8s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to {
+                transform: rotate(360deg);
+            }
+        }
+
+        /* Error Messages */
+        .error-message {
+            color: #DC2626;
+            font-size: 0.85rem;
+            margin-top: 0.25rem;
+            display: none;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .form-group.error input,
+        .form-group.error select,
+        .form-group.error textarea {
+            border-color: #DC2626;
+        }
+
+        .form-group.error input:focus,
+        .form-group.error select:focus,
+        .form-group.error textarea:focus {
+            box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <!-- Navbar -->
+    <nav class="navbar">
+        <div class="navbar-container">
+            <div class="navbar-logo">Goo<span>Campus</span></div>
+            <div class="navbar-title">Partner Registration</div>
+        </div>
+    </nav>
+
+    <!-- Main Content -->
+    <div class="main-container">
+        <div class="form-card">
+            <div class="form-header">
+                <h1>Complete Your Registration</h1>
+                <p>Welcome to GooCampus. Please fill in your details to get started.</p>
+            </div>
+
+            <form id="partnerForm" method="POST" action="/partner/onboard/{{ invitation.token }}">
+                <!-- Section 1: Company Details -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <span class="section-number">1</span>
+                        Company Details
+                    </h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="companyName">Company Name <span class="required">*</span></label>
+                            <input type="text" id="companyName" name="company_name"
+                                   value="{{ invitation.name or '' }}" required>
+                            <div class="error-message"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="contactPerson">Contact Person <span class="required">*</span></label>
+                            <input type="text" id="contactPerson" name="contact_person" required>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="email">Email <span class="required">*</span></label>
+                            <input type="email" id="email" name="email"
+                                   value="{{ invitation.email or '' }}" readonly>
+                            <div class="error-message"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="phone">Phone <span class="required">*</span></label>
+                            <input type="tel" id="phone" name="phone" pattern="[0-9\s\-\+\(\)]{10,}" required>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row full">
+                        <div class="form-group">
+                            <label for="website">Website <span style="color: var(--gray-500);">(Optional)</span></label>
+                            <input type="url" id="website" name="website">
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Team Members -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <span class="section-number">2</span>
+                        Team Members
+                    </h2>
+
+                    <div class="team-members-container" id="teamMembersContainer">
+                        <!-- Team member rows will be added here by JavaScript -->
+                    </div>
+
+                    <button type="button" class="add-team-btn" id="addTeamBtn">+ Add Team Member</button>
+                </div>
+
+                <!-- Section 3: Address Details -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <span class="section-number">3</span>
+                        Address Details
+                    </h2>
+
+                    <div class="form-row full">
+                        <div class="form-group">
+                            <label for="address">Address <span class="required">*</span></label>
+                            <textarea id="address" name="address" required></textarea>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="state">State <span class="required">*</span></label>
+                            <select id="state" name="state" required>
+                                <option value="">Select State</option>
+                            </select>
+                            <div class="error-message"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="city">City <span class="required">*</span></label>
+                            <div class="autocomplete-wrapper">
+                                <input type="text" id="city" name="city" placeholder="Start typing..." required>
+                                <div class="autocomplete-list" id="cityList"></div>
+                            </div>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+
+                    <div class="form-row full">
+                        <div class="form-group">
+                            <label for="country">Country <span class="required">*</span></label>
+                            <input type="text" id="country" name="country" value="India" readonly>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="submit" class="btn btn-primary" id="submitBtn">Submit Registration</button>
+                    <button type="reset" class="btn btn-secondary">Clear Form</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Success Modal -->
+    <div class="modal-overlay" id="successModal">
+        <div class="modal-content">
+            <div class="checkmark-icon">
+                <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                    <polyline class="check-path" points="20 6 9 17 4 12"></polyline>
+                </svg>
+            </div>
+            <h2 class="modal-title">Welcome to GooCampus Partner Network!</h2>
+            <p class="modal-message">Your registration is complete. Our team will review your details shortly.</p>
+            <button type="button" class="modal-close-btn" id="closeModalBtn">Continue</button>
+        </div>
+    </div>
+
+    <script>
+        // Initialize form
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTeamMembers();
+            loadStates();
+            setupEventListeners();
+        });
+
+        // Team Members Management
+        function initializeTeamMembers() {
+            const container = document.getElementById('teamMembersContainer');
+            container.innerHTML = '';
+            addTeamMemberRow();
+        }
+
+        function addTeamMemberRow() {
+            const container = document.getElementById('teamMembersContainer');
+            const rowIndex = container.children.length;
+
+            const row = document.createElement('div');
+            row.className = 'team-member-row';
+            row.dataset.index = rowIndex;
+
+            row.innerHTML = `
+                <div class="form-group">
+                    <label>Name</label>
+                    <input type="text" name="team_name[]" placeholder="Full Name">
+                    <div class="error-message"></div>
+                </div>
+                <div class="form-group">
+                    <label>Designation</label>
+                    <input type="text" name="team_designation[]" placeholder="Job Title">
+                    <div class="error-message"></div>
+                </div>
+                <div class="form-group">
+                    <label>Email</label>
+                    <input type="email" name="team_email[]" placeholder="Email Address">
+                    <div class="error-message"></div>
+                </div>
+                <div class="form-group">
+                    <label>Phone</label>
+                    <input type="tel" name="team_phone[]" placeholder="Phone Number">
+                    <div class="error-message"></div>
+                </div>
+                ${rowIndex > 0 ? `<button type="button" class="remove-team-btn" onclick="removeTeamMemberRow(${rowIndex})">Remove</button>` : ''}
+            `;
+
+            container.appendChild(row);
+        }
+
+        function removeTeamMemberRow(index) {
+            const container = document.getElementById('teamMembersContainer');
+            const row = container.querySelector(`[data-index="${index}"]`);
+            if (row) {
+                row.remove();
+            }
+        }
+
+        document.getElementById('addTeamBtn')?.addEventListener('click', function(e) {
+            e.preventDefault();
+            addTeamMemberRow();
+        });
+
+        // Load States
+        function loadStates() {
+            const stateSelect = document.getElementById('state');
+
+            fetch('/api/states')
+                .then(response => response.json())
+                .then(data => {
+                    if (Array.isArray(data)) {
+                        data.forEach(state => {
+                            const option = document.createElement('option');
+                            option.value = state;
+                            option.textContent = state;
+                            stateSelect.appendChild(option);
+                        });
+                    }
+                })
+                .catch(error => {
+                    console.error('Error loading states:', error);
+                });
+        }
+
+        // City Autocomplete
+        const cityInput = document.getElementById('city');
+        const cityList = document.getElementById('cityList');
+        let citiesCache = {};
+
+        if (cityInput) {
+            cityInput.addEventListener('input', debounce(function() {
+                const state = document.getElementById('state').value;
+                const query = this.value.trim();
+
+                if (query.length < 2) {
+                    cityList.classList.remove('show');
+                    return;
+                }
+
+                if (!state) {
+                    cityList.classList.remove('show');
+                    return;
+                }
+
+                // Check cache
+                if (citiesCache[state]) {
+                    filterAndShowCities(query, citiesCache[state]);
+                } else {
+                    // Fetch from API
+                    fetch(`/api/cities?state=${encodeURIComponent(state)}`)
+                        .then(response => response.json())
+                        .then(data => {
+                            citiesCache[state] = data;
+                            filterAndShowCities(query, data);
+                        })
+                        .catch(error => {
+                            console.error('Error loading cities:', error);
+                            cityList.classList.remove('show');
+                        });
+                }
+            }, 300));
+
+            // Close dropdown when clicking outside
+            document.addEventListener('click', function(e) {
+                if (e.target !== cityInput) {
+                    cityList.classList.remove('show');
+                }
+            });
+        }
+
+        function filterAndShowCities(query, cities) {
+            const filtered = cities.filter(city =>
+                city.toLowerCase().includes(query.toLowerCase())
+            ).slice(0, 10);
+
+            cityList.innerHTML = filtered.map(city =>
+                `<div class="autocomplete-item" onclick="selectCity('${city}')">${city}</div>`
+            ).join('');
+
+            cityList.classList.toggle('show', filtered.length > 0);
+        }
+
+        function selectCity(city) {
+            cityInput.value = city;
+            cityList.classList.remove('show');
+        }
+
+        // Reset city dropdown when state changes
+        document.getElementById('state')?.addEventListener('change', function() {
+            cityInput.value = '';
+            cityList.classList.remove('show');
+        });
+
+        // Form Submission
+        document.getElementById('partnerForm').addEventListener('submit', function(e) {
+            e.preventDefault();
+
+            // Clear previous errors
+            document.querySelectorAll('.form-group.error').forEach(group => {
+                group.classList.remove('error');
+                group.querySelector('.error-message').classList.remove('show');
+            });
+
+            // Validate form
+            if (!validateForm()) {
+                return;
+            }
+
+            // Show loading state
+            const submitBtn = document.getElementById('submitBtn');
+            const originalText = submitBtn.textContent;
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<span class="spinner"></span>Submitting...';
+
+            // Submit form
+            const formData = new FormData(this);
+
+            fetch(this.action, {
+                method: 'POST',
+                body: formData,
+                headers: {
+                    'Accept': 'application/json'
+                }
+            })
+            .then(response => {
+                if (response.ok) {
+                    // Show success modal
+                    showSuccessModal();
+
+                    // Reset form
+                    document.getElementById('partnerForm').reset();
+                    initializeTeamMembers();
+                } else {
+                    return response.json().then(data => {
+                        throw new Error(data.error || 'Registration failed');
+                    });
+                }
+            })
+            .catch(error => {
+                console.error('Error:', error);
+                submitBtn.disabled = false;
+                submitBtn.textContent = originalText;
+                alert('Error submitting form: ' + error.message);
+            });
+        });
+
+        function validateForm() {
+            let isValid = true;
+            const form = document.getElementById('partnerForm');
+
+            // Validate required fields
+            form.querySelectorAll('[required]').forEach(field => {
+                if (!field.value.trim()) {
+                    const group = field.closest('.form-group');
+                    group.classList.add('error');
+                    group.querySelector('.error-message').textContent = 'This field is required';
+                    group.querySelector('.error-message').classList.add('show');
+                    isValid = false;
+                }
+            });
+
+            // Validate email format
+            const emailField = document.getElementById('email');
+            if (emailField.value && !isValidEmail(emailField.value)) {
+                const group = emailField.closest('.form-group');
+                group.classList.add('error');
+                group.querySelector('.error-message').textContent = 'Please enter a valid email';
+                group.querySelector('.error-message').classList.add('show');
+                isValid = false;
+            }
+
+            // Validate team member emails
+            form.querySelectorAll('input[name="team_email[]"]').forEach(field => {
+                if (field.value.trim() && !isValidEmail(field.value)) {
+                    const group = field.closest('.form-group');
+                    group.classList.add('error');
+                    group.querySelector('.error-message').textContent = 'Please enter a valid email';
+                    group.querySelector('.error-message').classList.add('show');
+                    isValid = false;
+                }
+            });
+
+            return isValid;
+        }
+
+        function isValidEmail(email) {
+            const re = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            return re.test(email);
+        }
+
+        function showSuccessModal() {
+            const modal = document.getElementById('successModal');
+            modal.classList.add('show');
+
+            // Auto-close after 3 seconds
+            const autoCloseTimer = setTimeout(() => {
+                closeSuccessModal();
+            }, 3000);
+
+            // Manual close button
+            document.getElementById('closeModalBtn')?.addEventListener('click', function() {
+                clearTimeout(autoCloseTimer);
+                closeSuccessModal();
+            });
+        }
+
+        function closeSuccessModal() {
+            const modal = document.getElementById('successModal');
+            modal.classList.remove('show');
+
+            // Redirect after modal closes
+            setTimeout(() => {
+                window.location.href = '/partner/dashboard';
+            }, 500);
+        }
+
+        // Debounce utility
+        function debounce(func, delay) {
+            let timeoutId;
+            return function(...args) {
+                clearTimeout(timeoutId);
+                timeoutId = setTimeout(() => func.apply(this, args), delay);
+            };
+        }
+
+        // Setup event listeners for error clearing
+        function setupEventListeners() {
+            document.querySelectorAll('input, select, textarea').forEach(field => {
+                field.addEventListener('focus', function() {
+                    const group = this.closest('.form-group');
+                    if (group) {
+                        group.classList.remove('error');
+                        const errorMsg = group.querySelector('.error-message');
+                        if (errorMsg) {
+                            errorMsg.classList.remove('show');
+                        }
+                    }
+                });
+            });
+        }
+    </script>
+</body>
+</html>

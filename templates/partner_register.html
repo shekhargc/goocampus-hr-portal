@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Partner Registration — GooCampus</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange: #F58220;
+            --orange-dark: #D96E0E;
+            --orange-light: #FFF3E6;
+            --navy: #1B2A4A;
+            --navy-dark: #0F1B33;
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-700: #334155;
+            --gray-800: #1E293B;
+            --success: #10B981;
+            --success-light: #ECFDF5;
+            --danger: #EF4444;
+            --danger-light: #FEF2F2;
+            --blue: #4A7AB5;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 1.5rem;
+        }
+
+        .container {
+            width: 100%;
+            max-width: 480px;
+        }
+
+        .logo-section {
+            text-align: center;
+            margin-bottom: 2.5rem;
+        }
+
+        .logo-mark {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+            border-radius: 0.75rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.25rem;
+            box-shadow: 0 10px 30px rgba(245,130,32,0.3);
+        }
+
+        .logo-mark span {
+            color: white;
+            font-size: 1.8rem;
+            font-weight: 800;
+            line-height: 1;
+        }
+
+        .logo-text {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: white;
+            margin-bottom: 0.35rem;
+        }
+
+        .logo-text .goo {
+            color: var(--orange);
+        }
+
+        .logo-subtext {
+            font-size: 0.85rem;
+            color: rgba(255,255,255,0.6);
+            letter-spacing: 0.3px;
+        }
+
+        .card {
+            background: var(--white);
+            border-radius: 1rem;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            padding: 2.5rem;
+        }
+
+        .card-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+
+        .card-title {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.5rem;
+        }
+
+        .card-subtitle {
+            font-size: 0.95rem;
+            color: var(--gray-500);
+            line-height: 1.5;
+        }
+
+        .info-box {
+            background: var(--gray-50);
+            border-left: 4px solid var(--orange);
+            padding: 1rem 1.25rem;
+            border-radius: 0.6rem;
+            margin-bottom: 1.75rem;
+        }
+
+        .info-label {
+            font-size: 0.8rem;
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+            color: var(--gray-600);
+            margin-bottom: 0.35rem;
+        }
+
+        .info-value {
+            font-size: 1rem;
+            font-weight: 600;
+            color: var(--navy);
+        }
+
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+
+        .form-group label {
+            display: block;
+            margin-bottom: 0.6rem;
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 0.85rem 1.1rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 0.6rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: var(--white);
+        }
+
+        .form-input:focus {
+            outline: none;
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
+        }
+
+        .form-input.otp-input {
+            text-align: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+            letter-spacing: 0.3rem;
+            font-family: 'Courier New', monospace;
+        }
+
+        .otp-grid {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 0.75rem;
+            margin-bottom: 1.5rem;
+        }
+
+        .otp-grid input {
+            width: 100%;
+            padding: 0.9rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 0.6rem;
+            font-size: 1.25rem;
+            font-weight: 700;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            transition: border-color 0.2s, box-shadow 0.2s;
+        }
+
+        .otp-grid input:focus {
+            outline: none;
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
+        }
+
+        .btn {
+            width: 100%;
+            padding: 0.9rem;
+            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+            color: var(--white);
+            border: none;
+            border-radius: 0.6rem;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 6px 20px rgba(245,130,32,0.3);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+
+        .btn:hover:not(:disabled) {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(245,130,32,0.4);
+        }
+
+        .btn:disabled {
+            opacity: 0.7;
+            cursor: not-allowed;
+        }
+
+        .btn-secondary {
+            background: var(--blue);
+            box-shadow: 0 6px 20px rgba(74,122,181,0.3);
+        }
+
+        .btn-secondary:hover:not(:disabled) {
+            background: #3A6299;
+            box-shadow: 0 10px 28px rgba(74,122,181,0.4);
+        }
+
+        .resend-link {
+            text-align: center;
+            margin-top: 1rem;
+        }
+
+        .resend-link a {
+            color: var(--orange);
+            text-decoration: none;
+            font-weight: 600;
+            font-size: 0.9rem;
+            transition: color 0.2s;
+        }
+
+        .resend-link a:hover {
+            color: var(--orange-dark);
+            text-decoration: underline;
+        }
+
+        .resend-link.disabled a {
+            color: var(--gray-400);
+            cursor: not-allowed;
+            pointer-events: none;
+        }
+
+        .resend-countdown {
+            font-size: 0.85rem;
+            color: var(--gray-500);
+        }
+
+        .alert {
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.6rem;
+            border-left: 4px solid;
+            font-size: 0.9rem;
+        }
+
+        .alert-error {
+            background: var(--danger-light);
+            border-color: var(--danger);
+            color: #991B1B;
+        }
+
+        .alert-success {
+            background: var(--success-light);
+            border-color: var(--success);
+            color: #065F46;
+        }
+
+        .alert-info {
+            background: var(--blue-light);
+            border-color: var(--blue);
+            color: #335B95;
+        }
+
+        .step-indicator {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .step-dot {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background: var(--gray-200);
+            transition: all 0.3s;
+        }
+
+        .step-dot.active {
+            background: var(--orange);
+            box-shadow: 0 0 0 4px rgba(245,130,32,0.2);
+        }
+
+        .step-dot.completed {
+            background: var(--success);
+        }
+
+        .spinner {
+            display: inline-block;
+            width: 16px;
+            height: 16px;
+            border: 2px solid rgba(255,255,255,0.3);
+            border-top-color: white;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-right: 0.5rem;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @media (max-width: 480px) {
+            .card {
+                padding: 1.75rem;
+            }
+            .card-title {
+                font-size: 1.15rem;
+            }
+            .logo-mark {
+                width: 50px;
+                height: 50px;
+            }
+            .logo-mark span {
+                font-size: 1.4rem;
+            }
+            .otp-grid {
+                gap: 0.5rem;
+            }
+            .otp-grid input {
+                font-size: 1.1rem;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- Logo Section -->
+        <div class="logo-section">
+            <div class="logo-mark">
+                <span>G</span>
+            </div>
+            <div class="logo-text">
+                <span class="goo">Goo</span>Campus
+            </div>
+            <div class="logo-subtext">Partner Registration</div>
+        </div>
+
+        <!-- Main Card -->
+        <div class="card">
+            <!-- Step Indicator -->
+            <div class="step-indicator">
+                <div class="step-dot" id="stepDot1"></div>
+                <div class="step-dot" id="stepDot2"></div>
+            </div>
+
+            <!-- Step 1: Email Verification -->
+            <div id="step1" class="step-content">
+                <div class="card-header">
+                    <h1 class="card-title">Verify Your Email</h1>
+                    <p class="card-subtitle">Complete your partner registration by verifying your email address</p>
+                </div>
+
+                {% if error %}
+                <div class="alert alert-error">{{ error }}</div>
+                {% endif %}
+
+                <div class="info-box">
+                    <div class="info-label">Partner Organization</div>
+                    <div class="info-value">{{ invitation.name }}</div>
+                </div>
+
+                <div class="info-box">
+                    <div class="info-label">Email Address</div>
+                    <div class="info-value">{{ invitation.email }}</div>
+                </div>
+
+                <form id="otpForm" onsubmit="handleSendOTP(event)">
+                    <button type="submit" class="btn" id="sendOTPBtn">Send OTP</button>
+                </form>
+
+                <p style="text-align: center; font-size: 0.85rem; color: var(--gray-500); margin-top: 1.25rem;">
+                    We'll send a 6-digit code to your email to verify ownership.
+                </p>
+            </div>
+
+            <!-- Step 2: OTP Verification -->
+            <div id="step2" class="step-content" style="display: none;">
+                <div class="card-header">
+                    <h1 class="card-title">Enter OTP</h1>
+                    <p class="card-subtitle">Enter the 6-digit code sent to your email</p>
+                </div>
+
+                {% if otp_error %}
+                <div class="alert alert-error">{{ otp_error }}</div>
+                {% endif %}
+
+                <form id="verifyOTPForm" onsubmit="handleVerifyOTP(event)">
+                    <div class="form-group">
+                        <label for="otpCode">One-Time Password</label>
+                        <div class="otp-grid">
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]" autofocus>
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                            <input type="text" class="otp-digit" maxlength="1" inputmode="numeric" pattern="[0-9]">
+                        </div>
+                        <input type="hidden" id="otpCode" name="otp_code">
+                    </div>
+
+                    <button type="submit" class="btn" id="verifyOTPBtn">Verify OTP</button>
+                </form>
+
+                <div class="resend-link" id="resendSection">
+                    <a href="#" onclick="handleResendOTP(event)">Resend OTP</a>
+                </div>
+
+                <p style="text-align: center; font-size: 0.85rem; color: var(--gray-500); margin-top: 1.25rem;">
+                    Didn't receive a code? Check your spam folder or request a new code.
+                </p>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const invitationToken = "{{ invitation.token }}";
+
+        // OTP input grid handling
+        const otpInputs = document.querySelectorAll('.otp-digit');
+
+        otpInputs.forEach((input, index) => {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Backspace' && index > 0 && input.value === '') {
+                    otpInputs[index - 1].focus();
+                } else if (e.key === 'Backspace') {
+                    input.value = '';
+                }
+            });
+
+            input.addEventListener('input', (e) => {
+                const value = e.target.value;
+                if (!/^[0-9]$/.test(value)) {
+                    e.target.value = '';
+                    return;
+                }
+
+                updateOTPHidden();
+
+                if (value && index < otpInputs.length - 1) {
+                    otpInputs[index + 1].focus();
+                }
+            });
+
+            input.addEventListener('paste', (e) => {
+                e.preventDefault();
+                const paste = (e.clipboardData || window.clipboardData).getData('text');
+                const digits = paste.replace(/\D/g, '').split('');
+                digits.forEach((digit, i) => {
+                    if (index + i < otpInputs.length) {
+                        otpInputs[index + i].value = digit;
+                    }
+                });
+                if (digits.length + index >= otpInputs.length) {
+                    otpInputs[otpInputs.length - 1].focus();
+                } else {
+                    otpInputs[index + digits.length].focus();
+                }
+                updateOTPHidden();
+            });
+        });
+
+        function updateOTPHidden() {
+            const code = Array.from(otpInputs).map(input => input.value).join('');
+            document.getElementById('otpCode').value = code;
+        }
+
+        function showStep(stepNum) {
+            document.getElementById('step1').style.display = stepNum === 1 ? 'block' : 'none';
+            document.getElementById('step2').style.display = stepNum === 2 ? 'block' : 'none';
+
+            document.getElementById('stepDot1').className = stepNum >= 1 ? 'step-dot active' : 'step-dot';
+            document.getElementById('stepDot2').className = stepNum >= 2 ? 'step-dot active' : 'step-dot';
+
+            if (stepNum >= 1) {
+                document.getElementById('stepDot1').classList.add('completed');
+            }
+        }
+
+        async function handleSendOTP(e) {
+            e.preventDefault();
+            const btn = document.getElementById('sendOTPBtn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="spinner"></span>Sending...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/partner/register/send-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        token: invitationToken
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    showStep(2);
+                    otpInputs[0].focus();
+                    startResendCountdown();
+                } else {
+                    const data = await response.json();
+                    alert('Error: ' + (data.message || 'Failed to send OTP'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error sending OTP. Please try again.');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function handleVerifyOTP(e) {
+            e.preventDefault();
+            const code = document.getElementById('otpCode').value;
+
+            if (code.length !== 6) {
+                alert('Please enter a 6-digit code');
+                return;
+            }
+
+            const btn = document.getElementById('verifyOTPBtn');
+            const originalText = btn.textContent;
+            btn.innerHTML = '<span class="spinner"></span>Verifying...';
+            btn.disabled = true;
+
+            try {
+                const response = await fetch('/partner/register/verify-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        token: invitationToken,
+                        otp_code: code
+                    })
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    // Redirect to onboarding page
+                    window.location.href = `/partner/onboard/${data.onboard_token}`;
+                } else {
+                    const data = await response.json();
+                    alert('Error: ' + (data.message || 'Invalid OTP'));
+                    btn.textContent = originalText;
+                    btn.disabled = false;
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error verifying OTP. Please try again.');
+                btn.textContent = originalText;
+                btn.disabled = false;
+            }
+        }
+
+        async function handleResendOTP(e) {
+            e.preventDefault();
+            const resendLink = document.getElementById('resendSection').querySelector('a');
+            const originalText = resendLink.textContent;
+
+            resendLink.style.pointerEvents = 'none';
+            resendLink.style.color = 'var(--gray-400)';
+
+            try {
+                const response = await fetch('/partner/register/send-otp', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: JSON.stringify({
+                        token: invitationToken
+                    })
+                });
+
+                if (response.ok) {
+                    alert('New OTP sent to your email!');
+                    otpInputs.forEach(input => input.value = '');
+                    otpInputs[0].focus();
+                    startResendCountdown();
+                } else {
+                    alert('Failed to resend OTP');
+                    resendLink.style.pointerEvents = 'auto';
+                    resendLink.style.color = 'var(--orange)';
+                }
+            } catch (error) {
+                console.error('Error:', error);
+                alert('Error resending OTP. Please try again.');
+                resendLink.style.pointerEvents = 'auto';
+                resendLink.style.color = 'var(--orange)';
+            }
+        }
+
+        function startResendCountdown() {
+            let remaining = 30;
+            const resendSection = document.getElementById('resendSection');
+            const originalHTML = resendSection.innerHTML;
+
+            function updateCountdown() {
+                resendSection.innerHTML = `<span class="resend-countdown">Resend OTP in ${remaining}s</span>`;
+
+                if (remaining > 0) {
+                    remaining--;
+                    setTimeout(updateCountdown, 1000);
+                } else {
+                    resendSection.innerHTML = originalHTML;
+                }
+            }
+
+            updateCountdown();
+        }
+
+        // Initialize
+        showStep(1);
+    </script>
+</body>
+</html>

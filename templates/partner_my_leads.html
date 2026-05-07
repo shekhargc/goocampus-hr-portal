@@ -1,0 +1,808 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Student Leads - GooCampus Partner Portal</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    :root {
+      --orange: #F58220;
+      --orange-dark: #D96E0E;
+      --orange-light: #FFF3E6;
+      --navy: #1B2A4A;
+      --navy-dark: #0F1B33;
+      --navy-light: #2A3F66;
+      --gray-50: #F8FAFC;
+      --gray-200: #E2E8F0;
+      --gray-300: #CBD5E1;
+      --gray-500: #64748B;
+      --gray-800: #1E293B;
+      --success: #10B981;
+      --danger: #EF4444;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: var(--gray-50);
+      color: var(--gray-800);
+    }
+
+    /* Navbar */
+    .navbar {
+      background: white;
+      border-bottom: 1px solid var(--gray-200);
+      padding: 16px 32px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+    }
+
+    .navbar-left {
+      display: flex;
+      align-items: center;
+      gap: 24px;
+    }
+
+    .navbar-logo {
+      font-size: 18px;
+      font-weight: 700;
+      color: var(--orange);
+    }
+
+    .navbar-title {
+      font-size: 14px;
+      color: var(--gray-500);
+      border-left: 1px solid var(--gray-300);
+      padding-left: 24px;
+    }
+
+    .navbar-nav {
+      display: flex;
+      gap: 32px;
+    }
+
+    .navbar-nav a {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--gray-500);
+      text-decoration: none;
+      transition: color 0.2s;
+    }
+
+    .navbar-nav a.active {
+      color: var(--orange);
+      border-bottom: 3px solid var(--orange);
+      padding-bottom: 6px;
+    }
+
+    .navbar-nav a:hover {
+      color: var(--navy);
+    }
+
+    .navbar-logout {
+      padding: 8px 16px;
+      background: var(--danger);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .navbar-logout:hover {
+      background: #DC2626;
+    }
+
+    /* Main content */
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 32px;
+    }
+
+    .page-header {
+      margin-bottom: 32px;
+    }
+
+    .page-title {
+      font-size: 28px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 8px;
+    }
+
+    .page-subtitle {
+      font-size: 14px;
+      color: var(--gray-500);
+    }
+
+    /* Summary cards */
+    .summary-cards {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 16px;
+      margin-bottom: 32px;
+    }
+
+    .summary-card {
+      background: white;
+      padding: 20px;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+    }
+
+    .summary-card-icon {
+      font-size: 32px;
+      margin-bottom: 12px;
+    }
+
+    .summary-card-label {
+      font-size: 13px;
+      color: var(--gray-500);
+      font-weight: 600;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }
+
+    .summary-card-value {
+      font-size: 32px;
+      font-weight: 700;
+      color: var(--navy);
+    }
+
+    /* Add lead form */
+    .add-lead-section {
+      margin-bottom: 32px;
+    }
+
+    .btn-add-lead {
+      padding: 12px 24px;
+      background: var(--orange);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-add-lead:hover {
+      background: var(--orange-dark);
+    }
+
+    .form-card {
+      background: white;
+      padding: 24px;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      display: none;
+    }
+
+    .form-card.active {
+      display: block;
+    }
+
+    .form-title {
+      font-size: 16px;
+      font-weight: 700;
+      color: var(--navy);
+      margin-bottom: 20px;
+    }
+
+    .form-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 16px;
+      margin-bottom: 20px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .form-group label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--gray-800);
+    }
+
+    .form-group label .required {
+      color: var(--danger);
+    }
+
+    .form-group input,
+    .form-group select,
+    .form-group textarea {
+      padding: 10px 12px;
+      border: 1px solid var(--gray-300);
+      border-radius: 6px;
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    .form-group input:focus,
+    .form-group select:focus,
+    .form-group textarea:focus {
+      outline: none;
+      border-color: var(--orange);
+      box-shadow: 0 0 0 3px var(--orange-light);
+    }
+
+    .form-group textarea {
+      grid-column: 1 / -1;
+      resize: vertical;
+      min-height: 100px;
+    }
+
+    .checkbox-group {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+      grid-column: 1 / -1;
+    }
+
+    .checkbox-item {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .checkbox-item input[type="checkbox"] {
+      cursor: pointer;
+    }
+
+    .checkbox-item label {
+      cursor: pointer;
+      margin: 0;
+      font-weight: 400;
+    }
+
+    .form-buttons {
+      display: flex;
+      gap: 12px;
+      justify-content: flex-end;
+    }
+
+    .btn-submit {
+      padding: 10px 20px;
+      background: var(--orange);
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-submit:hover {
+      background: var(--orange-dark);
+    }
+
+    .btn-cancel {
+      padding: 10px 20px;
+      background: var(--gray-200);
+      color: var(--gray-800);
+      border: none;
+      border-radius: 6px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-cancel:hover {
+      background: var(--gray-300);
+    }
+
+    /* Table */
+    .table-container {
+      background: white;
+      border-radius: 8px;
+      border: 1px solid var(--gray-200);
+      overflow: hidden;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    thead {
+      background: var(--gray-50);
+      border-bottom: 2px solid var(--gray-200);
+    }
+
+    th {
+      padding: 14px 16px;
+      text-align: left;
+      font-size: 13px;
+      font-weight: 700;
+      color: var(--gray-800);
+      text-transform: uppercase;
+    }
+
+    tbody tr {
+      border-bottom: 1px solid var(--gray-200);
+      transition: background 0.15s;
+    }
+
+    tbody tr:hover {
+      background: var(--orange-light);
+    }
+
+    tbody tr.expanded {
+      background: var(--gray-50);
+    }
+
+    td {
+      padding: 14px 16px;
+      font-size: 14px;
+      color: var(--gray-800);
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 12px;
+      font-size: 12px;
+      font-weight: 600;
+    }
+
+    .badge-new {
+      background: #DBEAFE;
+      color: #1E40AF;
+    }
+
+    .badge-contacted {
+      background: var(--orange-light);
+      color: var(--orange-dark);
+    }
+
+    .badge-qualified {
+      background: #DCFCE7;
+      color: #166534;
+    }
+
+    .badge-converted {
+      background: #E0E7FF;
+      color: var(--navy-dark);
+    }
+
+    .badge-lost {
+      background: #FEE2E2;
+      color: #991B1B;
+    }
+
+    .expand-row {
+      cursor: pointer;
+    }
+
+    .expand-row:hover {
+      background: var(--orange-light) !important;
+    }
+
+    .expand-icon {
+      font-size: 12px;
+      color: var(--gray-500);
+    }
+
+    .details-row {
+      display: none;
+      background: var(--gray-50);
+    }
+
+    .details-row.active {
+      display: table-row;
+    }
+
+    .details-content {
+      padding: 20px 16px;
+      border-top: 1px solid var(--gray-200);
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 16px;
+    }
+
+    .detail-item {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .detail-label {
+      font-size: 12px;
+      color: var(--gray-500);
+      font-weight: 600;
+      text-transform: uppercase;
+    }
+
+    .detail-value {
+      font-size: 14px;
+      color: var(--gray-800);
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 60px 20px;
+      color: var(--gray-500);
+    }
+
+    .empty-state-icon {
+      font-size: 48px;
+      margin-bottom: 16px;
+    }
+
+    .empty-state-text {
+      font-size: 16px;
+      margin-bottom: 16px;
+    }
+
+    /* Footer */
+    .footer {
+      background: var(--navy);
+      color: white;
+      padding: 32px;
+      text-align: center;
+      font-size: 13px;
+      margin-top: 60px;
+    }
+
+    .footer-content {
+      max-width: 1200px;
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .footer-logo {
+      font-weight: 700;
+      color: var(--orange);
+    }
+
+    .footer-links {
+      display: flex;
+      gap: 20px;
+    }
+
+    .footer-links a {
+      color: white;
+      text-decoration: none;
+    }
+
+    .footer-links a:hover {
+      color: var(--orange);
+    }
+  </style>
+</head>
+<body>
+  <!-- Navbar -->
+  <nav class="navbar">
+    <div class="navbar-left">
+      <div class="navbar-logo">GooCampus</div>
+      <div class="navbar-title">Partner Portal</div>
+    </div>
+    <div class="navbar-nav">
+      <a href="/partner/dashboard">Dashboard</a>
+      <a href="/partner/leads" class="active">Student Leads</a>
+      <a href="/partner/b2b-leads">School Leads</a>
+    </div>
+    <button class="navbar-logout" onclick="logout()">Logout</button>
+  </nav>
+
+  <!-- Main content -->
+  <div class="container">
+    <div class="page-header">
+      <h1 class="page-title">Student Leads</h1>
+      <p class="page-subtitle">Manage and track your student leads</p>
+    </div>
+
+    <!-- Summary cards -->
+    <div class="summary-cards">
+      <div class="summary-card">
+        <div class="summary-card-icon">📊</div>
+        <div class="summary-card-label">Total Leads</div>
+        <div class="summary-card-value" id="total-count">{{ leads|length }}</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-icon">🆕</div>
+        <div class="summary-card-label">New</div>
+        <div class="summary-card-value" id="new-count">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-icon">📞</div>
+        <div class="summary-card-label">Contacted</div>
+        <div class="summary-card-value" id="contacted-count">0</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-card-icon">✅</div>
+        <div class="summary-card-label">Converted</div>
+        <div class="summary-card-value" id="converted-count">0</div>
+      </div>
+    </div>
+
+    <!-- Add lead section -->
+    <div class="add-lead-section">
+      <button class="btn-add-lead" id="toggle-form-btn">+ Add Student Lead</button>
+
+      <div class="form-card" id="form-card">
+        <h3 class="form-title">Add New Student Lead</h3>
+        <form id="add-lead-form">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Student Name <span class="required">*</span></label>
+              <input type="text" id="student_name" required>
+            </div>
+            <div class="form-group">
+              <label>Email</label>
+              <input type="email" id="student_email">
+            </div>
+            <div class="form-group">
+              <label>Phone</label>
+              <input type="tel" id="student_phone">
+            </div>
+            <div class="form-group">
+              <label>City</label>
+              <input type="text" id="city">
+            </div>
+            <div class="form-group">
+              <label>State</label>
+              <input type="text" id="state">
+            </div>
+            <div class="form-group">
+              <label>Interested Products</label>
+              <div class="checkbox-group">
+                {% for product in products %}
+                <div class="checkbox-item">
+                  <input type="checkbox" id="product_{{ loop.index }}" name="products" value="{{ product }}">
+                  <label for="product_{{ loop.index }}">{{ product }}</label>
+                </div>
+                {% endfor %}
+              </div>
+            </div>
+            <div class="form-group">
+              <label>Notes</label>
+              <textarea id="notes" placeholder="Any additional notes..."></textarea>
+            </div>
+          </div>
+
+          <div class="form-buttons">
+            <button type="button" class="btn-cancel" onclick="toggleForm()">Cancel</button>
+            <button type="submit" class="btn-submit">Add Lead</button>
+          </div>
+        </form>
+      </div>
+    </div>
+
+    <!-- Leads table -->
+    <div class="table-container">
+      <table id="leads-table">
+        <thead>
+          <tr>
+            <th></th>
+            <th>Student Name</th>
+            <th>Contact</th>
+            <th>City</th>
+            <th>Interested In</th>
+            <th>Status</th>
+            <th>Date</th>
+          </tr>
+        </thead>
+        <tbody id="leads-tbody">
+          {% for lead in leads %}
+          <tr class="expand-row" onclick="toggleDetails({{ loop.index0 }})">
+            <td><span class="expand-icon">▶</span></td>
+            <td>{{ lead.student_name }}</td>
+            <td>{{ lead.student_email }}</td>
+            <td>{{ lead.city }}</td>
+            <td>{{ lead.interested_products }}</td>
+            <td>
+              <span class="badge badge-{{ lead.status|lower|replace(' ', '-') }}">{{ lead.status|capitalize }}</span>
+            </td>
+            <td>{{ lead.created_at|strftime('%b %d, %Y') if lead.created_at else 'N/A' }}</td>
+          </tr>
+          <tr class="details-row" id="details-{{ loop.index0 }}">
+            <td colspan="7">
+              <div class="details-content">
+                <div class="details-grid">
+                  <div class="detail-item">
+                    <div class="detail-label">Phone</div>
+                    <div class="detail-value">{{ lead.student_phone or 'Not provided' }}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value"><a href="mailto:{{ lead.student_email }}">{{ lead.student_email or 'Not provided' }}</a></div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">State</div>
+                    <div class="detail-value">{{ lead.state or 'Not provided' }}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">Notes</div>
+                    <div class="detail-value">{{ lead.notes or 'No notes' }}</div>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% if not leads %}
+      <div class="empty-state">
+        <div class="empty-state-icon">📭</div>
+        <div class="empty-state-text">No student leads yet</div>
+        <div style="font-size: 13px;">Click "Add Student Lead" to get started</div>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+
+  <!-- Footer -->
+  <div class="footer">
+    <div class="footer-content">
+      <div class="footer-logo">GooCampus</div>
+      <div class="footer-links">
+        <a href="#">Privacy Policy</a>
+        <a href="#">Terms of Service</a>
+        <a href="#">Contact Support</a>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let allLeads = {{ leads|tojson }};
+
+    const formCard = document.getElementById('form-card');
+    const toggleFormBtn = document.getElementById('toggle-form-btn');
+    const addLeadForm = document.getElementById('add-lead-form');
+    const leadsTbody = document.getElementById('leads-tbody');
+
+    function toggleForm() {
+      formCard.classList.toggle('active');
+    }
+
+    toggleFormBtn.addEventListener('click', toggleForm);
+
+    addLeadForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+
+      const studentName = document.getElementById('student_name').value.trim();
+      if (!studentName) {
+        alert('Please enter student name');
+        return;
+      }
+
+      const productCheckboxes = document.querySelectorAll('input[name="products"]:checked');
+      const interestedProducts = Array.from(productCheckboxes).map(cb => cb.value).join(', ');
+
+      const payload = {
+        student_name: studentName,
+        student_email: document.getElementById('student_email').value.trim(),
+        student_phone: document.getElementById('student_phone').value.trim(),
+        city: document.getElementById('city').value.trim(),
+        state: document.getElementById('state').value.trim(),
+        interested_products: interestedProducts || 'Not specified',
+        notes: document.getElementById('notes').value.trim()
+      };
+
+      try {
+        const response = await fetch('/partner/leads/add', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload)
+        });
+
+        if (!response.ok) throw new Error('Failed to add lead');
+
+        const newLead = await response.json();
+        allLeads.push(newLead);
+
+        addLeadForm.reset();
+        toggleForm();
+        renderTable();
+        updateSummary();
+      } catch (error) {
+        alert('Error adding lead: ' + error.message);
+      }
+    });
+
+    function toggleDetails(index) {
+      const detailsRow = document.getElementById(`details-${index}`);
+      if (detailsRow) {
+        detailsRow.classList.toggle('active');
+        const expandIcon = document.querySelectorAll('.expand-icon')[index];
+        if (expandIcon) {
+          expandIcon.textContent = detailsRow.classList.contains('active') ? '▼' : '▶';
+        }
+      }
+    }
+
+    function renderTable() {
+      if (allLeads.length === 0) {
+        leadsTbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-state-icon">📭</div><div class="empty-state-text">No student leads yet</div><div style="font-size: 13px;">Click "Add Student Lead" to get started</div></div></td></tr>';
+      } else {
+        leadsTbody.innerHTML = allLeads.map((lead, index) => `
+          <tr class="expand-row" onclick="toggleDetails(${index})">
+            <td><span class="expand-icon">▶</span></td>
+            <td>${lead.student_name}</td>
+            <td>${lead.student_email}</td>
+            <td>${lead.city}</td>
+            <td>${lead.interested_products}</td>
+            <td>
+              <span class="badge badge-${lead.status.toLowerCase().replace(/\s+/g, '-')}">
+                ${lead.status.charAt(0).toUpperCase() + lead.status.slice(1)}
+              </span>
+            </td>
+            <td>${new Date(lead.created_at).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}</td>
+          </tr>
+          <tr class="details-row" id="details-${index}">
+            <td colspan="7">
+              <div class="details-content">
+                <div class="details-grid">
+                  <div class="detail-item">
+                    <div class="detail-label">Phone</div>
+                    <div class="detail-value">${lead.student_phone || 'Not provided'}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">Email</div>
+                    <div class="detail-value"><a href="mailto:${lead.student_email}">${lead.student_email || 'Not provided'}</a></div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">State</div>
+                    <div class="detail-value">${lead.state || 'Not provided'}</div>
+                  </div>
+                  <div class="detail-item">
+                    <div class="detail-label">Notes</div>
+                    <div class="detail-value">${lead.notes || 'No notes'}</div>
+                  </div>
+                </div>
+              </div>
+            </td>
+          </tr>
+        `).join('');
+      }
+    }
+
+    function updateSummary() {
+      document.getElementById('total-count').textContent = allLeads.length;
+      document.getElementById('new-count').textContent = allLeads.filter(l => l.status === 'new').length;
+      document.getElementById('contacted-count').textContent = allLeads.filter(l => l.status === 'contacted').length;
+      document.getElementById('converted-count').textContent = allLeads.filter(l => l.status === 'converted').length;
+    }
+
+    function logout() {
+      if (confirm('Are you sure you want to logout?')) {
+        window.location.href = '/partner/logout';
+      }
+    }
+
+    // Initialize
+    updateSummary();
+  </script>
+</body>
+</html>

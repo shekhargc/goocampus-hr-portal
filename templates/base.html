@@ -806,8 +806,6 @@
             <ul class="navbar-nav">
                 {% if session.get('is_admin') %}
                     <li><a href="/dashboard">Main Dashboard</a></li>
-                    <li><a href="/admin/manage-employees">Employees</a></li>
-
                     <!-- HR Dropdown (Admin) -->
                     <li class="nav-dropdown" id="hr-dropdown-admin">
                         <span class="nav-dropdown-toggle" onclick="toggleDropdown('hr-dropdown-admin', event)">
@@ -819,6 +817,10 @@
                                 <a href="/hr-dashboard">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
                                     HR Dashboard
+                                </a>
+                                <a href="/admin/manage-employees">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+                                    Employees
                                 </a>
                                 <a href="/leave-info">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
@@ -968,16 +970,6 @@
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
                                     Products &amp; Services
                                 </a>
-                                <!-- ── Partners ── -->
-                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Partners</div>
-                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                                    Partner Dashboard
-                                </a>
-                                <a href="/partners">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-                                    Partners List
-                                </a>
                                 <!-- ── Meetings ── -->
                                 <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>
                                 <a href="/b2b">
@@ -1071,6 +1063,40 @@
                                 <a href="/operations/consulting" style="border-top: 1px solid var(--gray-100);">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
                                     Consulting
+                                </a>
+                            </div>
+                        </div>
+                    </li>
+
+                    <!-- Partners Dropdown -->
+                    <li class="nav-dropdown" id="partners-dropdown-admin">
+                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('partners-dropdown-admin', event)">
+                            Partners
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                        </span>
+                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
+                            <div class="nav-dropdown-menu-inner">
+                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
+                                    Partner Dashboard
+                                </a>
+                                <a href="/partners">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
+                                    Partners List
+                                </a>
+                                <div style="padding:0.3rem 1rem 0.15rem;font-size:0.68rem;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--gray-100);margin-top:0.25rem;">Leads</div>
+                                <a href="/partners/leads">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
+                                    Student Leads
+                                </a>
+                                <a href="/partners/b2b-leads">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
+                                    School / College Leads
+                                </a>
+                                <div style="padding:0.3rem 1rem 0.15rem;font-size:0.68rem;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--gray-100);margin-top:0.25rem;">Settings</div>
+                                <a href="/partners/invitations">
+                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
+                                    Invitations
                                 </a>
                             </div>
                         </div>
@@ -1298,16 +1324,6 @@
                                 <a href="/products">
                                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
                                     Products &amp; Services
-                                </a>
-                                <!-- ── Partners ── -->
-                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Partners</div>
-                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                                    Partner Dashboard
-                                </a>
-                                <a href="/partners">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-                                    Partners List
                                 </a>
                                 <!-- ── Meetings ── -->
                                 <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>

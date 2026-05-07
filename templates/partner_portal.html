@@ -9,11 +9,14 @@
         :root {
             --orange: #F58220; --orange-dark: #D96E0E; --orange-light: #FFF3E6;
             --navy: #1B2A4A; --navy-dark: #0F1B33; --navy-light: #2A3F66;
-            --white: #FFFFFF; --gray-50: #F8FAFC; --gray-200: #E2E8F0;
-            --gray-500: #64748B; --gray-800: #1E293B;
+            --white: #FFFFFF; --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0;
+            --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-800: #1E293B;
+            --green: #10B981; --blue: #3B82F6; --purple: #8B5CF6; --red: #EF4444;
         }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body { font-family: 'Inter', -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; }
+
+        /* Navbar */
         .navbar {
             background: var(--navy); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
             position: sticky; top: 0; z-index: 100;
@@ -30,28 +33,144 @@
             color: rgba(255,255,255,0.75); text-decoration: none; font-size: 0.9rem; font-weight: 500;
             padding: 0.55rem 1.1rem; border-radius: 0.5rem; transition: all 0.2s;
         }
-        .navbar-nav a:hover { color: white; background: rgba(255,255,255,0.1); }
-        .navbar-nav .nav-logout { background: rgba(255,255,255,0.1); }
+        .navbar-nav a:hover, .navbar-nav a.active { color: white; background: rgba(255,255,255,0.1); }
+        .navbar-nav .nav-logout { background: rgba(245,130,32,0.15); color: var(--orange); }
+        .navbar-nav .nav-logout:hover { background: rgba(245,130,32,0.25); }
+
+        /* Main */
         .main { max-width: 1200px; margin: 0 auto; padding: 2rem 3rem; }
+
+        /* Welcome Banner */
         .welcome-card {
             background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
-            border-radius: 1rem; padding: 3rem; color: white; margin-bottom: 2rem;
+            border-radius: 1rem; padding: 2rem 2.5rem; color: white; margin-bottom: 1.5rem;
+            display: flex; justify-content: space-between; align-items: center;
             position: relative; overflow: hidden;
         }
         .welcome-card::before {
             content: ''; position: absolute; top: -40%; right: -10%; width: 400px; height: 400px;
             border-radius: 50%; background: radial-gradient(circle, rgba(245,130,32,0.15) 0%, transparent 70%);
         }
-        .welcome-card h1 { font-size: 1.75rem; font-weight: 700; position: relative; z-index: 1; }
+        .welcome-left { position: relative; z-index: 1; }
+        .welcome-card h1 { font-size: 1.6rem; font-weight: 700; }
         .welcome-card h1 span { color: var(--orange); }
-        .welcome-card p { color: rgba(255,255,255,0.7); font-size: 1rem; position: relative; z-index: 1; margin-top: 0.5rem; }
-        .info-card {
-            background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem; padding: 2.5rem; text-align: center;
+        .welcome-card p { color: rgba(255,255,255,0.65); font-size: 0.9rem; margin-top: 0.35rem; }
+        .welcome-actions { display: flex; gap: 0.75rem; position: relative; z-index: 1; }
+        .welcome-actions a {
+            display: inline-flex; align-items: center; gap: 0.4rem; padding: 0.6rem 1.2rem;
+            border-radius: 0.5rem; font-size: 0.85rem; font-weight: 600; text-decoration: none; transition: all 0.2s;
         }
-        .info-card h3 { font-size: 1.15rem; font-weight: 600; color: var(--navy); margin-bottom: 0.75rem; }
-        .info-card p { color: var(--gray-500); font-size: 0.95rem; line-height: 1.7; max-width: 480px; margin: 0 auto; }
-        .footer { background: var(--navy-dark); color: rgba(255,255,255,0.4); text-align: center; padding: 1.25rem; font-size: 0.78rem; margin-top: 4rem; }
+        .btn-orange { background: var(--orange); color: white; }
+        .btn-orange:hover { background: var(--orange-dark); }
+        .btn-outline-white { background: rgba(255,255,255,0.1); color: white; border: 1px solid rgba(255,255,255,0.25); }
+        .btn-outline-white:hover { background: rgba(255,255,255,0.2); }
+
+        /* Stat Cards */
+        .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
+        .stat-card {
+            background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+            padding: 1.25rem 1.5rem; display: flex; align-items: center; gap: 1rem;
+            transition: box-shadow 0.2s;
+        }
+        .stat-card:hover { box-shadow: 0 4px 12px rgba(0,0,0,0.06); }
+        .stat-icon {
+            width: 48px; height: 48px; border-radius: 0.65rem; display: flex;
+            align-items: center; justify-content: center; flex-shrink: 0;
+        }
+        .stat-icon svg { width: 24px; height: 24px; }
+        .stat-icon.orange { background: var(--orange-light); color: var(--orange); }
+        .stat-icon.green { background: #ECFDF5; color: var(--green); }
+        .stat-icon.blue { background: #EFF6FF; color: var(--blue); }
+        .stat-icon.purple { background: #F5F3FF; color: var(--purple); }
+        .stat-info { flex: 1; }
+        .stat-value { font-size: 1.5rem; font-weight: 700; color: var(--navy); line-height: 1; }
+        .stat-label { font-size: 0.78rem; font-weight: 500; color: var(--gray-500); margin-top: 0.25rem; }
+
+        /* Content Grid */
+        .content-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 1.5rem; }
+
+        /* Card */
+        .card {
+            background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+            overflow: hidden;
+        }
+        .card-header {
+            display: flex; justify-content: space-between; align-items: center;
+            padding: 1rem 1.25rem; border-bottom: 1px solid var(--gray-200);
+        }
+        .card-header h3 { font-size: 0.95rem; font-weight: 600; color: var(--navy); }
+        .card-header a {
+            font-size: 0.78rem; font-weight: 500; color: var(--orange); text-decoration: none;
+        }
+        .card-header a:hover { text-decoration: underline; }
+        .card-body { padding: 1rem 1.25rem; }
+
+        /* Recent Leads Table */
+        .leads-table { width: 100%; border-collapse: collapse; }
+        .leads-table th {
+            text-align: left; font-size: 0.72rem; font-weight: 600; color: var(--gray-500);
+            text-transform: uppercase; letter-spacing: 0.04em; padding: 0.5rem 0.75rem;
+            border-bottom: 1px solid var(--gray-200);
+        }
+        .leads-table td {
+            padding: 0.65rem 0.75rem; font-size: 0.85rem; border-bottom: 1px solid var(--gray-100);
+        }
+        .leads-table tr:last-child td { border-bottom: none; }
+        .status-badge {
+            display: inline-block; padding: 0.2rem 0.6rem; border-radius: 1rem;
+            font-size: 0.72rem; font-weight: 600;
+        }
+        .status-new { background: #DBEAFE; color: #1D4ED8; }
+        .status-contacted { background: #FEF3C7; color: #92400E; }
+        .status-qualified { background: #D1FAE5; color: #065F46; }
+        .status-converted { background: #ECFDF5; color: var(--green); }
+        .status-lost { background: #FEE2E2; color: var(--red); }
+        .empty-state {
+            text-align: center; padding: 2rem 1rem; color: var(--gray-400); font-size: 0.88rem;
+        }
+        .empty-state svg { width: 40px; height: 40px; margin-bottom: 0.5rem; opacity: 0.4; }
+
+        /* Team List */
+        .team-list { list-style: none; }
+        .team-item {
+            display: flex; align-items: center; gap: 0.85rem; padding: 0.7rem 0;
+            border-bottom: 1px solid var(--gray-100);
+        }
+        .team-item:last-child { border-bottom: none; }
+        .team-avatar {
+            width: 36px; height: 36px; border-radius: 50%;
+            background: var(--orange-light); color: var(--orange);
+            display: flex; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: 700; flex-shrink: 0;
+        }
+        .team-name { font-size: 0.88rem; font-weight: 600; color: var(--navy); }
+        .team-role { font-size: 0.75rem; color: var(--gray-500); }
+
+        /* Company Info */
+        .info-row {
+            display: flex; justify-content: space-between; padding: 0.55rem 0;
+            border-bottom: 1px solid var(--gray-100); font-size: 0.85rem;
+        }
+        .info-row:last-child { border-bottom: none; }
+        .info-label { color: var(--gray-500); font-weight: 500; }
+        .info-value { color: var(--navy); font-weight: 600; text-align: right; }
+
+        /* Footer */
+        .footer {
+            background: var(--navy-dark); color: rgba(255,255,255,0.4); text-align: center;
+            padding: 1.25rem; font-size: 0.78rem; margin-top: 3rem;
+        }
         .footer span { color: var(--orange); }
+
+        @media (max-width: 1024px) {
+            .stat-grid { grid-template-columns: repeat(2, 1fr); }
+            .content-grid { grid-template-columns: 1fr; }
+        }
+        @media (max-width: 640px) {
+            .stat-grid { grid-template-columns: 1fr; }
+            .main { padding: 1rem 1rem; }
+            .welcome-card { flex-direction: column; align-items: flex-start; gap: 1rem; }
+        }
     </style>
 </head>
 <body>
@@ -62,20 +181,180 @@
                 <div class="navbar-brand-text"><span class="goo">Goo</span>Campus <span style="font-weight: 400; font-size: 0.85rem; opacity: 0.6;">Partner Portal</span></div>
             </a>
             <ul class="navbar-nav">
+                <li><a href="/partner/dashboard" class="active">Dashboard</a></li>
+                <li><a href="/partner/leads">Student Leads</a></li>
+                <li><a href="/partner/b2b-leads">School/College Leads</a></li>
                 <li><a href="/logout" class="nav-logout">Logout</a></li>
             </ul>
         </div>
     </nav>
+
     <div class="main">
+        <!-- Welcome Banner -->
         <div class="welcome-card">
-            <h1>Welcome, <span>{{ partner_name }}</span></h1>
-            <p>Your GooCampus partner portal dashboard</p>
+            <div class="welcome-left">
+                <h1>Welcome, <span>{{ partner_name }}</span></h1>
+                <p>Your GooCampus partner portal dashboard</p>
+            </div>
+            <div class="welcome-actions">
+                <a href="/partner/leads" class="btn-orange">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
+                    Add Student Lead
+                </a>
+                <a href="/partner/b2b-leads" class="btn-outline-white">
+                    <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M3 7v1a3 3 0 003 3h12a3 3 0 003-3V7M21 7H3l2-4h14l2 4z"/></svg>
+                    Add School Lead
+                </a>
+            </div>
         </div>
-        <div class="info-card">
-            <h3>Partner Portal Coming Soon</h3>
-            <p>Your dedicated portal is being set up. You'll soon have access to partner resources, college data, student referral tracking, and more. Contact GooCampus for further information.</p>
+
+        <!-- Stat Cards -->
+        <div class="stat-grid">
+            <div class="stat-card">
+                <div class="stat-icon orange">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ total_leads }}</div>
+                    <div class="stat-label">Total Student Leads</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon green">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ new_leads }}</div>
+                    <div class="stat-label">New / Pending</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon blue">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M3 21h18M3 7v1a3 3 0 003 3h12a3 3 0 003-3V7M21 7H3l2-4h14l2 4z"/></svg>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ b2b_leads }}</div>
+                    <div class="stat-label">School/College Leads</div>
+                </div>
+            </div>
+            <div class="stat-card">
+                <div class="stat-icon purple">
+                    <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+                </div>
+                <div class="stat-info">
+                    <div class="stat-value">{{ team_count }}</div>
+                    <div class="stat-label">Team Members</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Content Grid -->
+        <div class="content-grid">
+            <!-- Recent Leads -->
+            <div class="card">
+                <div class="card-header">
+                    <h3>Recent Student Leads</h3>
+                    <a href="/partner/leads">View All &rarr;</a>
+                </div>
+                <div class="card-body" style="padding:0;">
+                    {% if recent_leads and recent_leads|length > 0 %}
+                    <table class="leads-table">
+                        <thead>
+                            <tr><th>Student Name</th><th>Status</th><th>Added</th></tr>
+                        </thead>
+                        <tbody>
+                            {% for lead in recent_leads %}
+                            <tr>
+                                <td style="font-weight:500;">{{ lead.student_name }}</td>
+                                <td>
+                                    {% set sc = lead.status|lower|replace(' ', '') %}
+                                    <span class="status-badge status-{{ sc }}">{{ lead.status }}</span>
+                                </td>
+                                <td style="color:var(--gray-500);font-size:0.8rem;">{{ lead.created_at[:10] if lead.created_at else '-' }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                    {% else %}
+                    <div class="empty-state">
+                        <svg fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24"><path d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+                        <p>No student leads yet. Add your first lead to get started!</p>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+
+            <!-- Right Column -->
+            <div style="display:flex;flex-direction:column;gap:1.5rem;">
+                <!-- Company Info -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Company Details</h3>
+                    </div>
+                    <div class="card-body">
+                        {% if partner %}
+                        <div class="info-row">
+                            <span class="info-label">Company</span>
+                            <span class="info-value">{{ partner.company_name or '-' }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Contact</span>
+                            <span class="info-value">{{ partner.contact_person or '-' }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Email</span>
+                            <span class="info-value">{{ partner.email or '-' }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Phone</span>
+                            <span class="info-value">{{ partner.phone or '-' }}</span>
+                        </div>
+                        <div class="info-row">
+                            <span class="info-label">Location</span>
+                            <span class="info-value">{{ partner.city or '' }}{% if partner.city and partner.state %}, {% endif %}{{ partner.state or '-' }}</span>
+                        </div>
+                        {% else %}
+                        <div class="empty-state">
+                            <p>Company details not available</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Team Members -->
+                <div class="card">
+                    <div class="card-header">
+                        <h3>Team Members</h3>
+                    </div>
+                    <div class="card-body">
+                        {% if team_members and team_members|length > 0 %}
+                        <ul class="team-list">
+                            {% for member in team_members[:5] %}
+                            <li class="team-item">
+                                <div class="team-avatar">{{ member.name[0]|upper if member.name else '?' }}</div>
+                                <div>
+                                    <div class="team-name">{{ member.name }}</div>
+                                    <div class="team-role">{{ member.designation or 'Team Member' }}{% if member.email %} &middot; {{ member.email }}{% endif %}</div>
+                                </div>
+                            </li>
+                            {% endfor %}
+                        </ul>
+                        {% if team_members|length > 5 %}
+                        <div style="text-align:center;padding-top:0.5rem;">
+                            <span style="font-size:0.78rem;color:var(--gray-500);">+ {{ team_members|length - 5 }} more members</span>
+                        </div>
+                        {% endif %}
+                        {% else %}
+                        <div class="empty-state">
+                            <p>No team members added yet</p>
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
+
     <footer class="footer">
         &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &middot; All rights reserved
     </footer>

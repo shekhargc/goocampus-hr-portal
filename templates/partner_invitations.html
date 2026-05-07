@@ -1,0 +1,332 @@
+{% extends "base.html" %}
+
+{% block title %}Partner Invitations - GooCampus HR Portal{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <div style="display: flex; justify-content: space-between; align-items: center;">
+        <div>
+            <h1>Partner Invitations</h1>
+            <p>Manage and send invitations to partner organizations</p>
+        </div>
+        <button type="button" class="button" onclick="openInvitationForm()">+ Send Invitation</button>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+        {% for category, message in messages %}
+            <div style="margin-bottom: 1.5rem; padding: 1rem 1.25rem; border-radius: 0.6rem; border-left: 4px solid; font-size: 0.95rem;" class="{% if category == 'error' %}alert-error{% elif category == 'success' %}alert-success{% else %}alert-info{% endif %}">
+                {{ message }}
+            </div>
+        {% endfor %}
+    {% endif %}
+{% endwith %}
+
+<!-- Invitation Form Modal -->
+<div id="invitationFormModal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center;">
+    <div style="background: white; border-radius: 1rem; padding: 2.5rem; width: 90%; max-width: 500px; box-shadow: 0 25px 80px rgba(0,0,0,0.3);">
+        <h2 style="font-size: 1.25rem; font-weight: 700; color: var(--navy); margin-bottom: 1.5rem;">Send Partner Invitation</h2>
+
+        <form id="invitationForm" method="POST" action="/partners/invitations" onsubmit="handleInvitationSubmit(event)">
+            <div class="form-group">
+                <label for="partner_name">Partner Name</label>
+                <input type="text" id="partner_name" name="partner_name" class="form-input" placeholder="e.g., Apollo Hospitals" required>
+            </div>
+
+            <div class="form-group">
+                <label for="partner_email">Partner Email</label>
+                <input type="email" id="partner_email" name="partner_email" class="form-input" placeholder="contact@example.com" required>
+            </div>
+
+            <div style="display: flex; gap: 1rem;">
+                <button type="submit" class="button" id="sendInvitationBtn">Send Invitation</button>
+                <button type="button" class="button" style="background: var(--gray-400); flex: 1;" onclick="closeInvitationForm()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Invitations Table -->
+<div class="card">
+    <h2 class="card-title">All Invitations</h2>
+
+    <div style="margin-bottom: 1.5rem;">
+        <input type="text" id="searchInput" class="form-input" placeholder="Search by name or email..." onkeyup="debounceSearch()">
+    </div>
+
+    {% if invitations %}
+    <div style="overflow-x: auto;">
+        <table class="table" id="invitationsTable">
+            <thead>
+                <tr>
+                    <th>Partner Name</th>
+                    <th>Email</th>
+                    <th>Status</th>
+                    <th>Invite Link</th>
+                    <th>Sent Date</th>
+                    <th>Registered Date</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for invitation in invitations %}
+                <tr class="invitation-row" data-name="{{ invitation.partner_name|lower }}" data-email="{{ invitation.partner_email|lower }}">
+                    <td><strong>{{ invitation.partner_name }}</strong></td>
+                    <td>{{ invitation.partner_email }}</td>
+                    <td>
+                        {% if invitation.status == 'registered' %}
+                            <span class="badge" style="background: var(--success-light); color: #166534;">Registered</span>
+                        {% else %}
+                            <span class="badge" style="background: var(--gray-100); color: var(--gray-600);">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div style="display: flex; gap: 0.5rem; align-items: center;">
+                            <code style="background: var(--gray-50); padding: 0.35rem 0.75rem; border-radius: 0.4rem; font-size: 0.82rem; color: var(--gray-700); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ invitation.invite_link }}">{{ invitation.invite_link[:30] }}...</code>
+                            <button type="button" class="button button-small" onclick="copyToClipboard('{{ invitation.invite_link }}', this)">Copy</button>
+                        </div>
+                    </td>
+                    <td>
+                        {% if invitation.sent_date %}
+                            <span title="{{ invitation.sent_date }}">{{ invitation.sent_date.strftime('%b %d, %Y') }}</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if invitation.registered_date %}
+                            <span title="{{ invitation.registered_date }}">{{ invitation.registered_date.strftime('%b %d, %Y') }}</span>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </td>
+                    <td>
+                        <button type="button" class="button button-small button-secondary" onclick="resendInvitation('{{ invitation.id }}')">Resend</button>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div style="text-align: center; padding: 3rem 1.5rem; color: var(--gray-500);">
+        <p style="font-size: 1rem; margin-bottom: 1rem;">No invitations yet. Send your first partner invitation to get started.</p>
+        <button type="button" class="button" onclick="openInvitationForm()">+ Send Invitation</button>
+    </div>
+    {% endif %}
+</div>
+
+<style>
+    .form-input {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        border: 2px solid var(--gray-200);
+        border-radius: 0.6rem;
+        font-family: inherit;
+        font-size: 0.95rem;
+        transition: border-color 0.2s, box-shadow 0.2s;
+        background: var(--white);
+    }
+    .form-input:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
+    }
+
+    .alert-error {
+        background: var(--danger-light);
+        border-color: var(--danger);
+        color: #991B1B;
+    }
+    .alert-success {
+        background: var(--success-light);
+        border-color: var(--success);
+        color: #065F46;
+    }
+    .alert-info {
+        background: var(--blue-light);
+        border-color: var(--blue);
+        color: var(--blue-dark);
+    }
+
+    .invitation-row.hidden {
+        display: none;
+    }
+
+    .toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: var(--success);
+        color: white;
+        padding: 1rem 1.5rem;
+        border-radius: 0.6rem;
+        box-shadow: 0 6px 20px rgba(16,185,129,0.3);
+        z-index: 300;
+        animation: slideIn 0.3s ease-out;
+    }
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+    }
+    .toast.removing {
+        animation: slideOut 0.3s ease-out;
+    }
+</style>
+
+<script>
+    let searchTimeout;
+
+    function openInvitationForm() {
+        document.getElementById('invitationFormModal').style.display = 'flex';
+        document.getElementById('partner_name').focus();
+    }
+
+    function closeInvitationForm() {
+        document.getElementById('invitationFormModal').style.display = 'none';
+        document.getElementById('invitationForm').reset();
+    }
+
+    function handleInvitationSubmit(e) {
+        e.preventDefault();
+        const btn = document.getElementById('sendInvitationBtn');
+        const originalText = btn.textContent;
+        btn.textContent = 'Sending...';
+        btn.disabled = true;
+
+        const formData = new FormData(document.getElementById('invitationForm'));
+
+        fetch('/partners/invitations', {
+            method: 'POST',
+            body: formData,
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                showToast('Invitation sent successfully!', 'success');
+                closeInvitationForm();
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                return response.text().then(text => {
+                    throw new Error('Failed to send invitation');
+                });
+            }
+        })
+        .catch(error => {
+            showToast('Error sending invitation. Please try again.', 'error');
+            btn.textContent = originalText;
+            btn.disabled = false;
+        });
+    }
+
+    function debounceSearch() {
+        clearTimeout(searchTimeout);
+        searchTimeout = setTimeout(filterInvitations, 300);
+    }
+
+    function filterInvitations() {
+        const searchTerm = document.getElementById('searchInput').value.toLowerCase();
+        const rows = document.querySelectorAll('.invitation-row');
+
+        if (searchTerm.length < 2) {
+            rows.forEach(row => row.classList.remove('hidden'));
+            return;
+        }
+
+        rows.forEach(row => {
+            const name = row.getAttribute('data-name');
+            const email = row.getAttribute('data-email');
+
+            if (name.includes(searchTerm) || email.includes(searchTerm)) {
+                row.classList.remove('hidden');
+            } else {
+                row.classList.add('hidden');
+            }
+        });
+    }
+
+    function copyToClipboard(text, button) {
+        navigator.clipboard.writeText(text).then(() => {
+            const originalText = button.textContent;
+            button.textContent = 'Copied!';
+            button.disabled = true;
+            setTimeout(() => {
+                button.textContent = originalText;
+                button.disabled = false;
+            }, 2000);
+            showToast('Invite link copied to clipboard!', 'success');
+        }).catch(err => {
+            showToast('Failed to copy. Please try again.', 'error');
+        });
+    }
+
+    function resendInvitation(invitationId) {
+        if (!confirm('Resend invitation to this partner?')) {
+            return;
+        }
+
+        fetch(`/partners/invitations/${invitationId}/resend`, {
+            method: 'POST',
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest'
+            }
+        })
+        .then(response => {
+            if (response.ok) {
+                showToast('Invitation resent successfully!', 'success');
+                setTimeout(() => location.reload(), 1500);
+            } else {
+                throw new Error('Failed to resend');
+            }
+        })
+        .catch(error => {
+            showToast('Error resending invitation. Please try again.', 'error');
+        });
+    }
+
+    function showToast(message, type = 'success') {
+        const toast = document.createElement('div');
+        toast.className = 'toast';
+        toast.textContent = message;
+
+        if (type === 'error') {
+            toast.style.background = 'var(--danger)';
+        } else if (type === 'info') {
+            toast.style.background = 'var(--blue)';
+        }
+
+        document.body.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('removing');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Close modal when clicking outside
+    document.getElementById('invitationFormModal').addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeInvitationForm();
+        }
+    });
+</script>
+{% endblock %}

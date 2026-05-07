@@ -3,6 +3,7 @@ import re
 import hashlib
 import logging
 import secrets
+import random
 from datetime import datetime, timedelta
 from functools import wraps
 from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
@@ -496,8 +497,32 @@ def partner_dashboard_view():
     if not session.get('is_partner'):
         flash('Please log in as a partner', 'error')
         return redirect(url_for('login'))
+    partner_id = session.get('partner_id')
+    conn = get_db()
+
+    # Partner info
+    partner = conn.execute('SELECT * FROM partners WHERE id = ?', (partner_id,)).fetchone()
+
+    # Lead counts
+    total_leads = conn.execute('SELECT COUNT(*) as c FROM partner_leads WHERE partner_id = ?', (partner_id,)).fetchone()['c']
+    new_leads = conn.execute("SELECT COUNT(*) as c FROM partner_leads WHERE partner_id = ? AND status = 'New'", (partner_id,)).fetchone()['c']
+    b2b_leads = conn.execute('SELECT COUNT(*) as c FROM partner_b2b_leads WHERE partner_id = ?', (partner_id,)).fetchone()['c']
+
+    # Team members
+    team_members = conn.execute('SELECT id, name, designation, email, phone FROM partner_team_members WHERE partner_id = ? ORDER BY created_at', (partner_id,)).fetchall()
+
+    # Recent leads (last 5)
+    recent_leads = conn.execute('SELECT id, student_name, status, created_at FROM partner_leads WHERE partner_id = ? ORDER BY created_at DESC LIMIT 5', (partner_id,)).fetchall()
+
     return render_template('partner_portal.html',
-                         partner_name=session.get('partner_name', 'Partner'))
+                         partner_name=session.get('partner_name', 'Partner'),
+                         partner=partner,
+                         total_leads=total_leads,
+                         new_leads=new_leads,
+                         b2b_leads=b2b_leads,
+                         team_count=len(team_members),
+                         team_members=team_members,
+                         recent_leads=recent_leads)
 
 
 @app.route('/dashboard')
@@ -4800,6 +4825,20 @@ def ensure_crm_tables():
             sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.commit()
+
+        # ── Partners table migrations ──
+        # Add onboarding_status column if not exists
+        try:
+            conn.execute("ALTER TABLE partners ADD COLUMN onboarding_status TEXT DEFAULT 'pending'")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        # Add invitation_id column if not exists
+        try:
+            conn.execute("ALTER TABLE partners ADD COLUMN invitation_id INTEGER")
+            conn.commit()
+        except Exception:
+            conn.rollback()
 
         conn.close()
         logging.info("CRM tables ensured.")
@@ -10261,6 +10300,86 @@ def ensure_ops_tables():
             UNIQUE(partner_id, product_id)
         )''')
 
+        # ── Partner Invitations ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_invitations (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT NOT NULL,
+            token TEXT NOT NULL UNIQUE,
+            status TEXT DEFAULT 'pending',
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            registered_at TIMESTAMP
+        )''')
+
+        # ── Partner Team Members ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_team_members (
+            id SERIAL PRIMARY KEY,
+            partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+            name TEXT NOT NULL,
+            designation TEXT,
+            email TEXT,
+            phone TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Partner Student Leads ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_leads (
+            id SERIAL PRIMARY KEY,
+            partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+            student_name TEXT NOT NULL,
+            student_email TEXT,
+            student_phone TEXT,
+            city TEXT,
+            state TEXT,
+            interested_products TEXT,
+            notes TEXT,
+            status TEXT DEFAULT 'New',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Partner B2B School/College Leads ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_b2b_leads (
+            id SERIAL PRIMARY KEY,
+            partner_id INTEGER REFERENCES partners(id) ON DELETE CASCADE,
+            institution_name TEXT NOT NULL,
+            institution_type TEXT,
+            contact_person TEXT,
+            phone TEXT,
+            email TEXT,
+            city TEXT,
+            state TEXT,
+            board_university TEXT,
+            student_count INTEGER,
+            notes TEXT,
+            status TEXT DEFAULT 'New',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Partner Lead Activities ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_lead_activities (
+            id SERIAL PRIMARY KEY,
+            lead_id INTEGER NOT NULL,
+            lead_type TEXT NOT NULL,
+            action TEXT NOT NULL,
+            notes TEXT,
+            created_by TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Partner OTP Codes ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS partner_otps (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL,
+            otp_code TEXT NOT NULL,
+            token TEXT NOT NULL,
+            expires_at TIMESTAMP NOT NULL,
+            verified BOOLEAN DEFAULT FALSE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── States & Cities ──
         conn.execute('''CREATE TABLE IF NOT EXISTS states (
             id SERIAL PRIMARY KEY,
@@ -10432,6 +10551,7 @@ def ensure_ops_tables():
                 # Partners
                 'partner_type': ['Channel Partner', 'Marketing Partner', 'Consultant'],
                 'partner_status': ['Active', 'Inactive'],
+                'lead_status': ['New', 'Contacted', 'Qualified', 'Converted', 'Lost'],
             }
         for category, values in SEED_DATA.items():
             existing = conn.execute("SELECT COUNT(*) as c FROM lookup_options WHERE category = ?", (category,)).fetchone()['c']
@@ -16471,6 +16591,763 @@ def partners_products(pid):
         conn.rollback()
         conn.close()
         return jsonify({'error': str(e)}), 500
+
+
+# ─── PARTNER INVITATION ROUTES ───
+
+@app.route('/partners/invitations', methods=['GET'])
+@login_required
+def partner_invitations_list():
+    """Admin page showing all partner invitations."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    invitations = conn.execute('''
+        SELECT id, name, email, token, status, created_at, registered_at
+        FROM partner_invitations
+        ORDER BY created_at DESC
+    ''').fetchall()
+    conn.close()
+
+    return render_template('partner_invitations.html', invitations=invitations)
+
+
+@app.route('/partners/invitations', methods=['POST'])
+@login_required
+def partner_invitations_create():
+    """Create a partner invitation and send email."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    name = request.form.get('name', '').strip()
+    email = request.form.get('email', '').strip()
+
+    if not name or not email:
+        flash('Name and email are required', 'error')
+        return redirect(url_for('partner_invitations_list'))
+
+    token = secrets.token_urlsafe(32)
+
+    try:
+        conn.execute('''
+            INSERT INTO partner_invitations (name, email, token, status, created_by)
+            VALUES (?, ?, ?, 'pending', ?)
+        ''', (name, email, token, session['user_id']))
+        conn.commit()
+
+        # Send invitation email
+        from email_utils import send_email
+        registration_link = f"{request.host_url}partner/register/{token}"
+        send_email(
+            email,
+            'Partner Registration Invitation',
+            f'''
+            <html>
+                <body>
+                    <h2>Welcome to GooCampus Partner Portal</h2>
+                    <p>Hello {name},</p>
+                    <p>You have been invited to register as a partner with GooCampus.</p>
+                    <p>
+                        <a href="{registration_link}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
+                            Click here to register
+                        </a>
+                    </p>
+                    <p>Or copy this link: {registration_link}</p>
+                    <p>This link will expire in 30 days.</p>
+                    <p>Best regards,<br>GooCampus Team</p>
+                </body>
+            </html>
+            '''
+        )
+
+        conn.close()
+        flash('Invitation sent successfully', 'success')
+    except Exception as e:
+        logging.error(f"partner_invitations_create: {e}")
+        conn.rollback()
+        conn.close()
+        flash(f'Error creating invitation: {e}', 'error')
+
+    return redirect(url_for('partner_invitations_list'))
+
+
+@app.route('/partner/register/<token>', methods=['GET'])
+def partner_register_page(token):
+    """Partner registration page - email verification step."""
+    conn = get_db()
+    invitation = conn.execute('''
+        SELECT id, name, email, status FROM partner_invitations WHERE token = ?
+    ''', (token,)).fetchone()
+    conn.close()
+
+    if not invitation:
+        flash('Invalid or expired invitation token', 'error')
+        return redirect(url_for('login'))
+
+    if invitation['status'] != 'pending':
+        flash('This invitation has already been registered', 'error')
+        return redirect(url_for('login'))
+
+    return render_template('partner_register.html', token=token, email=invitation['email'], name=invitation['name'])
+
+
+@app.route('/partner/register/send-otp', methods=['POST'])
+def partner_send_otp():
+    """Send OTP to partner email."""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        token = data.get('token', '').strip()
+
+        if not email or not token:
+            return jsonify({'error': 'Email and token required'}), 400
+
+        conn = get_db()
+        invitation = conn.execute('''
+            SELECT id, status FROM partner_invitations WHERE token = ? AND email = ?
+        ''', (token, email)).fetchone()
+
+        if not invitation or invitation['status'] != 'pending':
+            conn.close()
+            return jsonify({'error': 'Invalid or expired token'}), 400
+
+        # Generate 6-digit OTP
+        otp_code = str(random.randint(100000, 999999))
+        expires_at = datetime.now() + timedelta(minutes=10)
+
+        # Store OTP
+        conn.execute('''
+            INSERT INTO partner_otps (email, otp_code, token, expires_at, verified)
+            VALUES (?, ?, ?, ?, FALSE)
+        ''', (email, otp_code, token, expires_at))
+        conn.commit()
+
+        # Send OTP email
+        from email_utils import send_email
+        send_email(
+            email,
+            'Your GooCampus Partner Portal OTP',
+            f'''
+            <html>
+                <body>
+                    <h2>OTP Verification</h2>
+                    <p>Your OTP code is: <strong>{otp_code}</strong></p>
+                    <p>This OTP will expire in 10 minutes.</p>
+                    <p>Do not share this code with anyone.</p>
+                    <p>Best regards,<br>GooCampus Team</p>
+                </body>
+            </html>
+            '''
+        )
+
+        conn.close()
+        return jsonify({'success': True, 'message': 'OTP sent successfully'}), 200
+    except Exception as e:
+        logging.error(f"partner_send_otp: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/partner/register/verify-otp', methods=['POST'])
+def partner_verify_otp():
+    """Verify OTP and set session for partner registration."""
+    try:
+        data = request.get_json()
+        email = data.get('email', '').strip()
+        otp = data.get('otp', '').strip()
+        token = data.get('token', '').strip()
+
+        if not email or not otp or not token:
+            return jsonify({'error': 'Email, OTP, and token required'}), 400
+
+        conn = get_db()
+        otp_record = conn.execute('''
+            SELECT id, verified, expires_at FROM partner_otps
+            WHERE email = ? AND token = ? AND otp_code = ?
+        ''', (email, token, otp)).fetchone()
+
+        if not otp_record:
+            conn.close()
+            return jsonify({'error': 'Invalid OTP'}), 400
+
+        if otp_record['verified']:
+            conn.close()
+            return jsonify({'error': 'OTP already verified'}), 400
+
+        # Check expiry
+        expires_at = datetime.fromisoformat(otp_record['expires_at'])
+        if datetime.now() > expires_at:
+            conn.close()
+            return jsonify({'error': 'OTP has expired'}), 400
+
+        # Mark as verified
+        conn.execute('''
+            UPDATE partner_otps SET verified = TRUE WHERE email = ? AND token = ? AND otp_code = ?
+        ''', (email, token, otp))
+        conn.commit()
+        conn.close()
+
+        session['partner_register_token'] = token
+        session['partner_register_email'] = email
+
+        return jsonify({'success': True, 'message': 'OTP verified successfully'}), 200
+    except Exception as e:
+        logging.error(f"partner_verify_otp: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/partner/onboard/<token>', methods=['GET'])
+def partner_onboard_form(token):
+    """Partner onboarding form - company details, team members, address."""
+    if not session.get('partner_register_token') or session.get('partner_register_token') != token:
+        flash('Please verify your email first', 'error')
+        return redirect(url_for('login'))
+
+    conn = get_db()
+    products = conn.execute(
+        'SELECT id, name FROM products_services WHERE status = ? ORDER BY name',
+        ('active',)
+    ).fetchall()
+    conn.close()
+
+    return render_template('partner_onboard.html', token=token, products=products)
+
+
+@app.route('/partner/onboard/<token>', methods=['POST'])
+def partner_onboard_submit(token):
+    """Process partner onboarding form and create partner account."""
+    if not session.get('partner_register_token') or session.get('partner_register_token') != token:
+        flash('Session expired. Please try again', 'error')
+        return redirect(url_for('login'))
+
+    try:
+        conn = get_db()
+
+        # Get invitation
+        invitation = conn.execute('''
+            SELECT id, email, name FROM partner_invitations WHERE token = ?
+        ''', (token,)).fetchone()
+
+        if not invitation or invitation['status'] != 'pending':
+            conn.close()
+            flash('Invalid or expired invitation', 'error')
+            return redirect(url_for('login'))
+
+        # Get form data
+        company_name = request.form.get('company_name', '').strip()
+        contact_person = request.form.get('contact_person', '').strip()
+        phone = request.form.get('phone', '').strip()
+        website = request.form.get('website', '').strip()
+        address = request.form.get('address', '').strip()
+        city = request.form.get('city', '').strip()
+        state = request.form.get('state', '').strip()
+        country = request.form.get('country', 'India').strip()
+        partner_type = request.form.get('partner_type', '').strip()
+
+        if not company_name or not contact_person or not partner_type:
+            conn.close()
+            flash('Required fields: company name, contact person, partner type', 'error')
+            return redirect(url_for('partner_onboard_form', token=token))
+
+        # Create partner
+        conn.execute('''
+            INSERT INTO partners (
+                company_name, contact_person, email, phone, website, address, city, state, country,
+                partner_type, status, password_hash, invitation_id, onboarding_status, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, 'completed', CURRENT_TIMESTAMP)
+        ''', (
+            company_name, contact_person, invitation['email'], phone, website, address, city, state, country,
+            partner_type, hash_password(invitation['email']), invitation['id']
+        ))
+
+        partner_id = conn.lastrowid
+
+        # Add team members if provided
+        team_members = request.form.getlist('team_member_name[]')
+        team_emails = request.form.getlist('team_member_email[]')
+        team_designations = request.form.getlist('team_member_designation[]')
+        team_phones = request.form.getlist('team_member_phone[]')
+
+        for i, name in enumerate(team_members):
+            if name.strip():
+                conn.execute('''
+                    INSERT INTO partner_team_members (partner_id, name, email, designation, phone, created_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+                ''', (
+                    partner_id,
+                    name.strip(),
+                    team_emails[i].strip() if i < len(team_emails) else '',
+                    team_designations[i].strip() if i < len(team_designations) else '',
+                    team_phones[i].strip() if i < len(team_phones) else ''
+                ))
+
+        # Update invitation status
+        conn.execute('''
+            UPDATE partner_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?
+        ''', (invitation['id'],))
+
+        # Create notification
+        conn.execute('''
+            INSERT INTO notifications (type, title, message, created_at)
+            VALUES (?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (
+            'partner_registration',
+            f'New Partner Registration: {company_name}',
+            f'Partner {company_name} has completed onboarding. Contact: {contact_person}'
+        ))
+
+        conn.commit()
+
+        # Set partner session
+        session['user_id'] = partner_id
+        session['is_partner'] = True
+        session['partner_name'] = company_name
+        session['partner_email'] = invitation['email']
+
+        # Clear registration temp session
+        session.pop('partner_register_token', None)
+        session.pop('partner_register_email', None)
+
+        conn.close()
+        flash('Welcome! Your partner account has been created successfully.', 'success')
+        return redirect(url_for('partner_dashboard_view'))
+    except Exception as e:
+        logging.error(f"partner_onboard_submit: {e}")
+        conn.rollback()
+        conn.close()
+        flash(f'Error completing onboarding: {e}', 'error')
+        return redirect(url_for('partner_onboard_form', token=token))
+
+
+# ─── ADMIN PARTNER LEADS ROUTES ───
+
+@app.route('/partners/leads', methods=['GET'])
+@login_required
+def admin_partner_leads():
+    """Admin view of all student leads from all partners."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Get filter parameters
+    partner_id = request.args.get('partner_id', '')
+    status_filter = request.args.get('status', '')
+
+    query = '''
+        SELECT pl.id, pl.partner_id, pl.student_name, pl.student_email, pl.student_phone,
+               pl.city, pl.state, pl.interested_products, pl.status, pl.created_at,
+               p.company_name
+        FROM partner_leads pl
+        LEFT JOIN partners p ON pl.partner_id = p.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if partner_id:
+        query += ' AND pl.partner_id = ?'
+        params.append(partner_id)
+
+    if status_filter:
+        query += ' AND pl.status = ?'
+        params.append(status_filter)
+
+    query += ' ORDER BY pl.created_at DESC'
+
+    leads = conn.execute(query, params).fetchall()
+
+    # Get partners for filter dropdown
+    partners = conn.execute('SELECT id, company_name FROM partners ORDER BY company_name').fetchall()
+    lead_statuses = get_lookup_options('lead_status')
+
+    conn.close()
+
+    return render_template('partner_leads_admin.html',
+                         leads=leads,
+                         partners=partners,
+                         lead_statuses=lead_statuses,
+                         selected_partner=partner_id,
+                         selected_status=status_filter)
+
+
+@app.route('/partners/b2b-leads', methods=['GET'])
+@login_required
+def admin_partner_b2b_leads():
+    """Admin view of all B2B school/college leads."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Get filter parameters
+    partner_id = request.args.get('partner_id', '')
+    status_filter = request.args.get('status', '')
+
+    query = '''
+        SELECT pbl.id, pbl.partner_id, pbl.institution_name, pbl.institution_type, pbl.contact_person,
+               pbl.phone, pbl.email, pbl.city, pbl.state, pbl.board_university, pbl.student_count,
+               pbl.status, pbl.created_at, p.company_name
+        FROM partner_b2b_leads pbl
+        LEFT JOIN partners p ON pbl.partner_id = p.id
+        WHERE 1=1
+    '''
+    params = []
+
+    if partner_id:
+        query += ' AND pbl.partner_id = ?'
+        params.append(partner_id)
+
+    if status_filter:
+        query += ' AND pbl.status = ?'
+        params.append(status_filter)
+
+    query += ' ORDER BY pbl.created_at DESC'
+
+    leads = conn.execute(query, params).fetchall()
+
+    # Get partners for filter dropdown
+    partners = conn.execute('SELECT id, company_name FROM partners ORDER BY company_name').fetchall()
+    lead_statuses = get_lookup_options('lead_status')
+
+    conn.close()
+
+    return render_template('partner_b2b_leads_admin.html',
+                         leads=leads,
+                         partners=partners,
+                         lead_statuses=lead_statuses,
+                         selected_partner=partner_id,
+                         selected_status=status_filter)
+
+
+@app.route('/partners/leads/<int:lead_id>', methods=['GET'])
+@login_required
+def admin_partner_lead_detail(lead_id):
+    """Show lead detail with activity log."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        return jsonify({'error': 'Admin access required'}), 403
+
+    lead = conn.execute('''
+        SELECT pl.*, p.company_name
+        FROM partner_leads pl
+        LEFT JOIN partners p ON pl.partner_id = p.id
+        WHERE pl.id = ?
+    ''', (lead_id,)).fetchone()
+
+    if not lead:
+        conn.close()
+        return jsonify({'error': 'Lead not found'}), 404
+
+    activities = conn.execute('''
+        SELECT action, notes, created_by, created_at
+        FROM partner_lead_activities
+        WHERE lead_id = ? AND lead_type = 'student'
+        ORDER BY created_at DESC
+    ''', (lead_id,)).fetchall()
+
+    lead_statuses = get_lookup_options('lead_status')
+
+    conn.close()
+
+    return jsonify({
+        'lead': dict(lead),
+        'activities': [dict(a) for a in activities],
+        'lead_statuses': lead_statuses
+    })
+
+
+@app.route('/api/partner-leads/<int:lead_id>', methods=['PUT'])
+@login_required
+def api_update_student_lead(lead_id):
+    """Update lead status and/or notes."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        data = request.get_json()
+        status = data.get('status')
+        notes = data.get('notes', '')
+        action = data.get('action', 'Updated')
+
+        lead = conn.execute('SELECT id FROM partner_leads WHERE id = ?', (lead_id,)).fetchone()
+        if not lead:
+            conn.close()
+            return jsonify({'error': 'Lead not found'}), 404
+
+        if status:
+            conn.execute('UPDATE partner_leads SET status = ? WHERE id = ?', (status, lead_id))
+
+        if notes:
+            conn.execute('UPDATE partner_leads SET notes = ? WHERE id = ?', (notes, lead_id))
+
+        # Log activity
+        conn.execute('''
+            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+            VALUES (?, 'student', ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (lead_id, action, notes, session.get('user_id')))
+
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Lead updated'}), 200
+    except Exception as e:
+        logging.error(f"api_update_student_lead: {e}")
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/partner-b2b-leads/<int:lead_id>', methods=['PUT'])
+@login_required
+def api_update_b2b_lead(lead_id):
+    """Update B2B lead status and/or notes."""
+    conn = get_db()
+    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
+
+    if not user or user['is_admin'] != 1:
+        conn.close()
+        return jsonify({'error': 'Admin access required'}), 403
+
+    try:
+        data = request.get_json()
+        status = data.get('status')
+        notes = data.get('notes', '')
+        action = data.get('action', 'Updated')
+
+        lead = conn.execute('SELECT id FROM partner_b2b_leads WHERE id = ?', (lead_id,)).fetchone()
+        if not lead:
+            conn.close()
+            return jsonify({'error': 'Lead not found'}), 404
+
+        if status:
+            conn.execute('UPDATE partner_b2b_leads SET status = ? WHERE id = ?', (status, lead_id))
+
+        if notes:
+            conn.execute('UPDATE partner_b2b_leads SET notes = ? WHERE id = ?', (notes, lead_id))
+
+        # Log activity
+        conn.execute('''
+            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+            VALUES (?, 'b2b', ?, ?, ?, CURRENT_TIMESTAMP)
+        ''', (lead_id, action, notes, session.get('user_id')))
+
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Lead updated'}), 200
+    except Exception as e:
+        logging.error(f"api_update_b2b_lead: {e}")
+        conn.rollback()
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+
+
+# ─── PARTNER PORTAL ROUTES ───
+
+@app.route('/partner/leads', methods=['GET'])
+def partner_my_leads():
+    """Partner-facing view of their own student leads."""
+    if not session.get('is_partner'):
+        flash('Please log in as a partner', 'error')
+        return redirect(url_for('login'))
+
+    partner_id = session.get('user_id')
+    conn = get_db()
+
+    leads = conn.execute('''
+        SELECT id, student_name, student_email, student_phone, city, state,
+               interested_products, status, created_at
+        FROM partner_leads
+        WHERE partner_id = ?
+        ORDER BY created_at DESC
+    ''', (partner_id,)).fetchall()
+
+    lead_statuses = get_lookup_options('lead_status')
+    conn.close()
+
+    return render_template('partner_my_leads.html', leads=leads, lead_statuses=lead_statuses)
+
+
+@app.route('/partner/leads/add', methods=['POST'])
+def partner_add_student_lead():
+    """Partner adds a student lead."""
+    if not session.get('is_partner'):
+        return jsonify({'error': 'Partner login required'}), 401
+
+    try:
+        partner_id = session.get('user_id')
+        data = request.get_json() if request.is_json else request.form
+
+        student_name = data.get('student_name', '').strip()
+        student_email = data.get('student_email', '').strip()
+        student_phone = data.get('student_phone', '').strip()
+        city = data.get('city', '').strip()
+        state = data.get('state', '').strip()
+        interested_products = data.get('interested_products', '').strip()
+        notes = data.get('notes', '').strip()
+
+        if not student_name:
+            return jsonify({'error': 'Student name is required'}), 400
+
+        conn = get_db()
+        conn.execute('''
+            INSERT INTO partner_leads (
+                partner_id, student_name, student_email, student_phone, city, state,
+                interested_products, notes, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'New', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', (partner_id, student_name, student_email, student_phone, city, state, interested_products, notes))
+
+        lead_id = conn.lastrowid
+
+        conn.execute('''
+            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+            VALUES (?, 'student', 'Created', ?, ?, CURRENT_TIMESTAMP)
+        ''', (lead_id, notes, session.get('partner_name', 'Partner')))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Lead added successfully', 'lead_id': lead_id}), 200
+    except Exception as e:
+        logging.error(f"partner_add_student_lead: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/partner/b2b-leads', methods=['GET'])
+def partner_my_b2b_leads():
+    """Partner-facing view of their own B2B leads."""
+    if not session.get('is_partner'):
+        flash('Please log in as a partner', 'error')
+        return redirect(url_for('login'))
+
+    partner_id = session.get('user_id')
+    conn = get_db()
+
+    leads = conn.execute('''
+        SELECT id, institution_name, institution_type, contact_person, phone, email,
+               city, state, board_university, student_count, status, created_at
+        FROM partner_b2b_leads
+        WHERE partner_id = ?
+        ORDER BY created_at DESC
+    ''', (partner_id,)).fetchall()
+
+    lead_statuses = get_lookup_options('lead_status')
+    conn.close()
+
+    return render_template('partner_my_b2b_leads.html', leads=leads, lead_statuses=lead_statuses)
+
+
+@app.route('/partner/b2b-leads/add', methods=['POST'])
+def partner_add_b2b_lead():
+    """Partner adds a B2B lead."""
+    if not session.get('is_partner'):
+        return jsonify({'error': 'Partner login required'}), 401
+
+    try:
+        partner_id = session.get('user_id')
+        data = request.get_json() if request.is_json else request.form
+
+        institution_name = data.get('institution_name', '').strip()
+        institution_type = data.get('institution_type', '').strip()
+        contact_person = data.get('contact_person', '').strip()
+        phone = data.get('phone', '').strip()
+        email = data.get('email', '').strip()
+        city = data.get('city', '').strip()
+        state = data.get('state', '').strip()
+        board_university = data.get('board_university', '').strip()
+        student_count = data.get('student_count', '')
+        notes = data.get('notes', '').strip()
+
+        if not institution_name:
+            return jsonify({'error': 'Institution name is required'}), 400
+
+        student_count = int(student_count) if student_count else None
+
+        conn = get_db()
+        conn.execute('''
+            INSERT INTO partner_b2b_leads (
+                partner_id, institution_name, institution_type, contact_person, phone, email,
+                city, state, board_university, student_count, notes, status, created_at, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'New', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
+        ''', (partner_id, institution_name, institution_type, contact_person, phone, email,
+              city, state, board_university, student_count, notes))
+
+        lead_id = conn.lastrowid
+
+        conn.execute('''
+            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+            VALUES (?, 'b2b', 'Created', ?, ?, CURRENT_TIMESTAMP)
+        ''', (lead_id, notes, session.get('partner_name', 'Partner')))
+
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'B2B lead added successfully', 'lead_id': lead_id}), 200
+    except Exception as e:
+        logging.error(f"partner_add_b2b_lead: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/partner/dashboard')
+def partner_dashboard_updated():
+    """Updated partner dashboard with leads and team info."""
+    if not session.get('is_partner'):
+        flash('Please log in as a partner', 'error')
+        return redirect(url_for('login'))
+
+    partner_id = session.get('user_id')
+    conn = get_db()
+
+    partner = conn.execute('SELECT * FROM partners WHERE id = ?', (partner_id,)).fetchone()
+
+    student_leads_count = conn.execute(
+        'SELECT COUNT(*) as c FROM partner_leads WHERE partner_id = ?',
+        (partner_id,)
+    ).fetchone()['c']
+
+    b2b_leads_count = conn.execute(
+        'SELECT COUNT(*) as c FROM partner_b2b_leads WHERE partner_id = ?',
+        (partner_id,)
+    ).fetchone()['c']
+
+    team_members = conn.execute(
+        'SELECT id, name, designation, email, phone FROM partner_team_members WHERE partner_id = ? ORDER BY created_at',
+        (partner_id,)
+    ).fetchall()
+
+    products = conn.execute(
+        'SELECT ps.id, ps.name FROM products_services ps JOIN partner_products pp ON ps.id = pp.product_id WHERE pp.partner_id = ? ORDER BY ps.name',
+        (partner_id,)
+    ).fetchall()
+
+    conn.close()
+
+    return render_template('partner_dashboard_updated.html',
+                         partner=partner,
+                         student_leads_count=student_leads_count,
+                         b2b_leads_count=b2b_leads_count,
+                         team_members=team_members,
+                         products=products)
 
 
 def ensure_attendance_table():
