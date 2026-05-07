@@ -11155,7 +11155,10 @@ def ops_plab_settings_add():
             (category, value, value, max_order)
         )
         conn.commit()
-        new_id = conn.lastrowid
+        # Get the new ID
+        result = conn.execute("SELECT id FROM lookup_options WHERE category = ? AND value = ? ORDER BY id DESC LIMIT 1", (category, value))
+        row = result.fetchone()
+        new_id = row['id'] if row else None
         conn.close()
 
         return jsonify({
@@ -16374,7 +16377,10 @@ def partners_add():
                 f.get('notes'),
                 session.get('user_id', 0)
             ))
-            partner_id = conn.lastrowid
+            # Get the new partner ID
+            result = conn.execute("SELECT id FROM partners WHERE email = ? ORDER BY id DESC LIMIT 1", (f.get('email'),))
+            row = result.fetchone()
+            partner_id = row['id'] if row else None
 
             # Add products
             product_ids = request.form.getlist('products')
@@ -17028,7 +17034,7 @@ def partner_onboard_submit(token):
             return redirect(url_for('partner_onboard_form', token=token))
 
         # Create partner
-        conn.execute('''
+        cursor = conn.execute('''
             INSERT INTO partners (
                 company_name, contact_person, email, phone, website, address, city, state, country,
                 partner_type, status, password_hash, invitation_id, onboarding_status, created_at
@@ -17038,7 +17044,10 @@ def partner_onboard_submit(token):
             partner_type, hash_password(password), invitation['id']
         ))
 
-        partner_id = conn.lastrowid
+        # Get the new partner ID
+        result = conn.execute("SELECT id FROM partners WHERE email = ? ORDER BY id DESC LIMIT 1", (invitation['email'],))
+        row = result.fetchone()
+        partner_id = row['id'] if row else None
 
         # Add team members if provided
         team_members = request.form.getlist('team_name[]')
@@ -17390,12 +17399,16 @@ def partner_add_student_lead():
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'New', CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)
         ''', (partner_id, student_name, student_email, student_phone, city, state, interested_products, notes))
 
-        lead_id = conn.lastrowid
+        # Get the new lead ID
+        result = conn.execute("SELECT id FROM partner_leads WHERE partner_id = ? ORDER BY id DESC LIMIT 1", (partner_id,))
+        row = result.fetchone()
+        lead_id = row['id'] if row else None
 
-        conn.execute('''
-            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
-            VALUES (?, 'student', 'Created', ?, ?, CURRENT_TIMESTAMP)
-        ''', (lead_id, notes, session.get('partner_name', 'Partner')))
+        if lead_id:
+            conn.execute('''
+                INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+                VALUES (?, 'student', 'Created', ?, ?, CURRENT_TIMESTAMP)
+            ''', (lead_id, notes, session.get('partner_name', 'Partner')))
 
         conn.commit()
         conn.close()
@@ -17465,12 +17478,16 @@ def partner_add_b2b_lead():
         ''', (partner_id, institution_name, institution_type, contact_person, phone, email,
               city, state, board_university, student_count, notes))
 
-        lead_id = conn.lastrowid
+        # Get the new lead ID
+        result = conn.execute("SELECT id FROM partner_b2b_leads WHERE partner_id = ? ORDER BY id DESC LIMIT 1", (partner_id,))
+        row = result.fetchone()
+        lead_id = row['id'] if row else None
 
-        conn.execute('''
-            INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
-            VALUES (?, 'b2b', 'Created', ?, ?, CURRENT_TIMESTAMP)
-        ''', (lead_id, notes, session.get('partner_name', 'Partner')))
+        if lead_id:
+            conn.execute('''
+                INSERT INTO partner_lead_activities (lead_id, lead_type, action, notes, created_by, created_at)
+                VALUES (?, 'b2b', 'Created', ?, ?, CURRENT_TIMESTAMP)
+            ''', (lead_id, notes, session.get('partner_name', 'Partner')))
 
         conn.commit()
         conn.close()

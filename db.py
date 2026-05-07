@@ -26,6 +26,15 @@ class CursorWrapper:
         """Fetch all rows."""
         return self.cursor.fetchall()
 
+    @property
+    def lastrowid(self):
+        """Get the last inserted row ID. Works for both SQLite and PostgreSQL."""
+        if self.is_postgres:
+            # For PostgreSQL, lastrowid isn't reliable.
+            # The caller should use RETURNING id, but as a fallback try cursor attribute.
+            return getattr(self.cursor, 'lastrowid', None)
+        return self.cursor.lastrowid
+
 
 class DatabaseConnection:
     """Wrapper providing a consistent interface for SQLite and PostgreSQL."""
@@ -108,6 +117,13 @@ class DatabaseConnection:
         )
 
         return sql
+
+    @property
+    def lastrowid(self):
+        """Get last inserted row ID from the most recent execute call."""
+        if self.last_cursor:
+            return self.last_cursor.lastrowid
+        return None
 
     def commit(self):
         """Commit the transaction."""
