@@ -16706,8 +16706,10 @@ def partner_invitation_delete(inv_id):
     conn = get_db()
     user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
 
-    if not user or user['role'] not in ('Admin', 'Super Admin'):
+    if not user or not user.get('is_admin'):
         conn.close()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': 'Only admins can delete invitations'}), 403
         flash('Only admins can delete invitations', 'error')
         return redirect(url_for('partner_invitations_list'))
 
