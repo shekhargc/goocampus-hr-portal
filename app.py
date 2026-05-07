@@ -16723,20 +16723,21 @@ def partner_send_otp():
     """Send OTP to partner email."""
     try:
         data = request.get_json()
-        email = data.get('email', '').strip()
         token = data.get('token', '').strip()
 
-        if not email or not token:
-            return jsonify({'error': 'Email and token required'}), 400
+        if not token:
+            return jsonify({'error': 'Token required'}), 400
 
         conn = get_db()
         invitation = conn.execute('''
-            SELECT id, status FROM partner_invitations WHERE token = ? AND email = ?
-        ''', (token, email)).fetchone()
+            SELECT id, email, status FROM partner_invitations WHERE token = ?
+        ''', (token,)).fetchone()
 
         if not invitation or invitation['status'] != 'pending':
             conn.close()
             return jsonify({'error': 'Invalid or expired token'}), 400
+
+        email = invitation['email']
 
         # Generate 6-digit OTP
         otp_code = str(random.randint(100000, 999999))
@@ -16789,14 +16790,24 @@ def partner_verify_otp():
     """Verify OTP and set session for partner registration."""
     try:
         data = request.get_json()
-        email = data.get('email', '').strip()
-        otp = data.get('otp', '').strip()
+        otp = data.get('otp_code', data.get('otp', '')).strip()
         token = data.get('token', '').strip()
 
-        if not email or not otp or not token:
-            return jsonify({'error': 'Email, OTP, and token required'}), 400
+        if not otp or not token:
+            return jsonify({'error': 'OTP and token required'}), 400
 
+        # Look up email from invitation token
         conn = get_db()
+        invitation = conn.execute('''
+            SELECT email FROM partner_invitations WHERE token = ?
+        ''', (token,)).fetchone()
+
+        if not invitation:
+            conn.close()
+            return jsonify({'error': 'Invalid token'}), 400
+
+        email = invitation['email']
+
         otp_record = conn.execute('''
             SELECT id, verified, expires_at FROM partner_otps
             WHERE email = ? AND token = ? AND otp_code = ?
@@ -16810,8 +16821,12 @@ def partner_verify_otp():
             conn.close()
             return jsonify({'error': 'OTP already verified'}), 400
 
-        # Check expiry
-        expires_at = datetime.fromisoformat(otp_record['expires_at'])
+        # Check expiry — handle both string and datetime from PostgreSQL
+        exp = otp_record['expires_at']
+        if isinstance(exp, str):
+            expires_at = datetime.fromisoformat(exp)
+        else:
+            expires_at = exp
         if datetime.now() > expires_at:
             conn.close()
             return jsonify({'error': 'OTP has expired'}), 400
@@ -16826,7 +16841,7 @@ def partner_verify_otp():
         session['partner_register_token'] = token
         session['partner_register_email'] = email
 
-        return jsonify({'success': True, 'message': 'OTP verified successfully'}), 200
+        return jsonify({'success': True, 'message': 'OTP verified successfully', 'onboard_token': token}), 200
     except Exception as e:
         logging.error(f"partner_verify_otp: {e}")
         return jsonify({'error': str(e)}), 500
