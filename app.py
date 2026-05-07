@@ -16629,10 +16629,12 @@ def partner_invitations_create():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
-    name = request.form.get('name', '').strip()
-    email = request.form.get('email', '').strip()
+    name = request.form.get('partner_name', '').strip() or request.form.get('name', '').strip()
+    email = request.form.get('partner_email', '').strip() or request.form.get('email', '').strip()
 
     if not name or not email:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': 'Name and email are required'}), 400
         flash('Name and email are required', 'error')
         return redirect(url_for('partner_invitations_list'))
 
@@ -16648,34 +16650,49 @@ def partner_invitations_create():
         # Send invitation email
         from email_utils import send_email
         registration_link = f"{request.host_url}partner/register/{token}"
-        send_email(
-            email,
-            'Partner Registration Invitation',
+        email_sent = send_email(
+            [email],
+            'Partner Registration Invitation - GooCampus',
             f'''
             <html>
-                <body>
-                    <h2>Welcome to GooCampus Partner Portal</h2>
-                    <p>Hello {name},</p>
-                    <p>You have been invited to register as a partner with GooCampus.</p>
-                    <p>
-                        <a href="{registration_link}" style="background-color: #4CAF50; color: white; padding: 10px 20px; text-decoration: none; border-radius: 5px;">
-                            Click here to register
-                        </a>
-                    </p>
-                    <p>Or copy this link: {registration_link}</p>
-                    <p>This link will expire in 30 days.</p>
-                    <p>Best regards,<br>GooCampus Team</p>
+                <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 0;">
+                    <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px;">GooCampus Partner Portal</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: white;">
+                        <h2 style="color: #1e3a5f; margin-top: 0;">Welcome to GooCampus!</h2>
+                        <p style="font-size: 16px;">Hello {name},</p>
+                        <p>You have been invited to join the GooCampus Partner Network. Click the button below to verify your email and complete your registration.</p>
+                        <div style="text-align: center; margin: 30px 0;">
+                            <a href="{registration_link}" style="background-color: #F58220; color: white; padding: 14px 32px; text-decoration: none; border-radius: 6px; font-weight: bold; font-size: 16px; display: inline-block;">
+                                Register as Partner
+                            </a>
+                        </div>
+                        <p style="font-size: 13px; color: #666;">Or copy this link into your browser:<br>
+                        <a href="{registration_link}" style="color: #F58220; word-break: break-all;">{registration_link}</a></p>
+                        <p style="font-size: 13px; color: #999;">This invitation link will expire in 30 days.</p>
+                        <p style="margin-top: 30px;">Best regards,<br><strong style="color: #1e3a5f;">GooCampus Team</strong></p>
+                    </div>
+                    <div style="background-color: #f5f5f5; padding: 15px; text-align: center; border-top: 3px solid #F58220;">
+                        <p style="color: #999; font-size: 11px; margin: 0;">GooCampus Edu Solutions Pvt Ltd</p>
+                    </div>
                 </body>
             </html>
             '''
         )
 
         conn.close()
-        flash('Invitation sent successfully', 'success')
+
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'success': True, 'email_sent': email_sent, 'message': 'Invitation created' + (' and email sent' if email_sent else ' but email could not be sent')}), 200
+
+        flash('Invitation sent successfully' if email_sent else 'Invitation created but email could not be sent', 'success' if email_sent else 'warning')
     except Exception as e:
         logging.error(f"partner_invitations_create: {e}")
         conn.rollback()
         conn.close()
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return jsonify({'error': str(e)}), 500
         flash(f'Error creating invitation: {e}', 'error')
 
     return redirect(url_for('partner_invitations_list'))
@@ -16735,16 +16752,26 @@ def partner_send_otp():
         # Send OTP email
         from email_utils import send_email
         send_email(
-            email,
+            [email],
             'Your GooCampus Partner Portal OTP',
             f'''
             <html>
-                <body>
-                    <h2>OTP Verification</h2>
-                    <p>Your OTP code is: <strong>{otp_code}</strong></p>
-                    <p>This OTP will expire in 10 minutes.</p>
-                    <p>Do not share this code with anyone.</p>
-                    <p>Best regards,<br>GooCampus Team</p>
+                <body style="font-family: Arial, sans-serif; color: #333; line-height: 1.6; margin: 0; padding: 0;">
+                    <div style="background-color: #1e3a5f; padding: 20px; text-align: center;">
+                        <h1 style="color: white; margin: 0; font-size: 24px;">GooCampus Partner Portal</h1>
+                    </div>
+                    <div style="padding: 30px; background-color: white;">
+                        <h2 style="color: #1e3a5f; margin-top: 0;">Email Verification</h2>
+                        <p>Your one-time verification code is:</p>
+                        <div style="text-align: center; margin: 25px 0;">
+                            <span style="background: #f0f4f8; padding: 16px 32px; font-size: 32px; font-weight: bold; letter-spacing: 8px; color: #1e3a5f; border-radius: 8px; display: inline-block;">{otp_code}</span>
+                        </div>
+                        <p style="color: #666; font-size: 14px;">This code will expire in 10 minutes. Do not share it with anyone.</p>
+                        <p style="margin-top: 30px;">Best regards,<br><strong style="color: #1e3a5f;">GooCampus Team</strong></p>
+                    </div>
+                    <div style="background-color: #f5f5f5; padding: 15px; text-align: center; border-top: 3px solid #F58220;">
+                        <p style="color: #999; font-size: 11px; margin: 0;">GooCampus Edu Solutions Pvt Ltd</p>
+                    </div>
                 </body>
             </html>
             '''

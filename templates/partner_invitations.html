@@ -71,9 +71,10 @@
             </thead>
             <tbody>
                 {% for invitation in invitations %}
-                <tr class="invitation-row" data-name="{{ invitation.partner_name|lower }}" data-email="{{ invitation.partner_email|lower }}">
-                    <td><strong>{{ invitation.partner_name }}</strong></td>
-                    <td>{{ invitation.partner_email }}</td>
+                {% set invite_link = request.host_url ~ 'partner/register/' ~ invitation.token %}
+                <tr class="invitation-row" data-name="{{ invitation.name|lower }}" data-email="{{ invitation.email|lower }}">
+                    <td><strong>{{ invitation.name }}</strong></td>
+                    <td>{{ invitation.email }}</td>
                     <td>
                         {% if invitation.status == 'registered' %}
                             <span class="badge" style="background: var(--success-light); color: #166534;">Registered</span>
@@ -83,20 +84,20 @@
                     </td>
                     <td>
                         <div style="display: flex; gap: 0.5rem; align-items: center;">
-                            <code style="background: var(--gray-50); padding: 0.35rem 0.75rem; border-radius: 0.4rem; font-size: 0.82rem; color: var(--gray-700); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ invitation.invite_link }}">{{ invitation.invite_link[:30] }}...</code>
-                            <button type="button" class="button button-small" onclick="copyToClipboard('{{ invitation.invite_link }}', this)">Copy</button>
+                            <code style="background: var(--gray-50); padding: 0.35rem 0.75rem; border-radius: 0.4rem; font-size: 0.82rem; color: var(--gray-700); max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" title="{{ invite_link }}">{{ invite_link[:40] }}...</code>
+                            <button type="button" class="button button-small" onclick="copyToClipboard('{{ invite_link }}', this)">Copy</button>
                         </div>
                     </td>
                     <td>
-                        {% if invitation.sent_date %}
-                            <span title="{{ invitation.sent_date }}">{{ invitation.sent_date.strftime('%b %d, %Y') }}</span>
+                        {% if invitation.created_at %}
+                            <span title="{{ invitation.created_at }}">{{ invitation.created_at[:10] }}</span>
                         {% else %}
                             -
                         {% endif %}
                     </td>
                     <td>
-                        {% if invitation.registered_date %}
-                            <span title="{{ invitation.registered_date }}">{{ invitation.registered_date.strftime('%b %d, %Y') }}</span>
+                        {% if invitation.registered_at %}
+                            <span title="{{ invitation.registered_at }}">{{ invitation.registered_at[:10] }}</span>
                         {% else %}
                             -
                         {% endif %}
