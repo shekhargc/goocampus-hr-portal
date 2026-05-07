@@ -16847,6 +16847,45 @@ def partner_verify_otp():
         return jsonify({'error': str(e)}), 500
 
 
+@app.route('/partner/api/states')
+def partner_api_states():
+    """Return all active states as JSON (no login required, for partner onboarding)."""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY sort_order, name").fetchall()
+        return jsonify([{'id': r['id'], 'name': r['name']} for r in rows])
+    except Exception as e:
+        logging.error(f"partner_api_states: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
+@app.route('/partner/api/cities')
+def partner_api_cities():
+    """Return cities for a given state (no login required, for partner onboarding)."""
+    conn = get_db()
+    try:
+        state_id = request.args.get('state_id', '').strip()
+        state_name = request.args.get('state', '').strip()
+        if state_id:
+            rows = conn.execute("SELECT id, name FROM cities WHERE state_id = ? AND is_active = TRUE ORDER BY name", (int(state_id),)).fetchall()
+        elif state_name:
+            st = conn.execute("SELECT id FROM states WHERE name = ? AND is_active = TRUE", (state_name,)).fetchone()
+            if st:
+                rows = conn.execute("SELECT id, name FROM cities WHERE state_id = ? AND is_active = TRUE ORDER BY name", (st['id'],)).fetchall()
+            else:
+                rows = []
+        else:
+            rows = []
+        return jsonify([{'id': r['id'], 'name': r['name']} for r in rows])
+    except Exception as e:
+        logging.error(f"partner_api_cities: {e}")
+        return jsonify([])
+    finally:
+        conn.close()
+
+
 @app.route('/partner/onboard/<token>', methods=['GET'])
 def partner_onboard_form(token):
     """Partner onboarding form - company details, team members, address."""
@@ -16885,7 +16924,7 @@ def partner_onboard_submit(token):
 
         # Get invitation
         invitation = conn.execute('''
-            SELECT id, email, name FROM partner_invitations WHERE token = ?
+            SELECT id, email, name, status FROM partner_invitations WHERE token = ?
         ''', (token,)).fetchone()
 
         if not invitation or invitation['status'] != 'pending':
@@ -16904,9 +16943,22 @@ def partner_onboard_submit(token):
         country = request.form.get('country', 'India').strip()
         partner_type = request.form.get('partner_type', '').strip()
 
+        password = request.form.get('password', '').strip()
+        confirm_password = request.form.get('confirm_password', '').strip()
+
         if not company_name or not contact_person or not partner_type:
             conn.close()
             flash('Required fields: company name, contact person, partner type', 'error')
+            return redirect(url_for('partner_onboard_form', token=token))
+
+        if not password or len(password) < 6:
+            conn.close()
+            flash('Password must be at least 6 characters', 'error')
+            return redirect(url_for('partner_onboard_form', token=token))
+
+        if password != confirm_password:
+            conn.close()
+            flash('Passwords do not match', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
         # Create partner
@@ -16917,16 +16969,16 @@ def partner_onboard_submit(token):
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Active', ?, ?, 'completed', CURRENT_TIMESTAMP)
         ''', (
             company_name, contact_person, invitation['email'], phone, website, address, city, state, country,
-            partner_type, hash_password(invitation['email']), invitation['id']
+            partner_type, hash_password(password), invitation['id']
         ))
 
         partner_id = conn.lastrowid
 
         # Add team members if provided
-        team_members = request.form.getlist('team_member_name[]')
-        team_emails = request.form.getlist('team_member_email[]')
-        team_designations = request.form.getlist('team_member_designation[]')
-        team_phones = request.form.getlist('team_member_phone[]')
+        team_members = request.form.getlist('team_name[]')
+        team_emails = request.form.getlist('team_email[]')
+        team_designations = request.form.getlist('team_designation[]')
+        team_phones = request.form.getlist('team_phone[]')
 
         for i, name in enumerate(team_members):
             if name.strip():

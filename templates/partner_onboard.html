@@ -54,13 +54,13 @@
         }
 
         .navbar-logo {
-            font-size: 1.5rem;
-            font-weight: 700;
-            color: var(--navy);
+            display: flex;
+            align-items: center;
         }
 
-        .navbar-logo span {
-            color: var(--orange);
+        .navbar-logo img {
+            height: 38px;
+            width: auto;
         }
 
         .navbar-title {
@@ -563,7 +563,7 @@
     <!-- Navbar -->
     <nav class="navbar">
         <div class="navbar-container">
-            <div class="navbar-logo">Goo<span>Campus</span></div>
+            <div class="navbar-logo"><img src="/static/logo.png" alt="GooCampus"></div>
             <div class="navbar-title">Partner Registration</div>
         </div>
     </nav>
@@ -660,10 +660,9 @@
                         </div>
                         <div class="form-group">
                             <label for="city">City <span class="required">*</span></label>
-                            <div class="autocomplete-wrapper">
-                                <input type="text" id="city" name="city" placeholder="Start typing..." required>
-                                <div class="autocomplete-list" id="cityList"></div>
-                            </div>
+                            <select id="city" name="city" required disabled>
+                                <option value="">Select State first</option>
+                            </select>
                             <div class="error-message"></div>
                         </div>
                     </div>
@@ -672,6 +671,29 @@
                         <div class="form-group">
                             <label for="country">Country <span class="required">*</span></label>
                             <input type="text" id="country" name="country" value="India" readonly>
+                            <div class="error-message"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 4: Create Password -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <span class="section-number">4</span>
+                        Create Password
+                    </h2>
+
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="password">Password <span class="required">*</span></label>
+                            <input type="password" id="password" name="password" minlength="6" required
+                                   placeholder="Minimum 6 characters">
+                            <div class="error-message"></div>
+                        </div>
+                        <div class="form-group">
+                            <label for="confirmPassword">Confirm Password <span class="required">*</span></label>
+                            <input type="password" id="confirmPassword" name="confirm_password" minlength="6" required
+                                   placeholder="Re-enter password">
                             <div class="error-message"></div>
                         </div>
                     </div>
@@ -767,14 +789,15 @@
         function loadStates() {
             const stateSelect = document.getElementById('state');
 
-            fetch('/api/states')
+            fetch('/partner/api/states')
                 .then(response => response.json())
                 .then(data => {
                     if (Array.isArray(data)) {
                         data.forEach(state => {
                             const option = document.createElement('option');
-                            option.value = state;
-                            option.textContent = state;
+                            option.value = state.name;
+                            option.dataset.id = state.id;
+                            option.textContent = state.name;
                             stateSelect.appendChild(option);
                         });
                     }
@@ -784,73 +807,39 @@
                 });
         }
 
-        // City Autocomplete
-        const cityInput = document.getElementById('city');
-        const cityList = document.getElementById('cityList');
-        let citiesCache = {};
-
-        if (cityInput) {
-            cityInput.addEventListener('input', debounce(function() {
-                const state = document.getElementById('state').value;
-                const query = this.value.trim();
-
-                if (query.length < 2) {
-                    cityList.classList.remove('show');
-                    return;
-                }
-
-                if (!state) {
-                    cityList.classList.remove('show');
-                    return;
-                }
-
-                // Check cache
-                if (citiesCache[state]) {
-                    filterAndShowCities(query, citiesCache[state]);
-                } else {
-                    // Fetch from API
-                    fetch(`/api/cities?state=${encodeURIComponent(state)}`)
-                        .then(response => response.json())
-                        .then(data => {
-                            citiesCache[state] = data;
-                            filterAndShowCities(query, data);
-                        })
-                        .catch(error => {
-                            console.error('Error loading cities:', error);
-                            cityList.classList.remove('show');
-                        });
-                }
-            }, 300));
-
-            // Close dropdown when clicking outside
-            document.addEventListener('click', function(e) {
-                if (e.target !== cityInput) {
-                    cityList.classList.remove('show');
-                }
-            });
-        }
-
-        function filterAndShowCities(query, cities) {
-            const filtered = cities.filter(city =>
-                city.toLowerCase().includes(query.toLowerCase())
-            ).slice(0, 10);
-
-            cityList.innerHTML = filtered.map(city =>
-                `<div class="autocomplete-item" onclick="selectCity('${city}')">${city}</div>`
-            ).join('');
-
-            cityList.classList.toggle('show', filtered.length > 0);
-        }
-
-        function selectCity(city) {
-            cityInput.value = city;
-            cityList.classList.remove('show');
-        }
-
-        // Reset city dropdown when state changes
+        // Load cities when state changes
         document.getElementById('state')?.addEventListener('change', function() {
-            cityInput.value = '';
-            cityList.classList.remove('show');
+            const citySelect = document.getElementById('city');
+            const selectedOption = this.options[this.selectedIndex];
+            const stateId = selectedOption?.dataset?.id;
+
+            // Reset city
+            citySelect.innerHTML = '<option value="">Loading cities...</option>';
+            citySelect.disabled = true;
+
+            if (!this.value || !stateId) {
+                citySelect.innerHTML = '<option value="">Select State first</option>';
+                return;
+            }
+
+            fetch(`/partner/api/cities?state_id=${stateId}`)
+                .then(response => response.json())
+                .then(data => {
+                    citySelect.innerHTML = '<option value="">Select City</option>';
+                    if (Array.isArray(data)) {
+                        data.forEach(city => {
+                            const option = document.createElement('option');
+                            option.value = city.name;
+                            option.textContent = city.name;
+                            citySelect.appendChild(option);
+                        });
+                    }
+                    citySelect.disabled = false;
+                })
+                .catch(error => {
+                    console.error('Error loading cities:', error);
+                    citySelect.innerHTML = '<option value="">Error loading cities</option>';
+                });
         });
 
         // Form Submission
@@ -927,6 +916,24 @@
                 const group = emailField.closest('.form-group');
                 group.classList.add('error');
                 group.querySelector('.error-message').textContent = 'Please enter a valid email';
+                group.querySelector('.error-message').classList.add('show');
+                isValid = false;
+            }
+
+            // Validate password match
+            const password = document.getElementById('password');
+            const confirmPassword = document.getElementById('confirmPassword');
+            if (password.value && confirmPassword.value && password.value !== confirmPassword.value) {
+                const group = confirmPassword.closest('.form-group');
+                group.classList.add('error');
+                group.querySelector('.error-message').textContent = 'Passwords do not match';
+                group.querySelector('.error-message').classList.add('show');
+                isValid = false;
+            }
+            if (password.value && password.value.length < 6) {
+                const group = password.closest('.form-group');
+                group.classList.add('error');
+                group.querySelector('.error-message').textContent = 'Password must be at least 6 characters';
                 group.querySelector('.error-message').classList.add('show');
                 isValid = false;
             }
