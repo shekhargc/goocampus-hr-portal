@@ -16967,7 +16967,11 @@ def partner_onboard_form(token):
 @app.route('/partner/onboard/<token>', methods=['POST'])
 def partner_onboard_submit(token):
     """Process partner onboarding form and create partner account."""
+    is_ajax = request.headers.get('Accept', '').find('application/json') != -1 or request.headers.get('X-Requested-With') == 'XMLHttpRequest'
+
     if not session.get('partner_register_token') or session.get('partner_register_token') != token:
+        if is_ajax:
+            return jsonify({'error': 'Session expired. Please refresh the page and try again.'}), 401
         flash('Session expired. Please try again', 'error')
         return redirect(url_for('login'))
 
@@ -16981,6 +16985,8 @@ def partner_onboard_submit(token):
 
         if not invitation or invitation['status'] != 'pending':
             conn.close()
+            if is_ajax:
+                return jsonify({'error': 'Invalid or expired invitation'}), 400
             flash('Invalid or expired invitation', 'error')
             return redirect(url_for('login'))
 
@@ -17000,16 +17006,22 @@ def partner_onboard_submit(token):
 
         if not company_name or not contact_person or not partner_type:
             conn.close()
+            if is_ajax:
+                return jsonify({'error': 'Required fields: company name, contact person, partner type'}), 400
             flash('Required fields: company name, contact person, partner type', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
         if not password or len(password) < 6:
             conn.close()
+            if is_ajax:
+                return jsonify({'error': 'Password must be at least 6 characters'}), 400
             flash('Password must be at least 6 characters', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
         if password != confirm_password:
             conn.close()
+            if is_ajax:
+                return jsonify({'error': 'Passwords do not match'}), 400
             flash('Passwords do not match', 'error')
             return redirect(url_for('partner_onboard_form', token=token))
 
@@ -17073,12 +17085,16 @@ def partner_onboard_submit(token):
         session.pop('partner_register_email', None)
 
         conn.close()
+        if is_ajax:
+            return jsonify({'success': True, 'message': 'Partner account created successfully', 'redirect': url_for('partner_dashboard_view')}), 200
         flash('Welcome! Your partner account has been created successfully.', 'success')
         return redirect(url_for('partner_dashboard_view'))
     except Exception as e:
         logging.error(f"partner_onboard_submit: {e}")
         conn.rollback()
         conn.close()
+        if is_ajax:
+            return jsonify({'error': f'Error completing onboarding: {e}'}), 500
         flash(f'Error completing onboarding: {e}', 'error')
         return redirect(url_for('partner_onboard_form', token=token))
 

@@ -845,7 +845,20 @@
                     </div>
                 </div>
 
-                <div class="form-row full">
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="partnerType">Partner Type <span class="required">*</span></label>
+                        <div class="input-wrapper">
+                            <select id="partnerType" name="partner_type" required>
+                                <option value="">Select Type</option>
+                                <option value="Channel Partner">Channel Partner</option>
+                                <option value="Marketing Partner">Marketing Partner</option>
+                                <option value="Consultant">Consultant</option>
+                            </select>
+                            <i class="fas fa-handshake"></i>
+                        </div>
+                        <div class="error-message"><i class="fas fa-circle-exclamation"></i> <span></span></div>
+                    </div>
                     <div class="form-group">
                         <label for="website">Website <span class="optional-tag">Optional</span></label>
                         <div class="input-wrapper">
@@ -1323,13 +1336,15 @@
                     headers: { 'Accept': 'application/json' }
                 })
                 .then(response => {
-                    if (response.ok) {
-                        document.getElementById('successModal').classList.add('show');
-                    } else {
-                        return response.json().then(data => {
+                    return response.json().then(data => {
+                        if (response.ok && data.success) {
+                            // Store redirect URL for modal button
+                            window._partnerRedirect = data.redirect || '/partner/dashboard';
+                            document.getElementById('successModal').classList.add('show');
+                        } else {
                             throw new Error(data.error || 'Registration failed');
-                        });
-                    }
+                        }
+                    });
                 })
                 .catch(error => {
                     btn.disabled = false;
@@ -1341,7 +1356,7 @@
             // Modal close
             document.getElementById('closeModalBtn').addEventListener('click', function() {
                 document.getElementById('successModal').classList.remove('show');
-                setTimeout(() => { window.location.href = '/partner/dashboard'; }, 300);
+                setTimeout(() => { window.location.href = window._partnerRedirect || '/partner/dashboard'; }, 300);
             });
         });
     </script>
