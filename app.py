@@ -16855,13 +16855,22 @@ def partner_onboard_form(token):
         return redirect(url_for('login'))
 
     conn = get_db()
+    invitation = conn.execute('''
+        SELECT id, name, email, token, status FROM partner_invitations WHERE token = ?
+    ''', (token,)).fetchone()
+
+    if not invitation:
+        conn.close()
+        flash('Invalid invitation token', 'error')
+        return redirect(url_for('login'))
+
     products = conn.execute(
         'SELECT id, name FROM products_services WHERE status = ? ORDER BY name',
         ('active',)
     ).fetchall()
     conn.close()
 
-    return render_template('partner_onboard.html', token=token, products=products)
+    return render_template('partner_onboard.html', token=token, invitation=invitation, products=products)
 
 
 @app.route('/partner/onboard/<token>', methods=['POST'])
