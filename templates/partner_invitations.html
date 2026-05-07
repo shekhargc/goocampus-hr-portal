@@ -90,14 +90,14 @@
                     </td>
                     <td>
                         {% if invitation.created_at %}
-                            <span title="{{ invitation.created_at }}">{{ invitation.created_at[:10] }}</span>
+                            <span title="{{ invitation.created_at }}">{{ invitation.created_at|string|truncate(10, True, '') }}</span>
                         {% else %}
                             -
                         {% endif %}
                     </td>
                     <td>
                         {% if invitation.registered_at %}
-                            <span title="{{ invitation.registered_at }}">{{ invitation.registered_at[:10] }}</span>
+                            <span title="{{ invitation.registered_at }}">{{ invitation.registered_at|string|truncate(10, True, '') }}</span>
                         {% else %}
                             -
                         {% endif %}

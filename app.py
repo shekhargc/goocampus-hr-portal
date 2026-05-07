@@ -16703,7 +16703,7 @@ def partner_register_page(token):
     """Partner registration page - email verification step."""
     conn = get_db()
     invitation = conn.execute('''
-        SELECT id, name, email, status FROM partner_invitations WHERE token = ?
+        SELECT id, name, email, token, status FROM partner_invitations WHERE token = ?
     ''', (token,)).fetchone()
     conn.close()
 
@@ -16715,7 +16715,7 @@ def partner_register_page(token):
         flash('This invitation has already been registered', 'error')
         return redirect(url_for('login'))
 
-    return render_template('partner_register.html', token=token, email=invitation['email'], name=invitation['name'])
+    return render_template('partner_register.html', token=token, email=invitation['email'], name=invitation['name'], invitation=invitation)
 
 
 @app.route('/partner/register/send-otp', methods=['POST'])
