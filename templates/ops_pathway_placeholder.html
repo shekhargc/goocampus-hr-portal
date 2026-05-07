@@ -1,0 +1,81 @@
+{% extends "base.html" %}
+{% block title %}{{ pathway_name }} &mdash; GooCampus CRM{% endblock %}
+
+{% block extra_css %}
+<style>
+    .pathway-hero {
+        background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
+        border-radius: 1rem;
+        padding: 3rem;
+        color: white;
+        margin-bottom: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .pathway-hero::before {
+        content: '';
+        position: absolute;
+        top: -40%;
+        right: -10%;
+        width: 400px;
+        height: 400px;
+        border-radius: 50%;
+        background: radial-gradient(circle, rgba(245,130,32,0.12) 0%, transparent 70%);
+    }
+    .pathway-hero h1 {
+        font-size: 1.75rem;
+        font-weight: 700;
+        position: relative;
+        z-index: 1;
+    }
+    .pathway-hero h1 span { color: var(--orange); }
+    .pathway-hero p {
+        color: rgba(255,255,255,0.65);
+        font-size: 1rem;
+        position: relative;
+        z-index: 1;
+        margin-top: 0.5rem;
+    }
+    .coming-soon-card {
+        background: white;
+        border: 2px dashed var(--gray-300);
+        border-radius: 0.75rem;
+        padding: 3rem;
+        text-align: center;
+    }
+    .coming-soon-card h3 {
+        font-size: 1.15rem;
+        font-weight: 600;
+        color: var(--navy);
+        margin-bottom: 0.5rem;
+    }
+    .coming-soon-card p {
+        color: var(--gray-500);
+        font-size: 0.95rem;
+    }
+    .coming-soon-icon {
+        width: 56px;
+        height: 56px;
+        border-radius: 50%;
+        background: var(--orange-light);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 0 auto 1.25rem;
+    }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="pathway-hero">
+    <h1><span>{{ pathway_name }}</span></h1>
+    <p>{{ pathway_desc }}</p>
+</div>
+<div class="coming-soon-card">
+    <div class="coming-soon-icon">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+    </div>
+    <h3>Coming Soon</h3>
+    <p>This pathway is being set up. Sections and modules will be added soon.</p>
+</div>
+{% endblock %}

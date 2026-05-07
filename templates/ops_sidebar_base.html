@@ -1,0 +1,352 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* ===== SIDEBAR LAYOUT ===== */
+    .ops-layout {
+        display: flex;
+        min-height: calc(100vh - 180px);
+        margin: -2.5rem -3rem;
+    }
+
+    /* ── Sidebar ── */
+    .ops-sidebar {
+        width: 260px;
+        min-width: 260px;
+        background: var(--navy);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        transition: width 0.25s ease, min-width 0.25s ease;
+        overflow: hidden;
+        position: relative;
+        z-index: 10;
+    }
+    .ops-sidebar.collapsed {
+        width: 60px;
+        min-width: 60px;
+    }
+
+    .ops-sidebar-header {
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .ops-sidebar-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--orange);
+        white-space: nowrap;
+        overflow: hidden;
+        transition: opacity 0.2s;
+    }
+    .ops-sidebar.collapsed .ops-sidebar-title { opacity: 0; width: 0; }
+
+    .ops-sidebar-toggle {
+        background: rgba(255,255,255,0.08);
+        border: none;
+        color: rgba(255,255,255,0.6);
+        cursor: pointer;
+        width: 30px;
+        height: 30px;
+        border-radius: 0.4rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        transition: background 0.2s, color 0.2s;
+    }
+    .ops-sidebar-toggle:hover {
+        background: rgba(255,255,255,0.15);
+        color: white;
+    }
+    .ops-sidebar-toggle svg { transition: transform 0.25s; }
+    .ops-sidebar.collapsed .ops-sidebar-toggle svg { transform: rotate(180deg); }
+
+    /* ── Sidebar Nav ── */
+    .ops-sidebar-nav {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem 0;
+    }
+    .ops-sidebar-nav::-webkit-scrollbar { width: 4px; }
+    .ops-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    .ops-nav-group-label {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.8px;
+        color: rgba(255,255,255,0.35);
+        padding: 1rem 1rem 0.35rem 1rem;
+        white-space: nowrap;
+        overflow: hidden;
+    }
+    .ops-sidebar.collapsed .ops-nav-group-label {
+        font-size: 0;
+        padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        margin: 0 0.75rem;
+    }
+
+    .ops-nav-item {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.55rem 1rem;
+        color: rgba(255,255,255,0.65);
+        text-decoration: none;
+        font-size: 0.87rem;
+        font-weight: 500;
+        transition: all 0.15s;
+        white-space: nowrap;
+        position: relative;
+    }
+    .ops-nav-item:hover {
+        background: rgba(255,255,255,0.06);
+        color: rgba(255,255,255,0.9);
+    }
+    .ops-nav-item.active {
+        background: rgba(245,130,32,0.12);
+        color: var(--orange);
+        font-weight: 600;
+    }
+    .ops-nav-item.active::before {
+        content: '';
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--orange);
+        border-radius: 0 3px 3px 0;
+    }
+
+    .ops-nav-icon {
+        width: 20px;
+        height: 20px;
+        flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .ops-nav-text {
+        overflow: hidden;
+        transition: opacity 0.2s;
+    }
+    .ops-sidebar.collapsed .ops-nav-text { opacity: 0; width: 0; }
+
+    /* Tooltip on collapsed hover */
+    .ops-sidebar.collapsed .ops-nav-item {
+        justify-content: center;
+        padding: 0.65rem 0;
+    }
+    .ops-sidebar.collapsed .ops-nav-item:hover::after {
+        content: attr(data-tooltip);
+        position: absolute;
+        left: 64px;
+        top: 50%;
+        transform: translateY(-50%);
+        background: var(--navy);
+        color: white;
+        padding: 0.35rem 0.75rem;
+        border-radius: 0.35rem;
+        font-size: 0.82rem;
+        font-weight: 500;
+        white-space: nowrap;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 100;
+        pointer-events: none;
+    }
+
+    /* ── Main Content Area ── */
+    .ops-main {
+        flex: 1;
+        padding: 2rem 2.5rem;
+        overflow-x: auto;
+        background: var(--gray-50);
+        min-width: 0;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+        .ops-layout { margin: -2rem; }
+        .ops-main { padding: 1.5rem; }
+        .ops-sidebar { width: 220px; min-width: 220px; }
+        .ops-sidebar.collapsed { width: 54px; min-width: 54px; }
+    }
+    @media (max-width: 768px) {
+        .ops-layout { margin: -1.25rem; flex-direction: column; }
+        .ops-sidebar {
+            width: 100% !important;
+            min-width: 100% !important;
+            flex-direction: row;
+            overflow-x: auto;
+            max-height: none;
+            min-height: auto;
+        }
+        .ops-sidebar.collapsed { width: 100% !important; min-width: 100% !important; }
+        .ops-sidebar-header { display: none; }
+        .ops-nav-group-label { display: none; }
+        .ops-sidebar-nav { display: flex; padding: 0; }
+        .ops-nav-item { padding: 0.75rem 1rem; font-size: 0.82rem; }
+        .ops-sidebar.collapsed .ops-nav-text { opacity: 1; width: auto; }
+        .ops-sidebar.collapsed .ops-nav-item { justify-content: flex-start; padding: 0.75rem 1rem; }
+        .ops-sidebar.collapsed .ops-nav-item:hover::after { display: none; }
+        .ops-main { padding: 1.25rem; }
+    }
+</style>
+{% block ops_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="ops-layout">
+    <!-- Sidebar -->
+    <aside class="ops-sidebar" id="opsSidebar">
+        <div class="ops-sidebar-header">
+            <span class="ops-sidebar-title">{{ pathway_name|default('UK Pathway') }}</span>
+            <button class="ops-sidebar-toggle" onclick="toggleOpsSidebar()" title="Toggle sidebar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+        </div>
+        <nav class="ops-sidebar-nav">
+            <!-- Overview -->
+            <div class="ops-nav-group-label">Overview</div>
+            <a href="/operations/uk-pathway" class="ops-nav-item {% if active_ops_page == 'dashboard' %}active{% endif %}" data-tooltip="Dashboard">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+                <span class="ops-nav-text">Pathway Dashboard</span>
+            </a>
+
+            <!-- Client Management -->
+            <div class="ops-nav-group-label">Client Management</div>
+            <a href="/operations/plab" class="ops-nav-item {% if active_ops_page == 'plab' %}active{% endif %}" data-tooltip="PLAB Pathway">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <span class="ops-nav-text">PLAB Pathway</span>
+            </a>
+            <a href="/operations/call-notes" class="ops-nav-item {% if active_ops_page == 'call-notes' %}active{% endif %}" data-tooltip="Call Notes">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></span>
+                <span class="ops-nav-text">Call Notes</span>
+            </a>
+            <a href="/operations/payments" class="ops-nav-item {% if active_ops_page == 'payments' %}active{% endif %}" data-tooltip="Payments">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+                <span class="ops-nav-text">Payments</span>
+            </a>
+
+            <!-- Training & Exams -->
+            <div class="ops-nav-group-label">Training & Exams</div>
+            <a href="/operations/coaching" class="ops-nav-item {% if active_ops_page == 'coaching' %}active{% endif %}" data-tooltip="Coaching & Training">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></span>
+                <span class="ops-nav-text">Coaching & Training</span>
+            </a>
+            <a href="/operations/test-bookings" class="ops-nav-item {% if active_ops_page == 'test-bookings' %}active{% endif %}" data-tooltip="Test Bookings">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+                <span class="ops-nav-text">Test Bookings</span>
+            </a>
+            <a href="/operations/english-logins" class="ops-nav-item {% if active_ops_page == 'english-logins' %}active{% endif %}" data-tooltip="English Logins">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span>
+                <span class="ops-nav-text">English Logins</span>
+            </a>
+            <a href="/operations/online-courses" class="ops-nav-item {% if active_ops_page == 'online-courses' %}active{% endif %}" data-tooltip="Online Courses">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg></span>
+                <span class="ops-nav-text">Online Courses</span>
+            </a>
+
+            <!-- Registration -->
+            <div class="ops-nav-group-label">Registration</div>
+            <a href="/operations/epic" class="ops-nav-item {% if active_ops_page == 'epic' %}active{% endif %}" data-tooltip="EPIC Registration">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+                <span class="ops-nav-text">EPIC Registration</span>
+            </a>
+            <a href="/operations/gmc" class="ops-nav-item {% if active_ops_page == 'gmc' %}active{% endif %}" data-tooltip="GMC Registration">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+                <span class="ops-nav-text">GMC Registration</span>
+            </a>
+
+            <!-- UK Logistics -->
+            <div class="ops-nav-group-label">UK Logistics</div>
+            <a href="/operations/uk-visa-travel" class="ops-nav-item {% if active_ops_page == 'visa' %}active{% endif %}" data-tooltip="UK Visa & Travel">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg></span>
+                <span class="ops-nav-text">UK Visa & Travel</span>
+            </a>
+            <a href="/operations/uk-cab-bookings" class="ops-nav-item {% if active_ops_page == 'cab-bookings' %}active{% endif %}" data-tooltip="UK Cab Bookings">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 17h14v2H5z"/><path d="M5 11l2-6h10l2 6"/><circle cx="7.5" cy="15.5" r="1.5"/><circle cx="16.5" cy="15.5" r="1.5"/></svg></span>
+                <span class="ops-nav-text">UK Cab Bookings</span>
+            </a>
+            <a href="/operations/uk-observerships" class="ops-nav-item {% if active_ops_page == 'observerships' %}active{% endif %}" data-tooltip="UK Observerships">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+                <span class="ops-nav-text">UK Observerships</span>
+            </a>
+
+            <!-- Academic & Research -->
+            <div class="ops-nav-group-label">Academic & Research</div>
+            <a href="/operations/academic-details" class="ops-nav-item {% if active_ops_page == 'academic' %}active{% endif %}" data-tooltip="Academic Details">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg></span>
+                <span class="ops-nav-text">Academic Details</span>
+            </a>
+            <a href="/operations/research-publication" class="ops-nav-item {% if active_ops_page == 'research' %}active{% endif %}" data-tooltip="Research & Publication">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></span>
+                <span class="ops-nav-text">Research & Publication</span>
+            </a>
+            <a href="/operations/online-subscriptions" class="ops-nav-item {% if active_ops_page == 'subscriptions' %}active{% endif %}" data-tooltip="Online Subscriptions">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+                <span class="ops-nav-text">Online Subscriptions</span>
+            </a>
+            <a href="/operations/webinars-conferences" class="ops-nav-item {% if active_ops_page == 'webinars' %}active{% endif %}" data-tooltip="Webinars & Conferences">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <span class="ops-nav-text">Webinars & Conferences</span>
+            </a>
+
+            <!-- Other -->
+            <div class="ops-nav-group-label">Other</div>
+            <a href="/operations/ngo-activities" class="ops-nav-item {% if active_ops_page == 'ngo' %}active{% endif %}" data-tooltip="NGO Activities">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg></span>
+                <span class="ops-nav-text">NGO Activities</span>
+            </a>
+            <a href="/operations/mentorship" class="ops-nav-item {% if active_ops_page == 'mentorship' %}active{% endif %}" data-tooltip="Mentorship">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg></span>
+                <span class="ops-nav-text">Mentorship</span>
+            </a>
+
+            <!-- Admin -->
+            <div class="ops-nav-group-label">Admin</div>
+            <a href="/operations/plab/import" class="ops-nav-item {% if active_ops_page == 'import' %}active{% endif %}" data-tooltip="Import from CSV">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+                <span class="ops-nav-text">Import from CSV</span>
+            </a>
+            <a href="/operations/plab-settings" class="ops-nav-item {% if active_ops_page == 'settings' %}active{% endif %}" data-tooltip="Settings">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.98 2.98l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.98-2.98l4.24-4.24"/></svg></span>
+                <span class="ops-nav-text">Settings</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="ops-main">
+        {% block ops_content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleOpsSidebar() {
+    var sb = document.getElementById('opsSidebar');
+    sb.classList.toggle('collapsed');
+    // Persist state
+    try { localStorage.setItem('ops_sidebar_collapsed', sb.classList.contains('collapsed') ? '1' : '0'); } catch(e) {}
+}
+// Restore sidebar state on load
+(function() {
+    try {
+        if (localStorage.getItem('ops_sidebar_collapsed') === '1') {
+            document.getElementById('opsSidebar').classList.add('collapsed');
+        }
+    } catch(e) {}
+})();
+</script>
+{% block ops_extra_js %}{% endblock %}
+{% endblock %}
