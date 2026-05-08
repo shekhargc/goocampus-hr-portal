@@ -17738,20 +17738,23 @@ def partner_my_leads():
         return redirect(url_for('login'))
 
     partner_id = session.get('user_id')
+    visible_sections = get_partner_visible_sections(partner_id)
     conn = get_db()
 
     leads = conn.execute('''
         SELECT id, student_name, student_email, student_phone, city, state,
-               interested_products, status, created_at
+               interested_products, status, notes, created_at
         FROM partner_leads
         WHERE partner_id = ?
         ORDER BY created_at DESC
     ''', (partner_id,)).fetchall()
 
     lead_statuses = get_lookup_options('lead_status')
+    products = [r['name'] for r in conn.execute("SELECT name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()]
     conn.close()
 
-    return render_template('partner_my_leads.html', leads=leads, lead_statuses=lead_statuses)
+    return render_template('partner_my_leads.html', leads=leads, lead_statuses=lead_statuses,
+                           products=products, visible_sections=visible_sections)
 
 
 @app.route('/partner/leads/add', methods=['POST'])
@@ -17811,11 +17814,12 @@ def partner_my_b2b_leads():
         return redirect(url_for('login'))
 
     partner_id = session.get('user_id')
+    visible_sections = get_partner_visible_sections(partner_id)
     conn = get_db()
 
     leads = conn.execute('''
         SELECT id, institution_name, institution_type, contact_person, phone, email,
-               city, state, board_university, student_count, status, created_at
+               city, state, board_university, student_count, status, notes, created_at
         FROM partner_b2b_leads
         WHERE partner_id = ?
         ORDER BY created_at DESC
@@ -17824,7 +17828,8 @@ def partner_my_b2b_leads():
     lead_statuses = get_lookup_options('lead_status')
     conn.close()
 
-    return render_template('partner_my_b2b_leads.html', leads=leads, lead_statuses=lead_statuses)
+    return render_template('partner_my_b2b_leads.html', leads=leads, lead_statuses=lead_statuses,
+                           visible_sections=visible_sections)
 
 
 @app.route('/partner/b2b-leads/add', methods=['POST'])

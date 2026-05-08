@@ -1,360 +1,294 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>My Profile - GooCampus Partner Portal</title>
-    <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
-        :root {
-            --navy: #1B2A4A; --navy-dark: #0F1B33; --navy-light: #2A3F66;
-            --orange: #F58220; --orange-dark: #D96F10; --orange-light: #FFF3E8;
-            --gray-50: #f9fafb; --gray-100: #f3f4f6; --gray-200: #e5e7eb;
-            --gray-300: #d1d5db; --gray-400: #9ca3af; --gray-500: #6b7280;
-            --gray-600: #4b5563; --gray-700: #374151; --gray-800: #1f2937;
-            --success: #059669; --danger: #dc2626;
-        }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-800); }
+{% extends "partner_base.html" %}
 
-        /* Navbar */
-        .navbar {
-            background: var(--navy); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-            padding: 0 2rem;
-        }
-        .navbar-inner {
-            display: flex; justify-content: space-between; align-items: center;
-            max-width: 1200px; margin: 0 auto; height: 60px;
-        }
-        .navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: white; }
-        .navbar-brand-text { font-weight: 700; font-size: 1.25rem; color: white; }
-        .navbar-brand-text .goo { color: var(--orange); }
-        .navbar-nav { display: flex; gap: 0.25rem; align-items: center; list-style: none; }
-        .navbar-nav a {
-            color: rgba(255,255,255,0.7); text-decoration: none; padding: 0.4rem 0.85rem;
-            border-radius: 0.4rem; font-size: 0.9rem; font-weight: 500; transition: all 0.2s;
-        }
-        .navbar-nav a:hover, .navbar-nav a.active { color: white; background: rgba(255,255,255,0.1); }
-        .navbar-nav .nav-logout { background: rgba(245,130,32,0.15); color: var(--orange); }
-        .navbar-nav .nav-logout:hover { background: rgba(245,130,32,0.25); }
+{% block title %}My Profile - GooCampus Partner Portal{% endblock %}
 
-        .main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
+{% block extra_css %}
+<style>
+    .main { max-width: 900px; margin: 2rem auto; padding: 0 1.5rem; }
 
-        .page-title {
-            font-size: 1.5rem; font-weight: 700; color: var(--navy); margin-bottom: 1.5rem;
-        }
+    .page-title {
+        font-size: 1.5rem; font-weight: 700; color: var(--navy); margin-bottom: 1.5rem;
+    }
 
-        /* Flash messages */
-        .flash-msg {
-            padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.9rem;
-            margin-bottom: 1rem; font-weight: 500;
-        }
-        .flash-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
-        .flash-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+    /* Flash messages */
+    .flash-msg {
+        padding: 0.75rem 1rem; border-radius: 0.5rem; font-size: 0.9rem;
+        margin-bottom: 1rem; font-weight: 500;
+    }
+    .flash-success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+    .flash-error { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
 
-        /* Section cards */
-        .section-card {
-            background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
-            margin-bottom: 1.5rem; overflow: hidden;
-        }
-        .section-header {
-            background: var(--gray-50); padding: 0.85rem 1.25rem; font-weight: 600;
-            font-size: 0.95rem; color: var(--navy); border-bottom: 1px solid var(--gray-200);
-            display: flex; align-items: center; gap: 0.5rem;
-        }
-        .section-header svg { width: 18px; height: 18px; color: var(--orange); }
-        .section-body { padding: 1.25rem; }
+    /* Section cards */
+    .section-card {
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        margin-bottom: 1.5rem; overflow: hidden;
+    }
+    .section-header {
+        background: var(--gray-50); padding: 0.85rem 1.25rem; font-weight: 600;
+        font-size: 0.95rem; color: var(--navy); border-bottom: 1px solid var(--gray-200);
+        display: flex; align-items: center; gap: 0.5rem;
+    }
+    .section-header svg { width: 18px; height: 18px; color: var(--orange); }
+    .section-body { padding: 1.25rem; }
 
-        /* Form grid */
-        .form-grid {
-            display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
-        }
-        .form-grid.cols-1 { grid-template-columns: 1fr; }
-        .form-group { display: flex; flex-direction: column; }
-        .form-group.full { grid-column: 1 / -1; }
-        .form-label {
-            font-size: 0.82rem; font-weight: 600; color: var(--gray-600);
-            margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.3px;
-        }
-        .form-input, .form-select {
-            padding: 0.6rem 0.8rem; border: 1px solid var(--gray-200); border-radius: 0.5rem;
-            font-family: inherit; font-size: 0.9rem; color: var(--gray-800);
-            background: white; transition: border-color 0.2s;
-        }
-        .form-input:focus, .form-select:focus {
-            outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,130,32,0.1);
-        }
-        .form-input:read-only {
-            background: var(--gray-50); color: var(--gray-500); cursor: not-allowed;
-        }
+    /* Form grid */
+    .form-grid {
+        display: grid; grid-template-columns: 1fr 1fr; gap: 1rem;
+    }
+    .form-grid.cols-1 { grid-template-columns: 1fr; }
+    .form-group { display: flex; flex-direction: column; }
+    .form-group.full { grid-column: 1 / -1; }
+    .form-label {
+        font-size: 0.82rem; font-weight: 600; color: var(--gray-600);
+        margin-bottom: 0.35rem; text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .form-input, .form-select {
+        padding: 0.6rem 0.8rem; border: 1px solid var(--gray-200); border-radius: 0.5rem;
+        font-family: inherit; font-size: 0.9rem; color: var(--gray-800);
+        background: white; transition: border-color 0.2s;
+    }
+    .form-input:focus, .form-select:focus {
+        outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,130,32,0.1);
+    }
+    .form-input:read-only {
+        background: var(--gray-50); color: var(--gray-500); cursor: not-allowed;
+    }
 
-        /* Team member rows */
-        .team-row {
-            display: grid; grid-template-columns: 1.5fr 1.5fr 1fr 1fr 40px;
-            gap: 0.5rem; align-items: center; padding: 0.5rem 0;
-            border-bottom: 1px solid var(--gray-100);
-        }
-        .team-row:last-child { border-bottom: none; }
-        .team-header {
-            font-size: 0.78rem; font-weight: 600; color: var(--gray-500);
-            text-transform: uppercase; letter-spacing: 0.3px;
-        }
-        .team-input {
-            padding: 0.45rem 0.6rem; border: 1px solid var(--gray-200); border-radius: 0.4rem;
-            font-family: inherit; font-size: 0.85rem;
-        }
-        .team-input:focus { outline: none; border-color: var(--orange); }
-        .btn-remove {
-            background: none; border: 1px solid var(--gray-200); border-radius: 0.4rem;
-            padding: 0.3rem; cursor: pointer; color: var(--gray-400); transition: all 0.2s;
-        }
-        .btn-remove:hover { border-color: var(--danger); color: var(--danger); }
-        .btn-add-team {
-            background: var(--gray-50); color: var(--orange); border: 1px dashed var(--orange);
-            border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.85rem;
-            font-weight: 600; font-family: inherit; margin-top: 0.75rem; transition: all 0.2s;
-        }
-        .btn-add-team:hover { background: var(--orange-light); }
+    /* Team member rows */
+    .team-row {
+        display: grid; grid-template-columns: 1.5fr 1.5fr 1fr 1fr 40px;
+        gap: 0.5rem; align-items: center; padding: 0.5rem 0;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .team-row:last-child { border-bottom: none; }
+    .team-header {
+        font-size: 0.78rem; font-weight: 600; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.3px;
+    }
+    .team-input {
+        padding: 0.45rem 0.6rem; border: 1px solid var(--gray-200); border-radius: 0.4rem;
+        font-family: inherit; font-size: 0.85rem;
+    }
+    .team-input:focus { outline: none; border-color: var(--orange); }
+    .btn-remove {
+        background: none; border: 1px solid var(--gray-200); border-radius: 0.4rem;
+        padding: 0.3rem; cursor: pointer; color: var(--gray-400); transition: all 0.2s;
+    }
+    .btn-remove:hover { border-color: var(--red); color: var(--red); }
+    .btn-add-team {
+        background: var(--gray-50); color: var(--orange); border: 1px dashed var(--orange);
+        border-radius: 0.5rem; padding: 0.5rem 1rem; cursor: pointer; font-size: 0.85rem;
+        font-weight: 600; font-family: inherit; margin-top: 0.75rem; transition: all 0.2s;
+    }
+    .btn-add-team:hover { background: var(--orange-light); }
 
-        /* Buttons */
-        .form-actions {
-            display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;
-        }
-        .btn-save {
-            background: var(--orange); color: white; border: none; border-radius: 0.5rem;
-            padding: 0.7rem 2rem; font-weight: 600; font-size: 0.95rem; cursor: pointer;
-            font-family: inherit; transition: background 0.2s;
-        }
-        .btn-save:hover { background: var(--orange-dark); }
-        .btn-back {
-            background: var(--gray-100); color: var(--gray-600); border: none; border-radius: 0.5rem;
-            padding: 0.7rem 1.5rem; font-weight: 600; font-size: 0.95rem; cursor: pointer;
-            font-family: inherit; text-decoration: none; transition: background 0.2s;
-        }
-        .btn-back:hover { background: var(--gray-200); }
+    /* Buttons */
+    .form-actions {
+        display: flex; gap: 0.75rem; justify-content: flex-end; margin-top: 1.5rem;
+    }
+    .btn-save {
+        background: var(--orange); color: white; border: none; border-radius: 0.5rem;
+        padding: 0.7rem 2rem; font-weight: 600; font-size: 0.95rem; cursor: pointer;
+        font-family: inherit; transition: background 0.2s;
+    }
+    .btn-save:hover { background: var(--orange-dark); }
+    .btn-back {
+        background: var(--gray-100); color: var(--gray-600); border: none; border-radius: 0.5rem;
+        padding: 0.7rem 1.5rem; font-weight: 600; font-size: 0.95rem; cursor: pointer;
+        font-family: inherit; text-decoration: none; transition: background 0.2s;
+    }
+    .btn-back:hover { background: var(--gray-200); }
 
-        /* Footer */
-        .footer {
-            background: var(--navy-dark); color: rgba(255,255,255,0.4); text-align: center;
-            padding: 1.5rem; font-size: 0.8rem; margin-top: 3rem;
-        }
+    @media (max-width: 768px) {
+        .form-grid { grid-template-columns: 1fr; }
+        .team-row { grid-template-columns: 1fr; }
+    }
+</style>
+{% endblock %}
 
-        @media (max-width: 768px) {
-            .form-grid { grid-template-columns: 1fr; }
-            .team-row { grid-template-columns: 1fr; }
-            .navbar-inner { flex-direction: column; height: auto; padding: 0.75rem 0; gap: 0.5rem; }
-        }
-    </style>
-</head>
-<body>
-    <nav class="navbar">
-        <div class="navbar-inner">
-            <a href="/partner/dashboard" class="navbar-brand">
-                <img src="/static/logo-white.png" alt="GooCampus" style="height: 52px; object-fit: contain;">
-                <div class="navbar-brand-text"><span class="goo">Goo</span>Campus <span style="font-weight: 400; font-size: 0.85rem; opacity: 0.6;">Partner Portal</span></div>
-            </a>
-            <ul class="navbar-nav">
-                {% if visible_sections is defined %}
-                {% if 'partner_dashboard' in visible_sections %}<li><a href="/partner/dashboard">Dashboard</a></li>{% endif %}
-                {% if 'partner_student_leads' in visible_sections %}<li><a href="/partner/leads">Student Leads</a></li>{% endif %}
-                {% if 'partner_b2b_leads' in visible_sections %}<li><a href="/partner/b2b-leads">School/College Leads</a></li>{% endif %}
-                {% if 'partner_college_portal' in visible_sections %}<li><a href="/partner/colleges">College Portal</a></li>{% endif %}
-                {% if 'partner_medical_predictor' in visible_sections %}<li><a href="/partner/medical-predictor">Medical Predictor</a></li>{% endif %}
-                {% else %}
-                <li><a href="/partner/dashboard">Dashboard</a></li>
-                <li><a href="/partner/leads">Student Leads</a></li>
-                <li><a href="/partner/b2b-leads">School/College Leads</a></li>
-                {% endif %}
-                <li><a href="/partner/profile" class="active">Profile</a></li>
-                <li><a href="/logout" class="nav-logout">Logout</a></li>
-            </ul>
+{% block content %}
+<div class="main">
+    <h1 class="page-title">My Profile</h1>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}
+    {% for category, message in messages %}
+    <div class="flash-msg flash-{{ category }}">{{ message }}</div>
+    {% endfor %}
+    {% endif %}
+    {% endwith %}
+
+    <form method="POST" action="/partner/profile">
+        <!-- Company Information -->
+        <div class="section-card">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M9 17h1"/></svg>
+                Company Information
+            </div>
+            <div class="section-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">Company Name *</label>
+                        <input type="text" name="company_name" class="form-input" value="{{ partner.company_name or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Contact Person *</label>
+                        <input type="text" name="contact_person" class="form-input" value="{{ partner.contact_person or '' }}" required>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Email</label>
+                        <input type="email" class="form-input" value="{{ partner.email or '' }}" readonly>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Phone</label>
+                        <input type="text" name="phone" class="form-input" value="{{ partner.phone or '' }}">
+                    </div>
+                    <div class="form-group full">
+                        <label class="form-label">Website</label>
+                        <input type="text" name="website" class="form-input" value="{{ partner.website or '' }}" placeholder="https://">
+                    </div>
+                </div>
+            </div>
         </div>
-    </nav>
 
-    <div class="main">
-        <h1 class="page-title">My Profile</h1>
-
-        {% with messages = get_flashed_messages(with_categories=true) %}
-        {% if messages %}
-        {% for category, message in messages %}
-        <div class="flash-msg flash-{{ category }}">{{ message }}</div>
-        {% endfor %}
-        {% endif %}
-        {% endwith %}
-
-        <form method="POST" action="/partner/profile">
-            <!-- Company Information -->
-            <div class="section-card">
-                <div class="section-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18"/><path d="M5 21V7l8-4v18"/><path d="M19 21V11l-6-4"/><path d="M9 9h1"/><path d="M9 13h1"/><path d="M9 17h1"/></svg>
-                    Company Information
-                </div>
-                <div class="section-body">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">Company Name *</label>
-                            <input type="text" name="company_name" class="form-input" value="{{ partner.company_name or '' }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Contact Person *</label>
-                            <input type="text" name="contact_person" class="form-input" value="{{ partner.contact_person or '' }}" required>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Email</label>
-                            <input type="email" class="form-input" value="{{ partner.email or '' }}" readonly>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Phone</label>
-                            <input type="text" name="phone" class="form-input" value="{{ partner.phone or '' }}">
-                        </div>
-                        <div class="form-group full">
-                            <label class="form-label">Website</label>
-                            <input type="text" name="website" class="form-input" value="{{ partner.website or '' }}" placeholder="https://">
-                        </div>
+        <!-- Address -->
+        <div class="section-card">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                Address
+            </div>
+            <div class="section-body">
+                <div class="form-grid">
+                    <div class="form-group full">
+                        <label class="form-label">Address</label>
+                        <input type="text" name="address" class="form-input" value="{{ partner.address or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">State</label>
+                        <select name="state" class="form-select" id="stateSelect" onchange="loadCities()">
+                            <option value="">Select State</option>
+                            {% for s in states %}
+                            <option value="{{ s }}" {% if partner.state == s %}selected{% endif %}>{{ s }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">City</label>
+                        <select name="city" class="form-select" id="citySelect">
+                            <option value="{{ partner.city or '' }}">{{ partner.city or 'Select City' }}</option>
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Country</label>
+                        <input type="text" name="country" class="form-input" value="{{ partner.country or 'India' }}">
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Address -->
-            <div class="section-card">
-                <div class="section-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                    Address
+        <!-- Team Members -->
+        <div class="section-card">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                Team Members
+            </div>
+            <div class="section-body">
+                <div class="team-row team-header">
+                    <div>Name</div>
+                    <div>Email</div>
+                    <div>Designation</div>
+                    <div>Phone</div>
+                    <div></div>
                 </div>
-                <div class="section-body">
-                    <div class="form-grid">
-                        <div class="form-group full">
-                            <label class="form-label">Address</label>
-                            <input type="text" name="address" class="form-input" value="{{ partner.address or '' }}">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">State</label>
-                            <select name="state" class="form-select" id="stateSelect" onchange="loadCities()">
-                                <option value="">Select State</option>
-                                {% for s in states %}
-                                <option value="{{ s }}" {% if partner.state == s %}selected{% endif %}>{{ s }}</option>
-                                {% endfor %}
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">City</label>
-                            <select name="city" class="form-select" id="citySelect">
-                                <option value="{{ partner.city or '' }}">{{ partner.city or 'Select City' }}</option>
-                            </select>
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Country</label>
-                            <input type="text" name="country" class="form-input" value="{{ partner.country or 'India' }}">
-                        </div>
+                <div id="teamContainer">
+                    {% for tm in team_members %}
+                    <div class="team-row">
+                        <input type="hidden" name="team_id[]" value="{{ tm.id }}">
+                        <input type="text" name="team_name[]" class="team-input" value="{{ tm.name or '' }}" placeholder="Name">
+                        <input type="email" name="team_email[]" class="team-input" value="{{ tm.email or '' }}" placeholder="Email">
+                        <input type="text" name="team_designation[]" class="team-input" value="{{ tm.designation or '' }}" placeholder="Designation">
+                        <input type="text" name="team_phone[]" class="team-input" value="{{ tm.phone or '' }}" placeholder="Phone">
+                        <button type="button" class="btn-remove" onclick="this.closest('.team-row').remove()">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+                        </button>
+                    </div>
+                    {% endfor %}
+                </div>
+                <button type="button" class="btn-add-team" onclick="addTeamRow()">+ Add Team Member</button>
+            </div>
+        </div>
+
+        <!-- Change Password -->
+        <div class="section-card">
+            <div class="section-header">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+                Change Password
+            </div>
+            <div class="section-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label class="form-label">New Password</label>
+                        <input type="password" name="new_password" class="form-input" placeholder="Leave blank to keep current">
+                    </div>
+                    <div class="form-group">
+                        <label class="form-label">Confirm Password</label>
+                        <input type="password" name="confirm_password" class="form-input" placeholder="Confirm new password">
                     </div>
                 </div>
             </div>
+        </div>
 
-            <!-- Team Members -->
-            <div class="section-card">
-                <div class="section-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
-                    Team Members
-                </div>
-                <div class="section-body">
-                    <div class="team-row team-header">
-                        <div>Name</div>
-                        <div>Email</div>
-                        <div>Designation</div>
-                        <div>Phone</div>
-                        <div></div>
-                    </div>
-                    <div id="teamContainer">
-                        {% for tm in team_members %}
-                        <div class="team-row">
-                            <input type="hidden" name="team_id[]" value="{{ tm.id }}">
-                            <input type="text" name="team_name[]" class="team-input" value="{{ tm.name or '' }}" placeholder="Name">
-                            <input type="email" name="team_email[]" class="team-input" value="{{ tm.email or '' }}" placeholder="Email">
-                            <input type="text" name="team_designation[]" class="team-input" value="{{ tm.designation or '' }}" placeholder="Designation">
-                            <input type="text" name="team_phone[]" class="team-input" value="{{ tm.phone or '' }}" placeholder="Phone">
-                            <button type="button" class="btn-remove" onclick="this.closest('.team-row').remove()">
-                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-                            </button>
-                        </div>
-                        {% endfor %}
-                    </div>
-                    <button type="button" class="btn-add-team" onclick="addTeamRow()">+ Add Team Member</button>
-                </div>
-            </div>
+        <div class="form-actions">
+            <a href="/partner/dashboard" class="btn-back">Back to Dashboard</a>
+            <button type="submit" class="btn-save">Save Changes</button>
+        </div>
+    </form>
+</div>
+{% endblock %}
 
-            <!-- Change Password -->
-            <div class="section-card">
-                <div class="section-header">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
-                    Change Password
-                </div>
-                <div class="section-body">
-                    <div class="form-grid">
-                        <div class="form-group">
-                            <label class="form-label">New Password</label>
-                            <input type="password" name="new_password" class="form-input" placeholder="Leave blank to keep current">
-                        </div>
-                        <div class="form-group">
-                            <label class="form-label">Confirm Password</label>
-                            <input type="password" name="confirm_password" class="form-input" placeholder="Confirm new password">
-                        </div>
-                    </div>
-                </div>
-            </div>
+{% block extra_js %}
+<script>
+function addTeamRow() {
+    var container = document.getElementById('teamContainer');
+    var row = document.createElement('div');
+    row.className = 'team-row';
+    row.innerHTML = '<input type="hidden" name="team_id[]" value="">' +
+        '<input type="text" name="team_name[]" class="team-input" placeholder="Name">' +
+        '<input type="email" name="team_email[]" class="team-input" placeholder="Email">' +
+        '<input type="text" name="team_designation[]" class="team-input" placeholder="Designation">' +
+        '<input type="text" name="team_phone[]" class="team-input" placeholder="Phone">' +
+        '<button type="button" class="btn-remove" onclick="this.closest(\'.team-row\').remove()">' +
+        '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
+    container.appendChild(row);
+}
 
-            <div class="form-actions">
-                <a href="/partner/dashboard" class="btn-back">Back to Dashboard</a>
-                <button type="submit" class="btn-save">Save Changes</button>
-            </div>
-        </form>
-    </div>
-
-    <footer class="footer">
-        &copy; 2025 GooCampus. All rights reserved.
-    </footer>
-
-    <script>
-    function addTeamRow() {
-        var container = document.getElementById('teamContainer');
-        var row = document.createElement('div');
-        row.className = 'team-row';
-        row.innerHTML = '<input type="hidden" name="team_id[]" value="">' +
-            '<input type="text" name="team_name[]" class="team-input" placeholder="Name">' +
-            '<input type="email" name="team_email[]" class="team-input" placeholder="Email">' +
-            '<input type="text" name="team_designation[]" class="team-input" placeholder="Designation">' +
-            '<input type="text" name="team_phone[]" class="team-input" placeholder="Phone">' +
-            '<button type="button" class="btn-remove" onclick="this.closest(\'.team-row\').remove()">' +
-            '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg></button>';
-        container.appendChild(row);
+function loadCities() {
+    var state = document.getElementById('stateSelect').value;
+    var citySelect = document.getElementById('citySelect');
+    citySelect.innerHTML = '<option value="">Loading...</option>';
+    if (!state) {
+        citySelect.innerHTML = '<option value="">Select City</option>';
+        return;
     }
-
-    function loadCities() {
-        var state = document.getElementById('stateSelect').value;
-        var citySelect = document.getElementById('citySelect');
-        citySelect.innerHTML = '<option value="">Loading...</option>';
-        if (!state) {
-            citySelect.innerHTML = '<option value="">Select City</option>';
-            return;
-        }
-        fetch('/partner/profile/cities?state=' + encodeURIComponent(state))
-        .then(function(r) { return r.json(); })
-        .then(function(cities) {
-            citySelect.innerHTML = '<option value="">Select City</option>';
-            cities.forEach(function(c) {
-                var opt = document.createElement('option');
-                opt.value = c;
-                opt.textContent = c;
-                citySelect.appendChild(opt);
-            });
-            // Re-select current city if exists
-            var currentCity = '{{ partner.city or "" }}';
-            if (currentCity) citySelect.value = currentCity;
+    fetch('/partner/profile/cities?state=' + encodeURIComponent(state))
+    .then(function(r) { return r.json(); })
+    .then(function(cities) {
+        citySelect.innerHTML = '<option value="">Select City</option>';
+        cities.forEach(function(c) {
+            var opt = document.createElement('option');
+            opt.value = c;
+            opt.textContent = c;
+            citySelect.appendChild(opt);
         });
-    }
+        // Re-select current city if exists
+        var currentCity = '{{ partner.city or "" }}';
+        if (currentCity) citySelect.value = currentCity;
+    });
+}
 
-    // Load cities on page load if state is selected
-    if (document.getElementById('stateSelect').value) {
-        loadCities();
-    }
-    </script>
-</body>
-</html>
+// Load cities on page load if state is selected
+if (document.getElementById('stateSelect').value) {
+    loadCities();
+}
+</script>
+{% endblock %}
