@@ -1,17 +1,19 @@
-{% extends "base.html" %}
+{% extends "partner_base.html" if is_partner else "base.html" %}
 {% block title %}{{ college.name }} - College Portal{% endblock %}
 {% block content %}
 <div style="max-width:1200px;margin:0 auto;padding:2rem 1.5rem;">
 
     <!-- Back & Admin Actions -->
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1rem;flex-wrap:wrap;gap:0.5rem;">
-        <a href="/colleges" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to Colleges</a>
+        <a href="{{ '/partner/colleges' if is_partner else '/colleges' }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">← Back to Colleges</a>
+        {% if not is_partner %}
         <div style="display:flex;gap:0.5rem;">
             <a href="/colleges/admin/edit/{{ college.id }}" style="background:var(--navy);color:white;text-decoration:none;padding:0.45rem 0.85rem;border-radius:0.35rem;font-size:0.8rem;font-weight:600;">Edit College</a>
             <form method="POST" action="/colleges/admin/delete/{{ college.id }}" onsubmit="return confirm('Remove this college?');" style="display:inline;">
                 <button type="submit" style="background:#ef4444;color:white;border:none;padding:0.45rem 0.85rem;border-radius:0.35rem;font-size:0.8rem;font-weight:600;cursor:pointer;">Delete</button>
             </form>
         </div>
+        {% endif %}
     </div>
 
     <!-- Cover / Header Section -->
@@ -275,6 +277,7 @@
                     </table>
 
                     <!-- Add Fee Row Form (Admin) -->
+                    {% if not is_partner %}
                     <details style="margin-top:0.8rem;">
                         <summary style="font-size:0.78rem;color:var(--orange);font-weight:600;cursor:pointer;">+ Add Fee Row</summary>
                         <form method="POST" action="/colleges/admin/course/{{ course.id }}/fee/add" style="display:grid;grid-template-columns:repeat(4,1fr);gap:0.5rem;margin-top:0.6rem;padding:0.8rem;background:var(--gray-50);border-radius:0.4rem;">
@@ -319,6 +322,7 @@
                             </div>
                         </form>
                     </details>
+                    {% endif %}
                 </div>
                 {% else %}
                 <div style="padding:1.5rem;text-align:center;color:var(--gray-400);font-size:0.85rem;">No fee structure added yet.</div>
@@ -481,6 +485,7 @@
             {% endif %}
 
             <!-- Add Course Form -->
+            {% if not is_partner %}
             <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:1.3rem;">
                 <h3 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 0.8rem 0;">Add Course</h3>
                 <form method="POST" action="/colleges/admin/{{ college.id }}/course/add">
@@ -507,6 +512,7 @@
                     <button type="submit" style="background:var(--orange);color:white;border:none;padding:0.5rem 1rem;border-radius:0.35rem;font-weight:600;font-size:0.82rem;cursor:pointer;width:100%;">Add Course</button>
                 </form>
             </div>
+            {% endif %}
         </div>
     </div>
 </div>

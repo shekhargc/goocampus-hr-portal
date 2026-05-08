@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Partner Portal - GooCampus{% endblock %}</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --orange: #F58220; --orange-dark: #D96E0E; --orange-light: #FFF3E6;
+            --navy: #1B2A4A; --navy-dark: #0F1B33; --navy-light: #2A3F66;
+            --white: #FFFFFF; --gray-50: #F8FAFC; --gray-100: #F1F5F9; --gray-200: #E2E8F0;
+            --gray-400: #94A3B8; --gray-500: #64748B; --gray-600: #475569; --gray-800: #1E293B;
+            --green: #10B981; --blue: #3B82F6; --purple: #8B5CF6; --red: #EF4444;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Inter', -apple-system, sans-serif; background: var(--gray-50); color: var(--gray-800); min-height: 100vh; }
+
+        .partner-navbar {
+            background: var(--navy); box-shadow: 0 2px 16px rgba(0,0,0,0.18);
+            position: sticky; top: 0; z-index: 100;
+        }
+        .partner-navbar-inner {
+            max-width: 1440px; margin: 0 auto; padding: 0 2rem;
+            display: flex; justify-content: space-between; align-items: center; height: 64px;
+        }
+        .partner-navbar-brand { display: flex; align-items: center; gap: 0.75rem; text-decoration: none; color: white; }
+        .partner-navbar-brand img { height: 44px; object-fit: contain; }
+        .partner-navbar-brand-text { font-weight: 700; font-size: 1.15rem; color: white; }
+        .partner-navbar-brand-text .goo { color: var(--orange); }
+        .partner-nav-links { display: flex; gap: 0.15rem; align-items: center; list-style: none; }
+        .partner-nav-links a {
+            color: rgba(255,255,255,0.7); text-decoration: none; font-size: 0.85rem; font-weight: 500;
+            padding: 0.5rem 0.9rem; border-radius: 0.45rem; transition: all 0.2s;
+        }
+        .partner-nav-links a:hover, .partner-nav-links a.active { color: white; background: rgba(255,255,255,0.1); }
+        .partner-nav-links .nav-logout { background: rgba(245,130,32,0.15); color: var(--orange); }
+        .partner-nav-links .nav-logout:hover { background: rgba(245,130,32,0.25); }
+
+        .partner-footer {
+            background: var(--navy-dark); color: rgba(255,255,255,0.4); text-align: center;
+            padding: 1.25rem; font-size: 0.78rem; margin-top: 3rem;
+        }
+        .partner-footer span { color: var(--orange); }
+    </style>
+    {% block extra_css %}{% endblock %}
+</head>
+<body>
+    <nav class="partner-navbar">
+        <div class="partner-navbar-inner">
+            <a href="/partner/dashboard" class="partner-navbar-brand">
+                <img src="/static/logo-white.png" alt="GooCampus">
+                <div class="partner-navbar-brand-text"><span class="goo">Goo</span>Campus <span style="font-weight:400;font-size:0.8rem;opacity:0.6;">Partner Portal</span></div>
+            </a>
+            <ul class="partner-nav-links">
+                {% if visible_sections is defined %}
+                {% if 'partner_dashboard' in visible_sections %}<li><a href="/partner/dashboard" {% if request.path == '/partner/dashboard' %}class="active"{% endif %}>Dashboard</a></li>{% endif %}
+                {% if 'partner_student_leads' in visible_sections %}<li><a href="/partner/leads" {% if '/partner/leads' in request.path %}class="active"{% endif %}>Student Leads</a></li>{% endif %}
+                {% if 'partner_b2b_leads' in visible_sections %}<li><a href="/partner/b2b-leads" {% if '/partner/b2b-leads' in request.path %}class="active"{% endif %}>B2B Leads</a></li>{% endif %}
+                {% if 'partner_college_portal' in visible_sections %}<li><a href="/partner/colleges" {% if '/partner/colleges' in request.path %}class="active"{% endif %}>College Portal</a></li>{% endif %}
+                {% if 'partner_medical_predictor' in visible_sections %}<li><a href="/partner/medical-predictor" {% if '/partner/medical-predictor' in request.path %}class="active"{% endif %}>Medical Predictor</a></li>{% endif %}
+                {% endif %}
+                <li><a href="/partner/profile" {% if request.path == '/partner/profile' %}class="active"{% endif %}>Profile</a></li>
+                <li><a href="/logout" class="nav-logout">Logout</a></li>
+            </ul>
+        </div>
+    </nav>
+
+    {% block content %}{% endblock %}
+
+    <footer class="partner-footer">
+        &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &middot; All rights reserved
+    </footer>
+
+    {% block extra_js %}{% endblock %}
+</body>
+</html>

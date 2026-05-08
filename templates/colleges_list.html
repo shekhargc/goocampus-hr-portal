@@ -1,4 +1,4 @@
-{% extends "base.html" %}
+{% extends "partner_base.html" if is_partner else "base.html" %}
 {% block title %}Colleges - GooCampus{% endblock %}
 {% block content %}
 <div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
@@ -12,21 +12,23 @@
             </h1>
             <p style="margin:0;color:var(--gray-500);font-size:0.88rem;">Browse Indian &amp; International medical colleges for MBBS</p>
         </div>
+        {% if not is_partner %}
         <a href="/colleges/admin/add" style="background:var(--orange);color:white;text-decoration:none;padding:0.55rem 1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;display:inline-flex;align-items:center;gap:0.4rem;">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             Add College
         </a>
+        {% endif %}
     </div>
 
     <!-- Category Tabs -->
     <div style="display:flex;gap:0;margin-bottom:1.25rem;border-bottom:2px solid var(--gray-200);">
-        <a href="/colleges?category=all" style="padding:0.65rem 1.3rem;font-weight:{% if category=='all' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='all' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='all' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+        <a href="{{ '/partner/colleges' if is_partner else '/colleges' }}?category=all" style="padding:0.65rem 1.3rem;font-weight:{% if category=='all' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='all' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='all' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
             All Colleges
         </a>
-        <a href="/colleges?category=indian" style="padding:0.65rem 1.3rem;font-weight:{% if category=='indian' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='indian' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='indian' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+        <a href="{{ '/partner/colleges' if is_partner else '/colleges' }}?category=indian" style="padding:0.65rem 1.3rem;font-weight:{% if category=='indian' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='indian' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='indian' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
             Indian Colleges
         </a>
-        <a href="/colleges?category=international" style="padding:0.65rem 1.3rem;font-weight:{% if category=='international' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='international' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='international' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
+        <a href="{{ '/partner/colleges' if is_partner else '/colleges' }}?category=international" style="padding:0.65rem 1.3rem;font-weight:{% if category=='international' %}700{% else %}500{% endif %};font-size:0.88rem;text-decoration:none;color:{% if category=='international' %}var(--orange){% else %}var(--gray-500){% endif %};border-bottom:{% if category=='international' %}3px solid var(--orange){% else %}none{% endif %};margin-bottom:-2px;">
             International Colleges
         </a>
     </div>
@@ -44,7 +46,7 @@
             </div>
             <button type="submit" style="background:var(--navy);color:white;border:none;padding:0.55rem 1.1rem;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Search</button>
             {% if search or country_filter or state_filter or course_filter or fee_min or fee_max %}
-            <a href="/colleges?category={{ category }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset Filters</a>
+            <a href="{{ '/partner/colleges' if is_partner else '/colleges' }}?category={{ category }}" style="color:var(--gray-500);font-size:0.82rem;text-decoration:none;padding:0.55rem 0.8rem;background:var(--gray-100);border-radius:0.4rem;">Reset Filters</a>
             {% endif %}
         </div>
 
@@ -98,7 +100,7 @@
     {% if colleges %}
     <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:1.1rem;">
         {% for c in colleges %}
-        <a href="/colleges/{{ c.slug }}" style="text-decoration:none;color:inherit;">
+        <a href="{{ '/partner/colleges/' if is_partner else '/colleges/' }}{{ c.slug }}" style="text-decoration:none;color:inherit;">
             <div style="background:white;border:1px solid var(--gray-200);border-radius:0.65rem;overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,0.04);transition:box-shadow 0.2s, transform 0.15s;cursor:pointer;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.09)';this.style.transform='translateY(-1px)'" onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.04)';this.style.transform='none'">
                 <!-- Name Banner -->
                 <div style="background:linear-gradient(135deg, var(--navy), var(--navy-light));padding:0.75rem 1rem;display:flex;align-items:center;gap:0.5rem;min-height:0;">
@@ -159,7 +161,7 @@
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:3rem;text-align:center;color:var(--gray-500);">
         <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="var(--gray-300)" stroke-width="1.5" style="margin-bottom:1rem;"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
         <p style="margin:0 0 0.5rem 0;font-weight:600;">No colleges found</p>
-        <p style="margin:0;font-size:0.85rem;">Try adjusting your search or filters, or <a href="/colleges/admin/add" style="color:var(--orange);font-weight:600;">add a new college</a>.</p>
+        <p style="margin:0;font-size:0.85rem;">Try adjusting your search or filters{% if not is_partner %}, or <a href="/colleges/admin/add" style="color:var(--orange);font-weight:600;">add a new college</a>{% endif %}.</p>
     </div>
     {% endif %}
 </div>

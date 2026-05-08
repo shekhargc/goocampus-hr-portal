@@ -153,9 +153,17 @@
                 <div class="navbar-brand-text"><span class="goo">Goo</span>Campus <span style="font-weight: 400; font-size: 0.85rem; opacity: 0.6;">Partner Portal</span></div>
             </a>
             <ul class="navbar-nav">
+                {% if visible_sections is defined %}
+                {% if 'partner_dashboard' in visible_sections %}<li><a href="/partner/dashboard">Dashboard</a></li>{% endif %}
+                {% if 'partner_student_leads' in visible_sections %}<li><a href="/partner/leads">Student Leads</a></li>{% endif %}
+                {% if 'partner_b2b_leads' in visible_sections %}<li><a href="/partner/b2b-leads">School/College Leads</a></li>{% endif %}
+                {% if 'partner_college_portal' in visible_sections %}<li><a href="/partner/colleges">College Portal</a></li>{% endif %}
+                {% if 'partner_medical_predictor' in visible_sections %}<li><a href="/partner/medical-predictor">Medical Predictor</a></li>{% endif %}
+                {% else %}
                 <li><a href="/partner/dashboard">Dashboard</a></li>
                 <li><a href="/partner/leads">Student Leads</a></li>
                 <li><a href="/partner/b2b-leads">School/College Leads</a></li>
+                {% endif %}
                 <li><a href="/partner/profile" class="active">Profile</a></li>
                 <li><a href="/logout" class="nav-logout">Logout</a></li>
             </ul>
