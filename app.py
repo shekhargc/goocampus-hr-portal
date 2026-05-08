@@ -17199,12 +17199,15 @@ def partner_onboard_submit(token):
             UPDATE partner_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?
         ''', (invitation['id'],))
 
-        # Create notification for admins (wrap in try/except so it doesn't block registration)
+        conn.commit()
+        conn.close()
+
+        # Create notification for admins in a SEPARATE transaction so it never poisons partner creation
         try:
-            # Get first admin employee_id to use as notification target
-            admin_row = conn.execute("SELECT id FROM employees WHERE is_admin = TRUE ORDER BY id LIMIT 1").fetchone()
+            nconn = get_db()
+            admin_row = nconn.execute("SELECT id FROM employees WHERE is_admin = 1 ORDER BY id LIMIT 1").fetchone()
             admin_id = admin_row['id'] if admin_row else 1
-            conn.execute('''
+            nconn.execute('''
                 INSERT INTO notifications (employee_id, type, title, message, created_at)
                 VALUES (?, ?, ?, ?, CURRENT_TIMESTAMP)
             ''', (
@@ -17213,10 +17216,10 @@ def partner_onboard_submit(token):
                 f'New Partner Registration: {company_name}',
                 f'Partner {company_name} has completed onboarding. Contact: {contact_person}'
             ))
+            nconn.commit()
+            nconn.close()
         except Exception as e:
             logging.error(f"Failed to create partner registration notification: {e}")
-
-        conn.commit()
 
         # Set partner session
         session['user_id'] = partner_id
@@ -17227,8 +17230,6 @@ def partner_onboard_submit(token):
         # Clear registration temp session
         session.pop('partner_register_token', None)
         session.pop('partner_register_email', None)
-
-        conn.close()
         if is_ajax:
             return jsonify({'success': True, 'message': 'Partner account created successfully', 'redirect': url_for('partner_dashboard_view')}), 200
         flash('Welcome! Your partner account has been created successfully.', 'success')
