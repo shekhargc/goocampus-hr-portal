@@ -20983,6 +20983,222 @@ def delete_partner_section_permission(section_id):
     return jsonify({'success': True})
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# NEET PG 2025 CUT-OFF LANDING PAGE
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def ensure_neetpg_tables():
+    """Create neetpg_pdfs and neetpg_leads tables if they don't exist."""
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_pdfs (
+            id SERIAL PRIMARY KEY,
+            title TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'neetpg',
+            specialty TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_size INTEGER DEFAULT 0,
+            file_data BYTEA,
+            upload_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            download_count INTEGER DEFAULT 0,
+            is_active INTEGER DEFAULT 1
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_leads (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            whatsapp TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            source TEXT DEFAULT 'neetpg_landing'
+        )''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_neetpg_tables: {e}")
+
+ensure_neetpg_tables()
+
+
+# ── Public landing page (no login required) ──
+@app.route('/neet-pg-2025')
+def neetpg_landing():
+    conn = get_db()
+    neetpg_pdfs = conn.execute(
+        "SELECT id, title, specialty, file_name, file_size, upload_date, download_count FROM neetpg_pdfs WHERE category = 'neetpg' AND is_active = 1 ORDER BY specialty ASC"
+    ).fetchall()
+    dnb_pdfs = conn.execute(
+        "SELECT id, title, specialty, file_name, file_size, upload_date, download_count FROM neetpg_pdfs WHERE category = 'dnb' AND is_active = 1 ORDER BY specialty ASC"
+    ).fetchall()
+    conn.close()
+    # Check if lead already captured (cookie)
+    lead_captured = request.cookies.get('neetpg_lead', '')
+    return render_template('neetpg_landing.html',
+                           neetpg_pdfs=neetpg_pdfs,
+                           dnb_pdfs=dnb_pdfs,
+                           lead_captured=lead_captured)
+
+
+# ── Lead capture AJAX endpoint ──
+@app.route('/neet-pg-2025/capture-lead', methods=['POST'])
+def neetpg_capture_lead():
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    whatsapp = data.get('whatsapp', '').strip()
+    if not name or not whatsapp:
+        return jsonify({'error': 'Name and WhatsApp number are required'}), 400
+    # Validate WhatsApp (10 digits for India)
+    whatsapp_clean = re.sub(r'[^0-9]', '', whatsapp)
+    if len(whatsapp_clean) < 10:
+        return jsonify({'error': 'Please enter a valid WhatsApp number'}), 400
+    try:
+        conn = get_db()
+        conn.execute("INSERT INTO neetpg_leads (name, whatsapp) VALUES (?, ?)", (name, whatsapp_clean[-10:]))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"neetpg_capture_lead: {e}")
+    resp = jsonify({'success': True})
+    resp.set_cookie('neetpg_lead', 'captured', max_age=365*24*60*60, samesite='Lax')
+    return resp
+
+
+# ── PDF download route ──
+@app.route('/neet-pg-2025/download/<int:pdf_id>')
+def neetpg_download(pdf_id):
+    conn = get_db()
+    pdf = conn.execute("SELECT file_name, file_data FROM neetpg_pdfs WHERE id = ? AND is_active = 1", (pdf_id,)).fetchone()
+    if not pdf:
+        conn.close()
+        flash('PDF not found', 'error')
+        return redirect(url_for('neetpg_landing'))
+    # Increment download count
+    conn.execute("UPDATE neetpg_pdfs SET download_count = download_count + 1 WHERE id = ?", (pdf_id,))
+    conn.commit()
+    conn.close()
+    file_data = pdf['file_data']
+    if isinstance(file_data, memoryview):
+        file_data = bytes(file_data)
+    return send_file(
+        BytesIO(file_data),
+        download_name=pdf['file_name'],
+        as_attachment=True,
+        mimetype='application/pdf'
+    )
+
+
+# ── Admin: NEET PG PDF Management ──
+@app.route('/admin/neetpg-pdfs')
+@login_required
+def neetpg_admin():
+    user = get_user()
+    if not user.get('is_admin'):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    pdfs = conn.execute("SELECT * FROM neetpg_pdfs ORDER BY category ASC, specialty ASC, upload_date DESC").fetchall()
+    leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
+    lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
+    conn.close()
+    return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user)
+
+
+@app.route('/admin/neetpg-pdfs/upload', methods=['POST'])
+@login_required
+def neetpg_upload():
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    title = request.form.get('title', '').strip()
+    category = request.form.get('category', 'neetpg')
+    specialty = request.form.get('specialty', '').strip()
+    file = request.files.get('pdf_file')
+    if not title or not specialty or not file:
+        flash('Title, specialty, and PDF file are required', 'error')
+        return redirect(url_for('neetpg_admin'))
+    if not file.filename.lower().endswith('.pdf'):
+        flash('Only PDF files are allowed', 'error')
+        return redirect(url_for('neetpg_admin'))
+    file_data = file.read()
+    file_size = len(file_data)
+    file_name = file.filename
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO neetpg_pdfs (title, category, specialty, file_name, file_size, file_data) VALUES (?, ?, ?, ?, ?, ?)",
+            (title, category, specialty, file_name, file_size, file_data)
+        )
+        conn.commit()
+        conn.close()
+        flash('PDF uploaded successfully', 'success')
+    except Exception as e:
+        logging.error(f"neetpg_upload: {e}")
+        flash('Upload failed', 'error')
+    return redirect(url_for('neetpg_admin'))
+
+
+@app.route('/admin/neetpg-pdfs/<int:pdf_id>/toggle', methods=['POST'])
+@login_required
+def neetpg_toggle(pdf_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    pdf = conn.execute("SELECT is_active FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    if pdf:
+        new_status = 0 if pdf['is_active'] else 1
+        conn.execute("UPDATE neetpg_pdfs SET is_active = ? WHERE id = ?", (new_status, pdf_id))
+        conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/admin/neetpg-pdfs/<int:pdf_id>', methods=['DELETE'])
+@login_required
+def neetpg_delete(pdf_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    conn.execute("DELETE FROM neetpg_pdfs WHERE id = ?", (pdf_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Admin: Export NEET PG leads as Excel ──
+@app.route('/admin/neetpg-leads/export')
+@login_required
+def neetpg_export_leads():
+    user = get_user()
+    if not user.get('is_admin'):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    leads = conn.execute("SELECT name, whatsapp, created_at FROM neetpg_leads ORDER BY created_at DESC").fetchall()
+    conn.close()
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "NEET PG Leads"
+    headers = ['Name', 'WhatsApp', 'Captured At']
+    header_fill = PatternFill(start_color='1B2A4A', end_color='1B2A4A', fill_type='solid')
+    header_font = Font(bold=True, color='FFFFFF')
+    for col, h in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col, value=h)
+        cell.fill = header_fill
+        cell.font = header_font
+    for row, lead in enumerate(leads, 2):
+        ws.cell(row=row, column=1, value=lead['name'])
+        ws.cell(row=row, column=2, value=lead['whatsapp'])
+        ws.cell(row=row, column=3, value=str(lead['created_at']))
+    ws.column_dimensions['A'].width = 25
+    ws.column_dimensions['B'].width = 15
+    ws.column_dimensions['C'].width = 22
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(output, download_name='neetpg_leads.xlsx', as_attachment=True,
+                     mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)

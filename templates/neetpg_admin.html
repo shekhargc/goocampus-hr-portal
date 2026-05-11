@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}NEET PG PDF Management{% endblock %}
+
+{% block content %}
+<div class="container-fluid px-4 py-3">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-1" style="font-weight:700;color:#1B2A4A;">NEET PG 2025 — PDF Management</h4>
+            <p class="text-muted mb-0" style="font-size:14px;">Upload and manage cut-off PDFs for the public landing page</p>
+        </div>
+        <div class="d-flex gap-2">
+            <a href="{{ url_for('neetpg_landing') }}" target="_blank" class="btn btn-outline-primary btn-sm">
+                <i class="fas fa-external-link-alt me-1"></i> View Public Page
+            </a>
+            <a href="{{ url_for('neetpg_export_leads') }}" class="btn btn-outline-success btn-sm">
+                <i class="fas fa-file-excel me-1"></i> Export Leads ({{ lead_count }})
+            </a>
+        </div>
+    </div>
+
+    <!-- Upload Form -->
+    <div class="card mb-4" style="border:none;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-radius:12px;">
+        <div class="card-body p-4">
+            <h6 class="mb-3" style="font-weight:700;color:#1B2A4A;"><i class="fas fa-upload me-2" style="color:#F47B20;"></i>Upload New PDF</h6>
+            <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
+                <div class="row g-3 align-items-end">
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:13px;font-weight:600;">Title</label>
+                        <input type="text" name="title" class="form-control" placeholder="e.g. Radiology Paid Seats 2025" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size:13px;font-weight:600;">Category</label>
+                        <select name="category" class="form-select" required>
+                            <option value="neetpg">NEET PG (MD/MS)</option>
+                            <option value="dnb">DNB (NBEMS)</option>
+                        </select>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label" style="font-size:13px;font-weight:600;">Specialty</label>
+                        <input type="text" name="specialty" class="form-control" placeholder="e.g. Radiology" required>
+                    </div>
+                    <div class="col-md-2">
+                        <label class="form-label" style="font-size:13px;font-weight:600;">PDF File</label>
+                        <input type="file" name="pdf_file" class="form-control" accept=".pdf" required>
+                    </div>
+                    <div class="col-md-2">
+                        <button type="submit" class="btn w-100" style="background:#F47B20;color:white;font-weight:600;">
+                            <i class="fas fa-cloud-upload-alt me-1"></i> Upload
+                        </button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Tabs: PDFs / Leads -->
+    <ul class="nav nav-tabs mb-3" role="tablist">
+        <li class="nav-item">
+            <a class="nav-link active" data-bs-toggle="tab" href="#tabPdfs" style="font-weight:600;">
+                <i class="fas fa-file-pdf me-1"></i> PDFs ({{ pdfs|length }})
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link" data-bs-toggle="tab" href="#tabLeads" style="font-weight:600;">
+                <i class="fas fa-users me-1"></i> Leads ({{ lead_count }})
+            </a>
+        </li>
+    </ul>
+
+    <div class="tab-content">
+        <!-- PDFs Tab -->
+        <div class="tab-pane fade show active" id="tabPdfs">
+            {% if pdfs %}
+            <div class="table-responsive">
+                <table class="table table-hover" style="font-size:14px;">
+                    <thead style="background:#F0F2F5;">
+                        <tr>
+                            <th>Title</th>
+                            <th>Category</th>
+                            <th>Specialty</th>
+                            <th>File</th>
+                            <th>Size</th>
+                            <th>Downloads</th>
+                            <th>Uploaded</th>
+                            <th>Status</th>
+                            <th style="width:120px;">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for pdf in pdfs %}
+                        <tr id="pdf-row-{{ pdf.id }}">
+                            <td style="font-weight:600;">{{ pdf.title }}</td>
+                            <td>
+                                <span class="badge" style="background:{{ '#1B2A4A' if pdf.category == 'neetpg' else '#6B21A8' }};font-size:11px;">
+                                    {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
+                                </span>
+                            </td>
+                            <td>{{ pdf.specialty }}</td>
+                            <td style="font-size:12px;color:#6B7280;">{{ pdf.file_name }}</td>
+                            <td>{{ (pdf.file_size / 1024)|int }} KB</td>
+                            <td><i class="fas fa-download me-1" style="color:#F47B20;font-size:11px;"></i>{{ pdf.download_count }}</td>
+                            <td style="font-size:12px;">{{ pdf.upload_date|format_date }}</td>
+                            <td>
+                                {% if pdf.is_active %}
+                                <span class="badge bg-success" style="font-size:11px;">Active</span>
+                                {% else %}
+                                <span class="badge bg-secondary" style="font-size:11px;">Inactive</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                <button class="btn btn-sm btn-outline-secondary me-1" onclick="togglePdf({{ pdf.id }})" title="Toggle active/inactive">
+                                    <i class="fas fa-toggle-{{ 'on' if pdf.is_active else 'off' }}"></i>
+                                </button>
+                                <a href="{{ url_for('neetpg_download', pdf_id=pdf.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Download">
+                                    <i class="fas fa-download"></i>
+                                </a>
+                                <button class="btn btn-sm btn-outline-danger" onclick="deletePdf({{ pdf.id }})" title="Delete">
+                                    <i class="fas fa-trash"></i>
+                                </button>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-file-pdf fa-3x mb-3" style="opacity:0.3;"></i>
+                <p>No PDFs uploaded yet. Use the form above to upload your first PDF.</p>
+            </div>
+            {% endif %}
+        </div>
+
+        <!-- Leads Tab -->
+        <div class="tab-pane fade" id="tabLeads">
+            {% if leads %}
+            <div class="table-responsive">
+                <table class="table table-hover" style="font-size:14px;">
+                    <thead style="background:#F0F2F5;">
+                        <tr>
+                            <th>#</th>
+                            <th>Name</th>
+                            <th>WhatsApp</th>
+                            <th>Captured At</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for lead in leads %}
+                        <tr>
+                            <td>{{ loop.index }}</td>
+                            <td style="font-weight:600;">{{ lead.name }}</td>
+                            <td>
+                                <a href="https://wa.me/91{{ lead.whatsapp }}" target="_blank" style="color:#25D366;text-decoration:none;">
+                                    <i class="fab fa-whatsapp me-1"></i>{{ lead.whatsapp }}
+                                </a>
+                            </td>
+                            <td style="font-size:12px;">{{ lead.created_at }}</td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+            {% else %}
+            <div class="text-center py-5 text-muted">
+                <i class="fas fa-users fa-3x mb-3" style="opacity:0.3;"></i>
+                <p>No leads captured yet. Leads will appear here when users download PDFs from the public page.</p>
+            </div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<script>
+function togglePdf(pdfId) {
+    fetch(`/admin/neetpg-pdfs/${pdfId}/toggle`, {method: 'POST'})
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) location.reload();
+    });
+}
+
+function deletePdf(pdfId) {
+    if (!confirm('Are you sure you want to delete this PDF?')) return;
+    fetch(`/admin/neetpg-pdfs/${pdfId}`, {method: 'DELETE'})
+    .then(r => r.json())
+    .then(data => {
+        if (data.success) {
+            document.getElementById('pdf-row-' + pdfId).remove();
+        }
+    });
+}
+</script>
+{% endblock %}
