@@ -305,6 +305,50 @@
         transform: translateY(0);
     }
 
+    /* ── Autocomplete dropdown ── */
+    .np-autocomplete {
+        position: relative;
+    }
+    .np-autocomplete-list {
+        display: none;
+        position: absolute;
+        top: 100%;
+        left: 0;
+        right: 0;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        max-height: 220px;
+        overflow-y: auto;
+        z-index: 50;
+        box-shadow: 0 6px 16px rgba(0,0,0,0.1);
+        margin-top: 2px;
+    }
+    .np-autocomplete-list.show { display: block; }
+    .np-autocomplete-item {
+        padding: 0.5rem 0.75rem;
+        cursor: pointer;
+        font-size: 0.85rem;
+        color: var(--gray-700);
+        border-bottom: 1px solid var(--gray-50);
+    }
+    .np-autocomplete-item:last-child { border-bottom: none; }
+    .np-autocomplete-item:hover,
+    .np-autocomplete-item.highlighted {
+        background: var(--orange-light, #fff5eb);
+        color: var(--orange);
+    }
+    .np-autocomplete-item .np-ac-match {
+        font-weight: 700;
+        color: var(--orange);
+    }
+    .np-autocomplete-empty {
+        padding: 0.6rem 0.75rem;
+        font-size: 0.82rem;
+        color: var(--gray-400);
+        font-style: italic;
+    }
+
     @media (max-width: 900px) {
         .np-form-row {
             grid-template-columns: 1fr;
@@ -377,14 +421,16 @@
             </div>
             <div class="np-form-group">
                 <label>Category</label>
-                <select name="category" class="np-form-input" required>
+                <select name="category" id="npCategory" class="np-form-input" required onchange="npUpdateSpecialties()">
                     <option value="neetpg">NEET PG (MD/MS)</option>
                     <option value="dnb">DNB (NBEMS)</option>
                 </select>
             </div>
-            <div class="np-form-group">
-                <label>Specialty</label>
-                <input type="text" name="specialty" class="np-form-input" placeholder="e.g. Radiology" required>
+            <div class="np-form-group np-autocomplete">
+                <label>Specialty (Course Name)</label>
+                <input type="text" name="specialty" id="npSpecialty" class="np-form-input" placeholder="Type to search courses..." required autocomplete="off"
+                       oninput="npFilterSpecialties()" onfocus="npFilterSpecialties()">
+                <div class="np-autocomplete-list" id="npSpecialtyList"></div>
             </div>
             <div class="np-form-group">
                 <label>PDF File</label>
@@ -570,5 +616,219 @@ function deletePdf(pdfId) {
         }
     });
 }
+
+// ══════════════════════════════════════════
+// ── Specialty (Course Name) Autocomplete ──
+// ══════════════════════════════════════════
+
+var NEETPG_COURSES = [
+    "MD - Anaesthesiology",
+    "MD - Anatomy",
+    "MD - Biochemistry",
+    "MD - Community Medicine",
+    "MD - Dermatology, Venereology & Leprosy",
+    "MD - Emergency Medicine",
+    "MD - Family Medicine",
+    "MD - Forensic Medicine",
+    "MD - General Medicine",
+    "MD - Geriatrics",
+    "MD - Hospital Administration",
+    "MD - Immuno Haematology and Blood Transfusion",
+    "MD - Microbiology",
+    "MD - Nuclear Medicine",
+    "MD - Paediatrics",
+    "MD - Palliative Medicine",
+    "MD - Pathology",
+    "MD - Pharmacology",
+    "MD - Physical Medicine and Rehabilitation",
+    "MD - Physiology",
+    "MD - Psychiatry",
+    "MD - Radio-diagnosis",
+    "MD - Radio-therapy",
+    "MD - Respiratory Medicine",
+    "MD - Sports Medicine",
+    "MD - Transfusion Medicine",
+    "MD - Tropical Medicine",
+    "MS - ENT (Otorhinolaryngology)",
+    "MS - General Surgery",
+    "MS - Obstetrics and Gynaecology",
+    "MS - Ophthalmology",
+    "MS - Orthopaedics",
+    "Diploma in Anaesthesiology",
+    "Diploma in Child Health",
+    "Diploma in Clinical Pathology",
+    "Diploma in Dermatology, Venereology & Leprosy",
+    "Diploma in Forensic Medicine",
+    "Diploma in Gynaecology and Obstetrics",
+    "Diploma in Health Education",
+    "Diploma in Industrial Hygiene",
+    "Diploma in Medical Radio-diagnosis",
+    "Diploma in Medical Radio-therapy",
+    "Diploma in Oto-Rhino-Laryngology",
+    "Diploma in Ophthalmology",
+    "Diploma in Orthopaedics",
+    "Diploma in Physical Medicine and Rehabilitation",
+    "Diploma in Psychiatry",
+    "Diploma in Public Health",
+    "Diploma in Tuberculosis and Chest Diseases"
+];
+
+var DNB_COURSES = [
+    "(NBEMS) Anaesthesiology",
+    "(NBEMS) Anatomy",
+    "(NBEMS) Biochemistry",
+    "(NBEMS) Community Medicine",
+    "(NBEMS) Dermatology, Venereology & Leprosy",
+    "(NBEMS) Emergency Medicine",
+    "(NBEMS) Family Medicine",
+    "(NBEMS) Forensic Medicine",
+    "(NBEMS) General Medicine",
+    "(NBEMS) General Surgery",
+    "(NBEMS) Geriatrics",
+    "(NBEMS) Hospital Administration",
+    "(NBEMS) Immuno Haematology and Blood Transfusion",
+    "(NBEMS) Maternal and Child Health",
+    "(NBEMS) Microbiology",
+    "(NBEMS) Neonatology",
+    "(NBEMS) Nuclear Medicine",
+    "(NBEMS) Obstetrics and Gynaecology",
+    "(NBEMS) Ophthalmology",
+    "(NBEMS) Orthopaedics",
+    "(NBEMS) Oto-Rhino-Laryngology (ENT)",
+    "(NBEMS) Paediatrics",
+    "(NBEMS) Palliative Medicine",
+    "(NBEMS) Pathology",
+    "(NBEMS) Pharmacology",
+    "(NBEMS) Physical Medicine and Rehabilitation",
+    "(NBEMS) Physiology",
+    "(NBEMS) Psychiatry",
+    "(NBEMS) Radio-diagnosis",
+    "(NBEMS) Radio-therapy",
+    "(NBEMS) Respiratory Medicine",
+    "(NBEMS) Social and Preventive Medicine",
+    "(NBEMS) Sports Medicine",
+    "(NBEMS) Transfusion Medicine",
+    "(NBEMS) Tuberculosis and Respiratory Diseases"
+];
+
+var npHighlightIdx = -1;
+
+function npGetCurrentCourses() {
+    var cat = document.getElementById('npCategory').value;
+    return cat === 'dnb' ? DNB_COURSES : NEETPG_COURSES;
+}
+
+function npUpdateSpecialties() {
+    // Clear the specialty field when category changes
+    document.getElementById('npSpecialty').value = '';
+    document.getElementById('npSpecialtyList').classList.remove('show');
+    npHighlightIdx = -1;
+}
+
+function npFilterSpecialties() {
+    var input = document.getElementById('npSpecialty');
+    var list = document.getElementById('npSpecialtyList');
+    var val = input.value.trim().toLowerCase();
+    var courses = npGetCurrentCourses();
+    list.innerHTML = '';
+    npHighlightIdx = -1;
+
+    if (val.length < 1) {
+        // Show all courses when focused with empty input
+        var all = courses;
+        if (all.length === 0) { list.classList.remove('show'); return; }
+        all.forEach(function(c, i) {
+            var div = document.createElement('div');
+            div.className = 'np-autocomplete-item';
+            div.textContent = c;
+            div.setAttribute('data-idx', i);
+            div.onclick = function() { npSelectSpecialty(c); };
+            list.appendChild(div);
+        });
+        list.classList.add('show');
+        return;
+    }
+
+    var filtered = courses.filter(function(c) {
+        return c.toLowerCase().indexOf(val) > -1;
+    });
+
+    if (filtered.length === 0) {
+        list.innerHTML = '<div class="np-autocomplete-empty">No matching course found</div>';
+        list.classList.add('show');
+        return;
+    }
+
+    filtered.forEach(function(c, i) {
+        var div = document.createElement('div');
+        div.className = 'np-autocomplete-item';
+        // Highlight the matching part
+        var lowerC = c.toLowerCase();
+        var matchIdx = lowerC.indexOf(val);
+        if (matchIdx > -1) {
+            div.innerHTML = npEscHtml(c.substring(0, matchIdx))
+                + '<span class="np-ac-match">' + npEscHtml(c.substring(matchIdx, matchIdx + val.length)) + '</span>'
+                + npEscHtml(c.substring(matchIdx + val.length));
+        } else {
+            div.textContent = c;
+        }
+        div.setAttribute('data-idx', i);
+        div.onclick = function() { npSelectSpecialty(c); };
+        list.appendChild(div);
+    });
+    list.classList.add('show');
+}
+
+function npEscHtml(str) {
+    var d = document.createElement('div');
+    d.textContent = str;
+    return d.innerHTML;
+}
+
+function npSelectSpecialty(value) {
+    document.getElementById('npSpecialty').value = value;
+    document.getElementById('npSpecialtyList').classList.remove('show');
+    npHighlightIdx = -1;
+}
+
+// Keyboard navigation for autocomplete
+document.getElementById('npSpecialty').addEventListener('keydown', function(e) {
+    var list = document.getElementById('npSpecialtyList');
+    var items = list.querySelectorAll('.np-autocomplete-item');
+    if (!list.classList.contains('show') || items.length === 0) return;
+
+    if (e.key === 'ArrowDown') {
+        e.preventDefault();
+        npHighlightIdx = Math.min(npHighlightIdx + 1, items.length - 1);
+        npUpdateHighlight(items);
+    } else if (e.key === 'ArrowUp') {
+        e.preventDefault();
+        npHighlightIdx = Math.max(npHighlightIdx - 1, 0);
+        npUpdateHighlight(items);
+    } else if (e.key === 'Enter' && npHighlightIdx >= 0) {
+        e.preventDefault();
+        items[npHighlightIdx].click();
+    } else if (e.key === 'Escape') {
+        list.classList.remove('show');
+        npHighlightIdx = -1;
+    }
+});
+
+function npUpdateHighlight(items) {
+    items.forEach(function(item, i) {
+        item.classList.toggle('highlighted', i === npHighlightIdx);
+        if (i === npHighlightIdx) {
+            item.scrollIntoView({block: 'nearest'});
+        }
+    });
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', function(e) {
+    if (!e.target.closest('.np-autocomplete')) {
+        document.getElementById('npSpecialtyList').classList.remove('show');
+        npHighlightIdx = -1;
+    }
+});
 </script>
 {% endblock %}
