@@ -21027,6 +21027,29 @@ def ensure_neetpg_tables():
             conn.execute("ALTER TABLE neetpg_leads ALTER COLUMN whatsapp DROP NOT NULL")
         except Exception:
             pass  # already nullable or SQLite
+        # Migration: add state column
+        try:
+            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN state TEXT DEFAULT 'All India/MCC'")
+        except Exception:
+            pass
+        # Migration: add publish columns
+        try:
+            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN is_published INTEGER DEFAULT 0")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN published_at TIMESTAMP")
+        except Exception:
+            pass
+        try:
+            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN auto_schedule INTEGER DEFAULT 1")
+        except Exception:
+            pass
+        # Backfill: mark existing active PDFs as published
+        try:
+            conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = upload_date WHERE is_active = 1 AND is_published = 0")
+        except Exception:
+            pass
         conn.commit()
         conn.close()
     except Exception as e:
@@ -21048,12 +21071,22 @@ def neetpg_landing():
         conn.commit()
     except Exception as e:
         logging.error(f"neetpg visit track: {e}")
-    neetpg_pdfs = conn.execute(
-        "SELECT id, title, specialty, file_name, file_size, upload_date, download_count FROM neetpg_pdfs WHERE category = 'neetpg' AND is_active = 1 ORDER BY specialty ASC"
+    # Only show published + active PDFs, newest published first
+    all_pdfs = conn.execute(
+        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
     ).fetchall()
-    dnb_pdfs = conn.execute(
-        "SELECT id, title, specialty, file_name, file_size, upload_date, download_count FROM neetpg_pdfs WHERE category = 'dnb' AND is_active = 1 ORDER BY specialty ASC"
-    ).fetchall()
+    neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
+    dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
+    # Build dynamic filter lists from published PDFs
+    course_set = set()
+    state_set = set()
+    for p in all_pdfs:
+        if p['specialty']:
+            course_set.add(p['specialty'])
+        if p['state']:
+            state_set.add(p['state'])
+    courses_list = sorted(course_set)
+    states_list = sorted(state_set)
     conn.close()
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
@@ -21061,6 +21094,9 @@ def neetpg_landing():
     return render_template('neetpg_landing.html',
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
+                           all_pdfs=all_pdfs,
+                           courses_list=courses_list,
+                           states_list=states_list,
                            lead_captured=lead_captured,
                            google_client_id=google_client_id)
 
@@ -21106,7 +21142,7 @@ def neetpg_capture_lead():
 @app.route('/neet-pg-2025/download/<int:pdf_id>')
 def neetpg_download(pdf_id):
     conn = get_db()
-    pdf = conn.execute("SELECT file_name, file_data FROM neetpg_pdfs WHERE id = ? AND is_active = 1", (pdf_id,)).fetchone()
+    pdf = conn.execute("SELECT file_name, file_data FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
     if not pdf:
         conn.close()
         flash('PDF not found', 'error')
@@ -21157,6 +21193,8 @@ def neetpg_admin():
 
     total_downloads = conn.execute("SELECT COALESCE(SUM(download_count),0) as c FROM neetpg_pdfs").fetchone()['c']
     active_pdfs = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_active = 1").fetchone()['c']
+    published_pdfs = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1").fetchone()['c']
+    draft_pdfs = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1").fetchone()['c']
     leads_today = conn.execute(
         "SELECT COUNT(*) as c FROM neetpg_leads WHERE created_at::date = CURRENT_DATE"
     ).fetchone()['c']
@@ -21167,6 +21205,8 @@ def neetpg_admin():
         'avg_daily_visits': avg_daily,
         'total_downloads': total_downloads,
         'active_pdfs': active_pdfs,
+        'published_pdfs': published_pdfs,
+        'draft_pdfs': draft_pdfs,
         'leads_today': leads_today
     }
     conn.close()
@@ -21182,6 +21222,7 @@ def neetpg_upload():
     title = request.form.get('title', '').strip()
     category = request.form.get('category', 'neetpg')
     specialty = request.form.get('specialty', '').strip()
+    state = request.form.get('state', 'All India/MCC').strip()
     file = request.files.get('pdf_file')
     if not title or not specialty or not file:
         flash('Title, specialty, and PDF file are required', 'error')
@@ -21195,12 +21236,12 @@ def neetpg_upload():
     try:
         conn = get_db()
         conn.execute(
-            "INSERT INTO neetpg_pdfs (title, category, specialty, file_name, file_size, file_data) VALUES (?, ?, ?, ?, ?, ?)",
-            (title, category, specialty, file_name, file_size, file_data)
+            "INSERT INTO neetpg_pdfs (title, category, specialty, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)",
+            (title, category, specialty, file_name, file_size, file_data, state)
         )
         conn.commit()
         conn.close()
-        flash('PDF uploaded successfully', 'success')
+        flash('PDF uploaded as draft. Use Publish to make it live.', 'success')
     except Exception as e:
         logging.error(f"neetpg_upload: {e}")
         flash('Upload failed', 'error')
@@ -21218,6 +21259,42 @@ def neetpg_toggle(pdf_id):
     if pdf:
         new_status = 0 if pdf['is_active'] else 1
         conn.execute("UPDATE neetpg_pdfs SET is_active = ? WHERE id = ?", (new_status, pdf_id))
+        conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/admin/neetpg-pdfs/<int:pdf_id>/publish', methods=['POST'])
+@login_required
+def neetpg_publish(pdf_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    pdf = conn.execute("SELECT is_published FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    if pdf:
+        if pdf['is_published']:
+            # Unpublish
+            conn.execute("UPDATE neetpg_pdfs SET is_published = 0, published_at = NULL WHERE id = ?", (pdf_id,))
+        else:
+            # Publish now
+            conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP, is_active = 1 WHERE id = ?", (pdf_id,))
+        conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/admin/neetpg-pdfs/<int:pdf_id>/toggle-schedule', methods=['POST'])
+@login_required
+def neetpg_toggle_schedule(pdf_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    pdf = conn.execute("SELECT auto_schedule FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    if pdf:
+        new_val = 0 if pdf['auto_schedule'] else 1
+        conn.execute("UPDATE neetpg_pdfs SET auto_schedule = ? WHERE id = ?", (new_val, pdf_id))
         conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -21273,6 +21350,52 @@ def neetpg_export_leads():
     output.seek(0)
     return send_file(output, download_name='neetpg_leads.xlsx', as_attachment=True,
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+
+
+# ── Auto-publish scheduler (10 AM + 5 PM IST daily) ──
+def neetpg_auto_publish():
+    """Publish the next draft PDF that has auto_schedule=1."""
+    try:
+        conn = get_db()
+        # Pick the oldest draft PDF with auto_schedule enabled
+        draft = conn.execute(
+            "SELECT id FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        ).fetchone()
+        if draft:
+            conn.execute(
+                "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (draft['id'],)
+            )
+            conn.commit()
+            logging.info(f"Auto-published NEET PG PDF id={draft['id']}")
+        conn.close()
+    except Exception as e:
+        logging.error(f"neetpg_auto_publish error: {e}")
+
+
+def start_neetpg_scheduler():
+    """Start background scheduler for auto-publishing PDFs at 10 AM and 5 PM IST."""
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+        from apscheduler.triggers.cron import CronTrigger
+        import pytz
+        ist = pytz.timezone('Asia/Kolkata')
+        scheduler = BackgroundScheduler()
+        # 10:00 AM IST daily
+        scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=10, minute=0, timezone=ist), id='neetpg_publish_morning')
+        # 5:00 PM IST daily
+        scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
+        scheduler.start()
+        logging.info("NEET PG auto-publish scheduler started (10 AM + 5 PM IST)")
+    except ImportError:
+        logging.warning("APScheduler not installed. Auto-publish disabled. pip install APScheduler pytz")
+    except Exception as e:
+        logging.error(f"Scheduler start failed: {e}")
+
+
+# Start scheduler on app boot (only in production, not in reloader child)
+if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
+    start_neetpg_scheduler()
 
 
 if __name__ == '__main__':

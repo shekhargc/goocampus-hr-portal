@@ -58,7 +58,7 @@
     /* ── Analytics cards ── */
     .np-stats {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
         gap: 1rem;
         margin-bottom: 1.5rem;
     }
@@ -71,7 +71,7 @@
         flex-direction: column;
     }
     .np-stat-label {
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         font-weight: 600;
         color: var(--gray-500);
         text-transform: uppercase;
@@ -79,18 +79,19 @@
         margin-bottom: 0.5rem;
     }
     .np-stat-value {
-        font-size: 1.75rem;
+        font-size: 1.6rem;
         font-weight: 800;
         color: var(--navy);
         line-height: 1;
     }
     .np-stat-sub {
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         color: var(--gray-400);
         margin-top: 0.4rem;
     }
     .np-stat-card.orange .np-stat-value { color: var(--orange); }
     .np-stat-card.green .np-stat-value { color: #16a34a; }
+    .np-stat-card.blue .np-stat-value { color: #2563eb; }
 
     /* ── Upload form ── */
     .np-upload-card {
@@ -112,14 +113,14 @@
     .np-upload-title i { color: var(--orange); }
     .np-form-row {
         display: grid;
-        grid-template-columns: 1.5fr 1fr 1.5fr 1fr 0.8fr;
-        gap: 1rem;
+        grid-template-columns: 1.5fr 1fr 1fr 1.5fr 1fr 0.7fr;
+        gap: 0.75rem;
         align-items: end;
     }
     .np-form-group label {
         display: block;
         font-weight: 600;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         color: var(--gray-700);
         margin-bottom: 0.35rem;
         text-transform: uppercase;
@@ -127,11 +128,11 @@
     }
     .np-form-input {
         width: 100%;
-        padding: 0.55rem 0.75rem;
+        padding: 0.5rem 0.65rem;
         border: 1px solid var(--gray-200);
         border-radius: 0.5rem;
         font-family: inherit;
-        font-size: 0.88rem;
+        font-size: 0.85rem;
         background: white;
         color: var(--gray-700);
     }
@@ -190,28 +191,29 @@
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        overflow: hidden;
+        overflow-x: auto;
     }
     .np-table {
         width: 100%;
         border-collapse: collapse;
-        font-size: 0.88rem;
+        font-size: 0.85rem;
     }
     .np-table thead {
         background: var(--gray-50);
     }
     .np-table th {
-        padding: 0.75rem 1rem;
+        padding: 0.65rem 0.75rem;
         text-align: left;
         font-weight: 600;
-        font-size: 0.78rem;
+        font-size: 0.72rem;
         color: var(--gray-500);
         text-transform: uppercase;
         letter-spacing: 0.3px;
         border-bottom: 1px solid var(--gray-200);
+        white-space: nowrap;
     }
     .np-table td {
-        padding: 0.75rem 1rem;
+        padding: 0.65rem 0.75rem;
         border-bottom: 1px solid var(--gray-100);
         color: var(--gray-700);
     }
@@ -220,10 +222,11 @@
 
     .np-badge {
         display: inline-block;
-        padding: 0.15rem 0.6rem;
+        padding: 0.15rem 0.55rem;
         border-radius: 1rem;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         font-weight: 600;
+        white-space: nowrap;
     }
     .np-badge-navy { background: var(--navy); color: white; }
     .np-badge-purple { background: #7c3aed; color: white; }
@@ -231,33 +234,42 @@
     .np-badge-gray { background: var(--gray-100); color: var(--gray-500); }
     .np-badge-blue { background: #dbeafe; color: #2563eb; }
     .np-badge-orange { background: var(--orange-light); color: var(--orange); }
+    .np-badge-yellow { background: #fef9c3; color: #a16207; }
 
     .np-file-name {
-        font-size: 0.78rem;
+        font-size: 0.75rem;
         color: var(--gray-400);
         font-family: monospace;
     }
 
     .np-actions {
         display: flex;
-        gap: 0.35rem;
+        gap: 0.3rem;
     }
     .np-action-btn {
         background: none;
         border: 1px solid var(--gray-200);
         border-radius: 0.4rem;
-        padding: 0.35rem 0.55rem;
+        padding: 0.3rem 0.5rem;
         cursor: pointer;
         color: var(--gray-400);
         transition: all 0.2s;
         text-decoration: none;
         display: inline-flex;
         align-items: center;
-        font-size: 0.82rem;
+        font-size: 0.78rem;
     }
     .np-action-btn:hover {
         border-color: var(--navy);
         color: var(--navy);
+    }
+    .np-action-btn.publish:hover {
+        border-color: #16a34a;
+        color: #16a34a;
+    }
+    .np-action-btn.unpublish:hover {
+        border-color: #d97706;
+        color: #d97706;
     }
     .np-action-btn.danger:hover {
         border-color: #dc2626;
@@ -328,7 +340,7 @@
     .np-autocomplete-item {
         padding: 0.5rem 0.75rem;
         cursor: pointer;
-        font-size: 0.85rem;
+        font-size: 0.82rem;
         color: var(--gray-700);
         border-bottom: 1px solid var(--gray-50);
     }
@@ -349,7 +361,28 @@
         font-style: italic;
     }
 
-    @media (max-width: 900px) {
+    /* ── Schedule info banner ── */
+    .np-schedule-banner {
+        background: #eff6ff;
+        border: 1px solid #bfdbfe;
+        border-radius: 0.75rem;
+        padding: 1rem 1.25rem;
+        margin-bottom: 1.5rem;
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        font-size: 0.88rem;
+        color: #1e40af;
+    }
+    .np-schedule-banner i { font-size: 1.1rem; }
+    .np-schedule-banner strong { color: #1e3a8a; }
+
+    @media (max-width: 1100px) {
+        .np-form-row {
+            grid-template-columns: 1fr 1fr;
+        }
+    }
+    @media (max-width: 700px) {
         .np-form-row {
             grid-template-columns: 1fr;
         }
@@ -369,7 +402,7 @@
 <div class="np-header">
     <div>
         <h1>NEET PG 2025 — PDF Management</h1>
-        <p>Upload and manage cut-off PDFs for the public landing page</p>
+        <p>Upload, schedule and manage cut-off PDFs for the public landing page</p>
     </div>
     <div class="np-header-btns">
         <a href="{{ url_for('neetpg_landing') }}" target="_blank" class="np-btn np-btn-outline">
@@ -384,35 +417,48 @@
 <!-- Analytics Stats -->
 <div class="np-stats">
     <div class="np-stat-card">
-        <div class="np-stat-label">Total Page Visits</div>
+        <div class="np-stat-label">Page Visits</div>
         <div class="np-stat-value">{{ analytics.total_visits }}</div>
         <div class="np-stat-sub">{{ analytics.today_visits }} today</div>
     </div>
     <div class="np-stat-card orange">
-        <div class="np-stat-label">Avg Daily Visits</div>
+        <div class="np-stat-label">Avg Daily</div>
         <div class="np-stat-value">{{ analytics.avg_daily_visits }}</div>
         <div class="np-stat-sub">Since first visit</div>
     </div>
     <div class="np-stat-card">
-        <div class="np-stat-label">Total Downloads</div>
+        <div class="np-stat-label">Downloads</div>
         <div class="np-stat-value">{{ analytics.total_downloads }}</div>
         <div class="np-stat-sub">Across all PDFs</div>
     </div>
     <div class="np-stat-card green">
-        <div class="np-stat-label">Leads Captured</div>
+        <div class="np-stat-label">Leads</div>
         <div class="np-stat-value">{{ lead_count }}</div>
         <div class="np-stat-sub">{{ analytics.leads_today }} today</div>
     </div>
+    <div class="np-stat-card blue">
+        <div class="np-stat-label">Published</div>
+        <div class="np-stat-value">{{ analytics.published_pdfs }}</div>
+        <div class="np-stat-sub">{{ analytics.draft_pdfs }} drafts queued</div>
+    </div>
     <div class="np-stat-card">
-        <div class="np-stat-label">Active PDFs</div>
-        <div class="np-stat-value">{{ analytics.active_pdfs }}</div>
-        <div class="np-stat-sub">{{ pdfs|length }} total uploaded</div>
+        <div class="np-stat-label">Total PDFs</div>
+        <div class="np-stat-value">{{ pdfs|length }}</div>
+        <div class="np-stat-sub">{{ analytics.active_pdfs }} active</div>
     </div>
 </div>
 
+<!-- Schedule Banner -->
+{% if analytics.draft_pdfs > 0 %}
+<div class="np-schedule-banner">
+    <i class="fas fa-clock"></i>
+    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Next auto-publish at <strong>10:00 AM</strong> or <strong>5:00 PM IST</strong> (1 PDF per slot). Toggle the <i class="fas fa-calendar-check"></i> icon on any draft to include/exclude it from auto-publish.</div>
+</div>
+{% endif %}
+
 <!-- Upload Form -->
 <div class="np-upload-card">
-    <div class="np-upload-title"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF</div>
+    <div class="np-upload-title"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF (saves as Draft)</div>
     <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
         <div class="np-form-row">
             <div class="np-form-group">
@@ -426,18 +472,61 @@
                     <option value="dnb">DNB (NBEMS)</option>
                 </select>
             </div>
+            <div class="np-form-group">
+                <label>State</label>
+                <select name="state" class="np-form-input" required>
+                    <option value="All India/MCC">All India/MCC</option>
+                    <option value="Andhra Pradesh">Andhra Pradesh</option>
+                    <option value="Arunachal Pradesh">Arunachal Pradesh</option>
+                    <option value="Assam">Assam</option>
+                    <option value="Bihar">Bihar</option>
+                    <option value="Chhattisgarh">Chhattisgarh</option>
+                    <option value="Delhi">Delhi</option>
+                    <option value="Goa">Goa</option>
+                    <option value="Gujarat">Gujarat</option>
+                    <option value="Haryana">Haryana</option>
+                    <option value="Himachal Pradesh">Himachal Pradesh</option>
+                    <option value="Jammu & Kashmir">Jammu & Kashmir</option>
+                    <option value="Jharkhand">Jharkhand</option>
+                    <option value="Karnataka">Karnataka</option>
+                    <option value="Kerala">Kerala</option>
+                    <option value="Madhya Pradesh">Madhya Pradesh</option>
+                    <option value="Maharashtra">Maharashtra</option>
+                    <option value="Manipur">Manipur</option>
+                    <option value="Meghalaya">Meghalaya</option>
+                    <option value="Mizoram">Mizoram</option>
+                    <option value="Nagaland">Nagaland</option>
+                    <option value="Odisha">Odisha</option>
+                    <option value="Puducherry">Puducherry</option>
+                    <option value="Punjab">Punjab</option>
+                    <option value="Rajasthan">Rajasthan</option>
+                    <option value="Sikkim">Sikkim</option>
+                    <option value="Tamil Nadu">Tamil Nadu</option>
+                    <option value="Telangana">Telangana</option>
+                    <option value="Tripura">Tripura</option>
+                    <option value="Uttar Pradesh">Uttar Pradesh</option>
+                    <option value="Uttarakhand">Uttarakhand</option>
+                    <option value="West Bengal">West Bengal</option>
+                    <option value="Chandigarh">Chandigarh</option>
+                    <option value="Dadra & Nagar Haveli">Dadra & Nagar Haveli</option>
+                    <option value="Daman & Diu">Daman & Diu</option>
+                    <option value="Lakshadweep">Lakshadweep</option>
+                    <option value="Andaman & Nicobar">Andaman & Nicobar</option>
+                    <option value="Ladakh">Ladakh</option>
+                </select>
+            </div>
             <div class="np-form-group np-autocomplete">
-                <label>Specialty (Course Name)</label>
-                <input type="text" name="specialty" id="npSpecialty" class="np-form-input" placeholder="Type to search courses..." required autocomplete="off"
+                <label>Specialty (Course)</label>
+                <input type="text" name="specialty" id="npSpecialty" class="np-form-input" placeholder="Type to search..." required autocomplete="off"
                        oninput="npFilterSpecialties()" onfocus="npFilterSpecialties()">
                 <div class="np-autocomplete-list" id="npSpecialtyList"></div>
             </div>
             <div class="np-form-group">
                 <label>PDF File</label>
-                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required>
+                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required style="font-size:0.78rem;">
             </div>
             <div class="np-form-group">
-                <button type="submit" class="np-btn np-btn-primary" style="width:100%;justify-content:center;padding:0.6rem 1rem;">
+                <button type="submit" class="np-btn np-btn-primary" style="width:100%;justify-content:center;padding:0.55rem 0.75rem;">
                     <i class="fas fa-upload"></i> Upload
                 </button>
             </div>
@@ -466,43 +555,60 @@
                 <tr>
                     <th>Title</th>
                     <th>Category</th>
+                    <th>State</th>
                     <th>Specialty</th>
-                    <th>File</th>
                     <th>Size</th>
-                    <th>Downloads</th>
-                    <th>Uploaded</th>
+                    <th>DLs</th>
                     <th>Status</th>
+                    <th>Schedule</th>
                     <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for pdf in pdfs %}
                 <tr id="pdf-row-{{ pdf.id }}">
-                    <td style="font-weight:600;color:var(--gray-800);">{{ pdf.title }}</td>
+                    <td>
+                        <div style="font-weight:600;color:var(--gray-800);font-size:0.85rem;">{{ pdf.title }}</div>
+                        <div class="np-file-name">{{ pdf.file_name }}</div>
+                    </td>
                     <td>
                         <span class="np-badge {{ 'np-badge-navy' if pdf.category == 'neetpg' else 'np-badge-purple' }}">
                             {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
                         </span>
                     </td>
-                    <td>{{ pdf.specialty }}</td>
-                    <td><span class="np-file-name">{{ pdf.file_name }}</span></td>
-                    <td>{{ (pdf.file_size / 1024)|int }} KB</td>
+                    <td style="font-size:0.82rem;">{{ pdf.state or 'All India/MCC' }}</td>
+                    <td style="font-size:0.82rem;">{{ pdf.specialty }}</td>
+                    <td style="font-size:0.82rem;white-space:nowrap;">{{ (pdf.file_size / 1024)|int }} KB</td>
                     <td>
                         <span style="color:var(--orange);font-weight:600;">{{ pdf.download_count }}</span>
                     </td>
-                    <td style="font-size:0.82rem;">{{ pdf.upload_date|format_date }}</td>
                     <td>
-                        {% if pdf.is_active %}
-                        <span class="np-badge np-badge-green">Active</span>
+                        {% if pdf.is_published %}
+                        <span class="np-badge np-badge-green">Published</span>
                         {% else %}
-                        <span class="np-badge np-badge-gray">Inactive</span>
+                        <span class="np-badge np-badge-yellow">Draft</span>
+                        {% endif %}
+                    </td>
+                    <td style="text-align:center;">
+                        {% if not pdf.is_published %}
+                        <button class="np-action-btn" onclick="toggleSchedule({{ pdf.id }})" title="{{ 'Auto-publish ON — click to disable' if pdf.auto_schedule else 'Auto-publish OFF — click to enable' }}" style="{{ 'color:#16a34a;border-color:#bbf7d0;' if pdf.auto_schedule else '' }}">
+                            <i class="fas fa-calendar-{{ 'check' if pdf.auto_schedule else 'times' }}"></i>
+                        </button>
+                        {% else %}
+                        <span style="color:var(--gray-300);font-size:0.75rem;">—</span>
                         {% endif %}
                     </td>
                     <td>
                         <div class="np-actions">
-                            <button class="np-action-btn" onclick="togglePdf({{ pdf.id }})" title="Toggle active/inactive">
-                                <i class="fas fa-toggle-{{ 'on' if pdf.is_active else 'off' }}"></i>
+                            {% if pdf.is_published %}
+                            <button class="np-action-btn unpublish" onclick="togglePublish({{ pdf.id }})" title="Unpublish">
+                                <i class="fas fa-eye-slash"></i>
                             </button>
+                            {% else %}
+                            <button class="np-action-btn publish" onclick="togglePublish({{ pdf.id }})" title="Publish now">
+                                <i class="fas fa-rocket"></i>
+                            </button>
+                            {% endif %}
                             <a href="{{ url_for('neetpg_download', pdf_id=pdf.id) }}" class="np-action-btn" title="Download">
                                 <i class="fas fa-download"></i>
                             </a>
@@ -597,8 +703,16 @@ function npSwitchTab(tab, btn) {
     document.getElementById('panel-' + tab).classList.add('active');
 }
 
-function togglePdf(pdfId) {
-    fetch('/admin/neetpg-pdfs/' + pdfId + '/toggle', {method: 'POST'})
+function togglePublish(pdfId) {
+    fetch('/admin/neetpg-pdfs/' + pdfId + '/publish', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) location.reload();
+    });
+}
+
+function toggleSchedule(pdfId) {
+    fetch('/admin/neetpg-pdfs/' + pdfId + '/toggle-schedule', {method: 'POST'})
     .then(function(r) { return r.json(); })
     .then(function(data) {
         if (data.success) location.reload();
@@ -719,7 +833,6 @@ function npGetCurrentCourses() {
 }
 
 function npUpdateSpecialties() {
-    // Clear the specialty field when category changes
     document.getElementById('npSpecialty').value = '';
     document.getElementById('npSpecialtyList').classList.remove('show');
     npHighlightIdx = -1;
@@ -734,10 +847,7 @@ function npFilterSpecialties() {
     npHighlightIdx = -1;
 
     if (val.length < 1) {
-        // Show all courses when focused with empty input
-        var all = courses;
-        if (all.length === 0) { list.classList.remove('show'); return; }
-        all.forEach(function(c, i) {
+        courses.forEach(function(c, i) {
             var div = document.createElement('div');
             div.className = 'np-autocomplete-item';
             div.textContent = c;
@@ -762,7 +872,6 @@ function npFilterSpecialties() {
     filtered.forEach(function(c, i) {
         var div = document.createElement('div');
         div.className = 'np-autocomplete-item';
-        // Highlight the matching part
         var lowerC = c.toLowerCase();
         var matchIdx = lowerC.indexOf(val);
         if (matchIdx > -1) {
@@ -791,7 +900,6 @@ function npSelectSpecialty(value) {
     npHighlightIdx = -1;
 }
 
-// Keyboard navigation for autocomplete
 document.getElementById('npSpecialty').addEventListener('keydown', function(e) {
     var list = document.getElementById('npSpecialtyList');
     var items = list.querySelectorAll('.np-autocomplete-item');
@@ -823,7 +931,6 @@ function npUpdateHighlight(items) {
     });
 }
 
-// Close dropdown on outside click
 document.addEventListener('click', function(e) {
     if (!e.target.closest('.np-autocomplete')) {
         document.getElementById('npSpecialtyList').classList.remove('show');
