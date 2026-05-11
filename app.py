@@ -21017,40 +21017,27 @@ def ensure_neetpg_tables():
             ip_hash TEXT,
             user_agent TEXT
         )''')
-        # Migration: add email column if missing (existing installs)
-        try:
-            conn.execute("ALTER TABLE neetpg_leads ADD COLUMN email TEXT")
-        except Exception:
-            pass  # column already exists
-        # Migration: make whatsapp nullable (existing installs)
-        try:
-            conn.execute("ALTER TABLE neetpg_leads ALTER COLUMN whatsapp DROP NOT NULL")
-        except Exception:
-            pass  # already nullable or SQLite
-        # Migration: add state column
-        try:
-            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN state TEXT DEFAULT 'All India/MCC'")
-        except Exception:
-            pass
-        # Migration: add publish columns
-        try:
-            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN is_published INTEGER DEFAULT 0")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN published_at TIMESTAMP")
-        except Exception:
-            pass
-        try:
-            conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN auto_schedule INTEGER DEFAULT 1")
-        except Exception:
-            pass
+        # Migration helper: each ALTER needs its own commit/rollback for PostgreSQL
+        migrations = [
+            "ALTER TABLE neetpg_leads ADD COLUMN email TEXT",
+            "ALTER TABLE neetpg_leads ALTER COLUMN whatsapp DROP NOT NULL",
+            "ALTER TABLE neetpg_pdfs ADD COLUMN state TEXT DEFAULT 'All India/MCC'",
+            "ALTER TABLE neetpg_pdfs ADD COLUMN is_published INTEGER DEFAULT 0",
+            "ALTER TABLE neetpg_pdfs ADD COLUMN published_at TIMESTAMP",
+            "ALTER TABLE neetpg_pdfs ADD COLUMN auto_schedule INTEGER DEFAULT 1",
+        ]
+        for sql in migrations:
+            try:
+                conn.execute(sql)
+                conn.commit()
+            except Exception:
+                conn.rollback()
         # Backfill: mark existing active PDFs as published
         try:
             conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = upload_date WHERE is_active = 1 AND is_published = 0")
+            conn.commit()
         except Exception:
-            pass
-        conn.commit()
+            conn.rollback()
         conn.close()
     except Exception as e:
         logging.error(f"ensure_neetpg_tables: {e}")
