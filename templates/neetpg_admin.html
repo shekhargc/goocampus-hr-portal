@@ -1,191 +1,572 @@
 {% extends "base.html" %}
 {% block title %}NEET PG PDF Management{% endblock %}
 
+{% block extra_css %}
+<style>
+    .np-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .np-header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .np-header p {
+        color: var(--gray-500);
+        font-size: 0.9rem;
+        margin-top: 0.25rem;
+    }
+    .np-header-btns {
+        display: flex;
+        gap: 0.5rem;
+    }
+    .np-btn {
+        padding: 0.5rem 1rem;
+        border-radius: 0.5rem;
+        font-weight: 600;
+        font-size: 0.85rem;
+        cursor: pointer;
+        font-family: inherit;
+        text-decoration: none;
+        border: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.2s;
+    }
+    .np-btn-primary {
+        background: var(--orange);
+        color: white;
+    }
+    .np-btn-primary:hover { background: var(--orange-dark); }
+    .np-btn-outline {
+        background: white;
+        color: var(--navy);
+        border: 1px solid var(--gray-200);
+    }
+    .np-btn-outline:hover { border-color: var(--navy); }
+    .np-btn-success {
+        background: white;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+    .np-btn-success:hover { border-color: #16a34a; }
+
+    /* ── Analytics cards ── */
+    .np-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+        gap: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .np-stat-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem;
+        display: flex;
+        flex-direction: column;
+    }
+    .np-stat-label {
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        margin-bottom: 0.5rem;
+    }
+    .np-stat-value {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: var(--navy);
+        line-height: 1;
+    }
+    .np-stat-sub {
+        font-size: 0.78rem;
+        color: var(--gray-400);
+        margin-top: 0.4rem;
+    }
+    .np-stat-card.orange .np-stat-value { color: var(--orange); }
+    .np-stat-card.green .np-stat-value { color: #16a34a; }
+
+    /* ── Upload form ── */
+    .np-upload-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .np-upload-title {
+        font-size: 0.95rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 1rem;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .np-upload-title i { color: var(--orange); }
+    .np-form-row {
+        display: grid;
+        grid-template-columns: 1.5fr 1fr 1.5fr 1fr 0.8fr;
+        gap: 1rem;
+        align-items: end;
+    }
+    .np-form-group label {
+        display: block;
+        font-weight: 600;
+        font-size: 0.78rem;
+        color: var(--gray-700);
+        margin-bottom: 0.35rem;
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+    }
+    .np-form-input {
+        width: 100%;
+        padding: 0.55rem 0.75rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        font-family: inherit;
+        font-size: 0.88rem;
+        background: white;
+        color: var(--gray-700);
+    }
+    .np-form-input:focus {
+        outline: none;
+        border-color: var(--orange);
+    }
+
+    /* ── Tabs ── */
+    .np-tabs {
+        display: flex;
+        gap: 0;
+        margin-bottom: 1.5rem;
+        border-bottom: 2px solid var(--gray-200);
+    }
+    .np-tab {
+        padding: 0.75rem 1.5rem;
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: var(--gray-500);
+        cursor: pointer;
+        border-bottom: 3px solid transparent;
+        margin-bottom: -2px;
+        transition: all 0.2s;
+        background: none;
+        border-top: none;
+        border-left: none;
+        border-right: none;
+        font-family: inherit;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .np-tab:hover { color: var(--navy); }
+    .np-tab.active {
+        color: var(--orange);
+        border-bottom-color: var(--orange);
+    }
+    .np-tab-badge {
+        background: var(--gray-100);
+        color: var(--gray-500);
+        font-size: 0.75rem;
+        padding: 0.1rem 0.5rem;
+        border-radius: 1rem;
+        font-weight: 600;
+    }
+    .np-tab.active .np-tab-badge {
+        background: var(--orange-light);
+        color: var(--orange);
+    }
+    .np-tab-panel { display: none; }
+    .np-tab-panel.active { display: block; }
+
+    /* ── Table ── */
+    .np-table-wrap {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        overflow: hidden;
+    }
+    .np-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.88rem;
+    }
+    .np-table thead {
+        background: var(--gray-50);
+    }
+    .np-table th {
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-weight: 600;
+        font-size: 0.78rem;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.3px;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .np-table td {
+        padding: 0.75rem 1rem;
+        border-bottom: 1px solid var(--gray-100);
+        color: var(--gray-700);
+    }
+    .np-table tbody tr:last-child td { border-bottom: none; }
+    .np-table tbody tr:hover { background: var(--gray-50); }
+
+    .np-badge {
+        display: inline-block;
+        padding: 0.15rem 0.6rem;
+        border-radius: 1rem;
+        font-size: 0.72rem;
+        font-weight: 600;
+    }
+    .np-badge-navy { background: var(--navy); color: white; }
+    .np-badge-purple { background: #7c3aed; color: white; }
+    .np-badge-green { background: #dcfce7; color: #16a34a; }
+    .np-badge-gray { background: var(--gray-100); color: var(--gray-500); }
+    .np-badge-blue { background: #dbeafe; color: #2563eb; }
+    .np-badge-orange { background: var(--orange-light); color: var(--orange); }
+
+    .np-file-name {
+        font-size: 0.78rem;
+        color: var(--gray-400);
+        font-family: monospace;
+    }
+
+    .np-actions {
+        display: flex;
+        gap: 0.35rem;
+    }
+    .np-action-btn {
+        background: none;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        padding: 0.35rem 0.55rem;
+        cursor: pointer;
+        color: var(--gray-400);
+        transition: all 0.2s;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.82rem;
+    }
+    .np-action-btn:hover {
+        border-color: var(--navy);
+        color: var(--navy);
+    }
+    .np-action-btn.danger:hover {
+        border-color: #dc2626;
+        color: #dc2626;
+    }
+
+    .np-wa-link {
+        color: #25D366;
+        text-decoration: none;
+        font-weight: 500;
+    }
+    .np-wa-link:hover { text-decoration: underline; }
+
+    /* ── Empty state ── */
+    .np-empty {
+        text-align: center;
+        padding: 3rem 2rem;
+        color: var(--gray-400);
+        font-size: 0.9rem;
+    }
+    .np-empty i {
+        font-size: 2.5rem;
+        margin-bottom: 0.75rem;
+        display: block;
+        opacity: 0.3;
+    }
+
+    /* ── Toast ── */
+    .np-toast {
+        position: fixed;
+        bottom: 2rem;
+        right: 2rem;
+        background: var(--navy);
+        color: white;
+        padding: 0.75rem 1.5rem;
+        border-radius: 0.5rem;
+        font-size: 0.9rem;
+        z-index: 2000;
+        opacity: 0;
+        transform: translateY(10px);
+        transition: all 0.3s;
+    }
+    .np-toast.show {
+        opacity: 1;
+        transform: translateY(0);
+    }
+
+    @media (max-width: 900px) {
+        .np-form-row {
+            grid-template-columns: 1fr;
+        }
+        .np-stats {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .np-header {
+            flex-direction: column;
+            gap: 0.75rem;
+            align-items: flex-start;
+        }
+    }
+</style>
+{% endblock %}
+
 {% block content %}
-<div class="container-fluid px-4 py-3">
-    <div class="d-flex justify-content-between align-items-center mb-3">
-        <div>
-            <h4 class="mb-1" style="font-weight:700;color:#1B2A4A;">NEET PG 2025 — PDF Management</h4>
-            <p class="text-muted mb-0" style="font-size:14px;">Upload and manage cut-off PDFs for the public landing page</p>
-        </div>
-        <div class="d-flex gap-2">
-            <a href="{{ url_for('neetpg_landing') }}" target="_blank" class="btn btn-outline-primary btn-sm">
-                <i class="fas fa-external-link-alt me-1"></i> View Public Page
-            </a>
-            <a href="{{ url_for('neetpg_export_leads') }}" class="btn btn-outline-success btn-sm">
-                <i class="fas fa-file-excel me-1"></i> Export Leads ({{ lead_count }})
-            </a>
-        </div>
+<div class="np-header">
+    <div>
+        <h1>NEET PG 2025 — PDF Management</h1>
+        <p>Upload and manage cut-off PDFs for the public landing page</p>
     </div>
-
-    <!-- Upload Form -->
-    <div class="card mb-4" style="border:none;box-shadow:0 2px 8px rgba(0,0,0,0.06);border-radius:12px;">
-        <div class="card-body p-4">
-            <h6 class="mb-3" style="font-weight:700;color:#1B2A4A;"><i class="fas fa-upload me-2" style="color:#F47B20;"></i>Upload New PDF</h6>
-            <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
-                <div class="row g-3 align-items-end">
-                    <div class="col-md-3">
-                        <label class="form-label" style="font-size:13px;font-weight:600;">Title</label>
-                        <input type="text" name="title" class="form-control" placeholder="e.g. Radiology Paid Seats 2025" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" style="font-size:13px;font-weight:600;">Category</label>
-                        <select name="category" class="form-select" required>
-                            <option value="neetpg">NEET PG (MD/MS)</option>
-                            <option value="dnb">DNB (NBEMS)</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <label class="form-label" style="font-size:13px;font-weight:600;">Specialty</label>
-                        <input type="text" name="specialty" class="form-control" placeholder="e.g. Radiology" required>
-                    </div>
-                    <div class="col-md-2">
-                        <label class="form-label" style="font-size:13px;font-weight:600;">PDF File</label>
-                        <input type="file" name="pdf_file" class="form-control" accept=".pdf" required>
-                    </div>
-                    <div class="col-md-2">
-                        <button type="submit" class="btn w-100" style="background:#F47B20;color:white;font-weight:600;">
-                            <i class="fas fa-cloud-upload-alt me-1"></i> Upload
-                        </button>
-                    </div>
-                </div>
-            </form>
-        </div>
-    </div>
-
-    <!-- Tabs: PDFs / Leads -->
-    <ul class="nav nav-tabs mb-3" role="tablist">
-        <li class="nav-item">
-            <a class="nav-link active" data-bs-toggle="tab" href="#tabPdfs" style="font-weight:600;">
-                <i class="fas fa-file-pdf me-1"></i> PDFs ({{ pdfs|length }})
-            </a>
-        </li>
-        <li class="nav-item">
-            <a class="nav-link" data-bs-toggle="tab" href="#tabLeads" style="font-weight:600;">
-                <i class="fas fa-users me-1"></i> Leads ({{ lead_count }})
-            </a>
-        </li>
-    </ul>
-
-    <div class="tab-content">
-        <!-- PDFs Tab -->
-        <div class="tab-pane fade show active" id="tabPdfs">
-            {% if pdfs %}
-            <div class="table-responsive">
-                <table class="table table-hover" style="font-size:14px;">
-                    <thead style="background:#F0F2F5;">
-                        <tr>
-                            <th>Title</th>
-                            <th>Category</th>
-                            <th>Specialty</th>
-                            <th>File</th>
-                            <th>Size</th>
-                            <th>Downloads</th>
-                            <th>Uploaded</th>
-                            <th>Status</th>
-                            <th style="width:120px;">Actions</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for pdf in pdfs %}
-                        <tr id="pdf-row-{{ pdf.id }}">
-                            <td style="font-weight:600;">{{ pdf.title }}</td>
-                            <td>
-                                <span class="badge" style="background:{{ '#1B2A4A' if pdf.category == 'neetpg' else '#6B21A8' }};font-size:11px;">
-                                    {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
-                                </span>
-                            </td>
-                            <td>{{ pdf.specialty }}</td>
-                            <td style="font-size:12px;color:#6B7280;">{{ pdf.file_name }}</td>
-                            <td>{{ (pdf.file_size / 1024)|int }} KB</td>
-                            <td><i class="fas fa-download me-1" style="color:#F47B20;font-size:11px;"></i>{{ pdf.download_count }}</td>
-                            <td style="font-size:12px;">{{ pdf.upload_date|format_date }}</td>
-                            <td>
-                                {% if pdf.is_active %}
-                                <span class="badge bg-success" style="font-size:11px;">Active</span>
-                                {% else %}
-                                <span class="badge bg-secondary" style="font-size:11px;">Inactive</span>
-                                {% endif %}
-                            </td>
-                            <td>
-                                <button class="btn btn-sm btn-outline-secondary me-1" onclick="togglePdf({{ pdf.id }})" title="Toggle active/inactive">
-                                    <i class="fas fa-toggle-{{ 'on' if pdf.is_active else 'off' }}"></i>
-                                </button>
-                                <a href="{{ url_for('neetpg_download', pdf_id=pdf.id) }}" class="btn btn-sm btn-outline-primary me-1" title="Download">
-                                    <i class="fas fa-download"></i>
-                                </a>
-                                <button class="btn btn-sm btn-outline-danger" onclick="deletePdf({{ pdf.id }})" title="Delete">
-                                    <i class="fas fa-trash"></i>
-                                </button>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5 text-muted">
-                <i class="fas fa-file-pdf fa-3x mb-3" style="opacity:0.3;"></i>
-                <p>No PDFs uploaded yet. Use the form above to upload your first PDF.</p>
-            </div>
-            {% endif %}
-        </div>
-
-        <!-- Leads Tab -->
-        <div class="tab-pane fade" id="tabLeads">
-            {% if leads %}
-            <div class="table-responsive">
-                <table class="table table-hover" style="font-size:14px;">
-                    <thead style="background:#F0F2F5;">
-                        <tr>
-                            <th>#</th>
-                            <th>Name</th>
-                            <th>WhatsApp</th>
-                            <th>Captured At</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for lead in leads %}
-                        <tr>
-                            <td>{{ loop.index }}</td>
-                            <td style="font-weight:600;">{{ lead.name }}</td>
-                            <td>
-                                <a href="https://wa.me/91{{ lead.whatsapp }}" target="_blank" style="color:#25D366;text-decoration:none;">
-                                    <i class="fab fa-whatsapp me-1"></i>{{ lead.whatsapp }}
-                                </a>
-                            </td>
-                            <td style="font-size:12px;">{{ lead.created_at }}</td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-            </div>
-            {% else %}
-            <div class="text-center py-5 text-muted">
-                <i class="fas fa-users fa-3x mb-3" style="opacity:0.3;"></i>
-                <p>No leads captured yet. Leads will appear here when users download PDFs from the public page.</p>
-            </div>
-            {% endif %}
-        </div>
+    <div class="np-header-btns">
+        <a href="{{ url_for('neetpg_landing') }}" target="_blank" class="np-btn np-btn-outline">
+            <i class="fas fa-external-link-alt"></i> View Public Page
+        </a>
+        <a href="{{ url_for('neetpg_export_leads') }}" class="np-btn np-btn-success">
+            <i class="fas fa-file-excel"></i> Export Leads ({{ lead_count }})
+        </a>
     </div>
 </div>
 
+<!-- Analytics Stats -->
+<div class="np-stats">
+    <div class="np-stat-card">
+        <div class="np-stat-label">Total Page Visits</div>
+        <div class="np-stat-value">{{ analytics.total_visits }}</div>
+        <div class="np-stat-sub">{{ analytics.today_visits }} today</div>
+    </div>
+    <div class="np-stat-card orange">
+        <div class="np-stat-label">Avg Daily Visits</div>
+        <div class="np-stat-value">{{ analytics.avg_daily_visits }}</div>
+        <div class="np-stat-sub">Since first visit</div>
+    </div>
+    <div class="np-stat-card">
+        <div class="np-stat-label">Total Downloads</div>
+        <div class="np-stat-value">{{ analytics.total_downloads }}</div>
+        <div class="np-stat-sub">Across all PDFs</div>
+    </div>
+    <div class="np-stat-card green">
+        <div class="np-stat-label">Leads Captured</div>
+        <div class="np-stat-value">{{ lead_count }}</div>
+        <div class="np-stat-sub">{{ analytics.leads_today }} today</div>
+    </div>
+    <div class="np-stat-card">
+        <div class="np-stat-label">Active PDFs</div>
+        <div class="np-stat-value">{{ analytics.active_pdfs }}</div>
+        <div class="np-stat-sub">{{ pdfs|length }} total uploaded</div>
+    </div>
+</div>
+
+<!-- Upload Form -->
+<div class="np-upload-card">
+    <div class="np-upload-title"><i class="fas fa-cloud-upload-alt"></i> Upload New PDF</div>
+    <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
+        <div class="np-form-row">
+            <div class="np-form-group">
+                <label>Title</label>
+                <input type="text" name="title" class="np-form-input" placeholder="e.g. Radiology Paid Seats 2025" required>
+            </div>
+            <div class="np-form-group">
+                <label>Category</label>
+                <select name="category" class="np-form-input" required>
+                    <option value="neetpg">NEET PG (MD/MS)</option>
+                    <option value="dnb">DNB (NBEMS)</option>
+                </select>
+            </div>
+            <div class="np-form-group">
+                <label>Specialty</label>
+                <input type="text" name="specialty" class="np-form-input" placeholder="e.g. Radiology" required>
+            </div>
+            <div class="np-form-group">
+                <label>PDF File</label>
+                <input type="file" name="pdf_file" class="np-form-input" accept=".pdf" required>
+            </div>
+            <div class="np-form-group">
+                <button type="submit" class="np-btn np-btn-primary" style="width:100%;justify-content:center;padding:0.6rem 1rem;">
+                    <i class="fas fa-upload"></i> Upload
+                </button>
+            </div>
+        </div>
+    </form>
+</div>
+
+<!-- Tabs: PDFs / Leads -->
+<div class="np-tabs">
+    <button class="np-tab active" onclick="npSwitchTab('pdfs', this)">
+        <i class="fas fa-file-pdf"></i> PDFs
+        <span class="np-tab-badge">{{ pdfs|length }}</span>
+    </button>
+    <button class="np-tab" onclick="npSwitchTab('leads', this)">
+        <i class="fas fa-users"></i> Leads
+        <span class="np-tab-badge">{{ lead_count }}</span>
+    </button>
+</div>
+
+<!-- PDFs Tab -->
+<div class="np-tab-panel active" id="panel-pdfs">
+    {% if pdfs %}
+    <div class="np-table-wrap">
+        <table class="np-table">
+            <thead>
+                <tr>
+                    <th>Title</th>
+                    <th>Category</th>
+                    <th>Specialty</th>
+                    <th>File</th>
+                    <th>Size</th>
+                    <th>Downloads</th>
+                    <th>Uploaded</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for pdf in pdfs %}
+                <tr id="pdf-row-{{ pdf.id }}">
+                    <td style="font-weight:600;color:var(--gray-800);">{{ pdf.title }}</td>
+                    <td>
+                        <span class="np-badge {{ 'np-badge-navy' if pdf.category == 'neetpg' else 'np-badge-purple' }}">
+                            {{ 'NEET PG' if pdf.category == 'neetpg' else 'DNB' }}
+                        </span>
+                    </td>
+                    <td>{{ pdf.specialty }}</td>
+                    <td><span class="np-file-name">{{ pdf.file_name }}</span></td>
+                    <td>{{ (pdf.file_size / 1024)|int }} KB</td>
+                    <td>
+                        <span style="color:var(--orange);font-weight:600;">{{ pdf.download_count }}</span>
+                    </td>
+                    <td style="font-size:0.82rem;">{{ pdf.upload_date|format_date }}</td>
+                    <td>
+                        {% if pdf.is_active %}
+                        <span class="np-badge np-badge-green">Active</span>
+                        {% else %}
+                        <span class="np-badge np-badge-gray">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="np-actions">
+                            <button class="np-action-btn" onclick="togglePdf({{ pdf.id }})" title="Toggle active/inactive">
+                                <i class="fas fa-toggle-{{ 'on' if pdf.is_active else 'off' }}"></i>
+                            </button>
+                            <a href="{{ url_for('neetpg_download', pdf_id=pdf.id) }}" class="np-action-btn" title="Download">
+                                <i class="fas fa-download"></i>
+                            </a>
+                            <button class="np-action-btn danger" onclick="deletePdf({{ pdf.id }})" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="np-empty">
+        <i class="fas fa-file-pdf"></i>
+        <p>No PDFs uploaded yet. Use the form above to upload your first PDF.</p>
+    </div>
+    {% endif %}
+</div>
+
+<!-- Leads Tab -->
+<div class="np-tab-panel" id="panel-leads">
+    {% if leads %}
+    <div class="np-table-wrap">
+        <table class="np-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Name</th>
+                    <th>Contact</th>
+                    <th>Source</th>
+                    <th>Captured At</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for lead in leads %}
+                <tr>
+                    <td>{{ loop.index }}</td>
+                    <td style="font-weight:600;color:var(--gray-800);">{{ lead.name }}</td>
+                    <td>
+                        {% if lead.email %}
+                        <span class="np-badge np-badge-blue" style="margin-right:4px;">
+                            <i class="fab fa-google" style="font-size:10px;margin-right:3px;"></i>{{ lead.email }}
+                        </span>
+                        {% endif %}
+                        {% if lead.whatsapp %}
+                        <a href="https://wa.me/91{{ lead.whatsapp }}" target="_blank" class="np-wa-link">
+                            <i class="fab fa-whatsapp"></i> {{ lead.whatsapp }}
+                        </a>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if lead.email and not lead.whatsapp %}
+                        <span class="np-badge np-badge-blue">Google</span>
+                        {% elif lead.whatsapp and not lead.email %}
+                        <span class="np-badge np-badge-green">WhatsApp</span>
+                        {% else %}
+                        <span class="np-badge np-badge-orange">Both</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:0.82rem;">{{ lead.created_at }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="np-empty">
+        <i class="fas fa-users"></i>
+        <p>No leads captured yet. Leads will appear here when users download PDFs from the public page.</p>
+    </div>
+    {% endif %}
+</div>
+
+<div class="np-toast" id="npToast">Saved</div>
+{% endblock %}
+
+{% block extra_js %}
 <script>
+function npShowToast(msg) {
+    var t = document.getElementById('npToast');
+    t.textContent = msg || 'Saved';
+    t.classList.add('show');
+    setTimeout(function() { t.classList.remove('show'); }, 2000);
+}
+
+function npSwitchTab(tab, btn) {
+    document.querySelectorAll('.np-tab').forEach(function(t) { t.classList.remove('active'); });
+    btn.classList.add('active');
+    document.querySelectorAll('.np-tab-panel').forEach(function(p) { p.classList.remove('active'); });
+    document.getElementById('panel-' + tab).classList.add('active');
+}
+
 function togglePdf(pdfId) {
-    fetch(`/admin/neetpg-pdfs/${pdfId}/toggle`, {method: 'POST'})
-    .then(r => r.json())
-    .then(data => {
+    fetch('/admin/neetpg-pdfs/' + pdfId + '/toggle', {method: 'POST'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         if (data.success) location.reload();
     });
 }
 
 function deletePdf(pdfId) {
     if (!confirm('Are you sure you want to delete this PDF?')) return;
-    fetch(`/admin/neetpg-pdfs/${pdfId}`, {method: 'DELETE'})
-    .then(r => r.json())
-    .then(data => {
+    fetch('/admin/neetpg-pdfs/' + pdfId, {method: 'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
         if (data.success) {
             document.getElementById('pdf-row-' + pdfId).remove();
+            npShowToast('PDF deleted');
         }
     });
 }

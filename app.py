@@ -20988,7 +20988,7 @@ def delete_partner_section_permission(section_id):
 # ═══════════════════════════════════════════════════════════════════════════════
 
 def ensure_neetpg_tables():
-    """Create neetpg_pdfs and neetpg_leads tables if they don't exist."""
+    """Create neetpg_pdfs, neetpg_leads, and neetpg_page_visits tables if they don't exist."""
     try:
         conn = get_db()
         conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_pdfs (
@@ -21006,10 +21006,27 @@ def ensure_neetpg_tables():
         conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_leads (
             id SERIAL PRIMARY KEY,
             name TEXT NOT NULL,
-            whatsapp TEXT NOT NULL,
+            whatsapp TEXT,
+            email TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             source TEXT DEFAULT 'neetpg_landing'
         )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_page_visits (
+            id SERIAL PRIMARY KEY,
+            visited_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_hash TEXT,
+            user_agent TEXT
+        )''')
+        # Migration: add email column if missing (existing installs)
+        try:
+            conn.execute("ALTER TABLE neetpg_leads ADD COLUMN email TEXT")
+        except Exception:
+            pass  # column already exists
+        # Migration: make whatsapp nullable (existing installs)
+        try:
+            conn.execute("ALTER TABLE neetpg_leads ALTER COLUMN whatsapp DROP NOT NULL")
+        except Exception:
+            pass  # already nullable or SQLite
         conn.commit()
         conn.close()
     except Exception as e:
@@ -21022,6 +21039,15 @@ ensure_neetpg_tables()
 @app.route('/neet-pg-2025')
 def neetpg_landing():
     conn = get_db()
+    # Track page visit
+    try:
+        ip_raw = request.remote_addr or ''
+        ip_hash = hashlib.md5(ip_raw.encode()).hexdigest()[:12]
+        ua = (request.headers.get('User-Agent', '') or '')[:200]
+        conn.execute("INSERT INTO neetpg_page_visits (ip_hash, user_agent) VALUES (?, ?)", (ip_hash, ua))
+        conn.commit()
+    except Exception as e:
+        logging.error(f"neetpg visit track: {e}")
     neetpg_pdfs = conn.execute(
         "SELECT id, title, specialty, file_name, file_size, upload_date, download_count FROM neetpg_pdfs WHERE category = 'neetpg' AND is_active = 1 ORDER BY specialty ASC"
     ).fetchall()
@@ -21031,27 +21057,42 @@ def neetpg_landing():
     conn.close()
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
+    google_client_id = os.environ.get('GOOGLE_CLIENT_ID', '')
     return render_template('neetpg_landing.html',
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
-                           lead_captured=lead_captured)
+                           lead_captured=lead_captured,
+                           google_client_id=google_client_id)
 
 
-# ── Lead capture AJAX endpoint ──
+# ── Lead capture AJAX endpoint (WhatsApp or Google) ──
 @app.route('/neet-pg-2025/capture-lead', methods=['POST'])
 def neetpg_capture_lead():
     data = request.get_json() or {}
     name = data.get('name', '').strip()
     whatsapp = data.get('whatsapp', '').strip()
-    if not name or not whatsapp:
-        return jsonify({'error': 'Name and WhatsApp number are required'}), 400
-    # Validate WhatsApp (10 digits for India)
-    whatsapp_clean = re.sub(r'[^0-9]', '', whatsapp)
-    if len(whatsapp_clean) < 10:
-        return jsonify({'error': 'Please enter a valid WhatsApp number'}), 400
+    email = data.get('email', '').strip()
+    source = data.get('source', 'whatsapp').strip()
+
+    # At least one contact method required
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    if not whatsapp and not email:
+        return jsonify({'error': 'WhatsApp number or Google sign-in is required'}), 400
+
+    whatsapp_clean = None
+    if whatsapp:
+        whatsapp_clean = re.sub(r'[^0-9]', '', whatsapp)
+        if len(whatsapp_clean) < 10:
+            return jsonify({'error': 'Please enter a valid WhatsApp number'}), 400
+        whatsapp_clean = whatsapp_clean[-10:]
+
     try:
         conn = get_db()
-        conn.execute("INSERT INTO neetpg_leads (name, whatsapp) VALUES (?, ?)", (name, whatsapp_clean[-10:]))
+        conn.execute(
+            "INSERT INTO neetpg_leads (name, whatsapp, email, source) VALUES (?, ?, ?, ?)",
+            (name, whatsapp_clean, email or None, source)
+        )
         conn.commit()
         conn.close()
     except Exception as e:
@@ -21097,8 +21138,39 @@ def neetpg_admin():
     pdfs = conn.execute("SELECT * FROM neetpg_pdfs ORDER BY category ASC, specialty ASC, upload_date DESC").fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
+
+    # Analytics
+    total_visits = conn.execute("SELECT COUNT(*) as c FROM neetpg_page_visits").fetchone()['c']
+    today_visits = conn.execute(
+        "SELECT COUNT(*) as c FROM neetpg_page_visits WHERE visited_at::date = CURRENT_DATE"
+    ).fetchone()['c']
+    # Avg daily visits
+    first_visit = conn.execute("SELECT MIN(visited_at) as fv FROM neetpg_page_visits").fetchone()['fv']
+    if first_visit and total_visits > 0:
+        from datetime import datetime as dt2
+        if isinstance(first_visit, str):
+            first_visit = datetime.strptime(first_visit[:10], '%Y-%m-%d')
+        days_since = max((datetime.now() - (first_visit if isinstance(first_visit, datetime) else datetime.combine(first_visit, datetime.min.time()))).days, 1)
+        avg_daily = round(total_visits / days_since, 1)
+    else:
+        avg_daily = 0
+
+    total_downloads = conn.execute("SELECT COALESCE(SUM(download_count),0) as c FROM neetpg_pdfs").fetchone()['c']
+    active_pdfs = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_active = 1").fetchone()['c']
+    leads_today = conn.execute(
+        "SELECT COUNT(*) as c FROM neetpg_leads WHERE created_at::date = CURRENT_DATE"
+    ).fetchone()['c']
+
+    analytics = {
+        'total_visits': total_visits,
+        'today_visits': today_visits,
+        'avg_daily_visits': avg_daily,
+        'total_downloads': total_downloads,
+        'active_pdfs': active_pdfs,
+        'leads_today': leads_today
+    }
     conn.close()
-    return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user)
+    return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics)
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])
@@ -21173,12 +21245,12 @@ def neetpg_export_leads():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    leads = conn.execute("SELECT name, whatsapp, created_at FROM neetpg_leads ORDER BY created_at DESC").fetchall()
+    leads = conn.execute("SELECT name, whatsapp, email, source, created_at FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     conn.close()
     wb = Workbook()
     ws = wb.active
     ws.title = "NEET PG Leads"
-    headers = ['Name', 'WhatsApp', 'Captured At']
+    headers = ['Name', 'WhatsApp', 'Email', 'Source', 'Captured At']
     header_fill = PatternFill(start_color='1B2A4A', end_color='1B2A4A', fill_type='solid')
     header_font = Font(bold=True, color='FFFFFF')
     for col, h in enumerate(headers, 1):
@@ -21187,11 +21259,15 @@ def neetpg_export_leads():
         cell.font = header_font
     for row, lead in enumerate(leads, 2):
         ws.cell(row=row, column=1, value=lead['name'])
-        ws.cell(row=row, column=2, value=lead['whatsapp'])
-        ws.cell(row=row, column=3, value=str(lead['created_at']))
+        ws.cell(row=row, column=2, value=lead['whatsapp'] or '')
+        ws.cell(row=row, column=3, value=lead['email'] or '')
+        ws.cell(row=row, column=4, value=lead['source'] or 'whatsapp')
+        ws.cell(row=row, column=5, value=str(lead['created_at']))
     ws.column_dimensions['A'].width = 25
     ws.column_dimensions['B'].width = 15
-    ws.column_dimensions['C'].width = 22
+    ws.column_dimensions['C'].width = 30
+    ws.column_dimensions['D'].width = 12
+    ws.column_dimensions['E'].width = 22
     output = BytesIO()
     wb.save(output)
     output.seek(0)
