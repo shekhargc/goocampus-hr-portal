@@ -21658,56 +21658,59 @@ def neetpg_auto_publish():
 
 
 def neetpg_catchup_publish():
-    """On startup, publish drafts for any slots that were missed today.
+    """On startup, publish drafts for any slots missed today.
 
-    Slots are 10 AM and 5 PM IST. For each slot that has already passed today,
-    we check if a PDF was published within that slot window (±30 min). If not,
-    we publish one draft now (FIFO). This handles Render restarts / deploys
-    that happen after a slot time, ensuring no slot is wasted.
+    Approach: count how many 10 AM / 5 PM slots have passed today in IST,
+    then count how many PDFs were already published today (IST date).
+    If published < passed_slots, publish the difference (FIFO, max 2/day).
+    Uses IST-based date comparison via AT TIME ZONE to avoid UTC mismatch.
     """
     try:
         import pytz
-        from datetime import datetime, timedelta
         ist = pytz.timezone('Asia/Kolkata')
         now_ist = datetime.now(ist)
-        today_date = now_ist.date()
 
-        # Define the two daily slots (hour in IST)
-        slots = [10, 17]
-        missed_slots = 0
+        # How many slots have passed today?
+        slots_passed = 0
+        if now_ist.hour >= 10:
+            slots_passed += 1
+        if now_ist.hour >= 17:
+            slots_passed += 1
 
+        if slots_passed == 0:
+            logging.info("Catchup: no slots passed yet today, nothing to do")
+            return
+
+        # Count PDFs published today (IST date)
+        today_ist_str = now_ist.strftime('%Y-%m-%d')
         conn = get_db()
-        for slot_hour in slots:
-            slot_time = now_ist.replace(hour=slot_hour, minute=0, second=0, microsecond=0)
-            # Only check slots that have already passed
-            if now_ist < slot_time:
-                continue
-            # Check if anything was published in a window around this slot today
-            window_start = slot_time - timedelta(minutes=30)
-            window_end = slot_time + timedelta(minutes=30)
-            published_in_window = conn.execute(
-                "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 AND published_at >= ? AND published_at < ?",
-                (window_start.strftime('%Y-%m-%d %H:%M:%S'), window_end.strftime('%Y-%m-%d %H:%M:%S'))
-            ).fetchone()['c']
-            if published_in_window == 0:
-                missed_slots += 1
+        published_today = conn.execute(
+            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 "
+            "AND (published_at AT TIME ZONE 'UTC' AT TIME ZONE 'Asia/Kolkata')::date = ?::date",
+            (today_ist_str,)
+        ).fetchone()['c']
 
-        # Publish one draft per missed slot (FIFO)
-        if missed_slots > 0:
-            drafts = conn.execute(
-                "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
-                (missed_slots,)
-            ).fetchall()
-            for draft in drafts:
-                conn.execute(
-                    "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
-                    (draft['id'],)
-                )
-                logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']} (missed slot)")
-            if drafts:
-                conn.commit()
-            logging.info(f"Catchup check: {missed_slots} missed slot(s) today, published {len(drafts)} draft(s)")
+        need = slots_passed - published_today
+        if need <= 0:
+            logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} already published today — no catchup needed")
+            conn.close()
+            return
 
+        # Cap at 2 per day max
+        need = min(need, 2)
+        drafts = conn.execute(
+            "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
+            (need,)
+        ).fetchall()
+        for draft in drafts:
+            conn.execute(
+                "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+                (draft['id'],)
+            )
+            logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']}")
+        if drafts:
+            conn.commit()
+        logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} published today, catchup-published {len(drafts)}")
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_catchup_publish error: {e}")
