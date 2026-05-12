@@ -21149,6 +21149,27 @@ def neetpg_download(pdf_id):
     )
 
 
+# ── PDF inline view route (e-book reader style) ──
+@app.route('/neet-pg-2025/view/<int:pdf_id>')
+def neetpg_view(pdf_id):
+    conn = get_db()
+    pdf = conn.execute("SELECT file_name, file_data FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    if not pdf:
+        conn.close()
+        flash('PDF not found', 'error')
+        return redirect(url_for('neetpg_landing'))
+    conn.close()
+    file_data = pdf['file_data']
+    if isinstance(file_data, memoryview):
+        file_data = bytes(file_data)
+    return send_file(
+        BytesIO(file_data),
+        download_name=pdf['file_name'],
+        as_attachment=False,
+        mimetype='application/pdf'
+    )
+
+
 # ── Admin: NEET PG PDF Management ──
 @app.route('/admin/neetpg-pdfs')
 @login_required
