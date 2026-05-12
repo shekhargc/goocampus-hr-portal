@@ -21266,7 +21266,11 @@ def neetpg_send_otp():
                     "templateData": {
                         "body": {
                             "placeholders": [otp_code]
-                        }
+                        },
+                        "buttons": [{
+                            "type": "URL",
+                            "parameter": otp_code
+                        }]
                     },
                     "language": "en"
                 }
