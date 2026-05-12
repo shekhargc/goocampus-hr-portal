@@ -2,6 +2,7 @@
 {% block title %}NEET PG PDF Management{% endblock %}
 
 {% block extra_css %}
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
     .np-header {
         display: flex;
@@ -247,33 +248,45 @@
         gap: 0.3rem;
     }
     .np-action-btn {
-        background: none;
-        border: 1px solid var(--gray-200);
+        background: var(--gray-50);
+        border: 1px solid var(--gray-300);
         border-radius: 0.4rem;
-        padding: 0.3rem 0.5rem;
+        padding: 0.35rem 0.6rem;
         cursor: pointer;
-        color: var(--gray-400);
+        color: var(--gray-600);
         transition: all 0.2s;
         text-decoration: none;
         display: inline-flex;
         align-items: center;
-        font-size: 0.78rem;
+        font-size: 0.82rem;
     }
     .np-action-btn:hover {
         border-color: var(--navy);
         color: var(--navy);
+        background: white;
+    }
+    .np-action-btn.publish {
+        color: #16a34a;
+        border-color: #bbf7d0;
+        background: #f0fdf4;
     }
     .np-action-btn.publish:hover {
         border-color: #16a34a;
-        color: #16a34a;
+        background: #dcfce7;
+    }
+    .np-action-btn.unpublish {
+        color: #d97706;
+        border-color: #fde68a;
+        background: #fefce8;
     }
     .np-action-btn.unpublish:hover {
         border-color: #d97706;
-        color: #d97706;
+        background: #fef9c3;
     }
     .np-action-btn.danger:hover {
         border-color: #dc2626;
         color: #dc2626;
+        background: #fef2f2;
     }
 
     .np-wa-link {
