@@ -111,6 +111,23 @@
             transition: all 0.2s;
         }
         .user-bar-logout:hover { background: rgba(255,255,255,0.2); color: white; }
+        .header-login-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            padding: 7px 16px;
+            border-radius: 8px;
+            background: var(--orange);
+            color: white;
+            border: none;
+            font-size: 13px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .header-login-btn:hover { background: var(--orange-hover); }
+        .header-login-btn i { font-size: 13px; }
 
         /* ── Hero ── */
         .hero {
@@ -770,6 +787,8 @@
             <span class="user-bar-name"><i class="fas fa-user-circle"></i> {{ lead_name or 'User' }}</span>
             <button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
         </div>
+        {% else %}
+        <button class="header-login-btn" id="headerLoginBtn" onclick="openLoginModal()"><i class="fas fa-sign-in-alt"></i> Login</button>
         {% endif %}
     </div>
 </div>
@@ -1412,10 +1431,22 @@
         if (e.target === this) this.classList.remove('show');
     });
 
+    // ── Open login modal (from header button) ──
+    function openLoginModal() {
+        pendingViewId = null;
+        pendingViewTitle = null;
+        pendingDownloadId = null;
+        document.getElementById('leadModal').classList.add('show');
+        document.getElementById('leadName').focus();
+    }
+
     // ── User bar: show after login ──
     function showUserBar(name) {
         var existing = document.getElementById('userBar');
         if (existing) { existing.remove(); }
+        // Hide login button
+        var loginBtn = document.getElementById('headerLoginBtn');
+        if (loginBtn) loginBtn.style.display = 'none';
         var bar = document.createElement('div');
         bar.className = 'user-bar';
         bar.id = 'userBar';
@@ -1433,6 +1464,18 @@
                 leadCaptured = false;
                 var bar = document.getElementById('userBar');
                 if (bar) bar.remove();
+                // Show login button again
+                var loginBtn = document.getElementById('headerLoginBtn');
+                if (loginBtn) {
+                    loginBtn.style.display = '';
+                } else {
+                    var btn = document.createElement('button');
+                    btn.className = 'header-login-btn';
+                    btn.id = 'headerLoginBtn';
+                    btn.onclick = openLoginModal;
+                    btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
+                    document.querySelector('.header-inner').appendChild(btn);
+                }
             }
         });
     }
