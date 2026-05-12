@@ -1,6 +1,113 @@
 {% extends "base.html" %}
 {% block title %}Call Logs - Sales CRM{% endblock %}
 {% block content %}
+<style>
+/* ── Drawer ── */
+.cl-drawer-overlay {
+    display:none; position:fixed; inset:0; background:rgba(27,42,74,0.25); z-index:500;
+}
+.cl-drawer-overlay.open { display:block; }
+.cl-drawer {
+    position:fixed; top:0; right:0; width:540px; max-width:92vw; height:100vh;
+    background:white; z-index:510; transform:translateX(100%);
+    transition:transform 0.28s cubic-bezier(0.4,0,0.2,1);
+    display:flex; flex-direction:column;
+    box-shadow:-4px 0 24px rgba(0,0,0,0.12);
+}
+.cl-drawer.open { transform:translateX(0); }
+.cl-drawer-head {
+    padding:1.1rem 1.4rem; display:flex; align-items:center; justify-content:space-between;
+    border-bottom:1px solid var(--gray-200); background:var(--gray-50); flex-shrink:0;
+}
+.cl-drawer-head .emp-info { display:flex; align-items:center; gap:0.7rem; }
+.cl-drawer-head .emp-info img { width:38px; height:38px; border-radius:50%; object-fit:cover; border:2px solid var(--gray-200); }
+.cl-drawer-head .emp-info .emp-name { font-weight:700; color:var(--navy); font-size:0.95rem; }
+.cl-drawer-head .emp-info .emp-code { font-size:0.72rem; color:var(--gray-500); }
+.cl-drawer-close {
+    background:none; border:none; font-size:1.6rem; color:var(--gray-500); cursor:pointer;
+    width:36px; height:36px; display:flex; align-items:center; justify-content:center; border-radius:50%;
+}
+.cl-drawer-close:hover { background:var(--gray-100); color:var(--navy); }
+.cl-drawer-body { flex:1; overflow-y:auto; padding:0; }
+
+/* Stats bar inside drawer */
+.cl-stats {
+    display:grid; grid-template-columns:repeat(3, 1fr); gap:0;
+    border-bottom:1px solid var(--gray-200); background:white;
+}
+.cl-stat {
+    padding:0.85rem 1rem; text-align:center; border-right:1px solid var(--gray-100);
+}
+.cl-stat:last-child { border-right:none; }
+.cl-stat-val { font-size:1.25rem; font-weight:800; color:var(--navy); font-variant-numeric:tabular-nums; }
+.cl-stat-lbl { font-size:0.68rem; color:var(--gray-500); text-transform:uppercase; font-weight:600; margin-top:2px; }
+
+/* Month nav inside drawer */
+.cl-month-nav {
+    display:flex; align-items:center; justify-content:center; gap:0.6rem;
+    padding:0.65rem 1rem; border-bottom:1px solid var(--gray-100); background:var(--gray-50);
+}
+.cl-month-nav button {
+    background:none; border:1px solid var(--gray-300); border-radius:6px; width:30px; height:30px;
+    cursor:pointer; display:flex; align-items:center; justify-content:center;
+    color:var(--gray-600); font-size:0.85rem;
+}
+.cl-month-nav button:hover { background:var(--gray-100); border-color:var(--gray-400); }
+.cl-month-nav .month-label { font-weight:700; color:var(--navy); font-size:0.88rem; min-width:110px; text-align:center; }
+
+/* Day rows */
+.cl-day-table { width:100%; border-collapse:collapse; font-size:0.84rem; }
+.cl-day-table thead th {
+    padding:0.55rem 0.8rem; text-align:left; font-size:0.7rem; color:var(--gray-500);
+    text-transform:uppercase; font-weight:600; background:var(--gray-50);
+    border-bottom:1px solid var(--gray-200); position:sticky; top:0; z-index:2;
+}
+.cl-day-table thead th:nth-child(3),
+.cl-day-table thead th:nth-child(4) { text-align:right; }
+.cl-day-table tbody td { padding:0.55rem 0.8rem; border-bottom:1px solid var(--gray-100); }
+.cl-day-table tbody td:nth-child(3),
+.cl-day-table tbody td:nth-child(4) { text-align:right; font-variant-numeric:tabular-nums; }
+
+/* Weekday rows */
+.cl-day-row-weekday { background:#ffffff; }
+.cl-day-row-weekday:hover { background:var(--gray-50); }
+
+/* Weekend rows */
+.cl-day-row-weekend { background:#FFF7ED; }
+.cl-day-row-weekend:hover { background:#FFEDD5; }
+.cl-day-row-weekend td:first-child { position:relative; }
+.cl-day-row-weekend td:first-child::before {
+    content:''; position:absolute; left:0; top:0; bottom:0; width:3px; background:var(--orange);
+}
+
+/* Notes tooltip */
+.cl-notes-icon {
+    display:inline-flex; align-items:center; justify-content:center;
+    width:22px; height:22px; border-radius:50%; background:var(--gray-100);
+    color:var(--gray-500); font-size:0.65rem; cursor:help; position:relative;
+}
+.cl-notes-icon:hover { background:var(--orange-light); color:var(--orange); }
+.cl-notes-tooltip {
+    display:none; position:absolute; right:0; top:28px; background:var(--navy);
+    color:white; padding:0.5rem 0.7rem; border-radius:8px; font-size:0.78rem;
+    min-width:160px; max-width:260px; z-index:20; line-height:1.4; white-space:pre-wrap;
+    box-shadow:0 4px 12px rgba(0,0,0,0.2);
+}
+.cl-notes-icon:hover .cl-notes-tooltip { display:block; }
+
+/* Empty state */
+.cl-empty { padding:2.5rem 1.5rem; text-align:center; color:var(--gray-500); }
+.cl-empty i { font-size:2rem; margin-bottom:0.7rem; color:var(--gray-300); display:block; }
+
+/* Loading spinner */
+.cl-loading { padding:3rem; text-align:center; color:var(--gray-400); font-size:0.88rem; }
+
+/* Team table clickable rows */
+.team-row { cursor:pointer; transition:background 0.15s; }
+.team-row:hover { background:var(--gray-50) !important; }
+.team-row.active-row { background:#EFF6FF !important; border-left:3px solid var(--orange); }
+</style>
+
 <div style="max-width:1300px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
@@ -20,6 +127,7 @@
     </div>
 
     <div style="display:grid;grid-template-columns:1fr 1.2fr;gap:1.25rem;">
+        <!-- Left: Daily Entry / My Logs -->
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
             <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">{% if role == 'viewer' %}Team Call Logs (view-only){% else %}Daily Entry{% endif %}</div>
             {% if role == 'viewer' %}
@@ -91,8 +199,12 @@
             {% endif %}
         </div>
 
+        <!-- Right: Team Rollup -->
         <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
-            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);font-weight:700;color:var(--navy);font-size:0.95rem;">Team Rollup — {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1] }} {{ year }}</div>
+            <div style="padding:1rem 1.3rem;background:var(--gray-50);border-bottom:1px solid var(--gray-100);display:flex;align-items:center;justify-content:space-between;">
+                <span style="font-weight:700;color:var(--navy);font-size:0.95rem;">Team Rollup — {{ ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][month-1] }} {{ year }}</span>
+                <span style="font-size:0.72rem;color:var(--gray-400);">Click a row for day-wise details</span>
+            </div>
             {% if rollup %}
             <table style="width:100%;border-collapse:collapse;font-size:0.86rem;">
                 <thead><tr style="text-align:left;color:var(--gray-500);font-size:0.74rem;text-transform:uppercase;background:var(--gray-50);">
@@ -103,7 +215,7 @@
                 </tr></thead>
                 <tbody>
                     {% for r in rollup %}
-                    <tr style="border-top:1px solid var(--gray-100);">
+                    <tr class="team-row" data-eid="{{ r.id }}" onclick="openCallDrawer({{ r.id }}, {{ year }}, {{ month }})">
                         <td style="padding:0.65rem 1rem;">
                             <div style="display:flex;align-items:center;gap:0.55rem;">
                                 <img src="{{ r.photo_url if r.photo_url and r.photo_url.startswith('http') else '/static/photos/' ~ r.photo_url if r.photo_url else '/static/default-avatar.png' }}" style="width:30px;height:30px;border-radius:50%;object-fit:cover;border:1px solid var(--gray-200);" />
@@ -126,4 +238,134 @@
         </div>
     </div>
 </div>
+
+<!-- Call Details Drawer -->
+<div class="cl-drawer-overlay" id="clOverlay" onclick="closeCallDrawer()"></div>
+<div class="cl-drawer" id="clDrawer">
+    <div class="cl-drawer-head">
+        <div class="emp-info">
+            <img id="clEmpPhoto" src="/static/default-avatar.png" />
+            <div>
+                <div class="emp-name" id="clEmpName"></div>
+                <div class="emp-code" id="clEmpCode"></div>
+            </div>
+        </div>
+        <button class="cl-drawer-close" onclick="closeCallDrawer()">&times;</button>
+    </div>
+    <div class="cl-drawer-body">
+        <div class="cl-stats" id="clStats">
+            <div class="cl-stat"><div class="cl-stat-val" id="clTotalCalls">0</div><div class="cl-stat-lbl">Total Calls</div></div>
+            <div class="cl-stat"><div class="cl-stat-val" id="clTalkTime">0h 0m</div><div class="cl-stat-lbl">Talk Time</div></div>
+            <div class="cl-stat"><div class="cl-stat-val" id="clDaysLogged">0</div><div class="cl-stat-lbl">Days Logged</div></div>
+        </div>
+        <div class="cl-month-nav">
+            <button onclick="navMonth(-1)" title="Previous month"><i class="fas fa-chevron-left"></i></button>
+            <div class="month-label" id="clMonthLabel"></div>
+            <button onclick="navMonth(1)" title="Next month"><i class="fas fa-chevron-right"></i></button>
+        </div>
+        <div id="clContent">
+            <div class="cl-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+var drawerEid = null, drawerYear = null, drawerMonth = null;
+var monthNames = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+function openCallDrawer(eid, year, month) {
+    drawerEid = eid;
+    drawerYear = year;
+    drawerMonth = month;
+    // Highlight active row
+    document.querySelectorAll('.team-row').forEach(function(r) { r.classList.remove('active-row'); });
+    var activeRow = document.querySelector('.team-row[data-eid="' + eid + '"]');
+    if (activeRow) activeRow.classList.add('active-row');
+    document.getElementById('clOverlay').classList.add('open');
+    document.getElementById('clDrawer').classList.add('open');
+    document.body.style.overflow = 'hidden';
+    fetchCallDetails(eid, year, month);
+}
+
+function closeCallDrawer() {
+    document.getElementById('clOverlay').classList.remove('open');
+    document.getElementById('clDrawer').classList.remove('open');
+    document.body.style.overflow = '';
+    document.querySelectorAll('.team-row').forEach(function(r) { r.classList.remove('active-row'); });
+}
+
+function navMonth(dir) {
+    if (!drawerEid) return;
+    drawerMonth += dir;
+    if (drawerMonth > 12) { drawerMonth = 1; drawerYear++; }
+    if (drawerMonth < 1) { drawerMonth = 12; drawerYear--; }
+    fetchCallDetails(drawerEid, drawerYear, drawerMonth);
+}
+
+function fetchCallDetails(eid, year, month) {
+    document.getElementById('clContent').innerHTML = '<div class="cl-loading"><i class="fas fa-spinner fa-spin"></i> Loading...</div>';
+    document.getElementById('clMonthLabel').textContent = monthNames[month - 1] + ' ' + year;
+    fetch('/sales/calls/details?employee_id=' + eid + '&year=' + year + '&month=' + month)
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.error) {
+            document.getElementById('clContent').innerHTML = '<div class="cl-empty"><i class="fas fa-exclamation-circle"></i>' + data.error + '</div>';
+            return;
+        }
+        // Update header
+        document.getElementById('clEmpName').textContent = data.employee.name;
+        document.getElementById('clEmpCode').textContent = data.employee.emp_code;
+        document.getElementById('clEmpPhoto').src = data.employee.photo_url;
+        // Update stats
+        document.getElementById('clTotalCalls').textContent = data.total_calls;
+        var h = Math.floor(data.total_minutes / 60);
+        var m = data.total_minutes % 60;
+        document.getElementById('clTalkTime').textContent = h + 'h ' + m + 'm';
+        document.getElementById('clDaysLogged').textContent = data.days_logged;
+        document.getElementById('clMonthLabel').textContent = monthNames[data.month - 1] + ' ' + data.year;
+        // Build day table
+        if (data.days.length === 0) {
+            document.getElementById('clContent').innerHTML = '<div class="cl-empty"><i class="fas fa-phone-slash"></i>No call logs for this month.</div>';
+            return;
+        }
+        var html = '<table class="cl-day-table"><thead><tr><th>Date</th><th>Day</th><th>Calls</th><th>Talk Time</th><th></th></tr></thead><tbody>';
+        for (var i = 0; i < data.days.length; i++) {
+            var d = data.days[i];
+            var rowClass = d.is_weekend ? 'cl-day-row-weekend' : 'cl-day-row-weekday';
+            var dateParts = d.date.split('-');
+            var displayDate = dateParts[2] + ' ' + monthNames[parseInt(dateParts[1]) - 1];
+            var talkH = Math.floor(d.talk_time_minutes / 60);
+            var talkM = d.talk_time_minutes % 60;
+            var talkStr = talkH > 0 ? talkH + 'h ' + talkM + 'm' : talkM + 'm';
+            var notesHtml = '';
+            if (d.notes) {
+                notesHtml = '<span class="cl-notes-icon"><i class="fas fa-sticky-note"></i><span class="cl-notes-tooltip">' + escapeHtml(d.notes) + '</span></span>';
+            }
+            html += '<tr class="' + rowClass + '">';
+            html += '<td style="font-weight:600;color:var(--navy);">' + displayDate + '</td>';
+            html += '<td style="color:' + (d.is_weekend ? 'var(--orange)' : 'var(--gray-600)') + ';font-weight:' + (d.is_weekend ? '600' : '400') + ';">' + d.day_name + '</td>';
+            html += '<td style="font-weight:700;">' + d.num_calls + '</td>';
+            html += '<td>' + talkStr + '</td>';
+            html += '<td>' + notesHtml + '</td>';
+            html += '</tr>';
+        }
+        html += '</tbody></table>';
+        document.getElementById('clContent').innerHTML = html;
+    })
+    .catch(function(err) {
+        document.getElementById('clContent').innerHTML = '<div class="cl-empty"><i class="fas fa-exclamation-triangle"></i>Failed to load data. Try again.</div>';
+    });
+}
+
+function escapeHtml(text) {
+    var d = document.createElement('div');
+    d.appendChild(document.createTextNode(text));
+    return d.innerHTML;
+}
+
+// Close drawer on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeCallDrawer();
+});
+</script>
 {% endblock %}

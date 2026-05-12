@@ -16584,6 +16584,74 @@ def sales_calls_view():
                            total_calls=total_calls, total_minutes=total_minutes)
 
 
+@app.route('/sales/calls/details')
+@login_required
+@sales_crm_required
+def sales_calls_details():
+    """AJAX: return day-wise call logs for an employee in a given month."""
+    user = get_user()
+    visible_ids = get_visible_sales_employee_ids(user)
+    eid = int(request.args.get('employee_id', 0))
+    year = int(request.args.get('year', datetime.now().year))
+    month = int(request.args.get('month', datetime.now().month))
+    if eid not in visible_ids:
+        return jsonify({'error': 'Not authorised'}), 403
+    conn = get_db()
+    # Employee info
+    emp = conn.execute('SELECT name, emp_code, photo_url FROM employees WHERE id = ?', (eid,)).fetchone()
+    if not emp:
+        conn.close()
+        return jsonify({'error': 'Employee not found'}), 404
+    # Day-wise logs for the month
+    logs = conn.execute(
+        """SELECT log_date, num_calls, talk_time_minutes, notes,
+                  EXTRACT(DOW FROM log_date) AS dow
+           FROM sales_call_logs
+           WHERE employee_id = ? AND EXTRACT(YEAR FROM log_date) = ?
+                 AND EXTRACT(MONTH FROM log_date) = ?
+           ORDER BY log_date""",
+        (eid, year, month)
+    ).fetchall()
+    conn.close()
+    days = []
+    total_calls = 0
+    total_mins = 0
+    for lg in logs:
+        dow = int(lg['dow'])  # 0=Sun, 1=Mon ... 6=Sat in PostgreSQL
+        day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+        is_weekend = dow in (0, 6)
+        calls = int(lg['num_calls'] or 0)
+        mins = int(lg['talk_time_minutes'] or 0)
+        total_calls += calls
+        total_mins += mins
+        days.append({
+            'date': lg['log_date'].strftime('%Y-%m-%d') if hasattr(lg['log_date'], 'strftime') else str(lg['log_date']),
+            'day_name': day_names[dow],
+            'is_weekend': is_weekend,
+            'num_calls': calls,
+            'talk_time_minutes': mins,
+            'notes': lg['notes'] or ''
+        })
+    photo = emp['photo_url'] or ''
+    if photo and not photo.startswith('http'):
+        photo = '/static/photos/' + photo
+    elif not photo:
+        photo = '/static/default-avatar.png'
+    return jsonify({
+        'employee': {
+            'name': emp['name'],
+            'emp_code': emp['emp_code'],
+            'photo_url': photo
+        },
+        'year': year,
+        'month': month,
+        'days': days,
+        'total_calls': total_calls,
+        'total_minutes': total_mins,
+        'days_logged': len(days)
+    })
+
+
 # ─────────────────────────────────────────────────────────
 #  SALES – Partners
 # ─────────────────────────────────────────────────────────
