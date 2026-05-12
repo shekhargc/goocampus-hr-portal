@@ -80,6 +80,38 @@
         }
         .wa-btn-group:hover { background: rgba(37,211,102,0.22); border-color: #25D366; }
 
+        /* ── User bar (logged-in state) ── */
+        .user-bar {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        .user-bar-name {
+            color: rgba(255,255,255,0.9);
+            font-size: 13px;
+            font-weight: 500;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .user-bar-name i {
+            color: var(--orange);
+            font-size: 14px;
+        }
+        .user-bar-logout {
+            background: rgba(255,255,255,0.12);
+            color: rgba(255,255,255,0.8);
+            border: 1px solid rgba(255,255,255,0.15);
+            padding: 5px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+        }
+        .user-bar-logout:hover { background: rgba(255,255,255,0.2); color: white; }
+
         /* ── Hero ── */
         .hero {
             background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
@@ -540,7 +572,11 @@
             width: 100%;
         }
         @media (max-width: 768px) {
-            .viewer-box { height: 95vh; max-width: 100%; border-radius: 8px; }
+            .viewer-overlay { padding: 10px; }
+            .viewer-box { height: 85vh; max-width: 100%; border-radius: 10px; }
+            .viewer-header { padding: 10px 14px; }
+            .viewer-header h3 { font-size: 0.78rem; }
+            .viewer-header-btn { padding: 5px 10px; font-size: 0.72rem; }
         }
 
         /* ── Empty state ── */
@@ -687,9 +723,12 @@
 
         /* ── Responsive ── */
         @media (max-width: 900px) {
+            .header-inner { flex-wrap: wrap; gap: 8px; }
             .header-wa-btns { gap: 6px; }
             .wa-btn { padding: 6px 12px; font-size: 12px; }
             .wa-btn i { font-size: 14px; }
+            .user-bar { width: 100%; justify-content: space-between; order: 3; padding-top: 4px; border-top: 1px solid rgba(255,255,255,0.1); }
+            .wa-btn span.wa-label { display: none; }
             .main-layout {
                 grid-template-columns: 1fr;
                 padding: 16px;
@@ -726,6 +765,12 @@
                 <i class="fab fa-whatsapp"></i> Join Group
             </a>
         </div>
+        {% if lead_captured %}
+        <div class="user-bar" id="userBar">
+            <span class="user-bar-name"><i class="fas fa-user-circle"></i> {{ lead_name or 'User' }}</span>
+            <button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+        </div>
+        {% endif %}
     </div>
 </div>
 
@@ -1237,17 +1282,15 @@
             if (data.success) {
                 leadCaptured = true;
                 document.getElementById('leadModal').classList.remove('show');
-                // Reset modal to step 1 for next time (won't happen since cookie is set)
+                // Reset modal to step 1 for next time
                 document.getElementById('otpStep1').style.display = 'block';
                 document.getElementById('otpStep2').style.display = 'none';
-                if (pendingViewId) {
-                    openViewer(pendingViewId, pendingViewTitle);
-                    pendingViewId = null;
-                    pendingViewTitle = null;
-                } else if (pendingDownloadId) {
-                    window.location.href = '/neet-pg-2025/download/' + pendingDownloadId;
-                    pendingDownloadId = null;
-                }
+                // Clear pending actions — user will click View/Download again
+                pendingViewId = null;
+                pendingViewTitle = null;
+                pendingDownloadId = null;
+                // Show user bar with name
+                showUserBar(data.name || 'User');
             } else {
                 errorEl.textContent = data.error || 'Invalid OTP. Try again.';
                 errorEl.style.display = 'block';
@@ -1368,6 +1411,31 @@
     document.getElementById('leadModal').addEventListener('click', function(e) {
         if (e.target === this) this.classList.remove('show');
     });
+
+    // ── User bar: show after login ──
+    function showUserBar(name) {
+        var existing = document.getElementById('userBar');
+        if (existing) { existing.remove(); }
+        var bar = document.createElement('div');
+        bar.className = 'user-bar';
+        bar.id = 'userBar';
+        bar.innerHTML = '<span class="user-bar-name"><i class="fas fa-user-circle"></i> ' + (name || 'User') + '</span>' +
+                         '<button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>';
+        document.querySelector('.header-inner').appendChild(bar);
+    }
+
+    // ── Logout ──
+    function logoutUser() {
+        fetch('/neet-pg-2025/logout', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                leadCaptured = false;
+                var bar = document.getElementById('userBar');
+                if (bar) bar.remove();
+            }
+        });
+    }
 </script>
 
 </body>

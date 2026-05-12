@@ -21166,7 +21166,7 @@ def neetpg_landing():
     conn.close()
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
-    google_client_id = os.environ.get('GOOGLE_CLIENT_ID', '')
+    lead_name = request.cookies.get('neetpg_lead_name', '')
     return render_template('neetpg_landing.html',
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
@@ -21176,7 +21176,7 @@ def neetpg_landing():
                            dnb_courses=sorted(dnb_courses),
                            dnb_states=sorted(dnb_states),
                            lead_captured=lead_captured,
-                           google_client_id=google_client_id)
+                           lead_name=lead_name)
 
 
 # ── Lead capture AJAX endpoint (WhatsApp or Google) ──
@@ -21342,8 +21342,18 @@ def neetpg_verify_otp():
     session.pop('neetpg_otp_name', None)
     session.pop('neetpg_otp_time', None)
 
-    resp = jsonify({'success': True})
+    resp = jsonify({'success': True, 'name': stored_name})
     resp.set_cookie('neetpg_lead', 'captured', max_age=365*24*60*60, samesite='Lax')
+    resp.set_cookie('neetpg_lead_name', stored_name or '', max_age=365*24*60*60, samesite='Lax')
+    return resp
+
+
+# ── NEET PG Logout ──
+@app.route('/neet-pg-2025/logout', methods=['POST'])
+def neetpg_logout():
+    resp = jsonify({'success': True})
+    resp.set_cookie('neetpg_lead', '', max_age=0, samesite='Lax')
+    resp.set_cookie('neetpg_lead_name', '', max_age=0, samesite='Lax')
     return resp
 
 
