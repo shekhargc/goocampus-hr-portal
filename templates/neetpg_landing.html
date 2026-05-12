@@ -53,6 +53,7 @@
         }
         .logo-area { display: flex; align-items: center; gap: 12px; }
         .logo-area img { height: 48px; }
+        .header-right { display: flex; align-items: center; gap: 14px; }
         .header-wa-btns { display: flex; gap: 10px; align-items: center; }
         .wa-btn {
             display: inline-flex;
@@ -773,22 +774,24 @@
         <div class="logo-area">
             <img src="/static/logo-white.png" alt="GooCampus">
         </div>
-        <div class="header-wa-btns">
-            <a href="https://whatsapp.com/channel/0029Vb7wzelId7nNzI7sUt0j" class="wa-btn wa-btn-channel" target="_blank">
-                <i class="fab fa-whatsapp"></i> Join Channel
-            </a>
-            <a href="https://chat.whatsapp.com/JFf6ZL3VLB2FdsTjygVI8f" class="wa-btn wa-btn-group" target="_blank">
-                <i class="fab fa-whatsapp"></i> Join Group
-            </a>
+        <div class="header-right">
+            <div class="header-wa-btns">
+                <a href="https://whatsapp.com/channel/0029Vb7wzelId7nNzI7sUt0j" class="wa-btn wa-btn-channel" target="_blank">
+                    <i class="fab fa-whatsapp"></i> Join Channel
+                </a>
+                <a href="https://chat.whatsapp.com/JFf6ZL3VLB2FdsTjygVI8f" class="wa-btn wa-btn-group" target="_blank">
+                    <i class="fab fa-whatsapp"></i> Join Group
+                </a>
+            </div>
+            {% if lead_captured %}
+            <div class="user-bar" id="userBar">
+                <span class="user-bar-name"><i class="fas fa-user-circle"></i> {{ lead_name or 'User' }}</span>
+                <button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
+            </div>
+            {% else %}
+            <button class="header-login-btn" id="headerLoginBtn" onclick="openLoginModal()"><i class="fas fa-sign-in-alt"></i> Login</button>
+            {% endif %}
         </div>
-        {% if lead_captured %}
-        <div class="user-bar" id="userBar">
-            <span class="user-bar-name"><i class="fas fa-user-circle"></i> {{ lead_name or 'User' }}</span>
-            <button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
-        </div>
-        {% else %}
-        <button class="header-login-btn" id="headerLoginBtn" onclick="openLoginModal()"><i class="fas fa-sign-in-alt"></i> Login</button>
-        {% endif %}
     </div>
 </div>
 
@@ -1536,7 +1539,7 @@
         bar.id = 'userBar';
         bar.innerHTML = '<span class="user-bar-name"><i class="fas fa-user-circle"></i> ' + (name || 'User') + '</span>' +
                          '<button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>';
-        document.querySelector('.header-inner').appendChild(bar);
+        document.querySelector('.header-right').appendChild(bar);
     }
 
     // ── Logout ──
@@ -1558,7 +1561,7 @@
                     btn.id = 'headerLoginBtn';
                     btn.onclick = openLoginModal;
                     btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
-                    document.querySelector('.header-inner').appendChild(btn);
+                    document.querySelector('.header-right').appendChild(btn);
                 }
             }
         });
