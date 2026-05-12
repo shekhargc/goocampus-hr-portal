@@ -21150,16 +21150,22 @@ def neetpg_landing():
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
-    # Build dynamic filter lists from published PDFs
-    course_set = set()
-    state_set = set()
+    # Build dynamic filter lists per category
+    neetpg_courses = set()
+    neetpg_states = set()
+    dnb_courses = set()
+    dnb_states = set()
     for p in all_pdfs:
-        if p['specialty']:
-            course_set.add(p['specialty'])
-        if p['state']:
-            state_set.add(p['state'])
-    courses_list = sorted(course_set)
-    states_list = sorted(state_set)
+        if p['category'] == 'neetpg':
+            if p['specialty']:
+                neetpg_courses.add(p['specialty'])
+            if p['state']:
+                neetpg_states.add(p['state'])
+        elif p['category'] == 'dnb':
+            if p['specialty']:
+                dnb_courses.add(p['specialty'])
+            if p['state']:
+                dnb_states.add(p['state'])
     conn.close()
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
@@ -21168,8 +21174,10 @@ def neetpg_landing():
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
                            all_pdfs=all_pdfs,
-                           courses_list=courses_list,
-                           states_list=states_list,
+                           neetpg_courses=sorted(neetpg_courses),
+                           neetpg_states=sorted(neetpg_states),
+                           dnb_courses=sorted(dnb_courses),
+                           dnb_states=sorted(dnb_states),
                            lead_captured=lead_captured,
                            google_client_id=google_client_id)
 

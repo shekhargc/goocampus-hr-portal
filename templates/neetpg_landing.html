@@ -319,6 +319,35 @@
             position: relative;
             min-height: 68px;
         }
+        /* DNB card color */
+        #section-dnb .pdf-card-top {
+            background: linear-gradient(135deg, #0D4F4F 0%, #1A7A6D 100%);
+        }
+        #section-dnb .pdf-card:hover {
+            border-color: #1A7A6D;
+        }
+        #section-dnb .pdf-tag-course {
+            background: #E6F5F0;
+            color: #0D4F4F;
+        }
+
+        /* Clear filter button */
+        .clear-filter-btn {
+            font-size: 0.68rem;
+            color: var(--orange);
+            background: var(--orange-light);
+            border: 1px solid var(--orange);
+            border-radius: 4px;
+            padding: 2px 8px;
+            cursor: pointer;
+            font-weight: 600;
+            font-family: inherit;
+            transition: all 0.15s;
+        }
+        .clear-filter-btn:hover {
+            background: var(--orange);
+            color: white;
+        }
         .pdf-card-top h3 {
             font-size: 0.88rem;
             font-weight: 700;
@@ -710,16 +739,26 @@
     <aside class="sidebar" id="filterSidebar">
         <!-- State Filter -->
         <div class="sidebar-card">
-            <div class="sidebar-title"><i class="fas fa-map-marker-alt" style="margin-right:4px;color:var(--orange);"></i> State / Authority</div>
+            <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span><i class="fas fa-map-marker-alt" style="margin-right:4px;color:var(--orange);"></i> State / Authority</span>
+                <button class="clear-filter-btn" id="clearStateBtn" onclick="filterByState('all', null)" style="display:none;">Clear</button>
+            </div>
             <div class="sidebar-list" id="stateList">
                 <div class="sidebar-item active" data-state="all" onclick="filterByState('all', this)">
                     <i class="fas fa-globe-asia" style="font-size:12px;"></i> All States
-                    <span class="count">{{ all_pdfs|length }}</span>
                 </div>
-                {% for st in states_list %}
-                <div class="sidebar-item" data-state="{{ st }}" onclick="filterByState('{{ st }}', this)">
+                <!-- NEET PG States -->
+                {% for st in neetpg_states %}
+                <div class="sidebar-item" data-state="{{ st }}" data-cat="neetpg" onclick="filterByState('{{ st }}', this)">
                     {{ st }}
-                    <span class="count">{{ all_pdfs|selectattr('state', 'equalto', st)|list|length }}</span>
+                    <span class="count">{{ neetpg_pdfs|selectattr('state', 'equalto', st)|list|length }}</span>
+                </div>
+                {% endfor %}
+                <!-- DNB States -->
+                {% for st in dnb_states %}
+                <div class="sidebar-item" data-state="{{ st }}" data-cat="dnb" onclick="filterByState('{{ st }}', this)" style="display:none;">
+                    {{ st }}
+                    <span class="count">{{ dnb_pdfs|selectattr('state', 'equalto', st)|list|length }}</span>
                 </div>
                 {% endfor %}
             </div>
@@ -727,17 +766,26 @@
 
         <!-- Course/Specialty Filter -->
         <div class="sidebar-card">
-            <div class="sidebar-title"><i class="fas fa-stethoscope" style="margin-right:4px;color:var(--orange);"></i> Specialty</div>
+            <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
+                <span><i class="fas fa-stethoscope" style="margin-right:4px;color:var(--orange);"></i> Specialty</span>
+                <button class="clear-filter-btn" id="clearCourseBtn" onclick="filterByCourse('all', null)" style="display:none;">Clear</button>
+            </div>
             <div class="sidebar-search">
-                <input type="text" placeholder="Search specialty..." oninput="filterSidebarCourses(this.value)">
+                <input type="text" id="courseSearchInput" placeholder="Search specialty..." oninput="filterSidebarCourses(this.value)">
             </div>
             <div class="sidebar-list" id="courseList">
                 <div class="sidebar-item active" data-course="all" onclick="filterByCourse('all', this)">
                     <i class="fas fa-th" style="font-size:12px;"></i> All Specialties
-                    <span class="count">{{ all_pdfs|length }}</span>
                 </div>
-                {% for course in courses_list %}
-                <div class="sidebar-item" data-course="{{ course }}" onclick="filterByCourse('{{ course }}', this)">
+                <!-- NEET PG Courses -->
+                {% for course in neetpg_courses %}
+                <div class="sidebar-item" data-course="{{ course }}" data-cat="neetpg" onclick="filterByCourse('{{ course }}', this)">
+                    {{ course }}
+                </div>
+                {% endfor %}
+                <!-- DNB Courses -->
+                {% for course in dnb_courses %}
+                <div class="sidebar-item" data-course="{{ course }}" data-cat="dnb" onclick="filterByCourse('{{ course }}', this)" style="display:none;">
                     {{ course }}
                 </div>
                 {% endfor %}
@@ -941,20 +989,52 @@
     // ── Tab switching ──
     function switchTab(tab) {
         activeTab = tab;
+        // Reset filters when switching tabs
+        activeState = 'all';
+        activeCourse = 'all';
         document.querySelectorAll('.section-tab').forEach(function(t, i) {
             t.classList.toggle('active', (tab === 'neetpg' && i === 0) || (tab === 'dnb' && i === 1));
         });
         document.getElementById('section-neetpg').classList.toggle('active', tab === 'neetpg');
         document.getElementById('section-dnb').classList.toggle('active', tab === 'dnb');
+        // Clear search input
+        document.getElementById('searchInput').value = '';
+        var courseSearch = document.getElementById('courseSearchInput');
+        if (courseSearch) courseSearch.value = '';
+        // Show/hide sidebar items based on active tab category
+        updateSidebarForTab(tab);
         applyFilters();
+        updateChips();
+    }
+
+    function updateSidebarForTab(tab) {
+        // State filter items
+        document.querySelectorAll('#stateList .sidebar-item').forEach(function(item) {
+            var cat = item.getAttribute('data-cat');
+            if (!cat) { item.style.display = ''; item.classList.toggle('active', item.getAttribute('data-state') === 'all'); return; }
+            item.style.display = (cat === tab) ? '' : 'none';
+            item.classList.remove('active');
+        });
+        // Course filter items
+        document.querySelectorAll('#courseList .sidebar-item').forEach(function(item) {
+            var cat = item.getAttribute('data-cat');
+            if (!cat) { item.style.display = ''; item.classList.toggle('active', item.getAttribute('data-course') === 'all'); return; }
+            item.style.display = (cat === tab) ? '' : 'none';
+            item.classList.remove('active');
+        });
+        // Hide clear buttons
+        document.getElementById('clearStateBtn').style.display = 'none';
+        document.getElementById('clearCourseBtn').style.display = 'none';
     }
 
     // ── Sidebar filters ──
     function filterByState(state, el) {
         activeState = state;
         document.querySelectorAll('#stateList .sidebar-item').forEach(function(item) {
-            item.classList.toggle('active', item.getAttribute('data-state') === state || (state === 'all' && item.getAttribute('data-state') === 'all'));
+            var isAll = item.getAttribute('data-state') === 'all';
+            item.classList.toggle('active', item.getAttribute('data-state') === state || (state === 'all' && isAll));
         });
+        document.getElementById('clearStateBtn').style.display = (state === 'all') ? 'none' : '';
         applyFilters();
         updateChips();
     }
@@ -962,8 +1042,10 @@
     function filterByCourse(course, el) {
         activeCourse = course;
         document.querySelectorAll('#courseList .sidebar-item').forEach(function(item) {
-            item.classList.toggle('active', item.getAttribute('data-course') === course || (course === 'all' && item.getAttribute('data-course') === 'all'));
+            var isAll = item.getAttribute('data-course') === 'all';
+            item.classList.toggle('active', item.getAttribute('data-course') === course || (course === 'all' && isAll));
         });
+        document.getElementById('clearCourseBtn').style.display = (course === 'all') ? 'none' : '';
         applyFilters();
         updateChips();
     }
@@ -972,7 +1054,10 @@
         var q = query.toLowerCase();
         document.querySelectorAll('#courseList .sidebar-item').forEach(function(item) {
             var course = item.getAttribute('data-course') || '';
+            var cat = item.getAttribute('data-cat');
             if (course === 'all') { item.style.display = ''; return; }
+            // Only filter items belonging to the active tab
+            if (cat && cat !== activeTab) return;
             item.style.display = course.toLowerCase().indexOf(q) > -1 ? '' : 'none';
         });
     }
