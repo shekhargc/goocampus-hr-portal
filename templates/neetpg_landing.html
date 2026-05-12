@@ -911,7 +911,7 @@
             {% if neetpg_pdfs %}
             <div class="pdf-grid" id="grid-neetpg">
                 {% for pdf in neetpg_pdfs %}
-                <div class="pdf-card" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -950,7 +950,7 @@
             {% if dnb_pdfs %}
             <div class="pdf-grid" id="grid-dnb">
                 {% for pdf in dnb_pdfs %}
-                <div class="pdf-card" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1073,15 +1073,38 @@
     let activeCourse = 'all';
     let resendCountdown = null;
 
-    // ── NEW badge logic: show for PDFs published in last 3 days ──
+    // ── Viewed PDFs cookie helpers ──
+    function getViewedPdfs() {
+        var match = document.cookie.match(/(?:^|; )neetpg_viewed=([^;]*)/);
+        if (!match) return [];
+        return decodeURIComponent(match[1]).split(',').filter(Boolean);
+    }
+    function markPdfViewed(pdfId) {
+        var viewed = getViewedPdfs();
+        var idStr = String(pdfId);
+        if (viewed.indexOf(idStr) === -1) {
+            viewed.push(idStr);
+            document.cookie = 'neetpg_viewed=' + encodeURIComponent(viewed.join(',')) + '; max-age=' + (365*24*60*60) + '; path=/; SameSite=Lax';
+        }
+        // Hide the NEW badge on the card
+        var card = document.querySelector('.pdf-card[data-id="' + idStr + '"]');
+        if (card) {
+            var badge = card.querySelector('.pdf-new-badge');
+            if (badge) badge.style.display = 'none';
+        }
+    }
+
+    // ── NEW badge logic: show for PDFs published in last 3 days, unless already viewed ──
     (function() {
         var threeDaysAgo = new Date();
         threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        var viewed = getViewedPdfs();
         document.querySelectorAll('.pdf-card').forEach(function(card) {
             var pubStr = card.getAttribute('data-published');
+            var pdfId = card.getAttribute('data-id');
             if (pubStr && pubStr !== 'None') {
                 var pubDate = new Date(pubStr);
-                if (pubDate >= threeDaysAgo) {
+                if (pubDate >= threeDaysAgo && viewed.indexOf(pdfId) === -1) {
                     var badge = card.querySelector('.pdf-new-badge');
                     if (badge) badge.style.display = 'block';
                 }
@@ -1220,6 +1243,7 @@
     // ── Download handling ──
     function handleDownload(pdfId) {
         if (leadCaptured) {
+            markPdfViewed(pdfId);
             window.location.href = '/neet-pg-2025/download/' + pdfId;
         } else {
             pendingDownloadId = pdfId;
@@ -1385,6 +1409,7 @@
     // ── PDF Viewer ──
     function handleView(pdfId, title) {
         if (leadCaptured) {
+            markPdfViewed(pdfId);
             openViewer(pdfId, title);
         } else {
             pendingViewId = pdfId;
