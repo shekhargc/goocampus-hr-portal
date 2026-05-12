@@ -16547,12 +16547,14 @@ def sales_calls_view():
                                my_logs=[], rollup=[], owners=[],
                                total_calls=0, total_minutes=0)
     placeholders = ','.join(['?'] * len(visible_ids))
-    # Monthly rollup (per rep)
-    rollup = conn.execute(
+    # Monthly rollup (per rep) — includes weekday-only stats for avg calculation
+    rollup_raw = conn.execute(
         f'''SELECT e.id, e.name, e.photo_url, e.emp_code,
                   COALESCE(SUM(cl.num_calls), 0) AS calls,
                   COALESCE(SUM(cl.talk_time_minutes), 0) AS mins,
-                  COUNT(cl.id) AS days_logged
+                  COUNT(cl.id) AS days_logged,
+                  COALESCE(SUM(CASE WHEN EXTRACT(DOW FROM cl.log_date) NOT IN (0, 6) THEN cl.num_calls ELSE 0 END), 0) AS weekday_calls,
+                  SUM(CASE WHEN EXTRACT(DOW FROM cl.log_date) NOT IN (0, 6) THEN 1 ELSE 0 END) AS weekday_days
            FROM employees e JOIN sales_team st ON st.employee_id = e.id
            LEFT JOIN sales_call_logs cl ON cl.employee_id = e.id
                 AND EXTRACT(YEAR FROM cl.log_date) = ?
@@ -16562,6 +16564,14 @@ def sales_calls_view():
            ORDER BY calls DESC, e.name''',
         [year, month] + visible_ids
     ).fetchall()
+    # Compute avg_calls_per_weekday for each rep
+    rollup = []
+    for r in rollup_raw:
+        row = dict(r)
+        wd = int(row.get('weekday_days') or 0)
+        wc = int(row.get('weekday_calls') or 0)
+        row['avg_calls'] = round(wc / wd, 1) if wd > 0 else 0
+        rollup.append(row)
     total_calls = sum(int(r['calls'] or 0) for r in rollup)
     total_minutes = sum(int(r['mins'] or 0) for r in rollup)
 
@@ -16616,6 +16626,8 @@ def sales_calls_details():
     days = []
     total_calls = 0
     total_mins = 0
+    weekday_calls = 0
+    weekday_days = 0
     for lg in logs:
         dow = int(lg['dow'])  # 0=Sun, 1=Mon ... 6=Sat in PostgreSQL
         day_names = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
@@ -16624,6 +16636,9 @@ def sales_calls_details():
         mins = int(lg['talk_time_minutes'] or 0)
         total_calls += calls
         total_mins += mins
+        if not is_weekend:
+            weekday_calls += calls
+            weekday_days += 1
         days.append({
             'date': lg['log_date'].strftime('%Y-%m-%d') if hasattr(lg['log_date'], 'strftime') else str(lg['log_date']),
             'day_name': day_names[dow],
@@ -16632,6 +16647,7 @@ def sales_calls_details():
             'talk_time_minutes': mins,
             'notes': lg['notes'] or ''
         })
+    avg_calls = round(weekday_calls / weekday_days, 1) if weekday_days > 0 else 0
     photo = emp['photo_url'] or ''
     if photo and not photo.startswith('http'):
         photo = '/static/photos/' + photo
@@ -16648,7 +16664,9 @@ def sales_calls_details():
         'days': days,
         'total_calls': total_calls,
         'total_minutes': total_mins,
-        'days_logged': len(days)
+        'days_logged': len(days),
+        'avg_calls_per_weekday': avg_calls,
+        'weekday_days': weekday_days
     })
 
 

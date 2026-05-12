@@ -32,7 +32,7 @@
 
 /* Stats bar inside drawer */
 .cl-stats {
-    display:grid; grid-template-columns:repeat(3, 1fr); gap:0;
+    display:grid; grid-template-columns:repeat(4, 1fr); gap:0;
     border-bottom:1px solid var(--gray-200); background:white;
 }
 .cl-stat {
@@ -211,6 +211,7 @@
                     <th style="padding:0.65rem 1rem;font-weight:600;">Sales Member</th>
                     <th style="padding:0.65rem 0.5rem;font-weight:600;text-align:right;">Days Logged</th>
                     <th style="padding:0.65rem 0.5rem;font-weight:600;text-align:right;">Calls</th>
+                    <th style="padding:0.65rem 0.5rem;font-weight:600;text-align:right;">Avg/Day</th>
                     <th style="padding:0.65rem 1rem;font-weight:600;text-align:right;">Talk Time</th>
                 </tr></thead>
                 <tbody>
@@ -227,6 +228,7 @@
                         </td>
                         <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--gray-700);">{{ r.days_logged }}</td>
                         <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;font-weight:700;color:var(--navy);">{{ r.calls }}</td>
+                        <td style="padding:0.65rem 0.5rem;text-align:right;font-variant-numeric:tabular-nums;color:var(--orange);font-weight:600;">{{ r.avg_calls }}</td>
                         <td style="padding:0.65rem 1rem;text-align:right;color:var(--gray-700);">{{ (r.mins // 60) }}h {{ r.mins % 60 }}m</td>
                     </tr>
                     {% endfor %}
@@ -255,6 +257,7 @@
     <div class="cl-drawer-body">
         <div class="cl-stats" id="clStats">
             <div class="cl-stat"><div class="cl-stat-val" id="clTotalCalls">0</div><div class="cl-stat-lbl">Total Calls</div></div>
+            <div class="cl-stat"><div class="cl-stat-val" id="clAvgCalls" style="color:var(--orange);">0</div><div class="cl-stat-lbl">Avg/Weekday</div></div>
             <div class="cl-stat"><div class="cl-stat-val" id="clTalkTime">0h 0m</div><div class="cl-stat-lbl">Talk Time</div></div>
             <div class="cl-stat"><div class="cl-stat-val" id="clDaysLogged">0</div><div class="cl-stat-lbl">Days Logged</div></div>
         </div>
@@ -318,6 +321,7 @@ function fetchCallDetails(eid, year, month) {
         document.getElementById('clEmpPhoto').src = data.employee.photo_url;
         // Update stats
         document.getElementById('clTotalCalls').textContent = data.total_calls;
+        document.getElementById('clAvgCalls').textContent = data.avg_calls_per_weekday;
         var h = Math.floor(data.total_minutes / 60);
         var m = data.total_minutes % 60;
         document.getElementById('clTalkTime').textContent = h + 'h ' + m + 'm';
