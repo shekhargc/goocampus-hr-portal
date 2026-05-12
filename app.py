@@ -21146,7 +21146,7 @@ def neetpg_landing():
         logging.error(f"neetpg visit track: {e}")
     # Only show published + active PDFs, newest published first
     all_pdfs = conn.execute(
-        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
+        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY upload_date DESC"
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
@@ -21273,7 +21273,20 @@ def neetpg_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    pdfs = conn.execute("SELECT * FROM neetpg_pdfs ORDER BY category ASC, specialty ASC, upload_date DESC").fetchall()
+    # Pagination for PDFs
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    total_pdfs_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs").fetchone()['c']
+    total_pages = max(1, (total_pdfs_count + per_page - 1) // per_page)
+    if page < 1:
+        page = 1
+    if page > total_pages:
+        page = total_pages
+    offset = (page - 1) * per_page
+    pdfs = conn.execute(
+        "SELECT * FROM neetpg_pdfs ORDER BY upload_date DESC LIMIT ? OFFSET ?",
+        (per_page, offset)
+    ).fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
 
@@ -21312,7 +21325,8 @@ def neetpg_admin():
         'leads_today': leads_today
     }
     conn.close()
-    return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics)
+    return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
+                           page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count)
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])

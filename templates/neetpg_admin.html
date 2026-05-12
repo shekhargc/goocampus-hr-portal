@@ -641,6 +641,30 @@
         <p>No PDFs uploaded yet. Use the form above to upload your first PDF.</p>
     </div>
     {% endif %}
+
+    <!-- Pagination -->
+    {% if total_pages > 1 %}
+    <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:1.2rem 0 0.5rem;flex-wrap:wrap;">
+        <span style="font-size:0.78rem;color:var(--gray-500);margin-right:8px;">Page {{ page }} of {{ total_pages }} ({{ total_pdfs_count }} PDFs)</span>
+        {% if page > 1 %}
+        <a href="{{ url_for('neetpg_admin', page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
+        <a href="{{ url_for('neetpg_admin', page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <span style="padding:6px 12px;background:var(--orange);color:white;border-radius:6px;font-size:0.8rem;font-weight:700;">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
+            <a href="{{ url_for('neetpg_admin', page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
+            {% elif p == 4 or p == total_pages - 2 %}
+            <span style="padding:6px 4px;color:var(--gray-400);font-size:0.8rem;">...</span>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="{{ url_for('neetpg_admin', page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
+        <a href="{{ url_for('neetpg_admin', page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
 </div>
 
 <!-- Leads Tab -->
