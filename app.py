@@ -21321,9 +21321,46 @@ def neetpg_admin():
         'draft_pdfs': draft_pdfs,
         'leads_today': leads_today
     }
+
+    # ── Compute scheduled time slots for each queued draft (FIFO) ──
+    schedule_map = {}  # pdf_id -> "May 13, 10:00 AM IST"
+    try:
+        import pytz
+        from datetime import timedelta
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        queued_drafts = conn.execute(
+            "SELECT id FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        ).fetchall()
+        # Build list of future slots starting from next available
+        slots_today = []
+        for h in [10, 17]:
+            slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
+            if slot > now_ist:
+                slots_today.append(slot)
+        # Assign each draft a slot
+        slot_idx = 0
+        current_day_offset = 0
+        available_slots = list(slots_today)  # remaining slots today
+        for draft in queued_drafts:
+            if slot_idx >= len(available_slots):
+                # Move to next day
+                current_day_offset += 1
+                next_day = now_ist + timedelta(days=current_day_offset)
+                available_slots = [
+                    next_day.replace(hour=10, minute=0, second=0, microsecond=0),
+                    next_day.replace(hour=17, minute=0, second=0, microsecond=0)
+                ]
+                slot_idx = 0
+            assigned_slot = available_slots[slot_idx]
+            schedule_map[draft['id']] = assigned_slot.strftime('%b %d, %I:%M %p') + ' IST'
+            slot_idx += 1
+    except Exception as e:
+        logging.error(f"schedule_map build error: {e}")
+
     conn.close()
     return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
-                           page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count)
+                           page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map)
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])

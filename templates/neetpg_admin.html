@@ -465,7 +465,7 @@
 {% if analytics.draft_pdfs > 0 %}
 <div class="np-schedule-banner">
     <i class="fas fa-clock"></i>
-    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Next auto-publish at <strong>10:00 AM</strong> or <strong>5:00 PM IST</strong> (1 PDF per slot). Toggle the <i class="fas fa-calendar-check"></i> icon on any draft to include/exclude it from auto-publish.</div>
+    <div><strong>Auto-Publish Active:</strong> {{ analytics.draft_pdfs }} draft{{ 's' if analytics.draft_pdfs != 1 }} queued. Publishes automatically at <strong>10:00 AM</strong> &amp; <strong>5:00 PM IST</strong> daily (1 PDF per slot, oldest first). Runs on the server — no need to keep the page open.</div>
 </div>
 {% endif %}
 
@@ -598,8 +598,14 @@
                     <td>
                         {% if pdf.is_published %}
                         <span class="np-badge np-badge-green">Published</span>
+                        {% elif schedule_map.get(pdf.id) %}
+                        <span class="np-badge np-badge-yellow">Scheduled</span>
+                        <div style="font-size:0.7rem;color:#b45309;margin-top:3px;font-weight:600;">
+                            <i class="fas fa-clock" style="font-size:0.6rem;"></i> {{ schedule_map[pdf.id] }}
+                        </div>
                         {% else %}
                         <span class="np-badge np-badge-yellow">Draft</span>
+                        <div style="font-size:0.7rem;color:#9ca3af;margin-top:3px;">Auto-publish off</div>
                         {% endif %}
                     </td>
                     <td style="text-align:center;">
