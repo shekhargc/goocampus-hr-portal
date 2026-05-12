@@ -932,37 +932,55 @@
     <i class="fab fa-whatsapp"></i>
 </a>
 
-<!-- Lead Capture Modal -->
+<!-- Lead Capture Modal (WhatsApp OTP) -->
 <div class="modal-overlay" id="leadModal">
     <div class="modal-box">
-        <h2><i class="fas fa-lock" style="color:var(--orange);margin-right:8px;"></i>Quick Access</h2>
-        <p>Enter your details once to download all PDFs for free. No spam, we promise!</p>
-        <div class="modal-error" id="modalError"></div>
-        <form onsubmit="submitLead(event)">
-            <div class="form-group">
-                <label for="leadName">Your Name</label>
-                <input type="text" id="leadName" placeholder="Enter your full name" required>
-            </div>
-            <div class="form-group">
-                <label for="leadWhatsApp">WhatsApp Number</label>
-                <input type="tel" id="leadWhatsApp" placeholder="Enter 10-digit number" maxlength="15">
-            </div>
-            <button type="submit" class="btn-submit" id="submitBtn">
-                <i class="fas fa-unlock"></i> Unlock Downloads
-            </button>
-        </form>
-        {% if google_client_id %}
-        <div style="display:flex;align-items:center;gap:12px;margin:18px 0 14px;">
-            <div style="flex:1;height:1px;background:var(--gray-200);"></div>
-            <span style="font-size:12px;color:var(--gray-400);font-weight:600;">OR</span>
-            <div style="flex:1;height:1px;background:var(--gray-200);"></div>
+        <!-- Step 1: Name + WhatsApp -->
+        <div id="otpStep1">
+            <h2><i class="fab fa-whatsapp" style="color:#25D366;margin-right:8px;"></i>Verify via WhatsApp</h2>
+            <p>Enter your details to receive a one-time verification code on WhatsApp.</p>
+            <div class="modal-error" id="modalError"></div>
+            <form onsubmit="sendOtp(event)">
+                <div class="form-group">
+                    <label for="leadName">Your Name</label>
+                    <input type="text" id="leadName" placeholder="Enter your full name" required>
+                </div>
+                <div class="form-group">
+                    <label for="leadWhatsApp">WhatsApp Number</label>
+                    <div style="display:flex;align-items:center;gap:8px;">
+                        <span style="background:var(--gray-100);padding:10px 12px;border-radius:8px;font-weight:600;color:var(--gray-600);font-size:14px;border:1.5px solid var(--gray-200);">+91</span>
+                        <input type="tel" id="leadWhatsApp" placeholder="Enter 10-digit number" maxlength="10" style="flex:1;" required>
+                    </div>
+                </div>
+                <button type="submit" class="btn-submit" id="sendOtpBtn" style="background:#25D366;">
+                    <i class="fab fa-whatsapp"></i> Send OTP on WhatsApp
+                </button>
+            </form>
+            <p style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:12px;">We'll send a 6-digit code to your WhatsApp. No spam, we promise!</p>
         </div>
-        <button type="button" onclick="googleSignIn()" id="googleBtn" style="width:100%;padding:12px;background:white;color:var(--gray-800);border:2px solid var(--gray-200);border-radius:10px;font-weight:600;font-size:14px;cursor:pointer;font-family:inherit;display:flex;align-items:center;justify-content:center;gap:10px;transition:border-color 0.2s;">
-            <svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg>
-            Continue with Google
-        </button>
-        {% endif %}
-        <p style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:12px;">Your info is used solely for sending you updates. We never spam.</p>
+        <!-- Step 2: Enter OTP -->
+        <div id="otpStep2" style="display:none;">
+            <h2><i class="fas fa-shield-alt" style="color:#25D366;margin-right:8px;"></i>Enter OTP</h2>
+            <p>We've sent a 6-digit code to <strong id="otpPhoneDisplay"></strong> on WhatsApp.</p>
+            <div class="modal-error" id="otpError"></div>
+            <form onsubmit="verifyOtp(event)">
+                <div class="form-group">
+                    <label for="otpInput">Verification Code</label>
+                    <input type="text" id="otpInput" placeholder="Enter 6-digit OTP" maxlength="6" inputmode="numeric" pattern="[0-9]*" autocomplete="one-time-code" style="text-align:center;font-size:22px;font-weight:700;letter-spacing:8px;" required>
+                </div>
+                <button type="submit" class="btn-submit" id="verifyOtpBtn" style="background:#25D366;">
+                    <i class="fas fa-check-circle"></i> Verify & Unlock
+                </button>
+            </form>
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
+                <button type="button" onclick="goBackToStep1()" style="background:none;border:none;color:var(--gray-500);font-size:13px;cursor:pointer;font-family:inherit;padding:0;">
+                    <i class="fas fa-arrow-left"></i> Change number
+                </button>
+                <button type="button" onclick="resendOtp()" id="resendBtn" style="background:none;border:none;color:#25D366;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;padding:0;" disabled>
+                    Resend OTP <span id="resendTimer">(30s)</span>
+                </button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -980,9 +998,6 @@
     </div>
 </div>
 
-{% if google_client_id %}
-<script src="https://accounts.google.com/gsi/client" async defer></script>
-{% endif %}
 <script>
     let leadCaptured = {{ 'true' if lead_captured else 'false' }};
     let pendingDownloadId = null;
@@ -992,6 +1007,7 @@
     let activeTab = 'neetpg';
     let activeState = 'all';
     let activeCourse = 'all';
+    let resendCountdown = null;
 
     // ── NEW badge logic: show for PDFs published in last 3 days ──
     (function() {
@@ -1148,50 +1164,43 @@
         }
     }
 
-    function submitLead(e) {
+    // ── WhatsApp OTP Flow ──
+    function sendOtp(e) {
         e.preventDefault();
         var name = document.getElementById('leadName').value.trim();
         var whatsapp = document.getElementById('leadWhatsApp').value.trim();
         var errorEl = document.getElementById('modalError');
-        var btn = document.getElementById('submitBtn');
+        var btn = document.getElementById('sendOtpBtn');
         errorEl.style.display = 'none';
         if (!name) {
             errorEl.textContent = 'Please enter your name.';
             errorEl.style.display = 'block';
             return;
         }
-        if (!whatsapp) {
-            errorEl.textContent = 'Please enter your WhatsApp number, or use Google sign-in below.';
-            errorEl.style.display = 'block';
-            return;
-        }
-        if (whatsapp.replace(/[^0-9]/g, '').length < 10) {
+        if (!whatsapp || whatsapp.replace(/[^0-9]/g, '').length < 10) {
             errorEl.textContent = 'Please enter a valid 10-digit WhatsApp number.';
             errorEl.style.display = 'block';
             return;
         }
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
-        fetch('/neet-pg-2025/capture-lead', {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP...';
+        fetch('/neet-pg-2025/send-otp', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name, whatsapp: whatsapp, source: 'whatsapp'})
+            body: JSON.stringify({name: name, whatsapp: whatsapp})
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
             if (data.success) {
-                leadCaptured = true;
-                document.getElementById('leadModal').classList.remove('show');
-                if (pendingViewId) {
-                    openViewer(pendingViewId, pendingViewTitle);
-                    pendingViewId = null;
-                    pendingViewTitle = null;
-                } else if (pendingDownloadId) {
-                    window.location.href = '/neet-pg-2025/download/' + pendingDownloadId;
-                    pendingDownloadId = null;
-                }
+                // Show step 2
+                document.getElementById('otpStep1').style.display = 'none';
+                document.getElementById('otpStep2').style.display = 'block';
+                var cleanNum = whatsapp.replace(/[^0-9]/g, '').slice(-10);
+                document.getElementById('otpPhoneDisplay').textContent = '+91 ' + cleanNum.slice(0,5) + ' ' + cleanNum.slice(5);
+                document.getElementById('otpInput').focus();
+                startResendTimer();
             } else {
-                errorEl.textContent = data.error || 'Something went wrong.';
+                errorEl.textContent = data.error || 'Could not send OTP. Try again.';
                 errorEl.style.display = 'block';
             }
         })
@@ -1201,80 +1210,114 @@
         })
         .finally(function() {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-unlock"></i> Unlock Downloads';
+            btn.innerHTML = '<i class="fab fa-whatsapp"></i> Send OTP on WhatsApp';
         });
     }
 
-    // ── Google Sign-In ──
-    function googleSignIn() {
-        var errorEl = document.getElementById('modalError');
+    function verifyOtp(e) {
+        e.preventDefault();
+        var otp = document.getElementById('otpInput').value.trim();
+        var errorEl = document.getElementById('otpError');
+        var btn = document.getElementById('verifyOtpBtn');
         errorEl.style.display = 'none';
-        try {
-            google.accounts.id.initialize({
-                client_id: '{{ google_client_id }}',
-                callback: handleGoogleResponse,
-                auto_select: false
-            });
-            google.accounts.id.prompt(function(notification) {
-                if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-                    google.accounts.id.prompt();
-                }
-            });
-        } catch(err) {
-            errorEl.textContent = 'Google sign-in not available. Please use WhatsApp number instead.';
+        if (!otp || otp.length < 6) {
+            errorEl.textContent = 'Please enter the 6-digit OTP.';
             errorEl.style.display = 'block';
+            return;
         }
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Verifying...';
+        fetch('/neet-pg-2025/verify-otp', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({otp: otp})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                leadCaptured = true;
+                document.getElementById('leadModal').classList.remove('show');
+                // Reset modal to step 1 for next time (won't happen since cookie is set)
+                document.getElementById('otpStep1').style.display = 'block';
+                document.getElementById('otpStep2').style.display = 'none';
+                if (pendingViewId) {
+                    openViewer(pendingViewId, pendingViewTitle);
+                    pendingViewId = null;
+                    pendingViewTitle = null;
+                } else if (pendingDownloadId) {
+                    window.location.href = '/neet-pg-2025/download/' + pendingDownloadId;
+                    pendingDownloadId = null;
+                }
+            } else {
+                errorEl.textContent = data.error || 'Invalid OTP. Try again.';
+                errorEl.style.display = 'block';
+            }
+        })
+        .catch(function() {
+            errorEl.textContent = 'Network error. Please try again.';
+            errorEl.style.display = 'block';
+        })
+        .finally(function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-check-circle"></i> Verify & Unlock';
+        });
     }
 
-    function handleGoogleResponse(response) {
-        var errorEl = document.getElementById('modalError');
-        var googleBtn = document.getElementById('googleBtn');
-        try {
-            var payload = JSON.parse(atob(response.credential.split('.')[1]));
-            var name = payload.name || payload.given_name || 'Google User';
-            var email = payload.email || '';
-            if (!email) {
-                errorEl.textContent = 'Could not get email from Google. Please use WhatsApp instead.';
-                errorEl.style.display = 'block';
-                return;
+    function goBackToStep1() {
+        document.getElementById('otpStep2').style.display = 'none';
+        document.getElementById('otpStep1').style.display = 'block';
+        document.getElementById('modalError').style.display = 'none';
+        if (resendCountdown) clearInterval(resendCountdown);
+    }
+
+    function startResendTimer() {
+        var seconds = 30;
+        var timerEl = document.getElementById('resendTimer');
+        var btn = document.getElementById('resendBtn');
+        btn.disabled = true;
+        timerEl.textContent = '(' + seconds + 's)';
+        if (resendCountdown) clearInterval(resendCountdown);
+        resendCountdown = setInterval(function() {
+            seconds--;
+            if (seconds <= 0) {
+                clearInterval(resendCountdown);
+                timerEl.textContent = '';
+                btn.disabled = false;
+            } else {
+                timerEl.textContent = '(' + seconds + 's)';
             }
-            googleBtn.disabled = true;
-            googleBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Signing in...';
-            fetch('/neet-pg-2025/capture-lead', {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({name: name, email: email, source: 'google'})
-            })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
-                if (data.success) {
-                    leadCaptured = true;
-                    document.getElementById('leadModal').classList.remove('show');
-                    if (pendingViewId) {
-                        openViewer(pendingViewId, pendingViewTitle);
-                        pendingViewId = null;
-                        pendingViewTitle = null;
-                    } else if (pendingDownloadId) {
-                        window.location.href = '/neet-pg-2025/download/' + pendingDownloadId;
-                        pendingDownloadId = null;
-                    }
-                } else {
-                    errorEl.textContent = data.error || 'Something went wrong.';
-                    errorEl.style.display = 'block';
-                }
-            })
-            .catch(function() {
-                errorEl.textContent = 'Network error. Please try again.';
+        }, 1000);
+    }
+
+    function resendOtp() {
+        var name = document.getElementById('leadName').value.trim();
+        var whatsapp = document.getElementById('leadWhatsApp').value.trim();
+        var errorEl = document.getElementById('otpError');
+        var btn = document.getElementById('resendBtn');
+        errorEl.style.display = 'none';
+        btn.disabled = true;
+        btn.textContent = 'Sending...';
+        fetch('/neet-pg-2025/send-otp', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: name, whatsapp: whatsapp})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                startResendTimer();
+                btn.innerHTML = 'Resend OTP <span id="resendTimer"></span>';
+            } else {
+                errorEl.textContent = data.error || 'Could not resend OTP.';
                 errorEl.style.display = 'block';
-            })
-            .finally(function() {
-                googleBtn.disabled = false;
-                googleBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 48 48"><path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/><path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/><path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/><path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.15 1.45-4.92 2.3-8.16 2.3-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/></svg> Continue with Google';
-            });
-        } catch(err) {
-            errorEl.textContent = 'Google sign-in failed. Please use WhatsApp instead.';
+                btn.disabled = false;
+            }
+        })
+        .catch(function() {
+            errorEl.textContent = 'Network error.';
             errorEl.style.display = 'block';
-        }
+            btn.disabled = false;
+        });
     }
 
     // ── PDF Viewer ──

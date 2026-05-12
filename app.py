@@ -21216,6 +21216,133 @@ def neetpg_capture_lead():
     return resp
 
 
+# ── WhatsApp OTP for NEET PG PDF access ──
+@app.route('/neet-pg-2025/send-otp', methods=['POST'])
+def neetpg_send_otp():
+    data = request.get_json() or {}
+    name = data.get('name', '').strip()
+    whatsapp = data.get('whatsapp', '').strip()
+
+    if not name:
+        return jsonify({'error': 'Name is required'}), 400
+    if not whatsapp:
+        return jsonify({'error': 'WhatsApp number is required'}), 400
+
+    whatsapp_clean = re.sub(r'[^0-9]', '', whatsapp)
+    if len(whatsapp_clean) < 10:
+        return jsonify({'error': 'Please enter a valid WhatsApp number'}), 400
+    whatsapp_clean = whatsapp_clean[-10:]
+
+    # Generate 6-digit OTP
+    otp_code = str(random.randint(100000, 999999))
+
+    # Store OTP in session
+    session['neetpg_otp'] = otp_code
+    session['neetpg_otp_phone'] = whatsapp_clean
+    session['neetpg_otp_name'] = name
+    session['neetpg_otp_time'] = datetime.now().isoformat()
+
+    # Send OTP via Infobip WhatsApp
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+
+    if not infobip_key or not infobip_base:
+        logging.error("Infobip credentials not configured")
+        return jsonify({'error': 'OTP service not configured. Please try again later.'}), 500
+
+    try:
+        import requests as http_requests
+        url = f"https://{infobip_base}/whatsapp/1/message/template"
+        headers = {
+            "Authorization": f"App {infobip_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messages": [{
+                "from": "15558246314",
+                "to": f"91{whatsapp_clean}",
+                "content": {
+                    "templateName": "goocampus_otp_verify",
+                    "templateData": {
+                        "body": {
+                            "placeholders": [otp_code]
+                        }
+                    },
+                    "language": "en"
+                }
+            }]
+        }
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        resp_data = resp.json()
+        logging.info(f"Infobip OTP response for {whatsapp_clean}: status={resp.status_code} body={resp_data}")
+
+        if resp.status_code >= 400:
+            # Try fallback template
+            payload["messages"][0]["content"]["templateName"] = "otp_verify"
+            payload["messages"][0]["content"]["language"] = "en_GB"
+            resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            resp2_data = resp2.json()
+            logging.info(f"Infobip OTP fallback response: status={resp2.status_code} body={resp2_data}")
+            if resp2.status_code >= 400:
+                return jsonify({'error': 'Could not send OTP. Please check your WhatsApp number and try again.'}), 500
+
+        return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp'})
+    except Exception as e:
+        logging.error(f"Infobip OTP send error: {e}")
+        return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+
+
+@app.route('/neet-pg-2025/verify-otp', methods=['POST'])
+def neetpg_verify_otp():
+    data = request.get_json() or {}
+    entered_otp = data.get('otp', '').strip()
+
+    if not entered_otp:
+        return jsonify({'error': 'Please enter the OTP'}), 400
+
+    stored_otp = session.get('neetpg_otp')
+    stored_phone = session.get('neetpg_otp_phone')
+    stored_name = session.get('neetpg_otp_name')
+    stored_time = session.get('neetpg_otp_time')
+
+    if not stored_otp or not stored_phone:
+        return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+    # Check OTP expiry (10 minutes)
+    try:
+        otp_time = datetime.fromisoformat(stored_time)
+        if (datetime.now() - otp_time).total_seconds() > 600:
+            session.pop('neetpg_otp', None)
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+
+    if entered_otp != stored_otp:
+        return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
+
+    # OTP verified — save lead and set cookie
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO neetpg_leads (name, whatsapp, source) VALUES (?, ?, ?)",
+            (stored_name, stored_phone, 'whatsapp_otp')
+        )
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"neetpg OTP lead save: {e}")
+
+    # Clear OTP from session
+    session.pop('neetpg_otp', None)
+    session.pop('neetpg_otp_phone', None)
+    session.pop('neetpg_otp_name', None)
+    session.pop('neetpg_otp_time', None)
+
+    resp = jsonify({'success': True})
+    resp.set_cookie('neetpg_lead', 'captured', max_age=365*24*60*60, samesite='Lax')
+    return resp
+
+
 # ── PDF download route ──
 @app.route('/neet-pg-2025/download/<int:pdf_id>')
 def neetpg_download(pdf_id):
