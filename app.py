@@ -21217,14 +21217,45 @@ def neetpg_capture_lead():
 
 
 # ── WhatsApp OTP for NEET PG PDF access ──
+
+# Step 1: Check if phone number is already registered
+@app.route('/neet-pg-2025/check-phone', methods=['POST'])
+def neetpg_check_phone():
+    data = request.get_json() or {}
+    whatsapp = data.get('whatsapp', '').strip()
+
+    if not whatsapp:
+        return jsonify({'error': 'WhatsApp number is required'}), 400
+
+    whatsapp_clean = re.sub(r'[^0-9]', '', whatsapp)
+    if len(whatsapp_clean) < 10:
+        return jsonify({'error': 'Please enter a valid 10-digit number'}), 400
+    whatsapp_clean = whatsapp_clean[-10:]
+
+    try:
+        conn = get_db()
+        existing = conn.execute(
+            "SELECT name FROM neetpg_leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1",
+            (whatsapp_clean,)
+        ).fetchone()
+        conn.close()
+        if existing:
+            return jsonify({'exists': True, 'name': existing['name']})
+        else:
+            return jsonify({'exists': False})
+    except Exception as e:
+        logging.error(f"neetpg_check_phone: {e}")
+        return jsonify({'exists': False})
+
+
+# Step 2: Send OTP (name required only for new users)
 @app.route('/neet-pg-2025/send-otp', methods=['POST'])
 def neetpg_send_otp():
     data = request.get_json() or {}
     name = data.get('name', '').strip()
     whatsapp = data.get('whatsapp', '').strip()
+    is_returning = data.get('returning', False)
 
-    if not name:
-        return jsonify({'error': 'Name is required'}), 400
     if not whatsapp:
         return jsonify({'error': 'WhatsApp number is required'}), 400
 
@@ -21233,6 +21264,24 @@ def neetpg_send_otp():
         return jsonify({'error': 'Please enter a valid WhatsApp number'}), 400
     whatsapp_clean = whatsapp_clean[-10:]
 
+    # For new users, name is required
+    if not is_returning and not name:
+        return jsonify({'error': 'Name is required'}), 400
+
+    # For returning users, fetch name from DB
+    if is_returning:
+        try:
+            conn = get_db()
+            existing = conn.execute(
+                "SELECT name FROM neetpg_leads WHERE whatsapp = ? ORDER BY id DESC LIMIT 1",
+                (whatsapp_clean,)
+            ).fetchone()
+            conn.close()
+            if existing:
+                name = existing['name']
+        except Exception as e:
+            logging.error(f"neetpg_send_otp fetch name: {e}")
+
     # Generate 6-digit OTP
     otp_code = str(random.randint(100000, 999999))
 
@@ -21240,6 +21289,7 @@ def neetpg_send_otp():
     session['neetpg_otp'] = otp_code
     session['neetpg_otp_phone'] = whatsapp_clean
     session['neetpg_otp_name'] = name
+    session['neetpg_otp_returning'] = is_returning
     session['neetpg_otp_time'] = datetime.now().isoformat()
 
     # Send OTP via Infobip WhatsApp
@@ -21296,6 +21346,7 @@ def neetpg_send_otp():
         return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
 
 
+# Step 3: Verify OTP — insert lead only for new users
 @app.route('/neet-pg-2025/verify-otp', methods=['POST'])
 def neetpg_verify_otp():
     data = request.get_json() or {}
@@ -21308,6 +21359,7 @@ def neetpg_verify_otp():
     stored_phone = session.get('neetpg_otp_phone')
     stored_name = session.get('neetpg_otp_name')
     stored_time = session.get('neetpg_otp_time')
+    is_returning = session.get('neetpg_otp_returning', False)
 
     if not stored_otp or not stored_phone:
         return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
@@ -21324,23 +21376,31 @@ def neetpg_verify_otp():
     if entered_otp != stored_otp:
         return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
 
-    # OTP verified — save lead and set cookie
-    try:
-        conn = get_db()
-        conn.execute(
-            "INSERT INTO neetpg_leads (name, whatsapp, source) VALUES (?, ?, ?)",
-            (stored_name, stored_phone, 'whatsapp_otp')
-        )
-        conn.commit()
-        conn.close()
-    except Exception as e:
-        logging.error(f"neetpg OTP lead save: {e}")
+    # Only insert lead for new users (not returning)
+    if not is_returning:
+        try:
+            conn = get_db()
+            # Check once more to avoid race condition duplicates
+            existing = conn.execute(
+                "SELECT id FROM neetpg_leads WHERE whatsapp = ? LIMIT 1",
+                (stored_phone,)
+            ).fetchone()
+            if not existing:
+                conn.execute(
+                    "INSERT INTO neetpg_leads (name, whatsapp, source) VALUES (?, ?, ?)",
+                    (stored_name, stored_phone, 'whatsapp_otp')
+                )
+                conn.commit()
+            conn.close()
+        except Exception as e:
+            logging.error(f"neetpg OTP lead save: {e}")
 
     # Clear OTP from session
     session.pop('neetpg_otp', None)
     session.pop('neetpg_otp_phone', None)
     session.pop('neetpg_otp_name', None)
     session.pop('neetpg_otp_time', None)
+    session.pop('neetpg_otp_returning', None)
 
     resp = jsonify({'success': True, 'name': stored_name})
     resp.set_cookie('neetpg_lead', 'captured', max_age=365*24*60*60, samesite='Lax')

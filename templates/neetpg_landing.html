@@ -996,34 +996,48 @@
     <i class="fab fa-whatsapp"></i>
 </a>
 
-<!-- Lead Capture Modal (WhatsApp OTP) -->
+<!-- Lead Capture Modal (Phone-first OTP) -->
 <div class="modal-overlay" id="leadModal">
     <div class="modal-box">
-        <!-- Step 1: Name + WhatsApp -->
+        <!-- Step 1: Phone number only -->
         <div id="otpStep1">
-            <h2><i class="fab fa-whatsapp" style="color:#25D366;margin-right:8px;"></i>Verify via WhatsApp</h2>
-            <p>Enter your details to receive a one-time verification code on WhatsApp.</p>
-            <div class="modal-error" id="modalError"></div>
-            <form onsubmit="sendOtp(event)">
-                <div class="form-group">
-                    <label for="leadName">Your Name</label>
-                    <input type="text" id="leadName" placeholder="Enter your full name" required>
-                </div>
+            <h2><i class="fab fa-whatsapp" style="color:#25D366;margin-right:8px;"></i>Login via WhatsApp</h2>
+            <p>Enter your WhatsApp number to continue.</p>
+            <div class="modal-error" id="step1Error"></div>
+            <form onsubmit="checkPhone(event)">
                 <div class="form-group">
                     <label for="leadWhatsApp">WhatsApp Number</label>
                     <div style="display:flex;align-items:center;gap:8px;">
                         <span style="background:var(--gray-100);padding:10px 12px;border-radius:8px;font-weight:600;color:var(--gray-600);font-size:14px;border:1.5px solid var(--gray-200);">+91</span>
-                        <input type="tel" id="leadWhatsApp" placeholder="Enter 10-digit number" maxlength="10" style="flex:1;" required>
+                        <input type="tel" id="leadWhatsApp" placeholder="Enter 10-digit number" maxlength="10" inputmode="numeric" style="flex:1;" required>
                     </div>
+                </div>
+                <button type="submit" class="btn-submit" id="checkPhoneBtn" style="background:#25D366;">
+                    <i class="fab fa-whatsapp"></i> Continue
+                </button>
+            </form>
+            <p style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:12px;">We'll send a 6-digit code to your WhatsApp. No spam!</p>
+        </div>
+        <!-- Step 2: Name (new users only) -->
+        <div id="otpStep2" style="display:none;">
+            <h2><i class="fas fa-user" style="color:#25D366;margin-right:8px;"></i>Welcome! Tell us your name</h2>
+            <p>First time here? Enter your name to get started.</p>
+            <div class="modal-error" id="step2Error"></div>
+            <form onsubmit="sendOtpNewUser(event)">
+                <div class="form-group">
+                    <label for="leadName">Your Name</label>
+                    <input type="text" id="leadName" placeholder="Enter your full name" required>
                 </div>
                 <button type="submit" class="btn-submit" id="sendOtpBtn" style="background:#25D366;">
                     <i class="fab fa-whatsapp"></i> Send OTP on WhatsApp
                 </button>
             </form>
-            <p style="font-size:11px;color:var(--gray-400);text-align:center;margin-top:12px;">We'll send a 6-digit code to your WhatsApp. No spam, we promise!</p>
+            <button type="button" onclick="goBackToPhone()" style="background:none;border:none;color:var(--gray-500);font-size:13px;cursor:pointer;font-family:inherit;padding:0;margin-top:12px;">
+                <i class="fas fa-arrow-left"></i> Change number
+            </button>
         </div>
-        <!-- Step 2: Enter OTP -->
-        <div id="otpStep2" style="display:none;">
+        <!-- Step 3: Enter OTP -->
+        <div id="otpStep3" style="display:none;">
             <h2><i class="fas fa-shield-alt" style="color:#25D366;margin-right:8px;"></i>Enter OTP</h2>
             <p>We've sent a 6-digit code to <strong id="otpPhoneDisplay"></strong> on WhatsApp.</p>
             <div class="modal-error" id="otpError"></div>
@@ -1037,7 +1051,7 @@
                 </button>
             </form>
             <div style="display:flex;align-items:center;justify-content:space-between;margin-top:14px;">
-                <button type="button" onclick="goBackToStep1()" style="background:none;border:none;color:var(--gray-500);font-size:13px;cursor:pointer;font-family:inherit;padding:0;">
+                <button type="button" onclick="goBackToPhone()" style="background:none;border:none;color:var(--gray-500);font-size:13px;cursor:pointer;font-family:inherit;padding:0;">
                     <i class="fas fa-arrow-left"></i> Change number
                 </button>
                 <button type="button" onclick="resendOtp()" id="resendBtn" style="background:none;border:none;color:#25D366;font-size:13px;cursor:pointer;font-family:inherit;font-weight:600;padding:0;" disabled>
@@ -1241,55 +1255,64 @@
     applyFilters();
 
     // ── Download handling ──
+    let isReturningUser = false;
+
     function handleDownload(pdfId) {
         if (leadCaptured) {
             markPdfViewed(pdfId);
             window.location.href = '/neet-pg-2025/download/' + pdfId;
         } else {
             pendingDownloadId = pdfId;
-            document.getElementById('leadModal').classList.add('show');
-            document.getElementById('leadName').focus();
+            showModal();
         }
     }
 
-    // ── WhatsApp OTP Flow ──
-    function sendOtp(e) {
+    function showModal() {
+        resetModalToStep1();
+        document.getElementById('leadModal').classList.add('show');
+        document.getElementById('leadWhatsApp').focus();
+    }
+
+    function resetModalToStep1() {
+        document.getElementById('otpStep1').style.display = 'block';
+        document.getElementById('otpStep2').style.display = 'none';
+        document.getElementById('otpStep3').style.display = 'none';
+        document.getElementById('step1Error').style.display = 'none';
+        if (resendCountdown) clearInterval(resendCountdown);
+    }
+
+    // ── Step 1: Check phone number ──
+    function checkPhone(e) {
         e.preventDefault();
-        var name = document.getElementById('leadName').value.trim();
         var whatsapp = document.getElementById('leadWhatsApp').value.trim();
-        var errorEl = document.getElementById('modalError');
-        var btn = document.getElementById('sendOtpBtn');
+        var errorEl = document.getElementById('step1Error');
+        var btn = document.getElementById('checkPhoneBtn');
         errorEl.style.display = 'none';
-        if (!name) {
-            errorEl.textContent = 'Please enter your name.';
-            errorEl.style.display = 'block';
-            return;
-        }
+
         if (!whatsapp || whatsapp.replace(/[^0-9]/g, '').length < 10) {
             errorEl.textContent = 'Please enter a valid 10-digit WhatsApp number.';
             errorEl.style.display = 'block';
             return;
         }
         btn.disabled = true;
-        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP...';
-        fetch('/neet-pg-2025/send-otp', {
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Checking...';
+        fetch('/neet-pg-2025/check-phone', {
             method: 'POST',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name, whatsapp: whatsapp})
+            body: JSON.stringify({whatsapp: whatsapp})
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
-            if (data.success) {
-                // Show step 2
+            if (data.exists) {
+                // Returning user — send OTP directly, skip name
+                isReturningUser = true;
+                sendOtpDirect(whatsapp, true);
+            } else {
+                // New user — show name step
+                isReturningUser = false;
                 document.getElementById('otpStep1').style.display = 'none';
                 document.getElementById('otpStep2').style.display = 'block';
-                var cleanNum = whatsapp.replace(/[^0-9]/g, '').slice(-10);
-                document.getElementById('otpPhoneDisplay').textContent = '+91 ' + cleanNum.slice(0,5) + ' ' + cleanNum.slice(5);
-                document.getElementById('otpInput').focus();
-                startResendTimer();
-            } else {
-                errorEl.textContent = data.error || 'Could not send OTP. Try again.';
-                errorEl.style.display = 'block';
+                document.getElementById('leadName').focus();
             }
         })
         .catch(function() {
@@ -1298,10 +1321,70 @@
         })
         .finally(function() {
             btn.disabled = false;
-            btn.innerHTML = '<i class="fab fa-whatsapp"></i> Send OTP on WhatsApp';
+            btn.innerHTML = '<i class="fab fa-whatsapp"></i> Continue';
         });
     }
 
+    // ── Step 2a: New user submits name → send OTP ──
+    function sendOtpNewUser(e) {
+        e.preventDefault();
+        var name = document.getElementById('leadName').value.trim();
+        var whatsapp = document.getElementById('leadWhatsApp').value.trim();
+        var errorEl = document.getElementById('step2Error');
+        errorEl.style.display = 'none';
+
+        if (!name) {
+            errorEl.textContent = 'Please enter your name.';
+            errorEl.style.display = 'block';
+            return;
+        }
+        var btn = document.getElementById('sendOtpBtn');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Sending OTP...';
+        sendOtpDirect(whatsapp, false, name, function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fab fa-whatsapp"></i> Send OTP on WhatsApp';
+        }, errorEl);
+    }
+
+    // ── Core OTP sender (used by both new + returning flows) ──
+    function sendOtpDirect(whatsapp, returning, name, resetBtn, errorEl) {
+        var payload = {whatsapp: whatsapp, returning: returning};
+        if (name) payload.name = name;
+        fetch('/neet-pg-2025/send-otp', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(payload)
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) {
+                // Go to OTP verify step
+                document.getElementById('otpStep1').style.display = 'none';
+                document.getElementById('otpStep2').style.display = 'none';
+                document.getElementById('otpStep3').style.display = 'block';
+                var cleanNum = whatsapp.replace(/[^0-9]/g, '').slice(-10);
+                document.getElementById('otpPhoneDisplay').textContent = '+91 ' + cleanNum.slice(0,5) + ' ' + cleanNum.slice(5);
+                document.getElementById('otpInput').value = '';
+                document.getElementById('otpInput').focus();
+                startResendTimer();
+            } else {
+                var errTarget = errorEl || document.getElementById('step1Error');
+                errTarget.textContent = data.error || 'Could not send OTP. Try again.';
+                errTarget.style.display = 'block';
+            }
+        })
+        .catch(function() {
+            var errTarget = errorEl || document.getElementById('step1Error');
+            errTarget.textContent = 'Network error. Please try again.';
+            errTarget.style.display = 'block';
+        })
+        .finally(function() {
+            if (resetBtn) resetBtn();
+        });
+    }
+
+    // ── Step 3: Verify OTP ──
     function verifyOtp(e) {
         e.preventDefault();
         var otp = document.getElementById('otpInput').value.trim();
@@ -1325,14 +1408,10 @@
             if (data.success) {
                 leadCaptured = true;
                 document.getElementById('leadModal').classList.remove('show');
-                // Reset modal to step 1 for next time
-                document.getElementById('otpStep1').style.display = 'block';
-                document.getElementById('otpStep2').style.display = 'none';
-                // Clear pending actions — user will click View/Download again
+                resetModalToStep1();
                 pendingViewId = null;
                 pendingViewTitle = null;
                 pendingDownloadId = null;
-                // Show user bar with name
                 showUserBar(data.name || 'User');
             } else {
                 errorEl.textContent = data.error || 'Invalid OTP. Try again.';
@@ -1349,10 +1428,11 @@
         });
     }
 
-    function goBackToStep1() {
+    function goBackToPhone() {
         document.getElementById('otpStep2').style.display = 'none';
+        document.getElementById('otpStep3').style.display = 'none';
         document.getElementById('otpStep1').style.display = 'block';
-        document.getElementById('modalError').style.display = 'none';
+        document.getElementById('step1Error').style.display = 'none';
         if (resendCountdown) clearInterval(resendCountdown);
     }
 
@@ -1376,34 +1456,16 @@
     }
 
     function resendOtp() {
-        var name = document.getElementById('leadName').value.trim();
         var whatsapp = document.getElementById('leadWhatsApp').value.trim();
         var errorEl = document.getElementById('otpError');
         var btn = document.getElementById('resendBtn');
         errorEl.style.display = 'none';
         btn.disabled = true;
         btn.textContent = 'Sending...';
-        fetch('/neet-pg-2025/send-otp', {
-            method: 'POST',
-            headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({name: name, whatsapp: whatsapp})
-        })
-        .then(function(r) { return r.json(); })
-        .then(function(data) {
-            if (data.success) {
-                startResendTimer();
-                btn.innerHTML = 'Resend OTP <span id="resendTimer"></span>';
-            } else {
-                errorEl.textContent = data.error || 'Could not resend OTP.';
-                errorEl.style.display = 'block';
-                btn.disabled = false;
-            }
-        })
-        .catch(function() {
-            errorEl.textContent = 'Network error.';
-            errorEl.style.display = 'block';
-            btn.disabled = false;
-        });
+        var name = isReturningUser ? '' : (document.getElementById('leadName').value.trim() || '');
+        sendOtpDirect(whatsapp, isReturningUser, name || undefined, function() {
+            btn.innerHTML = 'Resend OTP <span id="resendTimer"></span>';
+        }, errorEl);
     }
 
     // ── PDF Viewer ──
@@ -1415,8 +1477,7 @@
             pendingViewId = pdfId;
             pendingViewTitle = title;
             pendingDownloadId = null;
-            document.getElementById('leadModal').classList.add('show');
-            document.getElementById('leadName').focus();
+            showModal();
         }
     }
 
@@ -1461,8 +1522,7 @@
         pendingViewId = null;
         pendingViewTitle = null;
         pendingDownloadId = null;
-        document.getElementById('leadModal').classList.add('show');
-        document.getElementById('leadName').focus();
+        showModal();
     }
 
     // ── User bar: show after login ──
