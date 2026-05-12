@@ -21118,12 +21118,9 @@ def ensure_neetpg_tables():
                 conn.commit()
             except Exception:
                 conn.rollback()
-        # Backfill: mark existing active PDFs as published
-        try:
-            conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = upload_date WHERE is_active = 1 AND is_published = 0")
-            conn.commit()
-        except Exception:
-            conn.rollback()
+        # One-time backfill (already applied, safe to skip)
+        # Previously: marked all active PDFs as published on first deploy.
+        # Removed to prevent re-publishing drafts on every app restart.
         conn.close()
     except Exception as e:
         logging.error(f"ensure_neetpg_tables: {e}")
@@ -21468,14 +21465,17 @@ def neetpg_export_leads():
                      mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
 
 
-# ── Auto-publish scheduler (10 AM + 5 PM IST daily) ──
+# ── Auto-publish scheduler (10 AM + 5 PM IST daily, FIFO) ──
+# Slots: 10:00 AM IST and 5:00 PM IST — one PDF per slot, oldest first.
+# On startup we catch up on any missed slots for today so deploys/restarts
+# don't cause skipped publishes.
+
 def neetpg_auto_publish():
-    """Publish the next draft PDF that has auto_schedule=1."""
+    """Publish the next draft PDF that has auto_schedule=1 (FIFO: oldest upload first)."""
     try:
         conn = get_db()
-        # Pick the oldest draft PDF with auto_schedule enabled
         draft = conn.execute(
-            "SELECT id FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+            "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT 1"
         ).fetchone()
         if draft:
             conn.execute(
@@ -21483,14 +21483,73 @@ def neetpg_auto_publish():
                 (draft['id'],)
             )
             conn.commit()
-            logging.info(f"Auto-published NEET PG PDF id={draft['id']}")
+            logging.info(f"Auto-published NEET PG PDF id={draft['id']} title={draft['title']}")
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
 
 
+def neetpg_catchup_publish():
+    """On startup, publish drafts for any slots that were missed today.
+
+    Slots are 10 AM and 5 PM IST. For each slot that has already passed today,
+    we check if a PDF was published within that slot window (±30 min). If not,
+    we publish one draft now (FIFO). This handles Render restarts / deploys
+    that happen after a slot time, ensuring no slot is wasted.
+    """
+    try:
+        import pytz
+        from datetime import datetime, timedelta
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        today_date = now_ist.date()
+
+        # Define the two daily slots (hour in IST)
+        slots = [10, 17]
+        missed_slots = 0
+
+        conn = get_db()
+        for slot_hour in slots:
+            slot_time = now_ist.replace(hour=slot_hour, minute=0, second=0, microsecond=0)
+            # Only check slots that have already passed
+            if now_ist < slot_time:
+                continue
+            # Check if anything was published in a window around this slot today
+            window_start = slot_time - timedelta(minutes=30)
+            window_end = slot_time + timedelta(minutes=30)
+            published_in_window = conn.execute(
+                "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE is_published = 1 AND published_at >= ? AND published_at < ?",
+                (window_start.strftime('%Y-%m-%d %H:%M:%S'), window_end.strftime('%Y-%m-%d %H:%M:%S'))
+            ).fetchone()['c']
+            if published_in_window == 0:
+                missed_slots += 1
+
+        # Publish one draft per missed slot (FIFO)
+        if missed_slots > 0:
+            drafts = conn.execute(
+                "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
+                (missed_slots,)
+            ).fetchall()
+            for draft in drafts:
+                conn.execute(
+                    "UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP WHERE id = ?",
+                    (draft['id'],)
+                )
+                logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']} (missed slot)")
+            if drafts:
+                conn.commit()
+            logging.info(f"Catchup check: {missed_slots} missed slot(s) today, published {len(drafts)} draft(s)")
+
+        conn.close()
+    except Exception as e:
+        logging.error(f"neetpg_catchup_publish error: {e}")
+
+
 def start_neetpg_scheduler():
-    """Start background scheduler for auto-publishing PDFs at 10 AM and 5 PM IST."""
+    """Start background scheduler for auto-publishing PDFs at 10 AM and 5 PM IST.
+
+    Also runs a one-time catchup to handle any slots missed due to app restarts.
+    """
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
         from apscheduler.triggers.cron import CronTrigger
@@ -21503,6 +21562,8 @@ def start_neetpg_scheduler():
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
         scheduler.start()
         logging.info("NEET PG auto-publish scheduler started (10 AM + 5 PM IST)")
+        # Run catchup for missed slots after restarts/deploys
+        neetpg_catchup_publish()
     except ImportError:
         logging.warning("APScheduler not installed. Auto-publish disabled. pip install APScheduler pytz")
     except Exception as e:
