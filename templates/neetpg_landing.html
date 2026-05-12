@@ -447,6 +447,38 @@
             text-transform: uppercase;
             margin-bottom: 6px;
         }
+        /* Coming Soon card */
+        .pdf-card.coming-soon {
+            opacity: 0.55;
+            pointer-events: none;
+            filter: grayscale(30%);
+        }
+        .pdf-card.coming-soon:hover {
+            transform: none;
+            box-shadow: var(--shadow);
+        }
+        .pdf-coming-badge {
+            display: inline-block;
+            background: #6366f1;
+            color: white;
+            font-size: 9px;
+            font-weight: 700;
+            padding: 2px 8px;
+            border-radius: 4px;
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+        .pdf-schedule-date {
+            font-size: 0.7rem;
+            color: #a5b4fc;
+            margin-top: 4px;
+            font-weight: 600;
+        }
+        .pdf-card.coming-soon .pdf-card-btns button {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
         .pdf-card-body {
             padding: 14px 18px 16px;
             flex: 1;
@@ -938,12 +970,68 @@
                     </div>
                 </div>
                 {% endfor %}
+                {# ── Coming Soon cards (scheduled, not yet published) ── #}
+                {% for pdf in neetpg_scheduled %}
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                    <div class="pdf-card-top">
+                        <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
+                        <h3>{{ pdf.title }}</h3>
+                        {% if schedule_map.get(pdf.id) %}
+                        <div class="pdf-schedule-date"><i class="fas fa-calendar-alt" style="font-size:9px;margin-right:3px;"></i>{{ schedule_map[pdf.id] }}</div>
+                        {% endif %}
+                        <div class="pdf-card-icon"><i class="fas fa-file-pdf"></i></div>
+                    </div>
+                    <div class="pdf-card-body">
+                        <div class="pdf-card-tags">
+                            <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                        </div>
+                        <div class="pdf-card-meta">
+                            <span class="size"><i class="fas fa-file" style="margin-right:3px;font-size:10px;"></i>{{ (pdf.file_size / 1024)|int }} KB</span>
+                        </div>
+                        <div class="pdf-card-btns">
+                            <button class="btn-view" disabled><i class="fas fa-eye"></i> View</button>
+                            <button class="btn-download" disabled><i class="fas fa-download"></i> Download</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            {% if neetpg_scheduled %}
+            <div class="pdf-grid" id="grid-neetpg">
+                {% for pdf in neetpg_scheduled %}
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                    <div class="pdf-card-top">
+                        <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
+                        <h3>{{ pdf.title }}</h3>
+                        {% if schedule_map.get(pdf.id) %}
+                        <div class="pdf-schedule-date"><i class="fas fa-calendar-alt" style="font-size:9px;margin-right:3px;"></i>{{ schedule_map[pdf.id] }}</div>
+                        {% endif %}
+                        <div class="pdf-card-icon"><i class="fas fa-file-pdf"></i></div>
+                    </div>
+                    <div class="pdf-card-body">
+                        <div class="pdf-card-tags">
+                            <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                        </div>
+                        <div class="pdf-card-meta">
+                            <span class="size"><i class="fas fa-file" style="margin-right:3px;font-size:10px;"></i>{{ (pdf.file_size / 1024)|int }} KB</span>
+                        </div>
+                        <div class="pdf-card-btns">
+                            <button class="btn-view" disabled><i class="fas fa-eye"></i> View</button>
+                            <button class="btn-download" disabled><i class="fas fa-download"></i> Download</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
             {% else %}
             <div class="empty-state">
                 <i class="fas fa-file-pdf"></i>
                 <p>NEET PG cut-off PDFs will be available soon. Join our WhatsApp channel for updates!</p>
             </div>
+            {% endif %}
             {% endif %}
         </div>
 
@@ -977,12 +1065,68 @@
                     </div>
                 </div>
                 {% endfor %}
+                {# ── Coming Soon cards (scheduled DNB) ── #}
+                {% for pdf in dnb_scheduled %}
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                    <div class="pdf-card-top">
+                        <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
+                        <h3>{{ pdf.title }}</h3>
+                        {% if schedule_map.get(pdf.id) %}
+                        <div class="pdf-schedule-date"><i class="fas fa-calendar-alt" style="font-size:9px;margin-right:3px;"></i>{{ schedule_map[pdf.id] }}</div>
+                        {% endif %}
+                        <div class="pdf-card-icon"><i class="fas fa-file-pdf"></i></div>
+                    </div>
+                    <div class="pdf-card-body">
+                        <div class="pdf-card-tags">
+                            <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                        </div>
+                        <div class="pdf-card-meta">
+                            <span class="size">{{ (pdf.file_size / 1024)|int }} KB</span>
+                        </div>
+                        <div class="pdf-card-btns">
+                            <button class="btn-view" disabled><i class="fas fa-eye"></i> View</button>
+                            <button class="btn-download" disabled><i class="fas fa-download"></i> Download</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+            {% else %}
+            {% if dnb_scheduled %}
+            <div class="pdf-grid" id="grid-dnb">
+                {% for pdf in dnb_scheduled %}
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                    <div class="pdf-card-top">
+                        <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
+                        <h3>{{ pdf.title }}</h3>
+                        {% if schedule_map.get(pdf.id) %}
+                        <div class="pdf-schedule-date"><i class="fas fa-calendar-alt" style="font-size:9px;margin-right:3px;"></i>{{ schedule_map[pdf.id] }}</div>
+                        {% endif %}
+                        <div class="pdf-card-icon"><i class="fas fa-file-pdf"></i></div>
+                    </div>
+                    <div class="pdf-card-body">
+                        <div class="pdf-card-tags">
+                            <span class="pdf-tag pdf-tag-course">{{ pdf.specialty }}</span>
+                            <span class="pdf-tag pdf-tag-state"><i class="fas fa-map-marker-alt" style="font-size:9px;margin-right:2px;"></i>{{ pdf.state or 'All India/MCC' }}</span>
+                        </div>
+                        <div class="pdf-card-meta">
+                            <span class="size">{{ (pdf.file_size / 1024)|int }} KB</span>
+                        </div>
+                        <div class="pdf-card-btns">
+                            <button class="btn-view" disabled><i class="fas fa-eye"></i> View</button>
+                            <button class="btn-download" disabled><i class="fas fa-download"></i> Download</button>
+                        </div>
+                    </div>
+                </div>
+                {% endfor %}
             </div>
             {% else %}
             <div class="empty-state">
                 <i class="fas fa-file-pdf"></i>
                 <p>DNB cut-off PDFs will be available soon. Join our WhatsApp channel for updates!</p>
             </div>
+            {% endif %}
             {% endif %}
         </div>
     </div>
@@ -1215,10 +1359,12 @@
         if (!section) return;
         var cards = section.querySelectorAll('.pdf-card');
         var visible = 0;
+        var comingSoonVisible = 0;
         cards.forEach(function(card) {
             var specialty = card.getAttribute('data-specialty') || '';
             var state = card.getAttribute('data-state') || '';
             var title = card.getAttribute('data-title') || '';
+            var isComingSoon = card.classList.contains('coming-soon');
             var show = true;
             // Text search
             if (query && specialty.toLowerCase().indexOf(query) === -1 && title.toLowerCase().indexOf(query) === -1) {
@@ -1233,11 +1379,18 @@
                 show = false;
             }
             card.style.display = show ? '' : 'none';
-            if (show) visible++;
+            if (show) {
+                if (isComingSoon) comingSoonVisible++;
+                else visible++;
+            }
         });
         // Update count
         var countEl = document.getElementById('resultsCount');
-        countEl.innerHTML = '<strong>' + visible + '</strong> PDF' + (visible !== 1 ? 's' : '') + ' found';
+        var text = '<strong>' + visible + '</strong> PDF' + (visible !== 1 ? 's' : '') + ' available';
+        if (comingSoonVisible > 0) {
+            text += ' · <span style="color:#6366f1;">' + comingSoonVisible + ' coming soon</span>';
+        }
+        countEl.innerHTML = text;
     }
 
     // ── Filter chips ──

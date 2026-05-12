@@ -21147,6 +21147,45 @@ def neetpg_landing():
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
+
+    # ── Fetch scheduled (coming soon) PDFs ──
+    scheduled_pdfs = conn.execute(
+        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+    ).fetchall()
+
+    # ── Compute schedule_map for coming soon PDFs (same FIFO logic as admin) ──
+    schedule_map = {}
+    try:
+        import pytz
+        from datetime import timedelta
+        ist = pytz.timezone('Asia/Kolkata')
+        now_ist = datetime.now(ist)
+        slots_today = []
+        for h in [10, 17]:
+            slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
+            if slot > now_ist:
+                slots_today.append(slot)
+        slot_idx = 0
+        current_day_offset = 0
+        available_slots = list(slots_today)
+        for draft in scheduled_pdfs:
+            if slot_idx >= len(available_slots):
+                current_day_offset += 1
+                next_day = now_ist + timedelta(days=current_day_offset)
+                available_slots = [
+                    next_day.replace(hour=10, minute=0, second=0, microsecond=0),
+                    next_day.replace(hour=17, minute=0, second=0, microsecond=0)
+                ]
+                slot_idx = 0
+            assigned_slot = available_slots[slot_idx]
+            schedule_map[draft['id']] = assigned_slot.strftime('%b %d, %I:%M %p') + ' IST'
+            slot_idx += 1
+    except Exception as e:
+        logging.error(f"landing schedule_map build error: {e}")
+
+    neetpg_scheduled = [p for p in scheduled_pdfs if p['category'] == 'neetpg']
+    dnb_scheduled = [p for p in scheduled_pdfs if p['category'] == 'dnb']
+
     # Build dynamic filter lists per category
     neetpg_courses = set()
     neetpg_states = set()
@@ -21171,6 +21210,9 @@ def neetpg_landing():
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
                            all_pdfs=all_pdfs,
+                           neetpg_scheduled=neetpg_scheduled,
+                           dnb_scheduled=dnb_scheduled,
+                           schedule_map=schedule_map,
                            neetpg_courses=sorted(neetpg_courses),
                            neetpg_states=sorted(neetpg_states),
                            dnb_courses=sorted(dnb_courses),
