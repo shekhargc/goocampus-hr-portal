@@ -21119,12 +21119,12 @@ def ensure_neetpg_tables():
             except Exception:
                 conn.rollback()
         # One-time: backdate published_at on all existing published PDFs to remove NEW badge
-        # This sets published_at to 7 days ago so the 3-day NEW window has expired.
-        # Only affects PDFs published before 2026-05-13 (the migration date).
+        # Sets published_at to 2026-05-01 (well outside the 3-day NEW window)
+        # for any PDF published on or before 2026-05-13 (migration date).
         try:
             conn.execute(
-                "UPDATE neetpg_pdfs SET published_at = CURRENT_TIMESTAMP - INTERVAL '7 days' "
-                "WHERE is_published = 1 AND published_at < '2026-05-13'"
+                "UPDATE neetpg_pdfs SET published_at = '2026-05-01 00:00:00' "
+                "WHERE is_published = 1 AND published_at <= '2026-05-13 23:59:59'"
             )
             conn.commit()
         except Exception:
