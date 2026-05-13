@@ -21118,13 +21118,13 @@ def ensure_neetpg_tables():
                 conn.commit()
             except Exception:
                 conn.rollback()
-        # One-time: backdate published_at on all existing published PDFs to remove NEW badge
-        # Sets published_at to 2026-05-01 (well outside the 3-day NEW window)
-        # for any PDF published on or before 2026-05-13 (migration date).
+        # One-time: backdate published_at on all PDFs published before May 13 8:30 AM IST
+        # to remove NEW badge. PDFs published after 8:45 AM IST onwards keep NEW badge.
+        # 8:30 AM IST = 3:00 AM UTC on May 13.
         try:
             conn.execute(
                 "UPDATE neetpg_pdfs SET published_at = '2026-05-01 00:00:00' "
-                "WHERE is_published = 1 AND published_at <= '2026-05-13 23:59:59'"
+                "WHERE is_published = 1 AND published_at <= '2026-05-13 03:00:00'"
             )
             conn.commit()
         except Exception:
