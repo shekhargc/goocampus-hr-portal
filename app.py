@@ -21581,10 +21581,15 @@ def neetpg_complete_request(req_id):
         conn.commit()
 
         # Send WhatsApp notification via Infobip
+        # Set NEETPG_WA_NOTIFY=1 in env to enable (disabled until template is approved)
         phone = req['phone']
         wa_sent = False
         wa_error = ''
-        if phone and len(phone) >= 10:
+        wa_enabled = os.environ.get('NEETPG_WA_NOTIFY', '') == '1'
+        if not wa_enabled:
+            wa_error = 'WhatsApp notifications disabled (enable via NEETPG_WA_NOTIFY=1)'
+            logging.info(f"WA notification skipped for request {req_id} — NEETPG_WA_NOTIFY not set")
+        elif phone and len(phone) >= 10:
             try:
                 import requests as http_requests
                 infobip_key = os.environ.get('INFOBIP_API_KEY', '')
