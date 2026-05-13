@@ -21118,9 +21118,17 @@ def ensure_neetpg_tables():
                 conn.commit()
             except Exception:
                 conn.rollback()
-        # One-time backfill (already applied, safe to skip)
-        # Previously: marked all active PDFs as published on first deploy.
-        # Removed to prevent re-publishing drafts on every app restart.
+        # One-time: backdate published_at on all existing published PDFs to remove NEW badge
+        # This sets published_at to 7 days ago so the 3-day NEW window has expired.
+        # Only affects PDFs published before 2026-05-13 (the migration date).
+        try:
+            conn.execute(
+                "UPDATE neetpg_pdfs SET published_at = CURRENT_TIMESTAMP - INTERVAL '7 days' "
+                "WHERE is_published = 1 AND published_at < '2026-05-13'"
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
         conn.close()
     except Exception as e:
         logging.error(f"ensure_neetpg_tables: {e}")
@@ -21161,7 +21169,7 @@ def neetpg_landing():
         ist = pytz.timezone('Asia/Kolkata')
         now_ist = datetime.now(ist)
         slots_today = []
-        for h in [10, 17]:
+        for h in [10, 13, 17]:
             slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
             if slot > now_ist:
                 slots_today.append(slot)
@@ -21577,7 +21585,7 @@ def neetpg_admin():
         ).fetchall()
         # Build list of future slots starting from next available
         slots_today = []
-        for h in [10, 17]:
+        for h in [10, 13, 17]:
             slot = now_ist.replace(hour=h, minute=0, second=0, microsecond=0)
             if slot > now_ist:
                 slots_today.append(slot)
@@ -21772,9 +21780,9 @@ def neetpg_auto_publish():
 def neetpg_catchup_publish():
     """On startup, publish drafts for any slots missed today.
 
-    Approach: count how many 10 AM / 5 PM slots have passed today in IST,
+    Approach: count how many 10 AM / 1 PM / 5 PM slots have passed today in IST,
     then count how many PDFs were already published today (IST date).
-    If published < passed_slots, publish the difference (FIFO, max 2/day).
+    If published < passed_slots, publish the difference (FIFO, max 3/day).
     Uses IST-based date comparison via AT TIME ZONE to avoid UTC mismatch.
     """
     try:
@@ -21785,6 +21793,8 @@ def neetpg_catchup_publish():
         # How many slots have passed today?
         slots_passed = 0
         if now_ist.hour >= 10:
+            slots_passed += 1
+        if now_ist.hour >= 13:
             slots_passed += 1
         if now_ist.hour >= 17:
             slots_passed += 1
@@ -21808,8 +21818,8 @@ def neetpg_catchup_publish():
             conn.close()
             return
 
-        # Cap at 2 per day max
-        need = min(need, 2)
+        # Cap at 3 per day max
+        need = min(need, 3)
         drafts = conn.execute(
             "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
             (need,)
@@ -21829,7 +21839,7 @@ def neetpg_catchup_publish():
 
 
 def start_neetpg_scheduler():
-    """Start background scheduler for auto-publishing PDFs at 10 AM and 5 PM IST.
+    """Start background scheduler for auto-publishing PDFs at 10 AM, 1 PM and 5 PM IST.
 
     Also runs a one-time catchup to handle any slots missed due to app restarts.
     """
@@ -21841,10 +21851,12 @@ def start_neetpg_scheduler():
         scheduler = BackgroundScheduler()
         # 10:00 AM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=10, minute=0, timezone=ist), id='neetpg_publish_morning')
+        # 1:00 PM IST daily
+        scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=13, minute=0, timezone=ist), id='neetpg_publish_afternoon')
         # 5:00 PM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
         scheduler.start()
-        logging.info("NEET PG auto-publish scheduler started (10 AM + 5 PM IST)")
+        logging.info("NEET PG auto-publish scheduler started (10 AM + 1 PM + 5 PM IST)")
         # Run catchup for missed slots after restarts/deploys
         neetpg_catchup_publish()
     except ImportError:
