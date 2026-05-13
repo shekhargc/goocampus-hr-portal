@@ -689,11 +689,12 @@
                     <th>Contact</th>
                     <th>Source</th>
                     <th>Captured At</th>
+                    <th>Actions</th>
                 </tr>
             </thead>
             <tbody>
                 {% for lead in leads %}
-                <tr>
+                <tr id="lead-row-{{ lead.id }}">
                     <td>{{ loop.index }}</td>
                     <td style="font-weight:600;color:var(--gray-800);">{{ lead.name }}</td>
                     <td>
@@ -718,6 +719,11 @@
                         {% endif %}
                     </td>
                     <td style="font-size:0.82rem;">{{ lead.created_at }}</td>
+                    <td>
+                        <button class="np-action-btn delete" onclick="deleteLead({{ lead.id }})" title="Delete lead">
+                            <i class="fas fa-trash"></i>
+                        </button>
+                    </td>
                 </tr>
                 {% endfor %}
             </tbody>
@@ -776,14 +782,15 @@
                         {% endif %}
                     </td>
                     <td style="font-size:0.82rem;white-space:nowrap;">{{ req.created_at }}</td>
-                    <td>
+                    <td style="white-space:nowrap;">
                         {% if req.status == 'pending' %}
                         <button class="np-action-btn publish" onclick="completeRequest({{ req.id }})" title="Mark as completed & notify doctor">
                             <i class="fas fa-check"></i>
                         </button>
-                        {% else %}
-                        <span style="color:var(--gray-300);font-size:0.75rem;">—</span>
                         {% endif %}
+                        <button class="np-action-btn delete" onclick="deleteRequest({{ req.id }})" title="Delete request" style="margin-left:4px;">
+                            <i class="fas fa-trash"></i>
+                        </button>
                     </td>
                 </tr>
                 {% endfor %}
@@ -895,10 +902,36 @@ function submitCompleteRequest() {
     .then(function(data) {
         if (data.success) {
             closeCompleteModal();
-            npShowToast('Request completed & doctor notified via WhatsApp');
-            setTimeout(function() { location.reload(); }, 1000);
+            if (data.wa_sent) {
+                npShowToast('Request completed & WhatsApp sent!');
+            } else {
+                npShowToast('Request completed. WhatsApp failed: ' + (data.wa_error || 'unknown'));
+            }
+            setTimeout(function() { location.reload(); }, 2000);
         } else {
             alert(data.error || 'Failed');
+        }
+    });
+}
+function deleteLead(leadId) {
+    if (!confirm('Delete this lead?')) return;
+    fetch('/admin/neetpg-leads/' + leadId, {method: 'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            document.getElementById('lead-row-' + leadId).remove();
+            npShowToast('Lead deleted');
+        }
+    });
+}
+function deleteRequest(reqId) {
+    if (!confirm('Delete this request?')) return;
+    fetch('/admin/neetpg-requests/' + reqId, {method: 'DELETE'})
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            document.getElementById('req-row-' + reqId).remove();
+            npShowToast('Request deleted');
         }
     });
 }

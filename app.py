@@ -21580,35 +21580,79 @@ def neetpg_complete_request(req_id):
         )
         conn.commit()
 
-        # Send WhatsApp notification via Infobip (free-form text message)
+        # Send WhatsApp notification via Infobip
         phone = req['phone']
+        wa_sent = False
+        wa_error = ''
         if phone and len(phone) >= 10:
             try:
                 import requests as http_requests
                 infobip_key = os.environ.get('INFOBIP_API_KEY', '')
                 infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
                 if infobip_key and infobip_base:
-                    wa_url = f"https://{infobip_base}/whatsapp/1/message/text"
                     wa_headers = {
                         "Authorization": f"App {infobip_key}",
                         "Content-Type": "application/json"
                     }
-                    pdf_line = f"*{pdf_title}*" if pdf_title else f"{req['category'].upper()} - {req['state'] or 'General'}"
-                    note_text = f"\n\nNote: {admin_note}" if admin_note else ""
+                    to_number = f"91{phone[-10:]}"
+                    pdf_line = pdf_title if pdf_title else f"{req['category'].upper()} - {req['state'] or 'General'}"
+                    msg_text = (
+                        f"Hi {req['name']},\n\n"
+                        f"Great news! The document you requested is now available:\n\n"
+                        f"*{pdf_line}*\n\n"
+                        f"Access it here: https://goocampus.org/neet-pg-2025\n\n"
+                        f"— GooCampus Team"
+                    )
+
+                    # Try free-form text first (works if 24h session window is open)
+                    wa_url = f"https://{infobip_base}/whatsapp/1/message/text"
                     wa_payload = {
                         "from": "15558246314",
-                        "to": f"91{phone[-10:]}",
-                        "content": {
-                            "text": f"Hi {req['name']},\n\nGreat news! The document you requested is now available:\n\n{pdf_line}\n\nAccess it here: https://goocampus.org/neet-pg-2025{note_text}\n\n— GooCampus Team"
-                        }
+                        "to": to_number,
+                        "content": {"text": msg_text}
                     }
                     resp = http_requests.post(wa_url, json=wa_payload, headers=wa_headers, timeout=15)
-                    logging.info(f"Request completion WA notification to {phone}: status={resp.status_code}, response={resp.text[:200]}")
+                    logging.info(f"WA text msg to {phone}: status={resp.status_code}, body={resp.text[:300]}")
+
+                    if resp.status_code >= 400:
+                        # Free-form failed (likely no 24h session window) — try template
+                        logging.info(f"Free-form WA failed, trying template for {phone}")
+                        tmpl_url = f"https://{infobip_base}/whatsapp/1/message/template"
+                        tmpl_payload = {
+                            "messages": [{
+                                "from": "15558246314",
+                                "to": to_number,
+                                "content": {
+                                    "templateName": "goocampus_doc_notification",
+                                    "templateData": {
+                                        "body": {
+                                            "placeholders": [req['name'], pdf_line]
+                                        }
+                                    },
+                                    "language": "en"
+                                }
+                            }]
+                        }
+                        resp2 = http_requests.post(tmpl_url, json=tmpl_payload, headers=wa_headers, timeout=15)
+                        logging.info(f"WA template msg to {phone}: status={resp2.status_code}, body={resp2.text[:300]}")
+
+                        if resp2.status_code >= 400:
+                            # Template also failed — try with generic OTP template as last resort
+                            # Just send a simple notification text via SMS-like approach
+                            wa_error = f"WhatsApp delivery failed (text: {resp.status_code}, template: {resp2.status_code})"
+                            logging.warning(wa_error)
+                        else:
+                            wa_sent = True
+                    else:
+                        wa_sent = True
+                else:
+                    wa_error = 'Infobip credentials not configured'
             except Exception as wa_err:
+                wa_error = str(wa_err)
                 logging.error(f"WA notification for request {req_id} failed: {wa_err}")
 
         conn.close()
-        return jsonify({'success': True})
+        return jsonify({'success': True, 'wa_sent': wa_sent, 'wa_error': wa_error})
     except Exception as e:
         logging.error(f"neetpg complete request error: {e}")
         return jsonify({'error': 'Failed to complete request'}), 500
@@ -21877,6 +21921,34 @@ def neetpg_delete(pdf_id):
         return jsonify({'error': 'Admin required'}), 403
     conn = get_db()
     conn.execute("DELETE FROM neetpg_pdfs WHERE id = ?", (pdf_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Admin: Delete a NEET PG lead ──
+@app.route('/admin/neetpg-leads/<int:lead_id>', methods=['DELETE'])
+@login_required
+def neetpg_delete_lead(lead_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    conn.execute("DELETE FROM neetpg_leads WHERE id = ?", (lead_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+# ── Admin: Delete a NEET PG request ──
+@app.route('/admin/neetpg-requests/<int:req_id>', methods=['DELETE'])
+@login_required
+def neetpg_delete_request(req_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    conn.execute("DELETE FROM neetpg_requests WHERE id = ?", (req_id,))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
