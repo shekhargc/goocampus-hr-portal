@@ -21143,7 +21143,7 @@ def neetpg_landing():
         logging.error(f"neetpg visit track: {e}")
     # Only show published + active PDFs, newest published first
     all_pdfs = conn.execute(
-        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY upload_date DESC"
+        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
