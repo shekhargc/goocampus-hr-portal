@@ -21673,7 +21673,12 @@ def neetpg_admin():
         doc_requests = conn.execute("SELECT * FROM neetpg_requests ORDER BY created_at DESC").fetchall()
         request_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_requests").fetchone()['c']
         pending_requests = conn.execute("SELECT COUNT(*) as c FROM neetpg_requests WHERE status = 'pending'").fetchone()['c']
-    except Exception:
+    except Exception as req_err:
+        logging.error(f"neetpg requests query error: {req_err}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         doc_requests = []
         request_count = 0
         pending_requests = 0
