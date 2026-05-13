@@ -21103,6 +21103,19 @@ def ensure_neetpg_tables():
             ip_hash TEXT,
             user_agent TEXT
         )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS neetpg_requests (
+            id SERIAL PRIMARY KEY,
+            phone TEXT NOT NULL,
+            name TEXT NOT NULL,
+            category TEXT NOT NULL DEFAULT 'neetpg',
+            state TEXT,
+            message TEXT NOT NULL,
+            status TEXT DEFAULT 'pending',
+            admin_note TEXT,
+            notified INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            completed_at TIMESTAMP
+        )''')
         # Migration helper: each ALTER needs its own commit/rollback for PostgreSQL
         migrations = [
             "ALTER TABLE neetpg_leads ADD COLUMN email TEXT",
@@ -21467,6 +21480,124 @@ def neetpg_logout():
     return resp
 
 
+# ── Doctor Request Submit ──
+@app.route('/neet-pg-2025/request', methods=['POST'])
+def neetpg_submit_request():
+    phone = request.cookies.get('neetpg_lead', '')
+    name = request.cookies.get('neetpg_lead_name', '')
+    if not phone:
+        return jsonify({'error': 'Please login first'}), 401
+    data = request.get_json() or {}
+    category = data.get('category', '').strip()
+    state = data.get('state', '').strip()
+    message = data.get('message', '').strip()
+    if not category or not message:
+        return jsonify({'error': 'Category and message are required'}), 400
+    try:
+        conn = get_db()
+        conn.execute(
+            "INSERT INTO neetpg_requests (phone, name, category, state, message) VALUES (?, ?, ?, ?, ?)",
+            (phone, name or 'Doctor', category, state or None, message)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Your request has been submitted. We will notify you when the document is available.'})
+    except Exception as e:
+        logging.error(f"neetpg request submit error: {e}")
+        return jsonify({'error': 'Failed to submit request. Please try again.'}), 500
+
+
+# ── Doctor Request Notifications (check for completed requests) ──
+@app.route('/neet-pg-2025/check-notifications', methods=['POST'])
+def neetpg_check_notifications():
+    phone = request.cookies.get('neetpg_lead', '')
+    if not phone:
+        return jsonify({'notifications': []})
+    try:
+        conn = get_db()
+        notifs = conn.execute(
+            "SELECT id, category, state, message, admin_note, completed_at FROM neetpg_requests "
+            "WHERE phone = ? AND status = 'completed' AND notified = 0 ORDER BY completed_at DESC",
+            (phone,)
+        ).fetchall()
+        results = []
+        for n in notifs:
+            results.append({
+                'id': n['id'],
+                'category': n['category'],
+                'state': n['state'],
+                'message': n['message'],
+                'admin_note': n['admin_note'],
+                'completed_at': str(n['completed_at']) if n['completed_at'] else ''
+            })
+        # Mark as notified
+        if results:
+            conn.execute(
+                "UPDATE neetpg_requests SET notified = 1 WHERE phone = ? AND status = 'completed' AND notified = 0",
+                (phone,)
+            )
+            conn.commit()
+        conn.close()
+        return jsonify({'notifications': results})
+    except Exception as e:
+        logging.error(f"neetpg check notifications error: {e}")
+        return jsonify({'notifications': []})
+
+
+# ── Admin: Mark request as completed + send WhatsApp notification ──
+@app.route('/admin/neetpg-requests/<int:req_id>/complete', methods=['POST'])
+@login_required
+def neetpg_complete_request(req_id):
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    data = request.get_json() or {}
+    admin_note = data.get('admin_note', '').strip()
+    try:
+        conn = get_db()
+        req = conn.execute("SELECT * FROM neetpg_requests WHERE id = ?", (req_id,)).fetchone()
+        if not req:
+            conn.close()
+            return jsonify({'error': 'Request not found'}), 404
+        conn.execute(
+            "UPDATE neetpg_requests SET status = 'completed', completed_at = CURRENT_TIMESTAMP, admin_note = ? WHERE id = ?",
+            (admin_note, req_id)
+        )
+        conn.commit()
+
+        # Send WhatsApp notification via Infobip (free-form text message)
+        phone = req['phone']
+        if phone and len(phone) >= 10:
+            try:
+                import requests as http_requests
+                infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+                infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+                if infobip_key and infobip_base:
+                    wa_url = f"https://{infobip_base}/whatsapp/1/message/text"
+                    wa_headers = {
+                        "Authorization": f"App {infobip_key}",
+                        "Content-Type": "application/json"
+                    }
+                    note_text = f"\n\nNote: {admin_note}" if admin_note else ""
+                    wa_payload = {
+                        "from": "15558246314",
+                        "to": f"91{phone[-10:]}",
+                        "content": {
+                            "text": f"Hi {req['name']},\n\nGreat news! The document you requested ({req['category'].upper()} - {req['state'] or 'General'}) is now available on our NEET PG 2025 portal.\n\nVisit: https://goocampus-hr-portal.onrender.com/neet-pg-2025{note_text}\n\n— GooCampus Team"
+                        }
+                    }
+                    resp = http_requests.post(wa_url, json=wa_payload, headers=wa_headers, timeout=15)
+                    logging.info(f"Request completion WA notification to {phone}: status={resp.status_code}")
+            except Exception as wa_err:
+                logging.error(f"WA notification for request {req_id} failed: {wa_err}")
+
+        conn.close()
+        return jsonify({'success': True})
+    except Exception as e:
+        logging.error(f"neetpg complete request error: {e}")
+        return jsonify({'error': 'Failed to complete request'}), 500
+
+
 # ── PDF download route ──
 @app.route('/neet-pg-2025/download/<int:pdf_id>')
 def neetpg_download(pdf_id):
@@ -21537,6 +21668,15 @@ def neetpg_admin():
     ).fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
+    # Requests
+    try:
+        doc_requests = conn.execute("SELECT * FROM neetpg_requests ORDER BY created_at DESC").fetchall()
+        request_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_requests").fetchone()['c']
+        pending_requests = conn.execute("SELECT COUNT(*) as c FROM neetpg_requests WHERE status = 'pending'").fetchone()['c']
+    except Exception:
+        doc_requests = []
+        request_count = 0
+        pending_requests = 0
 
     # Analytics
     total_visits = conn.execute("SELECT COUNT(*) as c FROM neetpg_page_visits").fetchone()['c']
@@ -21611,7 +21751,8 @@ def neetpg_admin():
 
     conn.close()
     return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
-                           page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map)
+                           page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map,
+                           doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests)
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])

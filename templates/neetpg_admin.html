@@ -557,6 +557,10 @@
         <i class="fas fa-users"></i> Leads
         <span class="np-tab-badge">{{ lead_count }}</span>
     </button>
+    <button class="np-tab" onclick="npSwitchTab('requests', this)">
+        <i class="fas fa-hand-paper"></i> Requests
+        <span class="np-tab-badge" {% if pending_requests > 0 %}style="background:#ef4444;color:white;"{% endif %}>{{ request_count }}{% if pending_requests > 0 %} ({{ pending_requests }}){% endif %}</span>
+    </button>
 </div>
 
 <!-- PDFs Tab -->
@@ -727,6 +731,70 @@
     {% endif %}
 </div>
 
+<!-- Requests Tab -->
+<div class="np-tab-panel" id="panel-requests">
+    {% if doc_requests %}
+    <div class="np-table-wrap">
+        <table class="np-table">
+            <thead>
+                <tr>
+                    <th>#</th>
+                    <th>Doctor</th>
+                    <th>Phone</th>
+                    <th>Category</th>
+                    <th>State</th>
+                    <th>Request</th>
+                    <th>Status</th>
+                    <th>Date</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for req in doc_requests %}
+                <tr id="req-row-{{ req.id }}">
+                    <td>{{ loop.index }}</td>
+                    <td style="font-weight:600;color:var(--gray-800);">{{ req.name }}</td>
+                    <td>
+                        <a href="https://wa.me/91{{ req.phone }}" target="_blank" class="np-wa-link">
+                            <i class="fab fa-whatsapp"></i> {{ req.phone }}
+                        </a>
+                    </td>
+                    <td><span class="np-badge np-badge-blue">{{ req.category|upper }}</span></td>
+                    <td style="font-size:0.82rem;">{{ req.state or '—' }}</td>
+                    <td style="font-size:0.82rem;max-width:220px;">{{ req.message }}</td>
+                    <td>
+                        {% if req.status == 'completed' %}
+                        <span class="np-badge np-badge-green">Completed</span>
+                        {% if req.admin_note %}
+                        <div style="font-size:0.7rem;color:#6b7280;margin-top:3px;">{{ req.admin_note }}</div>
+                        {% endif %}
+                        {% else %}
+                        <span class="np-badge np-badge-yellow">Pending</span>
+                        {% endif %}
+                    </td>
+                    <td style="font-size:0.82rem;white-space:nowrap;">{{ req.created_at }}</td>
+                    <td>
+                        {% if req.status == 'pending' %}
+                        <button class="np-action-btn publish" onclick="completeRequest({{ req.id }})" title="Mark as completed & notify doctor">
+                            <i class="fas fa-check"></i>
+                        </button>
+                        {% else %}
+                        <span style="color:var(--gray-300);font-size:0.75rem;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="np-empty">
+        <i class="fas fa-hand-paper"></i>
+        <p>No requests yet. Doctors can request specific PDFs or information from the landing page after logging in.</p>
+    </div>
+    {% endif %}
+</div>
+
 <div class="np-toast" id="npToast">Saved</div>
 {% endblock %}
 
@@ -770,6 +838,25 @@ function deletePdf(pdfId) {
         if (data.success) {
             document.getElementById('pdf-row-' + pdfId).remove();
             npShowToast('PDF deleted');
+        }
+    });
+}
+
+function completeRequest(reqId) {
+    var note = prompt('Admin note (optional — e.g., which PDF was uploaded):');
+    if (note === null) return; // cancelled
+    fetch('/admin/neetpg-requests/' + reqId + '/complete', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({admin_note: note})
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        if (data.success) {
+            npShowToast('Request completed & doctor notified');
+            setTimeout(function() { location.reload(); }, 1000);
+        } else {
+            alert(data.error || 'Failed');
         }
     });
 }

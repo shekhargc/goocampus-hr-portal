@@ -130,6 +130,48 @@
         .header-login-btn:hover { background: var(--orange-hover); }
         .header-login-btn i { font-size: 13px; }
 
+        /* Request PDF button */
+        .btn-request-pdf {
+            background: transparent;
+            border: 1.5px solid rgba(255,255,255,0.5);
+            color: white;
+            padding: 7px 14px;
+            border-radius: 8px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            cursor: pointer;
+            font-family: inherit;
+            transition: all 0.2s;
+            white-space: nowrap;
+        }
+        .btn-request-pdf:hover { background: rgba(255,255,255,0.15); border-color: white; }
+        .btn-request-pdf i { margin-right: 4px; }
+
+        /* Notification toast */
+        .notif-toast {
+            position: fixed;
+            top: 80px;
+            right: 20px;
+            background: #059669;
+            color: white;
+            padding: 14px 20px;
+            border-radius: 12px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.2);
+            z-index: 2000;
+            max-width: 360px;
+            font-size: 0.85rem;
+            animation: slideInRight 0.3s ease;
+            display: none;
+        }
+        .notif-toast.show { display: block; }
+        .notif-toast-title { font-weight: 700; margin-bottom: 4px; }
+        .notif-toast-close { position: absolute; top: 8px; right: 12px; background: none; border: none; color: white; font-size: 16px; cursor: pointer; opacity: 0.7; }
+        .notif-toast-close:hover { opacity: 1; }
+        @keyframes slideInRight {
+            from { opacity: 0; transform: translateX(40px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
         /* ── Hero ── */
         .hero {
             background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 100%);
@@ -816,6 +858,7 @@
                 </a>
             </div>
             {% if lead_captured %}
+            <button class="btn-request-pdf" id="requestPdfBtn" onclick="openRequestModal()"><i class="fas fa-paper-plane"></i> Request PDF</button>
             <div class="user-bar" id="userBar">
                 <span class="user-bar-name"><i class="fas fa-user-circle"></i> {{ lead_name or 'User' }}</span>
                 <button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>
@@ -1220,6 +1263,70 @@
         </div>
         <iframe class="viewer-iframe" id="viewerFrame"></iframe>
     </div>
+</div>
+
+<!-- Request PDF Modal -->
+<div class="modal-overlay" id="requestModal">
+    <div class="modal-box">
+        <h2><i class="fas fa-paper-plane" style="color:var(--orange);margin-right:8px;"></i>Request a PDF</h2>
+        <p>Can't find what you're looking for? Let us know and we'll upload it for you.</p>
+        <div class="form-group">
+            <label>Category *</label>
+            <select id="reqCategory" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;">
+                <option value="">Select category</option>
+                <option value="neetpg">NEET PG</option>
+                <option value="dnb">DNB</option>
+                <option value="other">Other</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>State (optional)</label>
+            <select id="reqState" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;">
+                <option value="">All India / General</option>
+                <option value="Andhra Pradesh">Andhra Pradesh</option>
+                <option value="Assam">Assam</option>
+                <option value="Bihar">Bihar</option>
+                <option value="Chhattisgarh">Chhattisgarh</option>
+                <option value="Delhi">Delhi</option>
+                <option value="Goa">Goa</option>
+                <option value="Gujarat">Gujarat</option>
+                <option value="Haryana">Haryana</option>
+                <option value="Himachal Pradesh">Himachal Pradesh</option>
+                <option value="Jharkhand">Jharkhand</option>
+                <option value="Karnataka">Karnataka</option>
+                <option value="Kerala">Kerala</option>
+                <option value="Madhya Pradesh">Madhya Pradesh</option>
+                <option value="Maharashtra">Maharashtra</option>
+                <option value="Manipur">Manipur</option>
+                <option value="Meghalaya">Meghalaya</option>
+                <option value="Odisha">Odisha</option>
+                <option value="Punjab">Punjab</option>
+                <option value="Rajasthan">Rajasthan</option>
+                <option value="Tamil Nadu">Tamil Nadu</option>
+                <option value="Telangana">Telangana</option>
+                <option value="Uttar Pradesh">Uttar Pradesh</option>
+                <option value="Uttarakhand">Uttarakhand</option>
+                <option value="West Bengal">West Bengal</option>
+                <option value="All India/MCC">All India / MCC</option>
+            </select>
+        </div>
+        <div class="form-group">
+            <label>What do you need? *</label>
+            <textarea id="reqMessage" rows="3" placeholder="Describe the PDF or information you need..." style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:14px;font-family:inherit;resize:vertical;"></textarea>
+        </div>
+        <div id="reqError" style="color:#ef4444;font-size:13px;margin-bottom:10px;display:none;"></div>
+        <button id="reqSubmitBtn" onclick="submitRequest()" style="width:100%;background:var(--orange);color:white;border:none;padding:12px;border-radius:8px;font-size:15px;font-weight:700;cursor:pointer;font-family:inherit;">
+            <i class="fas fa-paper-plane"></i> Submit Request
+        </button>
+        <button onclick="closeRequestModal()" style="width:100%;background:none;border:none;color:var(--gray-500);padding:10px;font-size:13px;cursor:pointer;margin-top:6px;font-family:inherit;">Cancel</button>
+    </div>
+</div>
+
+<!-- Notification Toast -->
+<div class="notif-toast" id="notifToast">
+    <button class="notif-toast-close" onclick="closeNotifToast()">&times;</button>
+    <div class="notif-toast-title"><i class="fas fa-check-circle" style="margin-right:6px;"></i>Document Available!</div>
+    <div id="notifToastMsg"></div>
 </div>
 
 <script>
@@ -1687,12 +1794,33 @@
         // Hide login button
         var loginBtn = document.getElementById('headerLoginBtn');
         if (loginBtn) loginBtn.style.display = 'none';
+        var headerRight = document.querySelector('.header-right');
+        // Add request button if not there
+        if (!document.getElementById('requestPdfBtn')) {
+            var reqBtn = document.createElement('button');
+            reqBtn.className = 'btn-request-pdf';
+            reqBtn.id = 'requestPdfBtn';
+            reqBtn.onclick = openRequestModal;
+            reqBtn.innerHTML = '<i class="fas fa-paper-plane"></i> Request PDF';
+            headerRight.appendChild(reqBtn);
+        }
         var bar = document.createElement('div');
         bar.className = 'user-bar';
         bar.id = 'userBar';
         bar.innerHTML = '<span class="user-bar-name"><i class="fas fa-user-circle"></i> ' + (name || 'User') + '</span>' +
                          '<button class="user-bar-logout" onclick="logoutUser()"><i class="fas fa-sign-out-alt"></i> Logout</button>';
-        document.querySelector('.header-right').appendChild(bar);
+        headerRight.appendChild(bar);
+        // Check notifications after login
+        fetch('/neet-pg-2025/check-notifications', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.notifications && data.notifications.length > 0) {
+                var n = data.notifications[0];
+                var msg = 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
+                if (n.admin_note) msg += ' ' + n.admin_note;
+                showNotifToast(msg);
+            }
+        }).catch(function() {});
     }
 
     // ── Logout ──
@@ -1715,10 +1843,92 @@
                     btn.onclick = openLoginModal;
                     btn.innerHTML = '<i class="fas fa-sign-in-alt"></i> Login';
                     document.querySelector('.header-right').appendChild(btn);
+                    // Remove request button on logout
+                    var reqBtn = document.getElementById('requestPdfBtn');
+                    if (reqBtn) reqBtn.remove();
                 }
             }
         });
     }
+
+    // ── Request PDF Modal ──
+    function openRequestModal() {
+        document.getElementById('requestModal').classList.add('show');
+        document.getElementById('reqError').style.display = 'none';
+        document.getElementById('reqCategory').value = '';
+        document.getElementById('reqState').value = '';
+        document.getElementById('reqMessage').value = '';
+    }
+    function closeRequestModal() {
+        document.getElementById('requestModal').classList.remove('show');
+    }
+    function submitRequest() {
+        var category = document.getElementById('reqCategory').value;
+        var state = document.getElementById('reqState').value;
+        var message = document.getElementById('reqMessage').value.trim();
+        var errEl = document.getElementById('reqError');
+        var btn = document.getElementById('reqSubmitBtn');
+        if (!category) { errEl.textContent = 'Please select a category'; errEl.style.display = 'block'; return; }
+        if (!message) { errEl.textContent = 'Please describe what you need'; errEl.style.display = 'block'; return; }
+        errEl.style.display = 'none';
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Submitting...';
+        fetch('/neet-pg-2025/request', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({category: category, state: state, message: message})
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+            if (data.success) {
+                closeRequestModal();
+                showNotifToast('Your request has been submitted! We\'ll notify you on WhatsApp when the document is available.');
+            } else {
+                errEl.textContent = data.error || 'Failed to submit';
+                errEl.style.display = 'block';
+            }
+        })
+        .catch(function() {
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-paper-plane"></i> Submit Request';
+            errEl.textContent = 'Network error. Please try again.';
+            errEl.style.display = 'block';
+        });
+    }
+    // Close request modal on overlay click
+    document.getElementById('requestModal').addEventListener('click', function(e) {
+        if (e.target === this) closeRequestModal();
+    });
+
+    // ── Notification Toast ──
+    function showNotifToast(msg) {
+        var toast = document.getElementById('notifToast');
+        document.getElementById('notifToastMsg').textContent = msg;
+        toast.classList.add('show');
+        setTimeout(function() { toast.classList.remove('show'); }, 8000);
+    }
+    function closeNotifToast() {
+        document.getElementById('notifToast').classList.remove('show');
+    }
+
+    // ── Check for completed request notifications on page load (logged-in users) ──
+    if (leadCaptured) {
+        fetch('/neet-pg-2025/check-notifications', {method: 'POST'})
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.notifications && data.notifications.length > 0) {
+                var n = data.notifications[0];
+                var msg = 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
+                if (n.admin_note) msg += ' ' + n.admin_note;
+                showNotifToast(msg);
+            }
+        })
+        .catch(function() {});
+    }
+
+
 </script>
 
 </body>
