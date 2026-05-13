@@ -21504,6 +21504,10 @@ def neetpg_submit_request():
         return jsonify({'success': True, 'message': 'Your request has been submitted. We will notify you when the document is available.'})
     except Exception as e:
         logging.error(f"neetpg request submit error: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return jsonify({'error': 'Failed to submit request. Please try again.'}), 500
 
 
@@ -21541,6 +21545,10 @@ def neetpg_check_notifications():
         return jsonify({'notifications': results})
     except Exception as e:
         logging.error(f"neetpg check notifications error: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
         return jsonify({'notifications': []})
 
 
