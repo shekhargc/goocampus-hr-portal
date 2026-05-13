@@ -21116,6 +21116,7 @@ def ensure_neetpg_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             completed_at TIMESTAMP
         )''')
+        conn.commit()
         # Migration helper: each ALTER needs its own commit/rollback for PostgreSQL
         migrations = [
             "ALTER TABLE neetpg_leads ADD COLUMN email TEXT",
