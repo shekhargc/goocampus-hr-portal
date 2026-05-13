@@ -21125,6 +21125,8 @@ def ensure_neetpg_tables():
             "ALTER TABLE neetpg_pdfs ADD COLUMN is_published INTEGER DEFAULT 0",
             "ALTER TABLE neetpg_pdfs ADD COLUMN published_at TIMESTAMP",
             "ALTER TABLE neetpg_pdfs ADD COLUMN auto_schedule INTEGER DEFAULT 1",
+            "ALTER TABLE neetpg_requests ADD COLUMN fulfilled_pdf_id INTEGER",
+            "ALTER TABLE neetpg_requests ADD COLUMN fulfilled_pdf_title TEXT",
         ]
         for sql in migrations:
             try:
@@ -21521,7 +21523,7 @@ def neetpg_check_notifications():
     try:
         conn = get_db()
         notifs = conn.execute(
-            "SELECT id, category, state, message, admin_note, completed_at FROM neetpg_requests "
+            "SELECT id, category, state, message, admin_note, completed_at, fulfilled_pdf_title FROM neetpg_requests "
             "WHERE phone = ? AND status = 'completed' AND notified = 0 ORDER BY completed_at DESC",
             (phone,)
         ).fetchall()
@@ -21533,7 +21535,8 @@ def neetpg_check_notifications():
                 'state': n['state'],
                 'message': n['message'],
                 'admin_note': n['admin_note'],
-                'completed_at': str(n['completed_at']) if n['completed_at'] else ''
+                'completed_at': str(n['completed_at']) if n['completed_at'] else '',
+                'fulfilled_pdf_title': n['fulfilled_pdf_title'] or ''
             })
         # Mark as notified
         if results:
@@ -21562,6 +21565,8 @@ def neetpg_complete_request(req_id):
         return jsonify({'error': 'Admin required'}), 403
     data = request.get_json() or {}
     admin_note = data.get('admin_note', '').strip()
+    pdf_id = data.get('pdf_id')
+    pdf_title = data.get('pdf_title', '').strip()
     try:
         conn = get_db()
         req = conn.execute("SELECT * FROM neetpg_requests WHERE id = ?", (req_id,)).fetchone()
@@ -21569,8 +21574,9 @@ def neetpg_complete_request(req_id):
             conn.close()
             return jsonify({'error': 'Request not found'}), 404
         conn.execute(
-            "UPDATE neetpg_requests SET status = 'completed', completed_at = CURRENT_TIMESTAMP, admin_note = ? WHERE id = ?",
-            (admin_note, req_id)
+            "UPDATE neetpg_requests SET status = 'completed', completed_at = CURRENT_TIMESTAMP, "
+            "admin_note = ?, fulfilled_pdf_id = ?, fulfilled_pdf_title = ? WHERE id = ?",
+            (admin_note, pdf_id, pdf_title, req_id)
         )
         conn.commit()
 
@@ -21587,16 +21593,17 @@ def neetpg_complete_request(req_id):
                         "Authorization": f"App {infobip_key}",
                         "Content-Type": "application/json"
                     }
+                    pdf_line = f"*{pdf_title}*" if pdf_title else f"{req['category'].upper()} - {req['state'] or 'General'}"
                     note_text = f"\n\nNote: {admin_note}" if admin_note else ""
                     wa_payload = {
                         "from": "15558246314",
                         "to": f"91{phone[-10:]}",
                         "content": {
-                            "text": f"Hi {req['name']},\n\nGreat news! The document you requested ({req['category'].upper()} - {req['state'] or 'General'}) is now available on our NEET PG 2025 portal.\n\nVisit: https://goocampus-hr-portal.onrender.com/neet-pg-2025{note_text}\n\n— GooCampus Team"
+                            "text": f"Hi {req['name']},\n\nGreat news! The document you requested is now available:\n\n{pdf_line}\n\nAccess it here: https://goocampus.org/neet-pg-2025{note_text}\n\n— GooCampus Team"
                         }
                     }
                     resp = http_requests.post(wa_url, json=wa_payload, headers=wa_headers, timeout=15)
-                    logging.info(f"Request completion WA notification to {phone}: status={resp.status_code}")
+                    logging.info(f"Request completion WA notification to {phone}: status={resp.status_code}, response={resp.text[:200]}")
             except Exception as wa_err:
                 logging.error(f"WA notification for request {req_id} failed: {wa_err}")
 
@@ -21692,6 +21699,11 @@ def neetpg_admin():
         request_count = 0
         pending_requests = 0
 
+    # Recent 10 PDFs for request completion dropdown
+    recent_pdfs = conn.execute(
+        "SELECT id, title, state, category FROM neetpg_pdfs ORDER BY upload_date DESC LIMIT 10"
+    ).fetchall()
+
     # Analytics
     total_visits = conn.execute("SELECT COUNT(*) as c FROM neetpg_page_visits").fetchone()['c']
     today_visits = conn.execute(
@@ -21766,7 +21778,8 @@ def neetpg_admin():
     conn.close()
     return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
                            page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map,
-                           doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests)
+                           doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests,
+                           recent_pdfs=recent_pdfs)
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])

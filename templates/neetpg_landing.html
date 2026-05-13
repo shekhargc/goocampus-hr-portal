@@ -1816,7 +1816,9 @@
         .then(function(data) {
             if (data.notifications && data.notifications.length > 0) {
                 var n = data.notifications[0];
-                var msg = 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
+                var msg = n.fulfilled_pdf_title
+                    ? 'Your requested document "' + n.fulfilled_pdf_title + '" is now available! Scroll down to find it.'
+                    : 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
                 if (n.admin_note) msg += ' ' + n.admin_note;
                 showNotifToast(msg);
             }
@@ -1920,7 +1922,9 @@
         .then(function(data) {
             if (data.notifications && data.notifications.length > 0) {
                 var n = data.notifications[0];
-                var msg = 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
+                var msg = n.fulfilled_pdf_title
+                    ? 'Your requested document "' + n.fulfilled_pdf_title + '" is now available! Scroll down to find it.'
+                    : 'Your requested document (' + n.category.toUpperCase() + (n.state ? ' - ' + n.state : '') + ') is now available!';
                 if (n.admin_note) msg += ' ' + n.admin_note;
                 showNotifToast(msg);
             }

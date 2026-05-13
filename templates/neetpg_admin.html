@@ -765,6 +765,9 @@
                     <td>
                         {% if req.status == 'completed' %}
                         <span class="np-badge np-badge-green">Completed</span>
+                        {% if req.fulfilled_pdf_title %}
+                        <div style="font-size:0.7rem;color:#059669;margin-top:3px;font-weight:600;">{{ req.fulfilled_pdf_title }}</div>
+                        {% endif %}
                         {% if req.admin_note %}
                         <div style="font-size:0.7rem;color:#6b7280;margin-top:3px;">{{ req.admin_note }}</div>
                         {% endif %}
@@ -793,6 +796,27 @@
         <p>No requests yet. Doctors can request specific PDFs or information from the landing page after logging in.</p>
     </div>
     {% endif %}
+</div>
+
+<!-- Complete Request Modal -->
+<div id="completeReqModal" style="display:none;position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.5);z-index:9999;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:24px 28px;max-width:440px;width:92%;box-shadow:0 20px 60px rgba(0,0,0,0.3);">
+        <h3 style="margin:0 0 16px;font-size:1.1rem;color:#1f2937;">Complete Request</h3>
+        <input type="hidden" id="crReqId">
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:6px;">Select PDF uploaded for this request:</label>
+        <select id="crPdfSelect" style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;margin-bottom:14px;background:#f9fafb;">
+            <option value="">— Select a PDF —</option>
+            {% for p in recent_pdfs %}
+            <option value="{{ p.id }}" data-title="{{ p.title }} ({{ p.state or 'All India' }})">{{ p.title }} ({{ p.state or 'All India' }})</option>
+            {% endfor %}
+        </select>
+        <label style="display:block;font-size:0.85rem;font-weight:600;color:#374151;margin-bottom:6px;">Admin note (optional):</label>
+        <input type="text" id="crAdminNote" placeholder="Any additional note..." style="width:100%;padding:8px 12px;border:1px solid #d1d5db;border-radius:8px;font-size:0.9rem;margin-bottom:18px;box-sizing:border-box;">
+        <div style="display:flex;gap:10px;justify-content:flex-end;">
+            <button onclick="closeCompleteModal()" style="padding:8px 18px;border:1px solid #d1d5db;border-radius:8px;background:#fff;color:#374151;font-size:0.85rem;cursor:pointer;">Cancel</button>
+            <button onclick="submitCompleteRequest()" style="padding:8px 18px;border:none;border-radius:8px;background:#059669;color:#fff;font-size:0.85rem;cursor:pointer;font-weight:600;">Complete & Notify</button>
+        </div>
+    </div>
 </div>
 
 <div class="np-toast" id="npToast">Saved</div>
@@ -843,17 +867,35 @@ function deletePdf(pdfId) {
 }
 
 function completeRequest(reqId) {
-    var note = prompt('Admin note (optional — e.g., which PDF was uploaded):');
-    if (note === null) return; // cancelled
+    document.getElementById('crReqId').value = reqId;
+    document.getElementById('crPdfSelect').value = '';
+    document.getElementById('crAdminNote').value = '';
+    var modal = document.getElementById('completeReqModal');
+    modal.style.display = 'flex';
+}
+function closeCompleteModal() {
+    document.getElementById('completeReqModal').style.display = 'none';
+}
+function submitCompleteRequest() {
+    var reqId = document.getElementById('crReqId').value;
+    var sel = document.getElementById('crPdfSelect');
+    var pdfId = sel.value || null;
+    var pdfTitle = sel.selectedIndex > 0 ? sel.options[sel.selectedIndex].getAttribute('data-title') : '';
+    var note = document.getElementById('crAdminNote').value.trim();
+    if (!pdfId) {
+        alert('Please select a PDF to fulfil this request.');
+        return;
+    }
     fetch('/admin/neetpg-requests/' + reqId + '/complete', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({admin_note: note})
+        body: JSON.stringify({admin_note: note, pdf_id: parseInt(pdfId), pdf_title: pdfTitle})
     })
     .then(function(r) { return r.json(); })
     .then(function(data) {
         if (data.success) {
-            npShowToast('Request completed & doctor notified');
+            closeCompleteModal();
+            npShowToast('Request completed & doctor notified via WhatsApp');
             setTimeout(function() { location.reload(); }, 1000);
         } else {
             alert(data.error || 'Failed');
