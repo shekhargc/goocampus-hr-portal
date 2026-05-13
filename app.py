@@ -21152,6 +21152,15 @@ def ensure_neetpg_tables():
 ensure_neetpg_tables()
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# JSS MAURITIUS LANDING PAGE (public, no login required)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/jss-mauritius')
+def jss_mauritius_landing():
+    return render_template('jss_mauritius_landing.html')
+
+
 # ── Public landing page (no login required) ──
 @app.route('/neet-pg-2025')
 def neetpg_landing():
