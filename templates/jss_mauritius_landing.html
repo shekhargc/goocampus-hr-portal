@@ -115,7 +115,22 @@
   .fg select option[value=""] { color: #A0AABB; }
   .fsub { width: 100%; padding: 15px; border-radius: 12px; background: linear-gradient(135deg, var(--teal), var(--teal-mid)); color: var(--white); font-weight: 700; font-size: 15.5px; border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 18px rgba(12,90,115,0.3); margin-top: 6px; font-family: 'Inter', sans-serif; }
   .fsub:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(12,90,115,0.4); }
+  .fsub:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .fpriv { font-size: 11px; color: #A0AABB; text-align: center; margin-top: 12px; }
+
+  /* OTP verification */
+  .phone-row { display: flex; gap: 10px; align-items: center; }
+  .phone-row input { flex: 1; }
+  .otp-btn { padding: 11px 20px; border-radius: 10px; background: linear-gradient(135deg, var(--teal), var(--teal-mid)); color: var(--white); font-weight: 600; font-size: 13px; border: none; cursor: pointer; white-space: nowrap; font-family: 'Inter', sans-serif; transition: opacity 0.2s; }
+  .otp-btn:hover { opacity: 0.9; }
+  .otp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+  .otp-row { display: none; gap: 10px; align-items: center; margin-top: 8px; }
+  .otp-row.show { display: flex; }
+  .otp-row input { flex: 1; letter-spacing: 6px; text-align: center; font-size: 18px; font-weight: 600; }
+  .otp-msg { font-size: 12px; margin-top: 6px; line-height: 1.4; }
+  .otp-msg.success { color: var(--green); }
+  .otp-msg.error { color: #E85D3A; }
+  .verified-badge { display: inline-flex; align-items: center; gap: 5px; background: #E8F5E9; color: #2E7D32; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 8px; }
 
   /* ════ PAGE 2 ════ */
   #page-2 { display: none; }
@@ -361,7 +376,18 @@
           <div class="fg"><label>First Name</label><input type="text" placeholder="Your first name"></div>
           <div class="fg"><label>Last Name</label><input type="text" placeholder="Your last name"></div>
         </div>
-        <div class="fg"><label>Phone Number</label><input type="tel" placeholder="+91 XXXXX XXXXX"></div>
+        <div class="fg" id="phone-group">
+          <label>Phone Number (WhatsApp)</label>
+          <div class="phone-row">
+            <input type="tel" id="phone-input" placeholder="+91 XXXXX XXXXX">
+            <button type="button" class="otp-btn" id="send-otp-btn" onclick="sendOtp()">Verify</button>
+          </div>
+          <div class="otp-row" id="otp-row">
+            <input type="text" id="otp-input" maxlength="6" placeholder="Enter 6-digit OTP">
+            <button type="button" class="otp-btn" id="verify-otp-btn" onclick="verifyOtp()">Submit</button>
+          </div>
+          <div class="otp-msg" id="otp-msg"></div>
+        </div>
         <div class="fg"><label>Email Address</label><input type="email" placeholder="your@email.com"></div>
         <div class="fg"><label>City / State</label><input type="text" placeholder="e.g. Mumbai, Maharashtra"></div>
         <div class="frow">
@@ -594,6 +620,7 @@
 
 <script>
   const SHEET_URL = 'https://script.google.com/macros/s/AKfycbycqCYqFU1BBSyRwYiyVX7I4kEq5HBJ7G27xi3OVr53An4GOpJSaOwa9oPR_u8Gy5qi/exec';
+  let phoneVerified = false;
 
   function openModal() {
     document.getElementById('vidModal').classList.add('active');
@@ -610,12 +637,111 @@
     document.getElementById('lead-form').scrollIntoView({ behavior: 'smooth' });
   }
 
+  /* ── OTP Functions ── */
+  function showOtpMsg(text, type) {
+    const el = document.getElementById('otp-msg');
+    el.textContent = text;
+    el.className = 'otp-msg ' + type;
+  }
+
+  async function sendOtp() {
+    const phone = document.getElementById('phone-input').value.trim();
+    if (!phone || phone.replace(/\D/g,'').length < 10) {
+      showOtpMsg('Please enter a valid 10-digit mobile number', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('send-otp-btn');
+    btn.disabled = true;
+    btn.textContent = 'Sending...';
+    showOtpMsg('', '');
+
+    try {
+      const resp = await fetch('/jss-mauritius/send-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phone: phone })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        document.getElementById('otp-row').classList.add('show');
+        document.getElementById('phone-input').readOnly = true;
+        btn.textContent = 'Resend';
+        btn.disabled = false;
+        showOtpMsg('OTP sent to your WhatsApp. Enter it below.', 'success');
+        document.getElementById('otp-input').focus();
+        // Start 60s cooldown for resend
+        let cd = 60;
+        btn.disabled = true;
+        btn.textContent = 'Resend (60s)';
+        const timer = setInterval(() => {
+          cd--;
+          if (cd <= 0) {
+            clearInterval(timer);
+            btn.disabled = false;
+            btn.textContent = 'Resend';
+          } else {
+            btn.textContent = 'Resend (' + cd + 's)';
+          }
+        }, 1000);
+      } else {
+        showOtpMsg(data.error || 'Failed to send OTP', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Verify';
+      }
+    } catch (err) {
+      showOtpMsg('Network error. Please try again.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Verify';
+    }
+  }
+
+  async function verifyOtp() {
+    const otp = document.getElementById('otp-input').value.trim();
+    if (!otp || otp.length !== 6) {
+      showOtpMsg('Please enter the 6-digit OTP', 'error');
+      return;
+    }
+
+    const btn = document.getElementById('verify-otp-btn');
+    btn.disabled = true;
+    btn.textContent = 'Verifying...';
+
+    try {
+      const resp = await fetch('/jss-mauritius/verify-otp', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ otp: otp })
+      });
+      const data = await resp.json();
+      if (data.success) {
+        phoneVerified = true;
+        // Replace the entire phone group with verified state
+        const pg = document.getElementById('phone-group');
+        const phoneVal = document.getElementById('phone-input').value;
+        pg.innerHTML =
+          '<label>Phone Number (WhatsApp)</label>' +
+          '<input type="tel" id="phone-input" value="' + phoneVal + '" readonly style="background:#E8F5E9;border-color:#2E7D32;">' +
+          '<span class="verified-badge">&#10003; Verified</span>';
+      } else {
+        showOtpMsg(data.error || 'Invalid OTP', 'error');
+        btn.disabled = false;
+        btn.textContent = 'Submit';
+      }
+    } catch (err) {
+      showOtpMsg('Network error. Please try again.', 'error');
+      btn.disabled = false;
+      btn.textContent = 'Submit';
+    }
+  }
+
+  /* ── Form Submission ── */
   function revealPage2() {
     const form = document.querySelector('#lead-form .form-card');
     const fields = {
       firstName:  form.querySelector('input[placeholder="Your first name"]'),
       lastName:   form.querySelector('input[placeholder="Your last name"]'),
-      phone:      form.querySelector('input[type="tel"]'),
+      phone:      document.getElementById('phone-input'),
       email:      form.querySelector('input[type="email"]'),
       city:       form.querySelector('input[placeholder="e.g. Mumbai, Maharashtra"]'),
       neetStatus: form.querySelector('select'),
@@ -632,6 +758,12 @@
       }
     });
     if (!valid) { alert('Please fill in all your details before continuing.'); return; }
+
+    if (!phoneVerified) {
+      alert('Please verify your phone number with OTP before submitting.');
+      document.getElementById('phone-input').scrollIntoView({ behavior: 'smooth', block: 'center' });
+      return;
+    }
 
     const payload = {
       source:     'JSS Mauritius',

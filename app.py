@@ -21161,6 +21161,122 @@ def jss_mauritius_landing():
     return render_template('jss_mauritius_landing.html')
 
 
+# ── JSS Mauritius OTP verification ──
+@app.route('/jss-mauritius/send-otp', methods=['POST'])
+def jss_mauritius_send_otp():
+    data = request.get_json() or {}
+    phone = data.get('phone', '').strip()
+
+    # Clean phone — keep only digits
+    phone_clean = ''.join(c for c in phone if c.isdigit())
+    # Remove leading 91 if present (Indian country code)
+    if phone_clean.startswith('91') and len(phone_clean) > 10:
+        phone_clean = phone_clean[2:]
+    if len(phone_clean) != 10:
+        return jsonify({'error': 'Please enter a valid 10-digit mobile number'}), 400
+
+    # Rate limit — max 1 OTP per 60 seconds per phone
+    last_time = session.get('jss_otp_time')
+    if last_time:
+        try:
+            elapsed = (datetime.now() - datetime.fromisoformat(last_time)).total_seconds()
+            if elapsed < 60:
+                return jsonify({'error': f'Please wait {int(60 - elapsed)} seconds before requesting again'}), 429
+        except Exception:
+            pass
+
+    otp_code = str(random.randint(100000, 999999))
+
+    session['jss_otp'] = otp_code
+    session['jss_otp_phone'] = phone_clean
+    session['jss_otp_time'] = datetime.now().isoformat()
+
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+
+    if not infobip_key or not infobip_base:
+        logging.error("Infobip credentials not configured for JSS OTP")
+        return jsonify({'error': 'OTP service not configured. Please try again later.'}), 500
+
+    try:
+        import requests as http_requests
+        url = f"https://{infobip_base}/whatsapp/1/message/template"
+        headers = {
+            "Authorization": f"App {infobip_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "messages": [{
+                "from": "15558246314",
+                "to": f"91{phone_clean}",
+                "content": {
+                    "templateName": "goocampus_otp_verify",
+                    "templateData": {
+                        "body": {
+                            "placeholders": [otp_code]
+                        },
+                        "buttons": [{
+                            "type": "URL",
+                            "parameter": otp_code
+                        }]
+                    },
+                    "language": "en"
+                }
+            }]
+        }
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        resp_data = resp.json()
+        logging.info(f"JSS OTP response for {phone_clean}: status={resp.status_code} body={resp_data}")
+
+        if resp.status_code >= 400:
+            payload["messages"][0]["content"]["templateName"] = "otp_verify"
+            payload["messages"][0]["content"]["language"] = "en_GB"
+            resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            resp2_data = resp2.json()
+            logging.info(f"JSS OTP fallback response: status={resp2.status_code} body={resp2_data}")
+            if resp2.status_code >= 400:
+                return jsonify({'error': 'Could not send OTP. Please check your WhatsApp number and try again.'}), 500
+
+        return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp'})
+    except Exception as e:
+        logging.error(f"JSS OTP send error: {e}")
+        return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+
+
+@app.route('/jss-mauritius/verify-otp', methods=['POST'])
+def jss_mauritius_verify_otp():
+    data = request.get_json() or {}
+    entered_otp = data.get('otp', '').strip()
+
+    if not entered_otp:
+        return jsonify({'error': 'Please enter the OTP'}), 400
+
+    stored_otp = session.get('jss_otp')
+    stored_phone = session.get('jss_otp_phone')
+    stored_time = session.get('jss_otp_time')
+
+    if not stored_otp or not stored_phone:
+        return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+    # Check OTP expiry (10 minutes)
+    try:
+        otp_time = datetime.fromisoformat(stored_time)
+        if (datetime.now() - otp_time).total_seconds() > 600:
+            session.pop('jss_otp', None)
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+
+    if entered_otp != stored_otp:
+        return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
+
+    # OTP verified — clean up
+    session.pop('jss_otp', None)
+    session['jss_phone_verified'] = stored_phone
+
+    return jsonify({'success': True, 'message': 'Phone number verified successfully'})
+
+
 # ── Public landing page (no login required) ──
 @app.route('/neet-pg-2025')
 def neetpg_landing():
