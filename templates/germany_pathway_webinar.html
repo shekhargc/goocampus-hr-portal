@@ -79,19 +79,7 @@
   .reg-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .reg-priv { font-size: 11px; color: #A0AABB; text-align: center; margin-top: 14px; }
 
-  /* OTP */
-  .phone-row { display: flex; gap: 10px; align-items: center; }
-  .phone-row input { flex: 1; }
-  .otp-btn { padding: 11px 18px; border-radius: 10px; background: linear-gradient(135deg, var(--blue), var(--blue-mid)); color: var(--white); font-weight: 600; font-size: 13px; border: none; cursor: pointer; white-space: nowrap; font-family: 'Inter', sans-serif; transition: opacity 0.2s; }
-  .otp-btn:hover { opacity: 0.9; }
-  .otp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .otp-row { display: none; gap: 10px; align-items: center; margin-top: 6px; }
-  .otp-row.show { display: flex; }
-  .otp-row input { flex: 1; letter-spacing: 6px; text-align: center; font-size: 18px; font-weight: 600; }
-  .otp-msg { font-size: 12px; margin-top: 5px; line-height: 1.4; }
-  .otp-msg.success { color: var(--green); }
-  .otp-msg.error { color: #E85D3A; }
-  .verified-badge { display: inline-flex; align-items: center; gap: 5px; background: #E8F5E9; color: #2E7D32; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 8px; margin-top: 4px; }
+  /* (OTP styles removed) */
 
   /* SUCCESS PANEL */
   .success-panel { display: none; text-align: center; padding: 30px 0; }
@@ -208,23 +196,15 @@
     <div class="reg-card" id="reg-card">
       <div id="reg-form">
         <h2>Register for the Webinar</h2>
-        <p class="reg-desc">Verify your WhatsApp number and fill in your details to get instant access to the live webinar link.</p>
+        <p class="reg-desc">Fill in your details to get instant access to the live webinar link.</p>
         <div class="frow">
           <div class="fg"><label>First Name</label><input type="text" id="fName" placeholder="Your first name"><span class="ferr" id="eN">Required</span></div>
           <div class="fg"><label>Last Name</label><input type="text" id="lName" placeholder="Your last name"><span class="ferr" id="eL">Required</span></div>
         </div>
-        <div class="fg" id="phone-group">
+        <div class="fg">
           <label>WhatsApp Number</label>
-          <div class="phone-row">
-            <input type="tel" id="jPhone" placeholder="10-digit mobile number" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
-            <button type="button" class="otp-btn" id="send-otp-btn" onclick="sendOtp()">Verify</button>
-          </div>
-          <div class="otp-row" id="otp-row">
-            <input type="text" id="otp-input" maxlength="6" placeholder="Enter 6-digit OTP" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)">
-            <button type="button" class="otp-btn" id="verify-otp-btn" onclick="verifyOtp()">Submit</button>
-          </div>
-          <div class="otp-msg" id="otp-msg"></div>
-          <span class="ferr" id="eP">Please verify your phone number</span>
+          <input type="tel" id="jPhone" placeholder="10-digit mobile number" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)">
+          <span class="ferr" id="eP">Please enter a valid 10-digit number</span>
         </div>
         <div class="fg"><label>Email Address</label><input type="email" id="jEmail" placeholder="your@email.com"><span class="ferr" id="eE">Valid email required</span></div>
         <div class="fg"><label>City / State</label><input type="text" id="jCity" placeholder="e.g. Mumbai, Maharashtra"><span class="ferr" id="eC">Required</span></div>
@@ -354,81 +334,6 @@
 <script>
   var SHEET_URL = 'https://script.google.com/macros/s/AKfycbycqCYqFU1BBSyRwYiyVX7I4kEq5HBJ7G27xi3OVr53An4GOpJSaOwa9oPR_u8Gy5qi/exec';
   var REGISTER_URL = '/germany-pathway-webinar/register';
-  var phoneVerified = false;
-
-  /* ── OTP ── */
-  function showOtpMsg(text, type) {
-    var el = document.getElementById('otp-msg');
-    el.textContent = text;
-    el.className = 'otp-msg ' + type;
-  }
-
-  async function sendOtp() {
-    var phone = document.getElementById('jPhone').value.trim();
-    if (!phone || phone.length < 10) {
-      showOtpMsg('Please enter a valid 10-digit mobile number', 'error');
-      return;
-    }
-    var btn = document.getElementById('send-otp-btn');
-    btn.disabled = true; btn.textContent = 'Sending...';
-    showOtpMsg('', '');
-    try {
-      var resp = await fetch('/germany-pathway-webinar/send-otp', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ phone: phone })
-      });
-      var data = await resp.json();
-      if (data.success) {
-        document.getElementById('otp-row').classList.add('show');
-        document.getElementById('jPhone').readOnly = true;
-        btn.disabled = true;
-        showOtpMsg('OTP sent to your WhatsApp. Enter it below.', 'success');
-        document.getElementById('otp-input').focus();
-        var cd = 60;
-        btn.textContent = 'Resend (60s)';
-        var timer = setInterval(function() {
-          cd--;
-          if (cd <= 0) { clearInterval(timer); btn.disabled = false; btn.textContent = 'Resend'; }
-          else { btn.textContent = 'Resend (' + cd + 's)'; }
-        }, 1000);
-      } else {
-        showOtpMsg(data.error || 'Failed to send OTP', 'error');
-        btn.disabled = false; btn.textContent = 'Verify';
-      }
-    } catch(e) {
-      showOtpMsg('Network error. Please try again.', 'error');
-      btn.disabled = false; btn.textContent = 'Verify';
-    }
-  }
-
-  async function verifyOtp() {
-    var otp = document.getElementById('otp-input').value.trim();
-    if (!otp || otp.length !== 6) { showOtpMsg('Please enter the 6-digit OTP', 'error'); return; }
-    var btn = document.getElementById('verify-otp-btn');
-    btn.disabled = true; btn.textContent = 'Verifying...';
-    try {
-      var resp = await fetch('/germany-pathway-webinar/verify-otp', {
-        method: 'POST', headers: {'Content-Type':'application/json'},
-        body: JSON.stringify({ otp: otp })
-      });
-      var data = await resp.json();
-      if (data.success) {
-        phoneVerified = true;
-        var pg = document.getElementById('phone-group');
-        var phoneVal = document.getElementById('jPhone').value;
-        pg.innerHTML =
-          '<label>WhatsApp Number</label>' +
-          '<input type="tel" id="jPhone" value="' + phoneVal + '" readonly style="background:#E8F5E9;border-color:#2E7D32;">' +
-          '<span class="verified-badge">&#10003; Verified</span>';
-      } else {
-        showOtpMsg(data.error || 'Invalid OTP', 'error');
-        btn.disabled = false; btn.textContent = 'Submit';
-      }
-    } catch(e) {
-      showOtpMsg('Network error. Please try again.', 'error');
-      btn.disabled = false; btn.textContent = 'Submit';
-    }
-  }
 
   /* ── Form Submit ── */
   function submitReg() {
@@ -440,21 +345,16 @@
     }
     chk('fName', 'eN', function(e){ return e.value.trim().length >= 2; });
     chk('lName', 'eL', function(e){ return e.value.trim().length >= 2; });
+    chk('jPhone','eP', function(e){ return e.value.trim().length === 10; });
     chk('jEmail','eE', function(e){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(e.value); });
     chk('jCity', 'eC', function(e){ return e.value.trim().length >= 2; });
     chk('jStatus','eS', function(e){ return e.value !== ''; });
     chk('jGerman','eG', function(e){ return e.value !== ''; });
 
-    // Phone verified check
-    if (!phoneVerified) {
-      document.getElementById('eP').style.display = 'block';
-      document.getElementById('jPhone').scrollIntoView({ behavior:'smooth', block:'center' });
-      ok = false;
-    } else {
-      document.getElementById('eP').style.display = 'none';
-    }
-
     if (!ok) return;
+
+    var btn = document.querySelector('.reg-btn');
+    btn.disabled = true; btn.textContent = 'Registering...';
 
     var payload = {
       source: 'Germany Pathway Webinar',
@@ -473,7 +373,7 @@
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
     }).then(function(r){ return r.json(); }).then(function(data){
-      if (!data.success) { alert(data.error || 'Registration failed. Please try again.'); return; }
+      if (!data.success) { alert(data.error || 'Registration failed. Please try again.'); btn.disabled = false; btn.textContent = 'Register & Get Webinar Link'; return; }
       // Also send to Google Sheets as backup
       fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
       // Show success with webinar link
@@ -481,6 +381,7 @@
       document.getElementById('success-panel').classList.add('show');
     }).catch(function(){
       alert('Network error. Please try again.');
+      btn.disabled = false; btn.textContent = 'Register & Get Webinar Link';
     });
   }
 </script>
