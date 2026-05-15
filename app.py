@@ -21153,6 +21153,35 @@ ensure_neetpg_tables()
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# WEBINAR REGISTRATIONS (shared table for all webinars)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+def ensure_webinar_tables():
+    try:
+        conn = get_db()
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS webinar_registrations (
+                id SERIAL PRIMARY KEY,
+                webinar TEXT NOT NULL,
+                first_name TEXT,
+                last_name TEXT,
+                phone TEXT,
+                email TEXT,
+                city TEXT,
+                current_status TEXT,
+                german_level TEXT,
+                registered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )
+        """)
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_webinar_tables: {e}")
+
+ensure_webinar_tables()
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # GERMANY PATHWAY WEBINAR LANDING PAGE (public, no login required)
 # ═══════════════════════════════════════════════════════════════════════════════
 
@@ -21239,6 +21268,36 @@ def germany_webinar_verify_otp():
     session.pop('gw_otp', None)
     session['gw_phone_verified'] = stored_phone
     return jsonify({'success': True, 'message': 'Phone number verified successfully'})
+
+
+@app.route('/germany-pathway-webinar/register', methods=['POST'])
+def germany_webinar_register():
+    data = request.get_json() or {}
+    first_name = data.get('firstName', '').strip()
+    last_name = data.get('lastName', '').strip()
+    phone = data.get('phone', '').strip()
+    email = data.get('email', '').strip()
+    city = data.get('city', '').strip()
+    current_status = data.get('currentStatus', '').strip()
+    german_level = data.get('germanLevel', '').strip()
+
+    if not first_name or not phone or not email:
+        return jsonify({'error': 'Missing required fields'}), 400
+
+    try:
+        conn = get_db()
+        conn.execute(
+            """INSERT INTO webinar_registrations
+               (webinar, first_name, last_name, phone, email, city, current_status, german_level)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            ('Germany Pathway Webinar', first_name, last_name, phone, email, city, current_status, german_level)
+        )
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Registration successful'})
+    except Exception as e:
+        logging.error(f"Germany webinar registration error: {e}")
+        return jsonify({'error': 'Registration failed. Please try again.'}), 500
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

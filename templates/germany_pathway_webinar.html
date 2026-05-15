@@ -32,13 +32,22 @@
   .wrap { max-width: 1100px; margin: 0 auto; }
   .tag { display: inline-block; font-size: 11px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; margin-bottom: 10px; }
 
-  /* HERO */
-  .hero { min-height: 100vh; background: linear-gradient(150deg, var(--blue) 0%, var(--blue-mid) 50%, #0C3B5E 100%); position: relative; padding: 110px 40px 80px; display: flex; align-items: center; overflow: hidden; }
-  .hero-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 28px 28px; }
-  .hero-inner { position: relative; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: center; max-width: 1100px; margin: 0 auto; width: 100%; }
+  /* LIVE BANNER */
+  .live-banner { position: fixed; top: 60px; left: 0; right: 0; z-index: 190; background: linear-gradient(90deg, var(--red) 0%, #D63031 50%, var(--red) 100%); padding: 10px 40px; text-align: center; display: flex; align-items: center; justify-content: center; gap: 12px; box-shadow: 0 4px 20px rgba(192,57,43,0.3); }
+  .live-dot { width: 10px; height: 10px; border-radius: 50%; background: #FFF; animation: livePulse 1.2s infinite; flex-shrink: 0; }
+  @keyframes livePulse { 0%,100%{opacity:1;box-shadow:0 0 0 0 rgba(255,255,255,0.6)}50%{opacity:0.7;box-shadow:0 0 0 6px rgba(255,255,255,0)} }
+  .live-banner p { color: var(--white); font-size: 13.5px; font-weight: 600; letter-spacing: 0.3px; }
+  .live-banner strong { color: #FFD700; }
+  .live-banner a { background: var(--white); color: var(--red); padding: 6px 18px; border-radius: 6px; font-weight: 700; font-size: 12px; text-decoration: none; white-space: nowrap; transition: transform 0.2s; }
+  .live-banner a:hover { transform: translateY(-1px); }
 
-  .hero-pill { display: inline-flex; align-items: center; gap: 7px; background: rgba(212,168,67,0.18); border: 1px solid rgba(212,168,67,0.4); color: var(--gold-light); font-size: 11px; font-weight: 600; padding: 6px 14px; border-radius: 20px; margin-bottom: 22px; letter-spacing: 1.5px; text-transform: uppercase; }
-  .hero-pill::before { content: ''; width: 8px; height: 8px; border-radius: 50%; background: var(--red); animation: pulse 2s infinite; }
+  /* HERO */
+  .hero { min-height: 100vh; background: linear-gradient(150deg, var(--blue) 0%, var(--blue-mid) 50%, #0C3B5E 100%); position: relative; padding: 150px 40px 80px; display: flex; align-items: center; overflow: hidden; }
+  .hero-dots { position: absolute; inset: 0; background-image: radial-gradient(rgba(255,255,255,0.05) 1px, transparent 1px); background-size: 28px 28px; }
+  .hero-inner { position: relative; display: grid; grid-template-columns: 1.1fr 0.9fr; gap: 60px; align-items: start; max-width: 1100px; margin: 0 auto; width: 100%; }
+
+  .hero-pill { display: inline-flex; align-items: center; gap: 7px; background: rgba(192,57,43,0.25); border: 1px solid rgba(231,76,60,0.5); color: #FF7675; font-size: 12px; font-weight: 700; padding: 8px 18px; border-radius: 20px; margin-bottom: 22px; letter-spacing: 1.5px; text-transform: uppercase; }
+  .hero-pill::before { content: ''; width: 10px; height: 10px; border-radius: 50%; background: var(--red); animation: pulse 1.2s infinite; box-shadow: 0 0 8px rgba(231,76,60,0.6); }
   @keyframes pulse { 0%,100%{opacity:1;transform:scale(1)}50%{opacity:0.4;transform:scale(0.8)} }
 
   .hero h1 { font-family: 'Libre Baskerville', serif; font-size: clamp(28px, 3.8vw, 46px); font-weight: 700; line-height: 1.2; color: var(--white); margin-bottom: 16px; }
@@ -55,20 +64,20 @@
   .hero-topics span { background: rgba(255,255,255,0.08); border: 1px solid rgba(255,255,255,0.15); color: rgba(255,255,255,0.75); font-size: 12px; padding: 6px 14px; border-radius: 20px; font-weight: 500; }
 
   /* REGISTRATION CARD */
-  .reg-card { background: var(--white); border-radius: 20px; padding: 40px 36px; box-shadow: 0 24px 70px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); }
-  .reg-card h2 { font-family: 'Libre Baskerville', serif; font-size: 22px; font-weight: 700; color: var(--blue); margin-bottom: 6px; }
-  .reg-card > p { font-size: 13px; color: var(--muted); margin-bottom: 28px; line-height: 1.6; }
-  .fg { display: flex; flex-direction: column; gap: 5px; margin-bottom: 14px; }
-  .fg label { font-size: 11px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
-  .fg input, .fg select { background: var(--sand); border: 1.5px solid var(--border); border-radius: 10px; padding: 11px 14px; color: var(--text); font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; }
+  .reg-card { background: var(--white); border-radius: 20px; padding: 48px 40px; box-shadow: 0 24px 70px rgba(0,0,0,0.25); border: 1px solid rgba(255,255,255,0.1); }
+  .reg-card h2 { font-family: 'Libre Baskerville', serif; font-size: 22px; font-weight: 700; color: var(--blue); margin-bottom: 8px; }
+  .reg-card .reg-desc { font-size: 14px; color: var(--muted); margin-bottom: 32px; line-height: 1.65; }
+  .fg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 18px; }
+  .fg label { font-size: 11.5px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
+  .fg input, .fg select { background: var(--sand); border: 1.5px solid var(--border); border-radius: 10px; padding: 13px 16px; color: var(--text); font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s; }
   .fg input::placeholder { color: #A0AABB; }
   .fg input:focus, .fg select:focus { border-color: var(--blue); background: var(--white); }
-  .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
   .ferr { color: #E85D3A; font-size: 11px; margin-top: 3px; display: none; }
-  .reg-btn { width: 100%; padding: 14px; border-radius: 12px; background: linear-gradient(135deg, var(--blue), var(--blue-mid)); color: var(--white); font-weight: 700; font-size: 15px; border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 18px rgba(26,58,92,0.3); margin-top: 8px; font-family: 'Inter', sans-serif; }
+  .reg-btn { width: 100%; padding: 16px; border-radius: 12px; background: linear-gradient(135deg, var(--blue), var(--blue-mid)); color: var(--white); font-weight: 700; font-size: 15.5px; border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 18px rgba(26,58,92,0.3); margin-top: 12px; font-family: 'Inter', sans-serif; }
   .reg-btn:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(26,58,92,0.4); }
   .reg-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
-  .reg-priv { font-size: 11px; color: #A0AABB; text-align: center; margin-top: 10px; }
+  .reg-priv { font-size: 11px; color: #A0AABB; text-align: center; margin-top: 14px; }
 
   /* OTP */
   .phone-row { display: flex; gap: 10px; align-items: center; }
@@ -131,13 +140,15 @@
     .topics-grid { grid-template-columns: 1fr; }
     .audience-grid { grid-template-columns: 1fr 1fr; }
     nav { padding: 12px 20px; }
-    .hero { padding: 100px 20px 60px; }
+    .live-banner { top: 52px; padding: 8px 16px; flex-wrap: wrap; gap: 8px; }
+    .live-banner p { font-size: 12px; }
+    .hero { padding: 140px 20px 60px; }
     .topics-sec, .audience, .bottom-cta { padding-left: 20px; padding-right: 20px; }
   }
   @media (max-width: 600px) {
     .frow { grid-template-columns: 1fr; }
     .audience-grid { grid-template-columns: 1fr; }
-    .reg-card { padding: 28px 22px; }
+    .reg-card { padding: 34px 24px; }
   }
 </style>
 </head>
@@ -152,27 +163,34 @@
   <a href="#register" class="nav-cta" onclick="event.preventDefault(); document.getElementById('register').scrollIntoView({behavior:'smooth'});">Register Free</a>
 </nav>
 
+<!-- LIVE BANNER -->
+<div class="live-banner">
+  <span class="live-dot"></span>
+  <p>LIVE TODAY at <strong>5:00 PM IST</strong> — Germany Medical Pathway Webinar</p>
+  <a href="#register" onclick="event.preventDefault(); document.getElementById('register').scrollIntoView({behavior:'smooth'});">Register Now</a>
+</div>
+
 <!-- HERO -->
 <section class="hero" id="register">
   <div class="hero-dots"></div>
   <div class="hero-inner">
     <div>
-      <div class="hero-pill">Live Webinar — Free Registration</div>
+      <div class="hero-pill">Live Today — 5:00 PM IST</div>
       <h1>Germany Medical Pathway<br>for <em>Indian MBBS Doctors</em></h1>
-      <p class="hero-sub">Join our expert-led live session and learn everything you need to know about building a medical career in Germany — from language requirements and licensing exams to job placement and residency pathways.</p>
+      <p class="hero-sub">Join our live session today and learn everything about building a medical career in Germany — from language requirements and licensing exams to job placement and residency pathways.</p>
 
       <div class="hero-details">
         <div class="hero-detail">
-          <span class="ico">📅</span>
-          <div class="info"><strong>Today, 15 May 2026</strong>5:00 PM IST (Indian Standard Time)</div>
+          <span class="ico">🔴</span>
+          <div class="info"><strong>Today, 15 May 2026 — 5:00 PM IST</strong>Live interactive session with Q&A</div>
         </div>
         <div class="hero-detail">
           <span class="ico">💻</span>
-          <div class="info"><strong>Live on Riverside</strong>Interactive session with Q&A</div>
+          <div class="info"><strong>Live on Riverside</strong>Register to get your personal webinar link</div>
         </div>
         <div class="hero-detail">
           <span class="ico">🎟️</span>
-          <div class="info"><strong>100% Free</strong>Register now to get your webinar link</div>
+          <div class="info"><strong>100% Free — Limited Spots</strong>Secure your spot now</div>
         </div>
       </div>
 
@@ -190,7 +208,7 @@
     <div class="reg-card" id="reg-card">
       <div id="reg-form">
         <h2>Register for the Webinar</h2>
-        <p>Fill in your details and verify your WhatsApp number to get instant access to the webinar link.</p>
+        <p class="reg-desc">Verify your WhatsApp number and fill in your details to get instant access to the live webinar link.</p>
         <div class="frow">
           <div class="fg"><label>First Name</label><input type="text" id="fName" placeholder="Your first name"><span class="ferr" id="eN">Required</span></div>
           <div class="fg"><label>Last Name</label><input type="text" id="lName" placeholder="Your last name"><span class="ferr" id="eL">Required</span></div>
@@ -335,6 +353,7 @@
 
 <script>
   var SHEET_URL = 'https://script.google.com/macros/s/AKfycbycqCYqFU1BBSyRwYiyVX7I4kEq5HBJ7G27xi3OVr53An4GOpJSaOwa9oPR_u8Gy5qi/exec';
+  var REGISTER_URL = '/germany-pathway-webinar/register';
   var phoneVerified = false;
 
   /* ── OTP ── */
@@ -447,11 +466,22 @@
       currentStatus: document.getElementById('jStatus').value,
       germanLevel: document.getElementById('jGerman').value,
     };
-    fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
 
-    // Show success with webinar link
-    document.getElementById('reg-form').style.display = 'none';
-    document.getElementById('success-panel').classList.add('show');
+    // Save to database
+    fetch(REGISTER_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    }).then(function(r){ return r.json(); }).then(function(data){
+      if (!data.success) { alert(data.error || 'Registration failed. Please try again.'); return; }
+      // Also send to Google Sheets as backup
+      fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+      // Show success with webinar link
+      document.getElementById('reg-form').style.display = 'none';
+      document.getElementById('success-panel').classList.add('show');
+    }).catch(function(){
+      alert('Network error. Please try again.');
+    });
   }
 </script>
 </body>
