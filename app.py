@@ -6,7 +6,7 @@ import secrets
 import random
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file, make_response
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from io import BytesIO
 from openpyxl import Workbook
@@ -21503,7 +21503,7 @@ def neetpg_landing():
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
     lead_name = request.cookies.get('neetpg_lead_name', '')
-    return render_template('neetpg_landing.html',
+    resp = make_response(render_template('neetpg_landing.html',
                            neetpg_pdfs=neetpg_pdfs,
                            dnb_pdfs=dnb_pdfs,
                            all_pdfs=all_pdfs,
@@ -21515,7 +21515,9 @@ def neetpg_landing():
                            dnb_courses=sorted(dnb_courses),
                            dnb_states=sorted(dnb_states),
                            lead_captured=lead_captured,
-                           lead_name=lead_name)
+                           lead_name=lead_name))
+    resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
+    return resp
 
 
 # ── Lead capture AJAX endpoint (WhatsApp or Google) ──
