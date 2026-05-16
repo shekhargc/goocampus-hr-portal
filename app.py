@@ -21471,6 +21471,7 @@ def neetpg_landing():
                 next_day = now_ist + timedelta(days=current_day_offset)
                 available_slots = [
                     next_day.replace(hour=10, minute=0, second=0, microsecond=0),
+                    next_day.replace(hour=13, minute=0, second=0, microsecond=0),
                     next_day.replace(hour=17, minute=0, second=0, microsecond=0)
                 ]
                 slot_idx = 0
@@ -22090,6 +22091,7 @@ def neetpg_admin():
                 next_day = now_ist + timedelta(days=current_day_offset)
                 available_slots = [
                     next_day.replace(hour=10, minute=0, second=0, microsecond=0),
+                    next_day.replace(hour=13, minute=0, second=0, microsecond=0),
                     next_day.replace(hour=17, minute=0, second=0, microsecond=0)
                 ]
                 slot_idx = 0
