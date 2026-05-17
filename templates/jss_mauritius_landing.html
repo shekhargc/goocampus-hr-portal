@@ -61,7 +61,6 @@
   .wt-caption { position: absolute; bottom: 0; left: 0; right: 0; padding: 18px 20px; background: linear-gradient(to top, rgba(0,0,0,0.82), transparent); }
   .wt-caption h4 { color: var(--white); font-size: 14px; font-weight: 600; margin-bottom: 3px; }
   .wt-caption p { color: rgba(255,255,255,0.55); font-size: 11.5px; }
-  .wt-jss { position: absolute; top: 18px; left: 18px; background: rgba(12,90,115,0.85); border: 1px solid rgba(26,139,168,0.5); padding: 5px 11px; border-radius: 6px; font-family: 'Libre Baskerville', serif; font-weight: 700; color: #7BE0F3; font-size: 14px; z-index: 2; }
   .play { width: 68px; height: 68px; border-radius: 50%; background: linear-gradient(135deg, var(--coral), var(--coral-light)); display: flex; align-items: center; justify-content: center; position: relative; z-index: 2; cursor: pointer; border: none; box-shadow: 0 0 0 14px rgba(232,112,42,0.18), 0 0 0 28px rgba(232,112,42,0.07); transition: transform 0.2s; }
   .play:hover { transform: scale(1.08); }
   .webinar-meta { padding: 18px 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px; background: var(--white); }
@@ -105,32 +104,18 @@
   .form-ico { font-size: 34px; margin-bottom: 14px; }
   .form-card h2 { font-family: 'Libre Baskerville', serif; font-size: 28px; font-weight: 700; color: var(--teal); margin-bottom: 9px; }
   .form-card > p { font-size: 14px; color: var(--muted); margin-bottom: 34px; line-height: 1.65; }
-  .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .frow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; align-items: start; margin-bottom: 16px; }
   .fg { display: flex; flex-direction: column; gap: 6px; margin-bottom: 16px; }
+  .frow .fg { margin-bottom: 0; }
   .fg label { font-size: 12px; font-weight: 600; color: var(--muted); letter-spacing: 0.4px; text-transform: uppercase; }
-  .fg input, .fg select { background: var(--sand); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 15px; color: var(--text); font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s, background 0.2s; }
+  .fg input, .fg select { background: var(--sand); border: 1.5px solid var(--border); border-radius: 10px; padding: 12px 15px; color: var(--text); font-size: 14px; font-family: 'Inter', sans-serif; outline: none; transition: border-color 0.2s, background 0.2s; width: 100%; box-sizing: border-box; }
   .fg input::placeholder { color: #A0AABB; }
   .fg input:focus, .fg select:focus { border-color: var(--teal); background: var(--white); }
-  .fg select { color: var(--text); }
+  .fg select { color: var(--text); appearance: none; -webkit-appearance: none; padding-right: 40px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%236b7280' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E"); background-repeat: no-repeat; background-position: right 12px center; }
   .fg select option[value=""] { color: #A0AABB; }
   .fsub { width: 100%; padding: 15px; border-radius: 12px; background: linear-gradient(135deg, var(--teal), var(--teal-mid)); color: var(--white); font-weight: 700; font-size: 15.5px; border: none; cursor: pointer; transition: transform 0.2s, box-shadow 0.2s; box-shadow: 0 4px 18px rgba(12,90,115,0.3); margin-top: 6px; font-family: 'Inter', sans-serif; }
   .fsub:hover { transform: translateY(-2px); box-shadow: 0 8px 28px rgba(12,90,115,0.4); }
-  .fsub:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
   .fpriv { font-size: 11px; color: #A0AABB; text-align: center; margin-top: 12px; }
-
-  /* OTP verification */
-  .phone-row { display: flex; gap: 10px; align-items: center; }
-  .phone-row input { flex: 1; }
-  .otp-btn { padding: 11px 20px; border-radius: 10px; background: linear-gradient(135deg, var(--teal), var(--teal-mid)); color: var(--white); font-weight: 600; font-size: 13px; border: none; cursor: pointer; white-space: nowrap; font-family: 'Inter', sans-serif; transition: opacity 0.2s; }
-  .otp-btn:hover { opacity: 0.9; }
-  .otp-btn:disabled { opacity: 0.5; cursor: not-allowed; }
-  .otp-row { display: none; gap: 10px; align-items: center; margin-top: 8px; }
-  .otp-row.show { display: flex; }
-  .otp-row input { flex: 1; letter-spacing: 6px; text-align: center; font-size: 18px; font-weight: 600; }
-  .otp-msg { font-size: 12px; margin-top: 6px; line-height: 1.4; }
-  .otp-msg.success { color: var(--green); }
-  .otp-msg.error { color: #E85D3A; }
-  .verified-badge { display: inline-flex; align-items: center; gap: 5px; background: #E8F5E9; color: #2E7D32; font-size: 12px; font-weight: 600; padding: 5px 12px; border-radius: 8px; }
 
   /* ════ PAGE 2 ════ */
   #page-2 { display: none; }
@@ -252,9 +237,9 @@
   .ccard p { font-size: 12px; color: rgba(255,255,255,0.5); line-height: 1.6; }
   .pathway { margin-top: 48px; }
   .pathway h3 { font-family: 'Libre Baskerville', serif; font-size: 21px; margin-bottom: 22px; }
-  .psteps { display: flex; gap: 0; flex-wrap: wrap; }
-  .pstep { flex: 1; min-width: 130px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 18px 14px; text-align: center; position: relative; }
-  .pstep:not(:last-child)::after { content: '→'; position: absolute; right: -12px; top: 50%; transform: translateY(-50%); color: #FFB07A; font-size: 17px; z-index: 1; }
+  .psteps { display: flex; gap: 24px; flex-wrap: nowrap; align-items: stretch; }
+  .pstep { flex: 1; min-width: 0; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 18px 10px; text-align: center; position: relative; }
+  .pstep:not(:last-child)::after { content: '➜'; position: absolute; right: -24px; top: 50%; transform: translateY(-50%); width: 24px; text-align: center; color: #FFB07A; font-size: 17px; line-height: 1; z-index: 1; }
   .pstep-n { width: 26px; height: 26px; border-radius: 50%; background: var(--coral); color: var(--white); font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; margin: 0 auto 9px; }
   .pstep p { font-size: 12px; color: rgba(255,255,255,0.7); line-height: 1.5; }
 
@@ -288,7 +273,38 @@
   .hero-left > *:nth-child(3){animation-delay:0.3s}
   .hero-left > *:nth-child(4){animation-delay:0.42s}
   .hero-right { animation: fadeUp 0.65s ease 0.28s both; padding-top: 48px; }
+  .wa-community-btn { display: flex; align-items: center; justify-content: center; gap: 12px; width: 100%; margin-top: 16px; padding: 16px 22px; background: linear-gradient(135deg, #1E88E5 0%, #1565C0 100%); color: #fff; border: 1px solid rgba(255,255,255,0.12); border-radius: 14px; font-family: 'DM Sans', sans-serif; font-size: 15px; font-weight: 700; cursor: pointer; text-decoration: none; box-shadow: 0 12px 30px rgba(21,101,192,0.35); transition: transform 0.2s, box-shadow 0.2s; }
+  .wa-community-btn:hover { transform: translateY(-2px); box-shadow: 0 16px 36px rgba(21,101,192,0.5); }
+  .wa-community-btn svg { flex-shrink: 0; }
+  .wa-community-btn .wa-community-text { display: flex; flex-direction: column; align-items: flex-start; line-height: 1.2; }
+  .wa-community-btn .wa-community-sub { font-size: 11.5px; font-weight: 500; opacity: 0.9; margin-top: 3px; letter-spacing: 0.2px; }
+
+  /* OTP MODAL */
+  .otp-overlay { display:none; position:fixed; inset:0; z-index:600; background:rgba(0,0,0,0.75); backdrop-filter:blur(6px); align-items:center; justify-content:center; padding:20px; }
+  .otp-overlay.active { display:flex; }
+  .otp-box { background:#fff; border-radius:20px; padding:40px; max-width:420px; width:100%; text-align:center; animation:otpIn 0.3s ease; }
+  @keyframes otpIn { from{opacity:0;transform:scale(0.95) translateY(12px)}to{opacity:1;transform:scale(1) translateY(0)} }
+  .otp-box h3 { font-size:20px; font-weight:700; margin-bottom:8px; color:#1A2332; }
+  .otp-box p { font-size:14px; color:#5A6478; margin-bottom:24px; line-height:1.6; }
+  .otp-input { width:100%; padding:14px 16px; border:2px solid #E2E8F0; border-radius:10px; font-size:18px; letter-spacing:8px; text-align:center; font-weight:700; outline:none; transition:border-color 0.2s; }
+  .otp-input:focus { border-color:#0C5A73; }
+  .otp-btn { width:100%; padding:14px; border-radius:10px; font-weight:700; font-size:15px; border:none; cursor:pointer; margin-top:16px; transition:opacity 0.2s; }
+  .otp-btn:disabled { opacity:0.6; cursor:not-allowed; }
+  .otp-btn-primary { background:#0C5A73; color:#fff; }
+  .otp-btn-primary:hover:not(:disabled) { background:#0F6E8A; }
+  .otp-error { color:#E85D3A; font-size:13px; margin-top:12px; min-height:20px; }
+  .otp-resend { font-size:13px; color:#5A6478; margin-top:16px; }
+  .otp-resend a { color:#0C5A73; font-weight:600; cursor:pointer; text-decoration:none; }
+  .otp-whatsapp-icon { display:inline-block; width:48px; height:48px; background:#25D366; border-radius:50%; margin-bottom:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+
 </style>
+<script type="text/javascript">
+    (function(c,l,a,r,i,t,y){
+        c[a]=c[a]||function(){(c[a].q=c[a].q||[]).push(arguments)};
+        t=l.createElement(r);t.async=1;t.src="https://www.clarity.ms/tag/"+i;
+        y=l.getElementsByTagName(r)[0];y.parentNode.insertBefore(t,y);
+    })(window, document, "clarity", "script", "wqr9yqu3d9");
+</script>
 </head>
 <body>
 
@@ -328,7 +344,6 @@
         <div class="webinar-card">
           <div class="webinar-thumb" onclick="openModal()">
             <div class="wt-glow"></div>
-            <div class="wt-jss">JSS</div>
             <button class="play" aria-label="Play Webinar">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none"><path d="M8 5.14v14l11-7-11-7z" fill="#fff"/></svg>
             </button>
@@ -342,6 +357,13 @@
             <button class="wm-btn" onclick="openModal()">▶ Watch Now</button>
           </div>
         </div>
+        <a href="https://chat.whatsapp.com/LUB3dtjZp2VFYx3BmMqh9f" target="_blank" rel="noopener" class="wa-community-btn">
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="white" aria-hidden="true"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.149-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+          <span class="wa-community-text">
+            Join Our WhatsApp Community
+            <span class="wa-community-sub">Live updates · Peer Q&amp;A · Counsellor access</span>
+          </span>
+        </a>
       </div>
     </div>
   </section>
@@ -379,19 +401,7 @@
           <div class="fg"><label>First Name</label><input type="text" id="jFirstName" placeholder="Your first name"><span id="jErrFirstName" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter your first name.</span></div>
           <div class="fg"><label>Last Name</label><input type="text" id="jLastName" placeholder="Your last name"><span id="jErrLastName" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter your last name.</span></div>
         </div>
-        <div class="fg" id="phone-group">
-          <label>Phone Number (WhatsApp)</label>
-          <div class="phone-row">
-            <input type="tel" id="jPhone" placeholder="Mobile number (excluding country code)" maxlength="15" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,15)">
-            <button type="button" class="otp-btn" id="send-otp-btn" onclick="sendOtp()">Verify</button>
-          </div>
-          <div class="otp-row" id="otp-row">
-            <input type="text" id="otp-input" maxlength="6" placeholder="Enter 6-digit OTP">
-            <button type="button" class="otp-btn" id="verify-otp-btn" onclick="verifyOtp()">Submit</button>
-          </div>
-          <div class="otp-msg" id="otp-msg"></div>
-          <span id="jErrPhone" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter a valid mobile number (7–15 digits, excluding country code).</span>
-        </div>
+        <div class="fg"><label>Phone Number</label><div style="display:flex;gap:8px;"><span style="display:flex;align-items:center;padding:0 14px;background:#f1f5f9;border:1.5px solid #d1d5db;border-radius:8px;font-size:14px;color:#1e293b;white-space:nowrap;font-weight:600;">🇮🇳 +91</span><input type="tel" id="jPhone" placeholder="Mobile number" style="flex:1;" maxlength="10" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,10)"></div><span id="jErrPhone" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter a valid 10-digit Indian mobile number.</span></div>
         <div class="fg"><label>Email Address</label><input type="email" id="jEmail" placeholder="your@email.com"><span id="jErrEmail" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter a valid email address.</span></div>
         <div class="fg"><label>City / State</label><input type="text" id="jCity" placeholder="e.g. Mumbai, Maharashtra"><span id="jErrCity" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please enter your city.</span></div>
         <div class="frow">
@@ -596,7 +606,7 @@
         <h3>Pathway to Practice — India & Beyond</h3>
         <div class="psteps">
           <div class="pstep"><div class="pstep-n">1</div><p>Complete 5-Year MBBS at JSS Mauritius</p></div>
-          <div class="pstep"><div class="pstep-n">2</div><p>Complete 1-Year Rotatory Internship (12 months; 18 months for Mauritius practice)</p></div>
+          <div class="pstep"><div class="pstep-n">2</div><p>After completing the 18-month internship, the student becomes eligible to appear for the Mauritius licensing examination.</p></div>
           <div class="pstep"><div class="pstep-n">3</div><p>Register with Mauritius Medical Council or home-country regulatory body</p></div>
           <div class="pstep"><div class="pstep-n">4</div><p>Appear for FMGE (India), PLAB (UK), USMLE (US), or AMC (Australia)</p></div>
           <div class="pstep"><div class="pstep-n">5</div><p>Begin licensed practice or PG training in your chosen country</p></div>
@@ -622,9 +632,25 @@
 
 </div>
 
+
+<!-- OTP VERIFICATION MODAL -->
+<div class="otp-overlay" id="otpOverlay">
+  <div class="otp-box">
+    <div class="otp-whatsapp-icon">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.149-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
+    </div>
+    <h3>Verify Your WhatsApp Number</h3>
+    <p id="otpMsg">We'll send a 6-digit OTP to your WhatsApp number to verify your identity.</p>
+    <input type="text" class="otp-input" id="otpInput" maxlength="6" placeholder="------" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" style="display:none;">
+    <button class="otp-btn otp-btn-primary" id="otpSendBtn" onclick="sendLandingOtp()">Send OTP via WhatsApp</button>
+    <button class="otp-btn otp-btn-primary" id="otpVerifyBtn" onclick="verifyLandingOtp()" style="display:none;">Verify OTP</button>
+    <div class="otp-error" id="otpError"></div>
+    <div class="otp-resend" id="otpResend" style="display:none;">Didn't receive? <a onclick="sendLandingOtp()">Resend OTP</a></div>
+  </div>
+</div>
+
 <script>
   const SHEET_URL = 'https://script.google.com/macros/s/AKfycbycqCYqFU1BBSyRwYiyVX7I4kEq5HBJ7G27xi3OVr53An4GOpJSaOwa9oPR_u8Gy5qi/exec';
-  let phoneVerified = false;
 
   function openModal() {
     document.getElementById('vidModal').classList.add('active');
@@ -641,102 +667,8 @@
     document.getElementById('lead-form').scrollIntoView({ behavior: 'smooth' });
   }
 
-  /* ── OTP Functions ── */
-  function showOtpMsg(text, type) {
-    var el = document.getElementById('otp-msg');
-    el.textContent = text;
-    el.className = 'otp-msg ' + type;
-  }
+  var otpVerifiedPhone = null;
 
-  async function sendOtp() {
-    var phone = document.getElementById('jPhone').value.trim();
-    if (!phone || phone.replace(/\D/g,'').length < 7) {
-      showOtpMsg('Please enter a valid mobile number', 'error');
-      return;
-    }
-
-    var btn = document.getElementById('send-otp-btn');
-    btn.disabled = true;
-    btn.textContent = 'Sending...';
-    showOtpMsg('', '');
-
-    try {
-      var resp = await fetch('/jss-mauritius/send-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ phone: phone })
-      });
-      var data = await resp.json();
-      if (data.success) {
-        document.getElementById('otp-row').classList.add('show');
-        document.getElementById('jPhone').readOnly = true;
-        btn.textContent = 'Resend';
-        btn.disabled = true;
-        showOtpMsg('OTP sent to your WhatsApp. Enter it below.', 'success');
-        document.getElementById('otp-input').focus();
-        var cd = 60;
-        btn.textContent = 'Resend (60s)';
-        var timer = setInterval(function() {
-          cd--;
-          if (cd <= 0) {
-            clearInterval(timer);
-            btn.disabled = false;
-            btn.textContent = 'Resend';
-          } else {
-            btn.textContent = 'Resend (' + cd + 's)';
-          }
-        }, 1000);
-      } else {
-        showOtpMsg(data.error || 'Failed to send OTP', 'error');
-        btn.disabled = false;
-        btn.textContent = 'Verify';
-      }
-    } catch (err) {
-      showOtpMsg('Network error. Please try again.', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Verify';
-    }
-  }
-
-  async function verifyOtp() {
-    var otp = document.getElementById('otp-input').value.trim();
-    if (!otp || otp.length !== 6) {
-      showOtpMsg('Please enter the 6-digit OTP', 'error');
-      return;
-    }
-
-    var btn = document.getElementById('verify-otp-btn');
-    btn.disabled = true;
-    btn.textContent = 'Verifying...';
-
-    try {
-      var resp = await fetch('/jss-mauritius/verify-otp', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ otp: otp })
-      });
-      var data = await resp.json();
-      if (data.success) {
-        phoneVerified = true;
-        var pg = document.getElementById('phone-group');
-        var phoneVal = document.getElementById('jPhone').value;
-        pg.innerHTML =
-          '<label>Phone Number (WhatsApp)</label>' +
-          '<input type="tel" id="jPhone" value="' + phoneVal + '" readonly style="background:#E8F5E9;border-color:#2E7D32;">' +
-          '<span class="verified-badge">&#10003; Verified</span>';
-      } else {
-        showOtpMsg(data.error || 'Invalid OTP', 'error');
-        btn.disabled = false;
-        btn.textContent = 'Submit';
-      }
-    } catch (err) {
-      showOtpMsg('Network error. Please try again.', 'error');
-      btn.disabled = false;
-      btn.textContent = 'Submit';
-    }
-  }
-
-  /* ── Form Submission ── */
   function revealPage2() {
     var valid = true;
     function chk(id, errId, testFn) {
@@ -745,36 +677,61 @@
       if (!testFn(el)) { if(err) err.style.display='block'; el.style.borderColor='#E85D3A'; valid=false; }
       else { if(err) err.style.display='none'; el.style.borderColor=''; }
     }
-    chk('jFirstName','jErrFirstName', function(el){ return el.value.trim().length>=2; });
-    chk('jLastName',  'jErrLastName',  function(el){ return el.value.trim().length>=2; });
-    chk('jPhone',     'jErrPhone',     function(el){ return /^[0-9]{7,15}$/.test(el.value); });
+    chk('jFirstName','jErrFirstName', function(el){ return el.value.trim().length>=1; });
+    chk('jLastName',  'jErrLastName',  function(el){ return el.value.trim().length>=1; });
+    chk('jPhone',     'jErrPhone',     function(el){ return /^[6-9][0-9]{9}$/.test(el.value); });
     chk('jEmail',     'jErrEmail',     function(el){ return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(el.value); });
-    chk('jCity',      'jErrCity',      function(el){ return el.value.trim().length>=2; });
+    chk('jCity',      'jErrCity',      function(el){ return el.value.trim().length>=1; });
     chk('jNeet',      'jErrNeet',      function(el){ return el.value!==''; });
     chk('jClass12',   'jErrClass12',   function(el){ return el.value.trim()!==''; });
     if (!valid) return;
 
-    if (!phoneVerified) {
-      alert('Please verify your phone number with OTP before submitting.');
-      document.getElementById('jPhone').scrollIntoView({ behavior: 'smooth', block: 'center' });
-      return;
-    }
+    // Show OTP modal
+    document.getElementById('otpOverlay').classList.add('active');
+    document.body.style.overflow = 'hidden';
+  }
 
-    var payload = {
-      source:'JSS Mauritius',
-      firstName: document.getElementById('jFirstName').value.trim(),
-      lastName:  document.getElementById('jLastName').value.trim(),
-      phone:     document.getElementById('jPhone').value.trim(),
-      email:     document.getElementById('jEmail').value.trim(),
-      city:      document.getElementById('jCity').value.trim(),
-      neetStatus:document.getElementById('jNeet').value,
-      class12:   document.getElementById('jClass12').value.trim(),
-    };
-    fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) });
+  function sendLandingOtp() {
+    var phone = document.getElementById('jPhone').value.trim();
+    var btn = document.getElementById('otpSendBtn');
+    btn.disabled = true; btn.textContent = 'Sending...';
+    document.getElementById('otpError').textContent = '';
+    fetch('/jss-mauritius/send-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone:phone})})
+      .then(r => r.json().then(d => ({status:r.status,data:d})))
+      .then(({status,data}) => {
+        if (status >= 400) { document.getElementById('otpError').textContent = data.error||'Error'; btn.disabled=false; btn.textContent='Send OTP via WhatsApp'; return; }
+        btn.style.display='none';
+        document.getElementById('otpInput').style.display='block';
+        document.getElementById('otpVerifyBtn').style.display='block';
+        document.getElementById('otpResend').style.display='block';
+        document.getElementById('otpMsg').textContent='Enter the 6-digit OTP sent to your WhatsApp (+91 '+phone+')';
+      }).catch(()=>{ document.getElementById('otpError').textContent='Network error'; btn.disabled=false; btn.textContent='Send OTP via WhatsApp'; });
+  }
 
-    var p2 = document.getElementById('page-2');
-    p2.classList.add('revealed');
-    setTimeout(function() { p2.scrollIntoView({ behavior: 'smooth' }); }, 100);
+  function verifyLandingOtp() {
+    var otp = document.getElementById('otpInput').value.trim();
+    if(otp.length!==6){document.getElementById('otpError').textContent='Please enter 6-digit OTP';return;}
+    var btn = document.getElementById('otpVerifyBtn');
+    btn.disabled=true; btn.textContent='Verifying...';
+    document.getElementById('otpError').textContent='';
+    fetch('/jss-mauritius/verify-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({otp:otp})})
+      .then(r => r.json().then(d => ({status:r.status,data:d})))
+      .then(({status,data}) => {
+        if(status>=400){document.getElementById('otpError').textContent=data.error||'Error';btn.disabled=false;btn.textContent='Verify OTP';return;}
+        // OTP verified - submit lead and reveal page 2
+        document.getElementById('otpOverlay').classList.remove('active');
+        document.body.style.overflow='';
+        const payload = {
+          source:'JSS Mauritius', firstName:document.getElementById('jFirstName').value.trim(),
+          lastName:document.getElementById('jLastName').value.trim(), phone:'(+91) '+document.getElementById('jPhone').value.trim(),
+          email:document.getElementById('jEmail').value.trim(), city:document.getElementById('jCity').value.trim(),
+          neetStatus:document.getElementById('jNeet').value, class12:document.getElementById('jClass12').value.trim()
+        };
+        fetch(SHEET_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)});
+        var p2 = document.getElementById('page-2');
+        p2.classList.add('revealed');
+        setTimeout(function(){ p2.scrollIntoView({behavior:'smooth'}); },100);
+      }).catch(()=>{document.getElementById('otpError').textContent='Network error';btn.disabled=false;btn.textContent='Verify OTP';});
   }
 
   document.getElementById('vidModal').addEventListener('click', function(e) {

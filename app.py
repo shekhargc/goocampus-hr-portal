@@ -21425,6 +21425,172 @@ def jss_mauritius_verify_otp():
     return jsonify({'success': True, 'message': 'Phone number verified successfully'})
 
 
+# ═══════════════════════════════════════════════════════════════════════════════
+# UZBEKISTAN LANDING PAGE (public, no login required)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/uzbekistan')
+def uzbekistan_landing():
+    return render_template('uzbekistan_landing.html')
+
+
+@app.route('/uzbekistan/send-otp', methods=['POST'])
+def uzbekistan_send_otp():
+    data = request.get_json() or {}
+    phone = data.get('phone', '').strip()
+    phone_clean = ''.join(c for c in phone if c.isdigit())
+    if phone_clean.startswith('91') and len(phone_clean) > 10:
+        phone_clean = phone_clean[2:]
+    if len(phone_clean) != 10:
+        return jsonify({'error': 'Please enter a valid 10-digit mobile number'}), 400
+
+    last_time = session.get('uz_otp_time')
+    if last_time:
+        try:
+            elapsed = (datetime.now() - datetime.fromisoformat(last_time)).total_seconds()
+            if elapsed < 60:
+                return jsonify({'error': f'Please wait {int(60 - elapsed)} seconds before requesting again'}), 429
+        except Exception:
+            pass
+
+    otp_code = str(random.randint(100000, 999999))
+    session['uz_otp'] = otp_code
+    session['uz_otp_phone'] = phone_clean
+    session['uz_otp_time'] = datetime.now().isoformat()
+
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+    if not infobip_key or not infobip_base:
+        return jsonify({'error': 'OTP service not configured. Please try again later.'}), 500
+
+    try:
+        import requests as http_requests
+        url = f"https://{infobip_base}/whatsapp/1/message/template"
+        headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+        payload = {"messages": [{"from": "15558246314", "to": f"91{phone_clean}", "content": {"templateName": "goocampus_otp_verify", "templateData": {"body": {"placeholders": [otp_code]}, "buttons": [{"type": "URL", "parameter": otp_code}]}, "language": "en"}}]}
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        if resp.status_code >= 400:
+            payload["messages"][0]["content"]["templateName"] = "otp_verify"
+            payload["messages"][0]["content"]["language"] = "en_GB"
+            resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            if resp2.status_code >= 400:
+                return jsonify({'error': 'Could not send OTP. Please check your WhatsApp number and try again.'}), 500
+        return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp'})
+    except Exception as e:
+        logging.error(f"Uzbekistan OTP send error: {e}")
+        return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+
+
+@app.route('/uzbekistan/verify-otp', methods=['POST'])
+def uzbekistan_verify_otp():
+    data = request.get_json() or {}
+    entered_otp = data.get('otp', '').strip()
+    if not entered_otp:
+        return jsonify({'error': 'Please enter the OTP'}), 400
+
+    stored_otp = session.get('uz_otp')
+    stored_time = session.get('uz_otp_time')
+    if not stored_otp:
+        return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+    try:
+        if (datetime.now() - datetime.fromisoformat(stored_time)).total_seconds() > 600:
+            session.pop('uz_otp', None)
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+
+    if entered_otp != stored_otp:
+        return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
+
+    session.pop('uz_otp', None)
+    session['uz_phone_verified'] = session.get('uz_otp_phone')
+    return jsonify({'success': True, 'message': 'Phone number verified successfully'})
+
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# VIETNAM LANDING PAGE (public, no login required)
+# ═══════════════════════════════════════════════════════════════════════════════
+
+@app.route('/vietnam')
+def vietnam_landing():
+    return render_template('vietnam_landing.html')
+
+
+@app.route('/vietnam/send-otp', methods=['POST'])
+def vietnam_send_otp():
+    data = request.get_json() or {}
+    phone = data.get('phone', '').strip()
+    phone_clean = ''.join(c for c in phone if c.isdigit())
+    if phone_clean.startswith('91') and len(phone_clean) > 10:
+        phone_clean = phone_clean[2:]
+    if len(phone_clean) != 10:
+        return jsonify({'error': 'Please enter a valid 10-digit mobile number'}), 400
+
+    last_time = session.get('vn_otp_time')
+    if last_time:
+        try:
+            elapsed = (datetime.now() - datetime.fromisoformat(last_time)).total_seconds()
+            if elapsed < 60:
+                return jsonify({'error': f'Please wait {int(60 - elapsed)} seconds before requesting again'}), 429
+        except Exception:
+            pass
+
+    otp_code = str(random.randint(100000, 999999))
+    session['vn_otp'] = otp_code
+    session['vn_otp_phone'] = phone_clean
+    session['vn_otp_time'] = datetime.now().isoformat()
+
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+    if not infobip_key or not infobip_base:
+        return jsonify({'error': 'OTP service not configured. Please try again later.'}), 500
+
+    try:
+        import requests as http_requests
+        url = f"https://{infobip_base}/whatsapp/1/message/template"
+        headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+        payload = {"messages": [{"from": "15558246314", "to": f"91{phone_clean}", "content": {"templateName": "goocampus_otp_verify", "templateData": {"body": {"placeholders": [otp_code]}, "buttons": [{"type": "URL", "parameter": otp_code}]}, "language": "en"}}]}
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=15)
+        if resp.status_code >= 400:
+            payload["messages"][0]["content"]["templateName"] = "otp_verify"
+            payload["messages"][0]["content"]["language"] = "en_GB"
+            resp2 = http_requests.post(url, json=payload, headers=headers, timeout=15)
+            if resp2.status_code >= 400:
+                return jsonify({'error': 'Could not send OTP. Please check your WhatsApp number and try again.'}), 500
+        return jsonify({'success': True, 'message': 'OTP sent to your WhatsApp'})
+    except Exception as e:
+        logging.error(f"Vietnam OTP send error: {e}")
+        return jsonify({'error': 'Failed to send OTP. Please try again.'}), 500
+
+
+@app.route('/vietnam/verify-otp', methods=['POST'])
+def vietnam_verify_otp():
+    data = request.get_json() or {}
+    entered_otp = data.get('otp', '').strip()
+    if not entered_otp:
+        return jsonify({'error': 'Please enter the OTP'}), 400
+
+    stored_otp = session.get('vn_otp')
+    stored_time = session.get('vn_otp_time')
+    if not stored_otp:
+        return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+
+    try:
+        if (datetime.now() - datetime.fromisoformat(stored_time)).total_seconds() > 600:
+            session.pop('vn_otp', None)
+            return jsonify({'error': 'OTP expired. Please request a new one.'}), 400
+    except Exception:
+        pass
+
+    if entered_otp != stored_otp:
+        return jsonify({'error': 'Invalid OTP. Please try again.'}), 400
+
+    session.pop('vn_otp', None)
+    session['vn_phone_verified'] = session.get('vn_otp_phone')
+    return jsonify({'success': True, 'message': 'Phone number verified successfully'})
+
+
 # ── Public landing page (no login required) ──
 @app.route('/neet-pg-2025')
 def neetpg_landing():
