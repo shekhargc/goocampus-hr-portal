@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Study MBBS Abroad 2026 | 12thPlus.com - GooCampus</title>
+  <meta name="description" content="Explore MBBS programs abroad with 12thPlus.com. Study in Russia, Uzbekistan, Georgia, Vietnam, Mauritius and more. NMC-recognised universities, affordable fees, expert counselling."/>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet"/>
+  <style>
+    *,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+    :root{
+      --navy:#0F1B2D;--navy-mid:#1A2A42;--blue:#2563EB;--blue-light:#3B82F6;
+      --teal:#0C5A73;--emerald:#1A6645;--gold:#C4922A;--saffron:#E8600A;--cyan:#00B5D8;
+      --white:#FFFFFF;--off:#F8FAFC;--grey:#64748B;--grey-light:#94A3B8;
+      --radius:16px;
+    }
+    html{scroll-behavior:smooth;}
+    body{font-family:'Inter',sans-serif;color:#1e293b;background:var(--off);line-height:1.6;}
+
+    /* ── NAV ── */
+    nav{
+      background:var(--navy);padding:16px 32px;display:flex;align-items:center;
+      justify-content:space-between;position:sticky;top:0;z-index:100;
+      box-shadow:0 2px 16px rgba(0,0,0,.25);
+    }
+    .nav-brand{display:flex;align-items:center;gap:12px;text-decoration:none;}
+    .nav-logo{width:44px;height:44px;border-radius:10px;background:linear-gradient(135deg,var(--blue),var(--blue-light));
+      display:flex;align-items:center;justify-content:center;font-weight:800;font-size:20px;color:#fff;}
+    .nav-label{color:#fff;}
+    .nav-label-name{font-weight:700;font-size:17px;letter-spacing:-.3px;}
+    .nav-label-sub{font-size:12px;color:var(--grey-light);font-weight:500;}
+    .nav-cta{background:var(--blue);color:#fff;font-weight:700;font-size:.85rem;padding:10px 24px;
+      border-radius:10px;text-decoration:none;transition:background .2s;}
+    .nav-cta:hover{background:var(--blue-light);}
+
+    /* ── HERO ── */
+    .hero{
+      background:linear-gradient(135deg,var(--navy) 0%,var(--navy-mid) 50%,#0e3460 100%);
+      color:#fff;padding:72px 32px 64px;text-align:center;position:relative;overflow:hidden;
+    }
+    .hero::before{content:'';position:absolute;top:-60%;right:-20%;width:600px;height:600px;
+      background:radial-gradient(circle,rgba(37,99,235,0.12) 0%,transparent 70%);border-radius:50%;}
+    .hero h1{font-size:clamp(28px,4vw,48px);font-weight:900;letter-spacing:-.5px;margin-bottom:16px;position:relative;}
+    .hero h1 span{background:linear-gradient(90deg,var(--cyan),var(--blue-light));-webkit-background-clip:text;-webkit-text-fill-color:transparent;}
+    .hero p{font-size:clamp(15px,1.8vw,19px);color:rgba(255,255,255,.8);max-width:640px;margin:0 auto;position:relative;}
+
+    /* ── STATS BAR ── */
+    .stats{display:flex;justify-content:center;gap:48px;padding:28px 32px;background:#fff;
+      border-bottom:1px solid #E2E8F0;flex-wrap:wrap;}
+    .stat{text-align:center;}
+    .stat-val{font-size:28px;font-weight:800;color:var(--navy);}
+    .stat-label{font-size:13px;color:var(--grey);font-weight:500;margin-top:2px;}
+
+    /* ── CARDS GRID ── */
+    .cards-section{max-width:1200px;margin:48px auto;padding:0 24px;}
+    .cards-section h2{font-size:28px;font-weight:800;text-align:center;margin-bottom:12px;color:var(--navy);}
+    .cards-section .sub{font-size:15px;color:var(--grey);text-align:center;margin-bottom:40px;max-width:600px;margin-left:auto;margin-right:auto;}
+
+    .cards-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(340px,1fr));gap:24px;}
+
+    .country-card{
+      background:#fff;border-radius:var(--radius);overflow:hidden;
+      box-shadow:0 1px 3px rgba(0,0,0,.06),0 4px 16px rgba(0,0,0,.04);
+      transition:transform .25s,box-shadow .25s;cursor:pointer;text-decoration:none;color:inherit;
+      display:flex;flex-direction:column;
+    }
+    .country-card:hover{transform:translateY(-6px);box-shadow:0 8px 32px rgba(0,0,0,.1);}
+
+    .card-banner{height:180px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center;}
+    .card-banner .flag{font-size:72px;position:absolute;opacity:.15;right:16px;bottom:8px;}
+    .card-banner .card-country{font-size:32px;font-weight:900;color:#fff;position:relative;z-index:1;letter-spacing:-.5px;text-shadow:0 2px 12px rgba(0,0,0,.3);}
+    .card-banner .card-sub{font-size:14px;color:rgba(255,255,255,.85);position:relative;z-index:1;margin-top:4px;font-weight:500;}
+
+    .card-body{padding:24px;flex:1;display:flex;flex-direction:column;}
+    .card-tags{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;}
+    .card-tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:20px;text-transform:uppercase;letter-spacing:.3px;}
+
+    .card-price{font-size:14px;color:var(--grey);margin-bottom:4px;}
+    .card-price strong{font-size:22px;font-weight:800;color:var(--navy);}
+
+    .card-features{list-style:none;margin:16px 0;padding:0;flex:1;}
+    .card-features li{font-size:13px;color:#475569;padding:5px 0;padding-left:22px;position:relative;}
+    .card-features li::before{content:'\2713';position:absolute;left:0;color:var(--emerald);font-weight:700;font-size:14px;}
+
+    .card-cta{display:block;text-align:center;padding:14px;border-radius:10px;font-weight:700;font-size:15px;
+      color:#fff;text-decoration:none;transition:opacity .2s;margin-top:auto;}
+    .card-cta:hover{opacity:.9;}
+
+    /* ── individual card banner colors ── */
+    .card-russia .card-banner{background:linear-gradient(135deg,#1A3C6E 0%,#2E62B0 100%);}
+    .card-russia .card-cta{background:#1A3C6E;}
+    .card-russia .card-tag{background:rgba(26,60,110,.1);color:#1A3C6E;}
+
+    .card-uzbekistan .card-banner{background:linear-gradient(135deg,#1B2D6B 0%,#00B5D8 100%);}
+    .card-uzbekistan .card-cta{background:#1B2D6B;}
+    .card-uzbekistan .card-tag{background:rgba(0,181,216,.1);color:#00849e;}
+
+    .card-georgia .card-banner{background:linear-gradient(135deg,#0B1F3A 0%,#C4922A 100%);}
+    .card-georgia .card-cta{background:#0B1F3A;}
+    .card-georgia .card-tag{background:rgba(196,146,42,.12);color:#8B6914;}
+
+    .card-vietnam .card-banner{background:linear-gradient(135deg,#0B1D2A 0%,#1A6645 100%);}
+    .card-vietnam .card-cta{background:#1A6645;}
+    .card-vietnam .card-tag{background:rgba(26,102,69,.1);color:#1A6645;}
+
+    .card-mauritius .card-banner{background:linear-gradient(135deg,#0C5A73 0%,#E8702A 100%);}
+    .card-mauritius .card-cta{background:#0C5A73;}
+    .card-mauritius .card-tag{background:rgba(12,90,115,.1);color:#0C5A73;}
+
+    /* ── FOOTER ── */
+    .footer{background:var(--navy);color:rgba(255,255,255,.6);text-align:center;padding:32px 24px;font-size:13px;margin-top:48px;}
+    .footer a{color:rgba(255,255,255,.8);text-decoration:none;}
+
+    /* ── WhatsApp float ── */
+    .wa-float{position:fixed;bottom:24px;right:24px;z-index:200;width:56px;height:56px;background:#25D366;
+      border-radius:50%;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 16px rgba(0,0,0,.2);
+      transition:transform .2s;text-decoration:none;}
+    .wa-float:hover{transform:scale(1.1);}
+
+    @media(max-width:600px){
+      nav{padding:12px 16px;}
+      .hero{padding:48px 20px 40px;}
+      .stats{gap:24px;padding:20px 16px;}
+      .stat-val{font-size:22px;}
+      .cards-section{padding:0 16px;}
+      .cards-grid{grid-template-columns:1fr;}
+    }
+  </style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <a href="/study-abroad" class="nav-brand">
+    <div class="nav-logo">12</div>
+    <div class="nav-label">
+      <div class="nav-label-name">12thPlus.com</div>
+      <div class="nav-label-sub">by GooCampus</div>
+    </div>
+  </a>
+  <a href="https://wa.me/917975038824?text=Hi%2C%20I%27m%20interested%20in%20studying%20MBBS%20abroad" class="nav-cta" target="_blank">Talk to a Counsellor</a>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <h1>Study <span>MBBS Abroad</span> in 2026</h1>
+  <p>NMC-recognised universities across 5+ countries. Affordable fees, world-class education, and dedicated counselling from India's trusted MBBS abroad experts.</p>
+</div>
+
+<!-- STATS -->
+<div class="stats">
+  <div class="stat"><div class="stat-val">5+</div><div class="stat-label">Countries</div></div>
+  <div class="stat"><div class="stat-val">50+</div><div class="stat-label">Universities</div></div>
+  <div class="stat"><div class="stat-val">10,000+</div><div class="stat-label">Students Counselled</div></div>
+  <div class="stat"><div class="stat-val">98%</div><div class="stat-label">NMC Recognition</div></div>
+</div>
+
+<!-- COUNTRY CARDS -->
+<div class="cards-section">
+  <h2>Choose Your Destination</h2>
+  <p class="sub">Each country offers unique advantages. Explore fee structures, university profiles, and admission requirements below.</p>
+
+  <div class="cards-grid">
+
+    <!-- RUSSIA -->
+    <a href="/russia" class="country-card card-russia">
+      <div class="card-banner">
+        <div class="flag">&#127479;&#127482;</div>
+        <div style="text-align:center;">
+          <div class="card-country">Russia</div>
+          <div class="card-sub">Top NMC-Recognised Universities</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tags">
+          <span class="card-tag">NMC Approved</span>
+          <span class="card-tag">NEET Required</span>
+          <span class="card-tag">English Medium</span>
+        </div>
+        <div class="card-price">Starting from <strong>$4,000/yr</strong></div>
+        <ul class="card-features">
+          <li>6-year MBBS programme with clinical rotations</li>
+          <li>Globally recognised medical degree</li>
+          <li>Indian mess and hostel facilities available</li>
+        </ul>
+        <div class="card-cta">Explore Russia &rarr;</div>
+      </div>
+    </a>
+
+    <!-- UZBEKISTAN -->
+    <a href="/uzbekistan" class="country-card card-uzbekistan">
+      <div class="card-banner">
+        <div class="flag">&#127482;&#127487;</div>
+        <div style="text-align:center;">
+          <div class="card-country">Uzbekistan</div>
+          <div class="card-sub">Most Affordable MBBS Abroad</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tags">
+          <span class="card-tag">NMC Approved</span>
+          <span class="card-tag">NEET Required</span>
+          <span class="card-tag">Low Cost</span>
+        </div>
+        <div class="card-price">Starting from <strong>$3,500/yr</strong></div>
+        <ul class="card-features">
+          <li>Affordable tuition with quality education</li>
+          <li>Growing hub for Indian medical students</li>
+          <li>Safe environment with Indian food options</li>
+        </ul>
+        <div class="card-cta">Explore Uzbekistan &rarr;</div>
+      </div>
+    </a>
+
+    <!-- GEORGIA -->
+    <a href="/georgia" class="country-card card-georgia">
+      <div class="card-banner">
+        <div class="flag">&#127468;&#127466;</div>
+        <div style="text-align:center;">
+          <div class="card-country">Georgia</div>
+          <div class="card-sub">European Standard Medical Education</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tags">
+          <span class="card-tag">NMC Approved</span>
+          <span class="card-tag">NEET Required</span>
+          <span class="card-tag">European</span>
+        </div>
+        <div class="card-price">Starting from <strong>$5,000/yr</strong></div>
+        <ul class="card-features">
+          <li>European-standard curriculum and hospitals</li>
+          <li>No donation or capitation fees</li>
+          <li>Direct flights from India, easy visa process</li>
+        </ul>
+        <div class="card-cta">Explore Georgia &rarr;</div>
+      </div>
+    </a>
+
+    <!-- VIETNAM -->
+    <a href="/vietnam" class="country-card card-vietnam">
+      <div class="card-banner">
+        <div class="flag">&#127483;&#127475;</div>
+        <div style="text-align:center;">
+          <div class="card-country">Vietnam</div>
+          <div class="card-sub">Emerging Medical Education Hub</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tags">
+          <span class="card-tag">NMC Approved</span>
+          <span class="card-tag">NEET Required</span>
+          <span class="card-tag">Affordable</span>
+        </div>
+        <div class="card-price">Starting from <strong>$3,800/yr</strong></div>
+        <ul class="card-features">
+          <li>Modern hospital infrastructure and training</li>
+          <li>Friendly culture, safe for Indian students</li>
+          <li>Growing international student community</li>
+        </ul>
+        <div class="card-cta">Explore Vietnam &rarr;</div>
+      </div>
+    </a>
+
+    <!-- JSS MAURITIUS -->
+    <a href="/jss-mauritius" class="country-card card-mauritius">
+      <div class="card-banner">
+        <div class="flag">&#127474;&#127482;</div>
+        <div style="text-align:center;">
+          <div class="card-country">Mauritius</div>
+          <div class="card-sub">JSS Academy of Higher Education</div>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="card-tags">
+          <span class="card-tag">NMC Approved</span>
+          <span class="card-tag">NEET Required</span>
+          <span class="card-tag">JSS University</span>
+        </div>
+        <div class="card-price">Starting from <strong>$6,500/yr</strong></div>
+        <ul class="card-features">
+          <li>JSS Academy &mdash; trusted Indian university brand</li>
+          <li>English-speaking country, easy adaptation</li>
+          <li>Beautiful island campus with modern facilities</li>
+        </ul>
+        <div class="card-cta">Explore Mauritius &rarr;</div>
+      </div>
+    </a>
+
+  </div>
+</div>
+
+<!-- FOOTER -->
+<div class="footer">
+  <p>&copy; 2026 <a href="https://12thplus.com" target="_blank">12thPlus.com</a> by GooCampus &mdash; India's Trusted MBBS Abroad Counsellors</p>
+</div>
+
+<!-- WhatsApp Float -->
+<a href="https://wa.me/917975038824?text=Hi%2C%20I%27m%20interested%20in%20studying%20MBBS%20abroad" class="wa-float" target="_blank">
+  <svg width="28" height="28" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+</body>
+</html>

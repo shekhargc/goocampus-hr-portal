@@ -21,8 +21,8 @@
   /* NAV */
   nav { position: fixed; top: 0; left: 0; right: 0; z-index: 200; background: rgba(11,29,42,0.97); backdrop-filter: blur(12px); padding: 16px 40px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(26,102,69,0.35); }
   .nav-logo { display: flex; align-items: center; gap: 12px; }
-  .nav-logo-badge { width: 46px; height: 46px; border-radius: 9px; background: linear-gradient(135deg, var(--red), #E74C3C); display: flex; align-items: center; justify-content: center; font-size: 22px; }
-  .nav-name { color: var(--white); font-size: 15px; font-weight: 500; line-height: 1.3; }
+  .nav-logo-badge { width: 38px; height: 38px; border-radius: 8px; background: linear-gradient(135deg, var(--red), #E74C3C); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+  .nav-name { color: var(--white); font-size: 13px; font-weight: 500; line-height: 1.3; }
   .nav-name span { color: #8ED9A8; font-size: 11px; display: block; font-weight: 300; }
   .nav-cta { background: var(--emerald); color: var(--white); padding: 9px 22px; border-radius: 6px; font-weight: 600; font-size: 13px; border: none; cursor: pointer; font-family: 'DM Sans', sans-serif; transition: background 0.2s, transform 0.2s; }
   .nav-cta:hover { background: var(--emerald-light); transform: translateY(-1px); }
@@ -268,10 +268,10 @@
   .otp-btn:disabled { opacity:0.6; cursor:not-allowed; }
   .otp-btn-primary { background:#1A6645; color:#fff; }
   .otp-btn-primary:hover:not(:disabled) { background:#228B55; }
-  .otp-error { color:#C0392B; font-size:13px; margin-top:12px; min-height:20px; }
+  .otp-error { color:#E85D3A; font-size:13px; margin-top:12px; min-height:20px; }
   .otp-resend { font-size:13px; color:#5A6478; margin-top:16px; }
   .otp-resend a { color:#1A6645; font-weight:600; cursor:pointer; text-decoration:none; }
-  .otp-whatsapp-icon { width:48px; height:48px; background:#25D366; border-radius:50%; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
+  .otp-whatsapp-icon { display:inline-block; width:48px; height:48px; background:#25D366; border-radius:50%; margin-bottom:16px; display:flex; align-items:center; justify-content:center; margin:0 auto 16px; }
 
 </style>
 <script type="text/javascript">
@@ -389,7 +389,7 @@
             <select id="vNeet">
               <option value="" disabled selected>Select your NEET status</option>
               <option>Yes, I have qualified NEET UG in 2025</option>
-              <option>I have given NEET UG in 2026</option>
+              <option>Planning to give NEET-UG in 2026</option>
             </select><span id="errNeet" style="color:#ff6b6b;font-size:11.5px;margin-top:4px;display:none;">Please select your NEET status.</span>
           </div>
         </div>
@@ -733,23 +733,6 @@
 
 </div>
 
-
-<!-- OTP VERIFICATION MODAL -->
-<div class="otp-overlay" id="otpOverlay">
-  <div class="otp-box">
-    <div class="otp-whatsapp-icon">
-      <svg width="26" height="26" viewBox="0 0 24 24" fill="white"><path d="M.057 24l1.687-6.163c-1.041-1.804-1.588-3.849-1.587-5.946.003-6.556 5.338-11.891 11.893-11.891 3.181.001 6.167 1.24 8.413 3.488 2.245 2.248 3.481 5.236 3.48 8.414-.003 6.557-5.338 11.892-11.893 11.892-1.99-.001-3.951-.5-5.688-1.448l-6.305 1.654zm6.597-3.807c1.676.995 3.276 1.591 5.392 1.592 5.448 0 9.886-4.434 9.889-9.885.002-5.462-4.415-9.89-9.881-9.892-5.452 0-9.887 4.434-9.889 9.884-.001 2.225.651 3.891 1.746 5.634l-.999 3.648 3.742-.981zm11.387-5.464c-.074-.124-.272-.198-.57-.347-.297-.149-1.758-.868-2.031-.967-.272-.099-.47-.149-.669.149-.198.297-.768.967-.941 1.165-.173.198-.347.223-.644.074-.297-.149-1.255-.462-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.297-.347.446-.521.151-.172.2-.296.3-.495.099-.198.05-.372-.025-.521-.075-.149-.669-1.611-.916-2.206-.242-.579-.487-.501-.669-.51l-.57-.01c-.198 0-.52.074-.792.372s-1.04 1.016-1.04 2.479 1.065 2.876 1.213 3.074c.149.198 2.095 3.2 5.076 4.487.709.306 1.263.489 1.694.626.712.226 1.36.194 1.872.118.571-.085 1.758-.719 2.006-1.413.248-.695.248-1.29.173-1.414z"/></svg>
-    </div>
-    <h3>Verify Your WhatsApp Number</h3>
-    <p id="otpMsg">We'll send a 6-digit OTP to your WhatsApp number to verify your identity.</p>
-    <input type="text" class="otp-input" id="otpInput" maxlength="6" placeholder="------" oninput="this.value=this.value.replace(/[^0-9]/g,'').slice(0,6)" style="display:none;">
-    <button class="otp-btn otp-btn-primary" id="otpSendBtn" onclick="sendLandingOtp()">Send OTP via WhatsApp</button>
-    <button class="otp-btn otp-btn-primary" id="otpVerifyBtn" onclick="verifyLandingOtp()" style="display:none;">Verify OTP</button>
-    <div class="otp-error" id="otpError"></div>
-    <div class="otp-resend" id="otpResend" style="display:none;">Didn't receive? <a onclick="sendLandingOtp()">Resend OTP</a></div>
-  </div>
-</div>
-
 <script>
   function openVideoModal() {
     document.getElementById('videoModal').classList.add('active');
@@ -774,7 +757,7 @@
   function scrollToForm() {
     document.getElementById('lead-form').scrollIntoView({ behavior: 'smooth' });
   }
-  function revealPage2() {
+  function _doRevealPage2() {
     var valid = true;
 
     function chk(id, errId, testFn) {
@@ -795,56 +778,86 @@
 
     if (!valid) return;
 
-    // Show OTP modal
-    document.getElementById('otpOverlay').classList.add('active');
-    document.body.style.overflow = 'hidden';
-  }
+    const SHEET_URL = 'https://script.google.com/macros/s/AKfycbxHLz2a7169juHnV2HM_1LFaj9-CQnvnjLV-FKiOrLL3nPAo7oYExB-Cp8GWxWZpVEJUg/exec';
+    const payload = {
+      source:       'Vietnam',
+      firstName:    document.getElementById('vFirstName').value.trim(),
+      lastName:     document.getElementById('vLastName').value.trim(),
+      phone:        '(+91) ' + document.getElementById('vPhone').value.trim(),
+      email:        document.getElementById('vEmail').value.trim(),
+      city:         document.getElementById('vCity').value.trim(),
+      neetStatus:   document.getElementById('vNeet').value,
+      class12:      document.getElementById('vPercent').value.trim(),
+    };
+    fetch(SHEET_URL, { method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload) })
+      .catch(err => console.error('Sheet submission error:', err));
 
-  function sendLandingOtp() {
-    var phone = document.getElementById('vPhone').value.trim();
-    var btn = document.getElementById('otpSendBtn');
-    btn.disabled = true; btn.textContent = 'Sending...';
-    document.getElementById('otpError').textContent = '';
-    fetch('/vietnam/send-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({phone:phone})})
-      .then(function(r){return r.json().then(function(d){return {status:r.status,data:d};});})
-      .then(function(res){
-        if (res.status >= 400) { document.getElementById('otpError').textContent = res.data.error||'Error'; btn.disabled=false; btn.textContent='Send OTP via WhatsApp'; return; }
-        btn.style.display='none';
-        document.getElementById('otpInput').style.display='block';
-        document.getElementById('otpVerifyBtn').style.display='block';
-        document.getElementById('otpResend').style.display='block';
-        document.getElementById('otpMsg').textContent='Enter the 6-digit OTP sent to your WhatsApp (+91 '+phone+')';
-      }).catch(function(){document.getElementById('otpError').textContent='Network error';btn.disabled=false;btn.textContent='Send OTP via WhatsApp';});
-  }
-
-  function verifyLandingOtp() {
-    var otp = document.getElementById('otpInput').value.trim();
-    if(otp.length!==6){document.getElementById('otpError').textContent='Please enter 6-digit OTP';return;}
-    var btn = document.getElementById('otpVerifyBtn');
-    btn.disabled=true; btn.textContent='Verifying...';
-    document.getElementById('otpError').textContent='';
-    fetch('/vietnam/verify-otp', {method:'POST', headers:{'Content-Type':'application/json'}, body:JSON.stringify({otp:otp})})
-      .then(function(r){return r.json().then(function(d){return {status:r.status,data:d};});})
-      .then(function(res){
-        if(res.status>=400){document.getElementById('otpError').textContent=res.data.error||'Error';btn.disabled=false;btn.textContent='Verify OTP';return;}
-        document.getElementById('otpOverlay').classList.remove('active');
-        document.body.style.overflow='';
-        var SHEET_URL = 'https://script.google.com/macros/s/AKfycbycqCYqFU1BBSyRwYiyVX7I4kEq5HBJ7G27xi3OVr53An4GOpJSaOwa9oPR_u8Gy5qi/exec';
-        var payload = {
-          source:'Vietnam', firstName:document.getElementById('vFirstName').value.trim(),
-          lastName:document.getElementById('vLastName').value.trim(), phone:'(+91) '+document.getElementById('vPhone').value.trim(),
-          email:document.getElementById('vEmail').value.trim(), city:document.getElementById('vCity').value.trim(),
-          neetStatus:document.getElementById('vNeet').value, class12:document.getElementById('vPercent').value.trim()
-        };
-        fetch(SHEET_URL, {method:'POST', mode:'no-cors', headers:{'Content-Type':'application/json'}, body:JSON.stringify(payload)}).catch(function(){});
-        var p2 = document.getElementById('page-2');
-        p2.classList.add('revealed');
-        setTimeout(function(){ p2.scrollIntoView({behavior:'smooth'}); },100);
-      }).catch(function(){document.getElementById('otpError').textContent='Network error';btn.disabled=false;btn.textContent='Verify OTP';});
+    const p2 = document.getElementById('page-2');
+    p2.classList.add('revealed');
+    setTimeout(() => { p2.scrollIntoView({ behavior: 'smooth' }); }, 100);
   }
   document.getElementById('videoModal').addEventListener('click', function(e) {
     if (e.target === this) closeVideoModal();
   });
+</script>
+
+<!-- OTP VERIFICATION MODAL -->
+<div class="otp-overlay" id="otpOverlay">
+  <div class="otp-box">
+    <div class="otp-whatsapp-icon"><svg width="26" height="26" viewBox="0 0 24 24" fill="#fff"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg></div>
+    <h3>Verify Your WhatsApp</h3>
+    <p id="otpMsg">We'll send a 6-digit OTP to your WhatsApp number to verify your identity.</p>
+    <input type="text" class="otp-input" id="otpInput" maxlength="6" placeholder="------" inputmode="numeric" pattern="[0-9]*" style="display:none;">
+    <button class="otp-btn otp-btn-primary" id="otpSendBtn" onclick="sendOTP()">Send OTP</button>
+    <button class="otp-btn otp-btn-primary" id="otpVerifyBtn" onclick="verifyOTP()" style="display:none;">Verify OTP</button>
+    <div class="otp-error" id="otpError"></div>
+    <div class="otp-resend" id="otpResend" style="display:none;">Didn't receive? <a onclick="sendOTP()">Resend OTP</a></div>
+    <div style="margin-top:16px;"><a style="color:#5A6478;font-size:13px;cursor:pointer;text-decoration:none;" onclick="closeOTP()">Cancel</a></div>
+  </div>
+</div>
+
+<script>
+var _otpPendingPhone='';
+function revealPage2(){
+  var ph=document.getElementById('vPhone');if(!ph)return;
+  _otpPendingPhone=ph.value.replace(/\D/g,'');
+  if(_otpPendingPhone.length<10){alert('Please enter a valid phone number');return;}
+  document.getElementById('otpOverlay').classList.add('active');
+  document.getElementById('otpInput').style.display='none';
+  document.getElementById('otpSendBtn').style.display='';
+  document.getElementById('otpVerifyBtn').style.display='none';
+  document.getElementById('otpResend').style.display='none';
+  document.getElementById('otpError').textContent='';
+  document.getElementById('otpMsg').textContent="We'll send a 6-digit OTP to your WhatsApp number to verify your identity.";
+}
+function closeOTP(){document.getElementById('otpOverlay').classList.remove('active');}
+function sendOTP(){
+  var btn=document.getElementById('otpSendBtn');btn.disabled=true;btn.textContent='Sending...';
+  fetch('/vietnam/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:_otpPendingPhone})})
+  .then(r=>r.json().then(d=>({ok:r.ok,data:d})))
+  .then(({ok,data})=>{
+    btn.disabled=false;btn.textContent='Send OTP';
+    if(!ok){document.getElementById('otpError').textContent=data.error||'Failed';return;}
+    document.getElementById('otpMsg').textContent='Enter the 6-digit code sent to your WhatsApp';
+    document.getElementById('otpInput').style.display='';document.getElementById('otpInput').value='';document.getElementById('otpInput').focus();
+    document.getElementById('otpSendBtn').style.display='none';
+    document.getElementById('otpVerifyBtn').style.display='';
+    document.getElementById('otpResend').style.display='';
+    document.getElementById('otpError').textContent='';
+  }).catch(()=>{btn.disabled=false;btn.textContent='Send OTP';document.getElementById('otpError').textContent='Network error.';});
+}
+function verifyOTP(){
+  var code=document.getElementById('otpInput').value.trim();
+  if(code.length!==6){document.getElementById('otpError').textContent='Please enter the 6-digit OTP';return;}
+  var btn=document.getElementById('otpVerifyBtn');btn.disabled=true;btn.textContent='Verifying...';
+  fetch('/vietnam/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:code})})
+  .then(r=>r.json().then(d=>({ok:r.ok,data:d})))
+  .then(({ok,data})=>{
+    btn.disabled=false;btn.textContent='Verify OTP';
+    if(!ok){document.getElementById('otpError').textContent=data.error||'Verification failed';return;}
+    closeOTP();_doRevealPage2();
+  }).catch(()=>{btn.disabled=false;btn.textContent='Verify OTP';document.getElementById('otpError').textContent='Network error.';});
+}
 </script>
 </body>
 </html>
