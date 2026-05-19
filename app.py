@@ -18605,7 +18605,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v8_zoho_form_match'
+        IMPORT_VERSION = 'v9_fix_switched_program'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()
@@ -18768,9 +18768,11 @@ def _import_excel_clients_once():
         # Set version marker so we don't re-import next restart
         conn.execute("INSERT INTO _import_markers (key, value) VALUES ('plab_excel_import', ?) ON CONFLICT(key) DO UPDATE SET value=?", (IMPORT_VERSION, IMPORT_VERSION))
         conn.commit()
+        # Verify switched_program data was imported
+        sp_check = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
+        logging.info(f"Excel client import {IMPORT_VERSION}: inserted={inserted}, updated={updated}, clients_with_switched_program={sp_check['cnt']}")
         conn.close()
         wb.close()
-        logging.info(f"Excel client import {IMPORT_VERSION}: inserted={inserted}, updated={updated}")
     except Exception as e:
         logging.error(f"Excel client import error: {e}")
         import traceback
