@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "ops_sidebar_base.html" %}
 {% block title %}{{ pathway_name }} &mdash; GooCampus CRM{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .pathway-hero {
         background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
@@ -66,7 +66,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="pathway-hero">
     <h1><span>{{ pathway_name }}</span></h1>
     <p>{{ pathway_desc }}</p>

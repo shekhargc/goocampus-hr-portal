@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "hr_sidebar_base.html" %}
 
 {% block title %}HR Dashboard - GooCampus CRM Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .dash-header { margin-bottom: 2.5rem; }
     .dash-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 0.4rem; }
@@ -153,7 +153,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 {% set dept_colors = {'Admin':'var(--navy)','Operations':'var(--blue)','Marketing':'var(--orange)','Sales':'var(--orange-dark)','Senior Management':'var(--gray-500)','HR':'var(--success)','Management':'var(--blue-dark)'} %}
 
 {% if is_management %}
