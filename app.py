@@ -18787,13 +18787,10 @@ if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
 
 _import_excel_clients_once()
 
-# ── One-time backfill: switched_program from dedicated Excel ──────────
+# ── One-time backfill: switched_program (hardcoded, no file dependency) ───
 def _backfill_switched_program():
-    """Update switched_program for all clients from the dedicated Excel file."""
+    """Directly set switched_program for 53 clients using hardcoded values."""
     try:
-        sp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GC_UK_Switched_Program.xlsx')
-        if not os.path.exists(sp_path):
-            return
         conn = get_db()
         conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
         try:
@@ -18801,28 +18798,77 @@ def _backfill_switched_program():
         except Exception:
             pass
         marker = conn.execute("SELECT value FROM _import_markers WHERE key = 'switched_program_backfill'").fetchone()
-        if marker and marker['value'] == 'v1':
+        if marker and marker['value'] == 'v2_hardcoded':
             conn.close()
             return
-        import openpyxl as _opx
-        wb = _opx.load_workbook(sp_path, read_only=True)
-        ws = wb.active
+        # 53 clients with switched_program values from Zoho/Excel
+        SP_DATA = {
+            'GCUKIP/25-26/017': 'Australia',
+            'GCUKIP/25-26/008': 'Australia',
+            'GCUKIP/25-26/004': 'Australia',
+            'GCUKIP/24-25/008': 'Australia',
+            'GCUKIP/24-25/005': 'NEET India',
+            'GCUKIP/23-24/088': 'Australia',
+            'GCUKIP/23-24/087': 'Australia',
+            'GCUKIP/2023/070': 'Australia',
+            'GCUKIP/2023/062': 'Australia',
+            'GCUKIP/2023/058': 'Australia',
+            'GCUKIP/2023/040': 'NEET India',
+            'GCUKIP/2023/036': 'NEET India',
+            'GCUKIP/2023/029': 'BAPIO Program',
+            'GCUKIP/2023/019': 'Australia',
+            'GCUKIP/2023/012': 'Australia',
+            'GCUKIP/2023/001': 'USMLE Pathway',
+            'GCUKIP/2022/103': 'Australia',
+            'GCUKIP/2022/096': 'Australia',
+            'GCUKIP/2022/089': 'NEET India',
+            'GCUKIP/2022/076': 'Australia',
+            'GCUKIP/2022/065': 'Australia',
+            'GCUKIP/2022/062': 'USMLE Pathway',
+            'GCUKIP/2022/044': 'NEET India',
+            'GCUKIP/2022/036': 'USMLE Pathway',
+            'GCUKIP/2022/024': 'NEET India',
+            'GCUKIP/2022/014': 'BAPIO Program',
+            'GCUKIP/2022/009': 'NEET India',
+            'GCUKIP/2022/008': 'NEET India',
+            'GCUKIP/2022/006': 'NEET India',
+            'GCUKIP/2021/093': 'USMLE Pathway',
+            'GCUKIP/2021/077': 'BAPIO Program',
+            'GCUKIP/2021/073': 'BAPIO Program',
+            'GCUKIP/2021/064': 'NEET India',
+            'GCUKIP/2021/059': 'USMLE Pathway',
+            'GCUKIP/2021/054': 'NEET India',
+            'GCUKIP/2021/039': 'NEET India',
+            'GCUKIP/2021/037': 'NEET India',
+            'GCUKIP/2021/034': 'USMLE Pathway',
+            'GCUKIP/2021/027': 'NEET India',
+            'GCUKIP/2021/019': 'NEET India',
+            'GCUKIP/2021/012': 'USMLE Pathway',
+            'GCUKIP/2021/005': 'USMLE Pathway',
+            'GCUKIP/2021/004': 'NEET India',
+            'GCUKIP/2021/002': 'Australia',
+            'GCUKIP/2020/050': 'BAPIO Program',
+            'GCUKIP/2020/045': 'NEET India',
+            'GCUKIP/2020/034': 'NEET India',
+            'GCUKIP/2020/029': 'NEET India',
+            'GCUKIP/2020/025': 'USMLE Pathway',
+            'GCUKIP/2020/004': 'BAPIO Program',
+            'GCUKIP/2020/003': 'NEET India',
+            'GCUKIP/2019/011': 'NEET India',
+            'GCUKIP/2019/003': 'BAPIO Program',
+        }
         updated = 0
-        for row in ws.iter_rows(min_row=2, values_only=True):
-            reg_num = str(row[1]).strip() if row[1] else ''
-            sp_val = str(row[2]).strip() if row[2] else ''
-            if not reg_num:
-                continue
+        for reg_num, sp_val in SP_DATA.items():
             conn.execute("UPDATE plab_clients SET switched_program = ? WHERE registration_number = ?", (sp_val, reg_num))
-            if sp_val:
-                updated += 1
-        conn.execute("INSERT INTO _import_markers (key, value) VALUES ('switched_program_backfill', 'v1') ON CONFLICT(key) DO UPDATE SET value='v1'")
+            updated += 1
+        conn.execute(
+            "INSERT INTO _import_markers (key, value) VALUES ('switched_program_backfill', 'v2_hardcoded') "
+            "ON CONFLICT(key) DO UPDATE SET value='v2_hardcoded'"
+        )
         conn.commit()
-        # Verify
         sp_check = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
-        logging.info(f"Switched program backfill: updated {updated} clients, total with value: {sp_check['cnt']}")
+        logging.info(f"Switched program backfill v2: updated {updated} clients, total with value: {sp_check['cnt']}")
         conn.close()
-        wb.close()
     except Exception as e:
         logging.error(f"Switched program backfill error: {e}")
         import traceback
