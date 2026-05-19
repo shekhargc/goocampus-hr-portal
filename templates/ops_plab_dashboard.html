@@ -137,64 +137,62 @@
           Personal Details
         </h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          {% if client.mobile %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Mobile:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.mobile }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.whatsapp1 %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">WhatsApp 1:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.whatsapp2 %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">WhatsApp 2:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.email %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if client.email %}
             <a href="mailto:{{ client.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.email }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
           </div>
-          {% endif %}
-          {% if client.dob %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">DOB:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.dob if client.dob else 'N/A' }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.dob or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.city or client.state %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">City/State:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.city or '' }}{% if client.city and client.state %}, {% endif %}{{ client.state or '' }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">City:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.city or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.instagram or client.facebook or client.linkedin %}
-          <div style="margin-top:8px;padding-top:12px;border-top:1px solid var(--gray-200);">
-            <p style="margin:0 0 8px 0;color:var(--gray-600);font-weight:500;font-size:12px;">Social Media:</p>
-            <div style="display:flex;gap:12px;flex-wrap:wrap;">
-              {% if client.instagram %}
-              <a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:13px;">
-                Instagram
-              </a>
-              {% endif %}
-              {% if client.facebook %}
-              <a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:13px;">
-                Facebook
-              </a>
-              {% endif %}
-              {% if client.linkedin %}
-              <a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:13px;">
-                LinkedIn
-              </a>
-              {% endif %}
-            </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">State:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.state or '—' }}</span>
           </div>
-          {% endif %}
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Instagram:</span>
+            {% if client.instagram %}
+            <a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.instagram }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Facebook:</span>
+            {% if client.facebook %}
+            <a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.facebook }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">LinkedIn:</span>
+            {% if client.linkedin %}
+            <a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.linkedin }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
+          </div>
         </div>
       </div>
 
@@ -204,36 +202,30 @@
           Parents Details
         </h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          {% if client.father_name %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Father:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.father_name }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">Father Name:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.father_phone %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Father Phone:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.father_phone }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.mother_name %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Mother:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.mother_name }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">Mother Name:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.mother_phone %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.mother_phone }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.parents_email %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
+            {% if client.parents_email %}
             <a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
           </div>
-          {% endif %}
         </div>
       </div>
 
@@ -310,25 +302,18 @@
           Plan & Stage
         </h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          {% if client.joined_stage %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Joined At:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.joined_stage }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.joined_stage or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.current_stage %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Current Stage:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.current_stage }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.current_stage or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.plan_type %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Plan Type:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.plan_type }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.plan_type or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.account_status %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
             <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
@@ -342,22 +327,19 @@
                 background:#FFFBEB;color:#92400E;
               {% elif client.account_status == 'Completed' %}
                 background:#EFF6FF;color:#1E40AF;
+              {% else %}
+                background:#F3F4F6;color:#374151;
               {% endif %}
-            ">{{ client.account_status }}</span>
+            ">{{ client.account_status or 'Unknown' }}</span>
           </div>
-          {% endif %}
-          {% if client.dropped_date %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">{% if client.account_status == 'Switched Program' %}Switched Date:{% else %}Dropped Date:{% endif %}</span>
-            <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date|format_date }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">Dropped / Switched Date:</span>
+            <span style="color:{% if client.dropped_date %}#991B1B{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.dropped_date|format_date if client.dropped_date else '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.switched_program %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Switched Program:</span>
-            <span style="color:#6D28D9;font-weight:600;">{{ client.switched_program }}</span>
+            <span style="color:{% if client.switched_program %}#6D28D9{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.switched_program or '—' }}</span>
           </div>
-          {% endif %}
         </div>
       </div>
 
@@ -367,42 +349,42 @@
           Counsellor & Lead
         </h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          {% if client.counsellor %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Counsellor:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.counsellor }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.counsellor_email %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            <span style="color:var(--gray-600);font-weight:500;">Counsellor Email:</span>
+            {% if client.counsellor_email %}
             <a href="mailto:{{ client.counsellor_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.counsellor_email }}</a>
+            {% else %}
+            <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
           </div>
-          {% endif %}
-          {% if client.counsellor_number %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Number:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.lead_source %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Lead Source:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.lead_source }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.referral_type %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Referral Type:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.referral_type }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">UK Client Referral:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.referral_type or '—' }}</span>
           </div>
-          {% endif %}
-          {% if client.operations_referral %}
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Portfolio Client Referral:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.portfolio_referral or '—' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Australia Client Referral:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.australia_referral or '—' }}</span>
+          </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Operations Referral:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.operations_referral }}</span>
+            <span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span>
           </div>
-          {% endif %}
         </div>
       </div>
 
@@ -474,15 +456,21 @@
     </div>
   </div>
 
+  <!-- Package Notes Section (Full Width) -->
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">
+      Package Notes (Discount Given, Package Reduced Reason)
+    </h3>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_package_notes or '—' }}</p>
+  </div>
+
   <!-- Additional Notes Section (Full Width) -->
-  {% if client.additional_notes %}
   <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
     <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">
       Additional Notes
     </h3>
-    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes }}</p>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes or '—' }}</p>
   </div>
-  {% endif %}
 
   <!-- ═══════════ LINKED SECTIONS ═══════════ -->
 

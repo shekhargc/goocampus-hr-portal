@@ -10357,6 +10357,8 @@ def ensure_ops_tables():
             lead_source TEXT,
             referral_type TEXT,
             operations_referral TEXT,
+            portfolio_referral TEXT,
+            australia_referral TEXT,
             package_amount NUMERIC(14,2) DEFAULT 0,
             discount_allowed NUMERIC(14,2) DEFAULT 0,
             additional_package_notes TEXT,
@@ -11183,6 +11185,22 @@ def ensure_ops_tables():
                 except Exception:
                     pass
                 logging.error(f"switched_program migration: {e2}")
+
+        # Migration: add portfolio_referral and australia_referral columns
+        for col_name in ('portfolio_referral', 'australia_referral'):
+            try:
+                conn.execute(f"SELECT {col_name} FROM plab_clients LIMIT 1")
+            except Exception:
+                try:
+                    conn.execute(f"ALTER TABLE plab_clients ADD COLUMN {col_name} TEXT")
+                    conn.commit()
+                    logging.info(f"Added {col_name} column to plab_clients")
+                except Exception as e2:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    logging.error(f"{col_name} migration: {e2}")
 
         # Migration: update plab_stage options (remove Job by GC, Job by Own)
         try:
@@ -12023,6 +12041,7 @@ def ops_plab_add():
                 account_status, current_stage, switched_program,
                 counsellor, counsellor_email, counsellor_number,
                 lead_source, referral_type, operations_referral,
+                portfolio_referral, australia_referral,
                 package_amount, discount_allowed, additional_package_notes,
                 final_package, total_paid,
                 inst1_amount, inst1_date, inst1_note,
@@ -12031,7 +12050,7 @@ def ops_plab_add():
                 inst4_amount, inst4_date, inst4_note,
                 additional_notes, created_by
             ) VALUES (
-                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             )''', (
                 reg_num, f.get('registration_date') or datetime.now().strftime('%Y-%m-%d'),
                 f.get('customer_id') or '',
@@ -12046,6 +12065,7 @@ def ops_plab_add():
                 f.get('switched_program', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
                 f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
+                f.get('portfolio_referral', ''), f.get('australia_referral', ''),
                 pkg, disc, f.get('additional_package_notes', ''),
                 final_pkg, inst_total,
                 float(f.get('inst1_amount') or 0), f.get('inst1_date', ''), f.get('inst1_note', ''),
@@ -12099,6 +12119,7 @@ def ops_plab_edit(client_id):
                 dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
                 lead_source=?, referral_type=?, operations_referral=?,
+                portfolio_referral=?, australia_referral=?,
                 package_amount=?, discount_allowed=?, additional_package_notes=?,
                 final_package=?, total_paid=?,
                 inst1_amount=?, inst1_date=?, inst1_note=?,
@@ -12126,6 +12147,7 @@ def ops_plab_edit(client_id):
                 f.get('dropped_date', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
                 f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
+                f.get('portfolio_referral', ''), f.get('australia_referral', ''),
                 pkg, disc, f.get('additional_package_notes', ''),
                 final_pkg, inst_total,
                 float(f.get('inst1_amount') or 0), f.get('inst1_date', ''), f.get('inst1_note', ''),
@@ -18474,7 +18496,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v6_new_excel_no_upgraded_to'
+        IMPORT_VERSION = 'v7_all_51_fields_referrals'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()
@@ -18556,6 +18578,7 @@ def _import_excel_clients_once():
                     joined_stage=?, plan_type=?, account_status=?, current_stage=?, switched_program=?,
                     counsellor=?, counsellor_email=?, counsellor_number=?,
                     lead_source=?, referral_type=?, operations_referral=?,
+                    portfolio_referral=?, australia_referral=?,
                     package_amount=?, discount_allowed=?, additional_package_notes=?,
                     final_package=?, total_paid=?,
                     inst1_amount=?, inst1_date=?, inst1_note=?,
@@ -18576,6 +18599,7 @@ def _import_excel_clients_once():
                     acct_st, ss(row.get('PLAB Stage (Current Status)')), ss(row.get('Switched Program')),
                     ss(row.get('Counsellor')), ss(row.get('Counsellor Email')), ss(row.get('Counsellor Number')),
                     ss(row.get('Lead Source')), ss(row.get('UK Client Referral')), ss(row.get('Operations Team Referral')),
+                    ss(row.get('Portfolio Client Referral')), ss(row.get('Australia Client Referral')),
                     pkg, disc, ss(row.get('Additional Notes (Discount Given, Package reduced reason)')),
                     final, total_paid,
                     i1, sd(row.get('1st Instalment Date')), ss(row.get('Ist Installment Note')),
@@ -18600,6 +18624,7 @@ def _import_excel_clients_once():
                     joined_stage, plan_type, account_status, current_stage, switched_program,
                     counsellor, counsellor_email, counsellor_number,
                     lead_source, referral_type, operations_referral,
+                    portfolio_referral, australia_referral,
                     package_amount, discount_allowed, additional_package_notes,
                     final_package, total_paid,
                     inst1_amount, inst1_date, inst1_note,
@@ -18607,7 +18632,7 @@ def _import_excel_clients_once():
                     inst3_amount, inst3_date, inst3_note,
                     inst4_amount, inst4_date, inst4_note,
                     dropped_date, additional_notes
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                     reg_num, sd(row.get('Registration Date (Payment Date)')), ss(row.get('Customer ID')),
                     px, fn, ln,
                     ss(row.get('Mobile Number')), ss(row.get('Whats App Number')), ss(row.get('Whats App Number 2')),
@@ -18619,6 +18644,7 @@ def _import_excel_clients_once():
                     acct_st, ss(row.get('PLAB Stage (Current Status)')), ss(row.get('Switched Program')),
                     ss(row.get('Counsellor')), ss(row.get('Counsellor Email')), ss(row.get('Counsellor Number')),
                     ss(row.get('Lead Source')), ss(row.get('UK Client Referral')), ss(row.get('Operations Team Referral')),
+                    ss(row.get('Portfolio Client Referral')), ss(row.get('Australia Client Referral')),
                     pkg, disc, ss(row.get('Additional Notes (Discount Given, Package reduced reason)')),
                     final, total_paid,
                     i1, sd(row.get('1st Instalment Date')), ss(row.get('Ist Installment Note')),
