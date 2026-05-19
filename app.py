@@ -10936,7 +10936,7 @@ def ensure_ops_tables():
                 'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage'],
                 'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
                 'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'Neet India', 'Australia'],
-                'plan_type': ['Full Spon', 'Integrated Consulting', '2022 UK - Full Sponsorship', '2022 UK - IC', '2023 UK - PGCP', '2024 UK - PGCP', '2025 UK - PGCP', '2023 UK - PGCP - Dual', '2024 UK - PGCP - Dual', '2025 UK - PGCP - Dual'],
+                'plan_type': ['Full Spon', 'Integrated Consulting', '2022 Integrated Consulting', '2022 Integrated Consulting - Dual', '2022 Premium Consulting', 'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025'],
                 'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
                 'english_training': ['IELTS', 'OET'],
                 'lead_source': ['Social Media', 'Website', 'Referral', 'Walk-in', 'Event', 'Other'],
@@ -18413,12 +18413,19 @@ def _import_excel_clients_once():
         return  # no file to import
     try:
         conn = get_db()
-        # Check if switched_program data already populated (import marker)
-        sp_count = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()['c']
-        if sp_count > 10:
+        # Version-based import marker: only re-import when version changes
+        IMPORT_VERSION = 'v3_plantype_switchprog'
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            pass
+        marker = conn.execute("SELECT value FROM _import_markers WHERE key = 'plab_excel_import'").fetchone()
+        if marker and marker['value'] == IMPORT_VERSION:
             conn.close()
-            logging.info(f"Excel import skipped: {sp_count} records already have switched_program")
+            logging.info(f"Excel import skipped: already at {IMPORT_VERSION}")
             return
+        logging.info(f"Running Excel import {IMPORT_VERSION}...")
         wb = openpyxl.load_workbook(excel_path, read_only=True)
         ws = wb.active
         headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
@@ -18561,10 +18568,12 @@ def _import_excel_clients_once():
                 ))
                 inserted += 1
 
+        # Set version marker so we don't re-import next restart
+        conn.execute("INSERT INTO _import_markers (key, value) VALUES ('plab_excel_import', ?) ON CONFLICT(key) DO UPDATE SET value=?", (IMPORT_VERSION, IMPORT_VERSION))
         conn.commit()
         conn.close()
         wb.close()
-        logging.info(f"Excel client import: inserted={inserted}, updated={updated}")
+        logging.info(f"Excel client import {IMPORT_VERSION}: inserted={inserted}, updated={updated}")
     except Exception as e:
         logging.error(f"Excel client import error: {e}")
         import traceback
