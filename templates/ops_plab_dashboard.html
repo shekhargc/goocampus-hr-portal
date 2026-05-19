@@ -348,20 +348,14 @@
           {% endif %}
           {% if client.dropped_date %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Dropped Date:</span>
-            <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date if client.dropped_date else 'N/A' }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">{% if client.account_status == 'Switched Program' %}Switched Date:{% else %}Dropped Date:{% endif %}</span>
+            <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date|format_date }}</span>
           </div>
           {% endif %}
           {% if client.switched_program %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Switched Program:</span>
             <span style="color:#6D28D9;font-weight:600;">{{ client.switched_program }}</span>
-          </div>
-          {% endif %}
-          {% if client.upgraded_to %}
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Upgraded To:</span>
-            <span style="color:#059669;font-weight:600;">{{ client.upgraded_to }}</span>
           </div>
           {% endif %}
         </div>

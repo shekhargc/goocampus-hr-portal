@@ -18474,7 +18474,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v5_field_name_fixes'
+        IMPORT_VERSION = 'v6_new_excel_no_upgraded_to'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()
@@ -18562,7 +18562,7 @@ def _import_excel_clients_once():
                     inst2_amount=?, inst2_date=?, inst2_note=?,
                     inst3_amount=?, inst3_date=?, inst3_note=?,
                     inst4_amount=?, inst4_date=?, inst4_note=?,
-                    dropped_date=?, upgraded_to=?, additional_notes=?, updated_at=CURRENT_TIMESTAMP
+                    dropped_date=?, additional_notes=?, updated_at=CURRENT_TIMESTAMP
                     WHERE id=?
                 ''', (
                     sd(row.get('Registration Date (Payment Date)')), ss(row.get('Customer ID')),
@@ -18582,7 +18582,7 @@ def _import_excel_clients_once():
                     i2, sd(row.get('2nd Instalment Date')), ss(row.get('2nd Installment Note')),
                     i3, sd(row.get('3rd Instalment Date')), ss(row.get('3rd Installment Note')),
                     i4, sd(row.get('4th Instalment Date')), ss(row.get('4th Installment Note')),
-                    sd(row.get('Dropped Out / Switched Program Date')), ss(row.get('Upgraded To')),
+                    sd(row.get('Dropped Out / Switched Program Date')),
                     ss(row.get('Additional Notes')),
                     existing['id']
                 ))
@@ -18606,8 +18606,8 @@ def _import_excel_clients_once():
                     inst2_amount, inst2_date, inst2_note,
                     inst3_amount, inst3_date, inst3_note,
                     inst4_amount, inst4_date, inst4_note,
-                    dropped_date, upgraded_to, additional_notes
-                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    dropped_date, additional_notes
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                     reg_num, sd(row.get('Registration Date (Payment Date)')), ss(row.get('Customer ID')),
                     px, fn, ln,
                     ss(row.get('Mobile Number')), ss(row.get('Whats App Number')), ss(row.get('Whats App Number 2')),
@@ -18625,7 +18625,7 @@ def _import_excel_clients_once():
                     i2, sd(row.get('2nd Instalment Date')), ss(row.get('2nd Installment Note')),
                     i3, sd(row.get('3rd Instalment Date')), ss(row.get('3rd Installment Note')),
                     i4, sd(row.get('4th Instalment Date')), ss(row.get('4th Installment Note')),
-                    sd(row.get('Dropped Out / Switched Program Date')), ss(row.get('Upgraded To')),
+                    sd(row.get('Dropped Out / Switched Program Date')),
                     ss(row.get('Additional Notes')),
                 ))
                 inserted += 1
