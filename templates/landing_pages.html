@@ -1,0 +1,175 @@
+{% extends "base.html" %}
+
+{% block title %}Landing Pages - GooCampus CRM Portal{% endblock %}
+
+{% block extra_css %}
+<style>
+    .lp-container { max-width: 1200px; margin: 0 auto; }
+    .lp-header { margin-bottom: 2rem; }
+    .lp-header h1 {
+        font-size: 1.75rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem;
+    }
+    .lp-header p {
+        font-size: 0.95rem; color: var(--gray-500); font-weight: 400;
+    }
+    .lp-grid {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 1.5rem;
+    }
+    @media (max-width: 1024px) { .lp-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (max-width: 640px)  { .lp-grid { grid-template-columns: 1fr; } }
+
+    .lp-card {
+        background: var(--white);
+        border: 1px solid var(--gray-200);
+        border-radius: 0.85rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+        padding: 1.75rem;
+        display: flex;
+        flex-direction: column;
+        transition: box-shadow 0.2s, transform 0.2s;
+    }
+    .lp-card:hover {
+        box-shadow: 0 8px 24px rgba(0,0,0,0.1);
+        transform: translateY(-2px);
+    }
+    .lp-flag {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+        line-height: 1;
+    }
+    .lp-country {
+        font-size: 1.15rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin-bottom: 0.5rem;
+    }
+    .lp-desc {
+        font-size: 0.88rem;
+        color: var(--gray-500);
+        line-height: 1.55;
+        flex: 1;
+        margin-bottom: 1.25rem;
+    }
+    .lp-footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+    }
+    .lp-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: #059669;
+    }
+    .lp-status-dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        background: var(--success);
+        display: inline-block;
+    }
+    .lp-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        background: var(--orange);
+        color: var(--white);
+        text-decoration: none;
+        padding: 0.55rem 1.15rem;
+        border-radius: 0.5rem;
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: background 0.15s;
+        white-space: nowrap;
+    }
+    .lp-btn:hover { background: var(--orange-dark); }
+    .lp-btn svg { flex-shrink: 0; }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lp-container">
+    <div class="lp-header">
+        <h1>Landing Pages</h1>
+        <p>Manage and access all country-specific landing pages</p>
+    </div>
+
+    <div class="lp-grid">
+
+        <!-- Mauritius (JSS) -->
+        <div class="lp-card">
+            <div class="lp-flag">&#127474;&#127482;</div>
+            <div class="lp-country">Mauritius (JSS)</div>
+            <div class="lp-desc">JSS Academy of Higher Education partnership for MBBS in Mauritius</div>
+            <div class="lp-footer">
+                <span class="lp-status"><span class="lp-status-dot"></span> Live</span>
+                <a href="/jss-mauritius" target="_blank" class="lp-btn">
+                    View Landing Page
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Uzbekistan -->
+        <div class="lp-card">
+            <div class="lp-flag">&#127482;&#127487;</div>
+            <div class="lp-country">Uzbekistan</div>
+            <div class="lp-desc">Medical education opportunities in Uzbekistan</div>
+            <div class="lp-footer">
+                <span class="lp-status"><span class="lp-status-dot"></span> Live</span>
+                <a href="/uzbekistan" target="_blank" class="lp-btn">
+                    View Landing Page
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Vietnam -->
+        <div class="lp-card">
+            <div class="lp-flag">&#127483;&#127475;</div>
+            <div class="lp-country">Vietnam</div>
+            <div class="lp-desc">Study MBBS in Vietnam with GooCampus</div>
+            <div class="lp-footer">
+                <span class="lp-status"><span class="lp-status-dot"></span> Live</span>
+                <a href="/vietnam" target="_blank" class="lp-btn">
+                    View Landing Page
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Georgia -->
+        <div class="lp-card">
+            <div class="lp-flag">&#127468;&#127466;</div>
+            <div class="lp-country">Georgia</div>
+            <div class="lp-desc">Medical universities and MBBS programs in Georgia</div>
+            <div class="lp-footer">
+                <span class="lp-status"><span class="lp-status-dot"></span> Live</span>
+                <a href="/georgia" target="_blank" class="lp-btn">
+                    View Landing Page
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+            </div>
+        </div>
+
+        <!-- Russia -->
+        <div class="lp-card">
+            <div class="lp-flag">&#127479;&#127482;</div>
+            <div class="lp-country">Russia</div>
+            <div class="lp-desc">Top medical universities in Russia for Indian students</div>
+            <div class="lp-footer">
+                <span class="lp-status"><span class="lp-status-dot"></span> Live</span>
+                <a href="/russia" target="_blank" class="lp-btn">
+                    View Landing Page
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                </a>
+            </div>
+        </div>
+
+    </div>
+</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{% block title %}GooCampus CRM Portal{% endblock %}</title>
+    <title>{% block title %}GooCampus Portal{% endblock %}</title>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
     <style>
         :root {
@@ -34,6 +34,8 @@
             --danger-light: #FEF2F2;
             --warning: #F59E0B;
             --warning-light: #FEF3C7;
+            --sidebar-w: 260px;
+            --sidebar-collapsed-w: 60px;
         }
 
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -43,23 +45,20 @@
             background: var(--gray-50);
             color: var(--gray-800);
             min-height: 100vh;
-            display: flex;
-            flex-direction: column;
+            overflow: hidden;
         }
 
-        /* ===== NAVBAR ===== */
+        /* ===== TOP NAVBAR ===== */
         .navbar {
             background: var(--navy);
             color: white;
             box-shadow: 0 2px 16px rgba(0,0,0,0.18);
-            position: sticky;
-            top: 0;
-            z-index: 100;
+            position: relative;
+            z-index: 200;
+            height: 70px;
         }
         .navbar-inner {
-            max-width: 1440px;
-            margin: 0 auto;
-            padding: 0 2.5rem;
+            padding: 0 1.5rem;
             display: flex;
             justify-content: space-between;
             align-items: center;
@@ -72,30 +71,14 @@
             text-decoration: none;
             color: white;
         }
-        .navbar-brand-logo {
-            height: 52px;
-            object-fit: contain;
-        }
-        .navbar-brand-text {
-            font-weight: 700;
-            font-size: 1.2rem;
-            line-height: 1.2;
-        }
-        .navbar-brand-text .goo { color: var(--orange); }
-        .navbar-brand-sub {
-            font-size: 0.65rem;
-            opacity: 0.5;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-            font-weight: 400;
-        }
-        .navbar-nav {
+        .navbar-brand-logo { height: 52px; object-fit: contain; }
+        .navbar-right {
             display: flex;
-            gap: 0.35rem;
             align-items: center;
+            gap: 0.25rem;
             list-style: none;
         }
-        .navbar-nav a {
+        .navbar-right a, .navbar-right .nav-dropdown-toggle {
             color: rgba(255,255,255,0.8);
             text-decoration: none;
             font-size: 0.9rem;
@@ -103,697 +86,358 @@
             padding: 0.55rem 1rem;
             border-radius: 0.5rem;
             transition: all 0.2s;
-        }
-        .navbar-nav a:hover {
-            color: white;
-            background: rgba(255,255,255,0.1);
-        }
-        .navbar-nav a.active {
-            color: white;
-            background: var(--orange);
-        }
-        .nav-divider {
-            width: 1px;
-            height: 28px;
-            background: rgba(255,255,255,0.15);
-            margin: 0 0.4rem;
-        }
-
-        /* Dropdown */
-        .nav-dropdown { position: relative; }
-        .nav-dropdown-toggle {
             cursor: pointer;
             display: flex;
             align-items: center;
             gap: 0.5rem;
-            color: rgba(255,255,255,0.8);
-            padding: 0.55rem 0.85rem;
-            border-radius: 0.5rem;
-            transition: all 0.2s;
-            font-size: 0.9rem;
         }
-        .nav-dropdown-toggle:hover {
+        .navbar-right a:hover, .navbar-right .nav-dropdown-toggle:hover {
             color: white;
             background: rgba(255,255,255,0.1);
         }
+        .nav-divider { width: 1px; height: 28px; background: rgba(255,255,255,0.15); margin: 0 0.4rem; }
+
+        /* Account / Notification dropdowns */
+        .nav-dropdown { position: relative; }
         .nav-dropdown-menu {
-            display: none;
-            position: absolute;
-            right: 0;
-            top: 100%;
-            padding-top: 0.35rem;
-            background: transparent;
-            min-width: 220px;
-            z-index: 1000;
+            display: none; position: absolute; right: 0; top: 100%; padding-top: 0.35rem;
+            background: transparent; min-width: 220px; z-index: 1000;
         }
         .nav-dropdown-menu-inner {
-            background: var(--white);
-            border-radius: 0.65rem;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.15);
-            overflow-y: auto;
-            max-height: 75vh;
+            background: var(--white); border-radius: 0.65rem;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.15); overflow-y: auto; max-height: 75vh;
             border: 1px solid var(--gray-200);
         }
         .nav-dropdown.open .nav-dropdown-menu { display: block; }
         .nav-dropdown-menu-inner a {
-            display: flex;
-            align-items: center;
-            gap: 0.7rem;
-            color: var(--gray-700) !important;
-            padding: 0.85rem 1.15rem;
-            text-decoration: none;
-            transition: background 0.15s;
-            border-radius: 0;
-            font-size: 0.9rem;
+            display: flex; align-items: center; gap: 0.7rem;
+            color: var(--gray-700) !important; padding: 0.85rem 1.15rem;
+            text-decoration: none; transition: background 0.15s; font-size: 0.9rem;
         }
-        .nav-dropdown-menu-inner a:hover {
-            background: var(--orange-light) !important;
-            color: var(--orange-dark) !important;
-        }
-        .nav-dropdown-menu-inner a svg { flex-shrink: 0; }
-
-        /* Wide / multi-column dropdown menus for long sub-lists */
-        .nav-dropdown-menu--wide { min-width: 500px; max-width: calc(100vw - 1rem); }
-        .nav-dropdown-menu--wide .nav-dropdown-menu-inner {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(220px, 1fr));
-            gap: 0.1rem;
-            padding: 0.4rem;
-            max-height: none;
-            overflow-y: visible;
-        }
-        .nav-dropdown-menu--wide-3 { min-width: 720px; max-width: calc(100vw - 1rem); }
-        .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner {
-            display: grid;
-            grid-template-columns: repeat(3, minmax(220px, 1fr));
-            gap: 0.1rem;
-            padding: 0.4rem;
-            max-height: none;
-            overflow-y: visible;
-        }
-        .nav-dropdown-menu--wide .nav-dropdown-menu-inner a,
-        .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner a {
-            padding: 0.65rem 0.8rem;
-            border-radius: 0.45rem;
-            border-top: none !important;
-            font-size: 0.86rem;
-        }
-        @media (max-width: 960px) {
-            .nav-dropdown-menu--wide,
-            .nav-dropdown-menu--wide-3 { min-width: 260px; }
-            .nav-dropdown-menu--wide .nav-dropdown-menu-inner,
-            .nav-dropdown-menu--wide-3 .nav-dropdown-menu-inner {
-                grid-template-columns: 1fr;
-            }
-        }
-
-        /* Approvals Badge */
+        .nav-dropdown-menu-inner a:hover { background: var(--orange-light) !important; color: var(--orange-dark) !important; }
         .nav-badge {
-            background: var(--danger);
+            background: var(--danger); color: white; font-size: 0.65rem;
+            padding: 0.1rem 0.35rem; border-radius: 9999px; font-weight: 700; line-height: 1.3;
+        }
+
+        /* ===== APP BODY LAYOUT ===== */
+        .app-body {
+            display: flex;
+            height: calc(100vh - 70px);
+            overflow: hidden;
+        }
+
+        /* ===== GLOBAL SIDEBAR ===== */
+        .global-sidebar {
+            width: var(--sidebar-w);
+            min-width: var(--sidebar-w);
+            background: var(--navy);
             color: white;
-            font-size: 0.65rem;
-            padding: 0.1rem 0.35rem;
-            border-radius: 9999px;
-            font-weight: 700;
-            margin-left: 0.25rem;
-            line-height: 1.3;
+            display: flex;
+            flex-direction: column;
+            transition: width 0.25s ease, min-width 0.25s ease;
+            overflow: hidden;
+            z-index: 50;
+            border-right: 1px solid rgba(255,255,255,0.06);
+        }
+        .global-sidebar.collapsed {
+            width: var(--sidebar-collapsed-w);
+            min-width: var(--sidebar-collapsed-w);
         }
 
-        /* ===== CONTAINER ===== */
-        .container {
-            max-width: 1440px;
-            margin: 0 auto;
-            padding: 2.5rem 3rem;
-            width: 100%;
-        }
-
-        /* ===== FOOTER ===== */
-        .site-footer {
-            background: var(--navy-dark);
-            color: rgba(255,255,255,0.5);
-            margin-top: auto;
-        }
-        .site-footer-inner {
-            max-width: 1440px;
-            margin: 0 auto;
-            padding: 2.5rem 3rem;
-            display: grid;
-            grid-template-columns: 2fr 1fr 1fr;
-            gap: 3rem;
-        }
-        .footer-brand {
+        .sidebar-header {
+            padding: 1rem 0.85rem;
+            border-bottom: 1px solid rgba(255,255,255,0.08);
             display: flex;
             align-items: center;
-            gap: 0.65rem;
-            margin-bottom: 1rem;
+            justify-content: space-between;
+            gap: 0.5rem;
+            flex-shrink: 0;
         }
-        .footer-brand-text {
-            font-weight: 700;
-            font-size: 1.15rem;
-            color: white;
+        .sidebar-title {
+            font-size: 0.82rem; font-weight: 700; color: var(--orange);
+            white-space: nowrap; overflow: hidden; transition: opacity 0.2s;
+            text-transform: uppercase; letter-spacing: 0.5px;
         }
-        .footer-brand-text .goo { color: var(--orange); }
-        .footer-desc {
-            font-size: 0.85rem;
-            line-height: 1.6;
-            max-width: 380px;
-            color: rgba(255,255,255,0.45);
+        .global-sidebar.collapsed .sidebar-title { opacity: 0; width: 0; }
+
+        .sidebar-toggle {
+            background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6);
+            cursor: pointer; width: 30px; height: 30px; border-radius: 0.4rem;
+            display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+            transition: background 0.2s, color 0.2s;
         }
-        .footer-heading {
-            font-size: 0.8rem;
-            font-weight: 600;
-            text-transform: uppercase;
-            letter-spacing: 0.8px;
-            color: rgba(255,255,255,0.65);
-            margin-bottom: 1rem;
+        .sidebar-toggle:hover { background: rgba(255,255,255,0.15); color: white; }
+        .sidebar-toggle svg { transition: transform 0.25s; }
+        .global-sidebar.collapsed .sidebar-toggle svg { transform: rotate(180deg); }
+
+        /* Sidebar Nav */
+        .sidebar-nav {
+            flex: 1; overflow-y: auto; overflow-x: hidden; padding: 0.4rem 0;
         }
-        .footer-links {
-            list-style: none;
+        .sidebar-nav::-webkit-scrollbar { width: 4px; }
+        .sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+        /* Top-level item (Dashboard link) */
+        .sb-item {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.55rem 0.85rem; color: rgba(255,255,255,0.65);
+            text-decoration: none; font-size: 0.87rem; font-weight: 500;
+            transition: all 0.15s; white-space: nowrap; position: relative;
         }
-        .footer-links li {
-            margin-bottom: 0.55rem;
+        .sb-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+        .sb-item.active {
+            background: rgba(245,130,32,0.12); color: var(--orange); font-weight: 600;
         }
-        .footer-links a {
-            color: rgba(255,255,255,0.45);
-            text-decoration: none;
-            font-size: 0.85rem;
-            transition: color 0.2s;
+        .sb-item.active::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+            width: 3px; background: var(--orange); border-radius: 0 3px 3px 0;
         }
-        .footer-links a:hover {
-            color: var(--orange);
+        .sb-icon {
+            width: 20px; height: 20px; flex-shrink: 0;
+            display: flex; align-items: center; justify-content: center;
         }
-        .footer-bottom {
-            border-top: 1px solid rgba(255,255,255,0.08);
-            padding: 1.25rem 3rem;
-            text-align: center;
-            font-size: 0.78rem;
-            color: rgba(255,255,255,0.35);
+        .sb-text { overflow: hidden; transition: opacity 0.2s; }
+        .global-sidebar.collapsed .sb-text { opacity: 0; width: 0; }
+
+        /* Section header (expandable) */
+        .sb-section-hdr {
+            display: flex; align-items: center; gap: 0.6rem;
+            padding: 0.55rem 0.85rem; color: rgba(255,255,255,0.7);
+            cursor: pointer; font-size: 0.87rem; font-weight: 600;
+            transition: all 0.15s; white-space: nowrap; user-select: none;
+            position: relative;
         }
-        .footer-bottom span { color: var(--orange); }
-        .footer-bottom-inner {
-            max-width: 1440px;
-            margin: 0 auto;
+        .sb-section-hdr:hover { background: rgba(255,255,255,0.06); color: white; }
+        .sb-section-hdr.sec-active { color: var(--orange); }
+        .sb-section-hdr .sb-chevron {
+            margin-left: auto; transition: transform 0.2s; flex-shrink: 0;
         }
+        .sb-section-hdr.sec-open .sb-chevron { transform: rotate(90deg); }
+        .global-sidebar.collapsed .sb-chevron { display: none; }
+
+        /* Section body (child items) */
+        .sb-section-body {
+            max-height: 0; overflow: hidden; transition: max-height 0.3s ease;
+        }
+        .sb-section-body.sec-open { max-height: 2000px; }
+        .global-sidebar.collapsed .sb-section-body { display: none; }
+
+        .sb-sub-label {
+            font-size: 0.65rem; font-weight: 600; text-transform: uppercase;
+            letter-spacing: 0.7px; color: rgba(255,255,255,0.3);
+            padding: 0.65rem 0.85rem 0.2rem 2.6rem; white-space: nowrap;
+        }
+        .sb-child {
+            display: flex; align-items: center; gap: 0.5rem;
+            padding: 0.4rem 0.85rem 0.4rem 2.6rem; color: rgba(255,255,255,0.55);
+            text-decoration: none; font-size: 0.83rem; font-weight: 400;
+            transition: all 0.15s; white-space: nowrap; position: relative;
+        }
+        .sb-child:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+        .sb-child.active {
+            background: rgba(245,130,32,0.10); color: var(--orange); font-weight: 600;
+        }
+        .sb-child.active::before {
+            content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+            width: 3px; background: var(--orange); border-radius: 0 3px 3px 0;
+        }
+
+        /* Collapsed sidebar tooltips */
+        .global-sidebar.collapsed .sb-item,
+        .global-sidebar.collapsed .sb-section-hdr {
+            justify-content: center; padding: 0.65rem 0;
+        }
+        .global-sidebar.collapsed .sb-item:hover::after,
+        .global-sidebar.collapsed .sb-section-hdr:hover::after {
+            content: attr(data-tooltip); position: absolute; left: 64px; top: 50%;
+            transform: translateY(-50%); background: var(--navy); color: white;
+            padding: 0.35rem 0.75rem; border-radius: 0.35rem; font-size: 0.82rem;
+            font-weight: 500; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 200; pointer-events: none;
+        }
+
+        /* ===== MAIN CONTENT ===== */
+        .main-content {
+            flex: 1; overflow-y: auto; overflow-x: auto;
+            padding: 2rem 2.5rem; background: var(--gray-50); min-width: 0;
+        }
+
+        /* Legacy .container — keep for any template that uses it directly */
+        .container {
+            max-width: 1440px; margin: 0 auto; width: 100%;
+        }
+
+        /* ===== FOOTER (hidden in sidebar layout) ===== */
+        .site-footer { display: none !important; }
 
         /* ===== ALERTS ===== */
         .alert {
-            padding: 1rem 1.35rem;
-            margin-bottom: 1.75rem;
-            border-radius: 0.65rem;
-            border-left: 4px solid;
-            font-size: 0.92rem;
-            display: flex;
-            align-items: center;
-            gap: 0.7rem;
+            padding: 1rem 1.35rem; margin-bottom: 1.75rem; border-radius: 0.65rem;
+            border-left: 4px solid; font-size: 0.92rem; display: flex; align-items: center; gap: 0.7rem;
         }
-        .alert-success {
-            background: var(--success-light);
-            border-color: var(--success);
-            color: #065F46;
-        }
-        .alert-error {
-            background: var(--danger-light);
-            border-color: var(--danger);
-            color: #991B1B;
-        }
-        .alert-info {
-            background: var(--blue-light);
-            border-color: var(--blue);
-            color: var(--blue-dark);
-        }
+        .alert-success { background: var(--success-light); border-color: var(--success); color: #065F46; }
+        .alert-error { background: var(--danger-light); border-color: var(--danger); color: #991B1B; }
+        .alert-info { background: var(--blue-light); border-color: var(--blue); color: var(--blue-dark); }
 
         /* ===== CARDS ===== */
         .card {
-            background: var(--white);
-            border-radius: 1rem;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-            border: 1px solid var(--gray-200);
-            padding: 2rem;
-            margin-bottom: 2rem;
+            background: var(--white); border-radius: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200); padding: 2rem; margin-bottom: 2rem;
         }
-        .card-title {
-            font-size: 1.15rem;
-            font-weight: 600;
-            margin-bottom: 1.25rem;
-            color: var(--navy);
-        }
+        .card-title { font-size: 1.15rem; font-weight: 600; margin-bottom: 1.25rem; color: var(--navy); }
 
         /* ===== BUTTONS ===== */
         .button {
-            display: inline-flex;
-            align-items: center;
-            gap: 0.5rem;
-            padding: 0.7rem 1.4rem;
-            background: var(--orange);
-            color: white;
-            border: none;
-            border-radius: 0.6rem;
-            cursor: pointer;
-            font-size: 0.92rem;
-            font-weight: 600;
-            text-decoration: none;
-            transition: all 0.2s;
-            font-family: inherit;
+            display: inline-flex; align-items: center; gap: 0.5rem;
+            padding: 0.7rem 1.4rem; background: var(--orange); color: white;
+            border: none; border-radius: 0.6rem; cursor: pointer;
+            font-size: 0.92rem; font-weight: 600; text-decoration: none;
+            transition: all 0.2s; font-family: inherit;
         }
-        .button:hover {
-            background: var(--orange-dark);
-            transform: translateY(-1px);
-            box-shadow: 0 6px 12px rgba(245,130,32,0.25);
-        }
-        .button-secondary {
-            background: var(--blue);
-        }
-        .button-secondary:hover {
-            background: var(--blue-dark);
-            box-shadow: 0 6px 12px rgba(74,122,181,0.25);
-        }
-        .button-danger {
-            background: var(--danger);
-        }
-        .button-danger:hover {
-            background: #DC2626;
-            box-shadow: 0 6px 12px rgba(239,68,68,0.25);
-        }
-        .button-success {
-            background: var(--success);
-        }
-        .button-success:hover {
-            background: #059669;
-            box-shadow: 0 6px 12px rgba(16,185,129,0.25);
-        }
-        .button-small {
-            padding: 0.4rem 0.9rem;
-            font-size: 0.85rem;
-        }
+        .button:hover { background: var(--orange-dark); transform: translateY(-1px); box-shadow: 0 6px 12px rgba(245,130,32,0.25); }
+        .button-secondary { background: var(--blue); }
+        .button-secondary:hover { background: var(--blue-dark); box-shadow: 0 6px 12px rgba(74,122,181,0.25); }
+        .button-danger { background: var(--danger); }
+        .button-danger:hover { background: #DC2626; box-shadow: 0 6px 12px rgba(239,68,68,0.25); }
+        .button-success { background: var(--success); }
+        .button-success:hover { background: #059669; box-shadow: 0 6px 12px rgba(16,185,129,0.25); }
+        .button-small { padding: 0.4rem 0.9rem; font-size: 0.85rem; }
 
         /* ===== FORMS ===== */
-        .form-group {
-            margin-bottom: 1.5rem;
+        .form-group { margin-bottom: 1.5rem; }
+        .form-group label { display: block; margin-bottom: 0.5rem; font-weight: 600; color: var(--gray-700); font-size: 0.9rem; }
+        .form-group input, .form-group select, .form-group textarea {
+            width: 100%; padding: 0.75rem 1rem; border: 2px solid var(--gray-200);
+            border-radius: 0.6rem; font-family: inherit; font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s; background: var(--white);
         }
-        .form-group label {
-            display: block;
-            margin-bottom: 0.5rem;
-            font-weight: 600;
-            color: var(--gray-700);
-            font-size: 0.9rem;
+        .form-group textarea { resize: vertical; min-height: 120px; }
+        .form-group input:focus, .form-group select:focus, .form-group textarea:focus {
+            outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
         }
-        .form-group input,
-        .form-group select,
-        .form-group textarea {
-            width: 100%;
-            padding: 0.75rem 1rem;
-            border: 2px solid var(--gray-200);
-            border-radius: 0.6rem;
-            font-family: inherit;
-            font-size: 0.95rem;
-            transition: border-color 0.2s, box-shadow 0.2s;
-            background: var(--white);
-        }
-        .form-group textarea {
-            resize: vertical;
-            min-height: 120px;
-        }
-        .form-group input:focus,
-        .form-group select:focus,
-        .form-group textarea:focus {
-            outline: none;
-            border-color: var(--orange);
-            box-shadow: 0 0 0 3px rgba(245,130,32,0.12);
-        }
+        .form-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.25rem; }
 
         /* ===== TABLES ===== */
-        .table {
-            width: 100%;
-            border-collapse: collapse;
-            background: white;
-        }
-        .table thead {
-            background: var(--navy);
-            color: white;
-        }
-        .table th {
-            padding: 1rem 1.25rem;
-            text-align: left;
-            font-weight: 600;
-            font-size: 0.85rem;
-            text-transform: uppercase;
-            letter-spacing: 0.5px;
-        }
-        .table td {
-            padding: 1rem 1.25rem;
-            border-bottom: 1px solid var(--gray-100);
-            font-size: 0.95rem;
-        }
-        .table tbody tr:hover {
-            background: var(--orange-light);
-        }
+        .table { width: 100%; border-collapse: collapse; background: white; }
+        .table thead { background: var(--navy); color: white; }
+        .table th { padding: 1rem 1.25rem; text-align: left; font-weight: 600; font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.5px; }
+        .table td { padding: 1rem 1.25rem; border-bottom: 1px solid var(--gray-100); font-size: 0.95rem; }
+        .table tbody tr:hover { background: var(--orange-light); }
 
         /* ===== BADGES ===== */
-        .badge {
-            display: inline-flex;
-            align-items: center;
-            padding: 0.3rem 0.85rem;
-            border-radius: 9999px;
-            font-size: 0.82rem;
-            font-weight: 600;
-        }
-        .badge-pending {
-            background: var(--warning-light);
-            color: #92400E;
-        }
-        .badge-approved {
-            background: var(--success-light);
-            color: #166534;
-        }
-        .badge-rejected {
-            background: var(--danger-light);
-            color: #991B1B;
-        }
+        .badge { display: inline-flex; align-items: center; padding: 0.3rem 0.85rem; border-radius: 9999px; font-size: 0.82rem; font-weight: 600; }
+        .badge-pending { background: var(--warning-light); color: #92400E; }
+        .badge-approved { background: var(--success-light); color: #166534; }
+        .badge-rejected { background: var(--danger-light); color: #991B1B; }
 
         /* ===== SUMMARY CARDS ===== */
-        .summary-cards {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 1.75rem;
-            margin-bottom: 2.5rem;
-        }
+        .summary-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 1.5rem; margin-bottom: 2rem; }
         .summary-card {
-            background: var(--white);
-            border-radius: 1rem;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-            border: 1px solid var(--gray-200);
-            padding: 2rem;
-            text-align: center;
+            background: var(--white); border-radius: 1rem; box-shadow: 0 1px 4px rgba(0,0,0,0.06);
+            border: 1px solid var(--gray-200); padding: 1.5rem; text-align: center;
             border-top: 3px solid var(--orange);
         }
-        .summary-card-value {
-            font-size: 2.25rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.5rem;
-        }
-        .summary-card-label {
-            font-size: 0.95rem;
-            color: var(--gray-500);
-        }
+        .summary-card-value { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 0.35rem; }
+        .summary-card-label { font-size: 0.9rem; color: var(--gray-500); }
 
         /* ===== GRID HELPERS ===== */
-        .grid-2 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1.75rem;
-            margin-bottom: 2.5rem;
-        }
-        .grid-3 {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 1.25rem;
-            margin-bottom: 2.5rem;
-        }
+        .grid-2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 1.75rem; margin-bottom: 2.5rem; }
+        .grid-3 { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 1.25rem; margin-bottom: 2.5rem; }
 
         /* ===== CALENDAR ===== */
-        .calendar {
-            background: var(--white);
-            border-radius: 1rem;
-            overflow: hidden;
-            box-shadow: 0 1px 4px rgba(0,0,0,0.06);
-            border: 1px solid var(--gray-200);
-        }
-        .calendar-header {
-            background: linear-gradient(135deg, var(--navy), var(--navy-light));
-            color: white;
-            padding: 2rem;
-            text-align: center;
-        }
-        .calendar-header h2 {
-            font-size: 1.5rem;
-            margin-bottom: 1.25rem;
-        }
-        .calendar-nav {
-            display: flex;
-            justify-content: space-between;
-            gap: 1rem;
-        }
-        .calendar-nav a {
-            color: white;
-            text-decoration: none;
-            padding: 0.6rem 1.25rem;
-            background: rgba(255,255,255,0.12);
-            border-radius: 0.5rem;
-            transition: background 0.2s;
-            font-size: 0.9rem;
-        }
-        .calendar-nav a:hover {
-            background: var(--orange);
-        }
-        .calendar-table {
-            width: 100%;
-            border-collapse: collapse;
-        }
-        .calendar-table th {
-            background: var(--gray-100);
-            padding: 0.85rem 1rem;
-            text-align: center;
-            font-weight: 600;
-            font-size: 0.85rem;
-            color: var(--navy);
-            border-bottom: 2px solid var(--gray-200);
-        }
-        .calendar-table td {
-            border: 1px solid var(--gray-100);
-            height: 110px;
-            vertical-align: top;
-            padding: 0.6rem;
-            position: relative;
-        }
-        .calendar-table td.weekend {
-            background: #FAFBFC;
-        }
-        .calendar-table td.holiday {
-            background: var(--warning-light);
-        }
-        .calendar-table td.today {
-            border: 2px solid var(--orange);
-        }
-        .calendar-table td.other-month {
-            background: #FAFBFC;
-            color: var(--gray-300);
-        }
-        .calendar-day-number {
-            font-weight: 600;
-            color: var(--gray-800);
-            margin-bottom: 0.3rem;
-        }
-        .calendar-day-content {
-            font-size: 0.82rem;
-        }
-        .holiday-badge {
-            display: inline-block;
-            background: var(--orange);
-            color: white;
-            padding: 0.2rem 0.5rem;
-            border-radius: 0.3rem;
-            font-size: 0.7rem;
-            margin-top: 0.3rem;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-            max-width: 100px;
-            font-weight: 600;
-        }
-        .leave-dot {
-            display: inline-block;
-            width: 7px;
-            height: 7px;
-            border-radius: 50%;
-            margin-right: 0.3rem;
-        }
+        .calendar { background: var(--white); border-radius: 1rem; overflow: hidden; box-shadow: 0 1px 4px rgba(0,0,0,0.06); border: 1px solid var(--gray-200); }
+        .calendar-header { background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: white; padding: 2rem; text-align: center; }
+        .calendar-header h2 { font-size: 1.5rem; margin-bottom: 1.25rem; }
+        .calendar-nav { display: flex; justify-content: space-between; gap: 1rem; }
+        .calendar-nav a { color: white; text-decoration: none; padding: 0.6rem 1.25rem; background: rgba(255,255,255,0.12); border-radius: 0.5rem; transition: background 0.2s; font-size: 0.9rem; }
+        .calendar-nav a:hover { background: var(--orange); }
+        .calendar-table { width: 100%; border-collapse: collapse; }
+        .calendar-table th { background: var(--gray-100); padding: 0.85rem 1rem; text-align: center; font-weight: 600; font-size: 0.85rem; color: var(--navy); border-bottom: 2px solid var(--gray-200); }
+        .calendar-table td { border: 1px solid var(--gray-100); height: 110px; vertical-align: top; padding: 0.6rem; position: relative; }
+        .calendar-table td.weekend { background: #FAFBFC; }
+        .calendar-table td.holiday { background: var(--warning-light); }
+        .calendar-table td.today { border: 2px solid var(--orange); }
+        .calendar-table td.other-month { background: #FAFBFC; color: var(--gray-300); }
+        .calendar-day-number { font-weight: 600; color: var(--gray-800); margin-bottom: 0.3rem; }
+        .calendar-day-content { font-size: 0.82rem; }
+        .holiday-badge { display: inline-block; background: var(--orange); color: white; padding: 0.2rem 0.5rem; border-radius: 0.3rem; font-size: 0.7rem; margin-top: 0.3rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100px; font-weight: 600; }
+        .leave-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; margin-right: 0.3rem; }
         .leave-annual { background: var(--blue); }
         .leave-sick { background: var(--success); }
         .leave-casual { background: var(--orange); }
-        .leave-pending {
-            border: 1px dashed var(--blue);
-            border-radius: 3px;
-            padding: 0.3rem;
-        }
-
-        /* ===== FORM ROW ===== */
-        .form-row {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
-            gap: 1.25rem;
-        }
+        .leave-pending { border: 1px dashed var(--blue); border-radius: 3px; padding: 0.3rem; }
 
         /* ===== PAGE HEADER ===== */
-        .page-header {
-            margin-bottom: 2.25rem;
-            padding-bottom: 1.25rem;
-            border-bottom: 2px solid var(--gray-100);
-        }
-        .page-header h1 {
-            font-size: 1.85rem;
-            font-weight: 700;
-            color: var(--navy);
-            margin-bottom: 0.35rem;
-        }
-        .page-header p {
-            color: var(--gray-500);
-            font-size: 1rem;
-        }
+        .page-header { margin-bottom: 2.25rem; padding-bottom: 1.25rem; border-bottom: 2px solid var(--gray-100); }
+        .page-header h1 { font-size: 1.65rem; font-weight: 700; color: var(--navy); margin-bottom: 0.35rem; }
+        .page-header p { color: var(--gray-500); font-size: 1rem; }
 
         /* ===== SECTION SPACING ===== */
-        .section {
-            margin-bottom: 3rem;
-        }
-        .section-title {
-            font-size: 1.25rem;
-            font-weight: 600;
-            color: var(--navy);
-            margin-bottom: 1.25rem;
-        }
+        .section { margin-bottom: 3rem; }
+        .section-title { font-size: 1.25rem; font-weight: 600; color: var(--navy); margin-bottom: 1.25rem; }
 
         /* ===== RESPONSIVE ===== */
         @media (max-width: 1024px) {
-            .container { padding: 2rem; }
-            .navbar-inner { padding: 0 1.5rem; }
-            .site-footer-inner { padding: 2rem 1.5rem; grid-template-columns: 1fr 1fr; gap: 2rem; }
-            .footer-bottom { padding: 1rem 1.5rem; }
+            .main-content { padding: 1.5rem; }
+            .global-sidebar { width: 220px; min-width: 220px; }
+            .global-sidebar.collapsed { width: 54px; min-width: 54px; }
+            .calendar-table td { height: auto; min-height: 80px; }
         }
         @media (max-width: 768px) {
             .navbar-inner { padding: 0 1rem; height: 60px; }
-            .navbar-nav { gap: 0.15rem; }
-            .navbar-nav a { padding: 0.4rem 0.6rem; font-size: 0.82rem; }
-            .container { padding: 1.25rem; }
+            .navbar { height: 60px; }
+            .app-body { height: calc(100vh - 60px); }
+            .main-content { padding: 1.25rem; }
             .summary-cards { grid-template-columns: 1fr; }
-            .calendar-table td { height: auto; min-height: 80px; font-size: 0.82rem; }
             .form-row { grid-template-columns: 1fr; }
-            .navbar-brand-sub { display: none; }
-            .site-footer-inner { grid-template-columns: 1fr; gap: 1.5rem; }
-            .page-header h1 { font-size: 1.5rem; }
+            .page-header h1 { font-size: 1.35rem; }
+            .global-sidebar {
+                position: fixed; left: 0; top: 60px; bottom: 0;
+                z-index: 100; transform: translateX(0);
+                transition: transform 0.25s ease;
+            }
+            .global-sidebar.collapsed { transform: translateX(-100%); width: var(--sidebar-w); min-width: var(--sidebar-w); }
         }
-    </style>
-    <style>
+
         /* ===== NOTIFICATION BELL ===== */
         .notif-badge {
-            position: absolute;
-            top: 2px;
-            right: 2px;
-            background: var(--danger);
-            color: white;
-            font-size: 0.6rem;
-            min-width: 16px;
-            height: 16px;
-            padding: 0 4px;
-            border-radius: 9999px;
-            font-weight: 700;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            line-height: 1;
+            position: absolute; top: 2px; right: 2px; background: var(--danger);
+            color: white; font-size: 0.6rem; min-width: 16px; height: 16px;
+            padding: 0 4px; border-radius: 9999px; font-weight: 700;
+            display: flex; align-items: center; justify-content: center; line-height: 1;
         }
         .notif-panel {
-            position: absolute;
-            right: 0;
-            top: 100%;
-            margin-top: 0.35rem;
-            background: var(--white);
-            border-radius: 0.75rem;
-            box-shadow: 0 12px 40px rgba(0,0,0,0.18);
-            width: 360px;
-            max-height: 480px;
-            z-index: 1001;
-            border: 1px solid var(--gray-200);
-            overflow: hidden;
+            position: absolute; right: 0; top: 100%; margin-top: 0.35rem;
+            background: var(--white); border-radius: 0.75rem;
+            box-shadow: 0 12px 40px rgba(0,0,0,0.18); width: 360px;
+            max-height: 480px; z-index: 1001; border: 1px solid var(--gray-200); overflow: hidden;
         }
         .notif-panel-header {
-            padding: 0.85rem 1.15rem;
-            border-bottom: 1px solid var(--gray-200);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            background: var(--gray-50);
+            padding: 0.85rem 1.15rem; border-bottom: 1px solid var(--gray-200);
+            display: flex; justify-content: space-between; align-items: center; background: var(--gray-50);
         }
-        .notif-panel-header strong {
-            color: var(--navy);
-            font-size: 0.95rem;
-        }
-        .notif-panel-body {
-            max-height: 400px;
-            overflow-y: auto;
-        }
+        .notif-panel-header strong { color: var(--navy); font-size: 0.95rem; }
+        .notif-panel-body { max-height: 400px; overflow-y: auto; }
         .notif-item {
-            padding: 0.85rem 1.15rem;
-            border-bottom: 1px solid var(--gray-100);
-            cursor: pointer;
-            transition: background 0.15s;
-            display: flex;
-            gap: 0.75rem;
-            align-items: flex-start;
+            padding: 0.85rem 1.15rem; border-bottom: 1px solid var(--gray-100);
+            cursor: pointer; transition: background 0.15s; display: flex; gap: 0.75rem; align-items: flex-start;
         }
-        .notif-item:hover {
-            background: var(--orange-light);
-        }
-        .notif-item.unread {
-            background: #f0f7ff;
-            border-left: 3px solid var(--orange);
-        }
-        .notif-item.unread:hover {
-            background: #e6f0fb;
-        }
-        .notif-icon {
-            width: 32px;
-            height: 32px;
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            flex-shrink: 0;
-            font-size: 1rem;
-        }
+        .notif-item:hover { background: var(--orange-light); }
+        .notif-item.unread { background: #f0f7ff; border-left: 3px solid var(--orange); }
+        .notif-item.unread:hover { background: #e6f0fb; }
+        .notif-icon { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-size: 1rem; }
         .notif-icon.birthday { background: #fef3c7; }
         .notif-icon.anniversary { background: #ede9fe; }
         .notif-icon.announcement { background: #dbeafe; }
         .notif-icon.holiday { background: #d1fae5; }
         .notif-icon.leave_request { background: #fce7f3; }
-        .notif-content {
-            flex: 1;
-            min-width: 0;
-        }
-        .notif-title {
-            font-size: 0.85rem;
-            font-weight: 600;
-            color: var(--navy);
-            margin-bottom: 2px;
-            white-space: nowrap;
-            overflow: hidden;
-            text-overflow: ellipsis;
-        }
-        .notif-msg {
-            font-size: 0.78rem;
-            color: var(--gray-500);
-            line-height: 1.4;
-            display: -webkit-box;
-            -webkit-line-clamp: 2;
-            -webkit-box-orient: vertical;
-            overflow: hidden;
-        }
-        .notif-time {
-            font-size: 0.7rem;
-            color: var(--gray-400);
-            margin-top: 3px;
-        }
-        .notif-empty {
-            text-align: center;
-            padding: 2rem;
-            color: var(--gray-400);
-            font-size: 0.9rem;
-        }
-        @media (max-width: 768px) {
-            .notif-panel {
-                width: 300px;
-                right: -40px;
-            }
-        }
+        .notif-content { flex: 1; min-width: 0; }
+        .notif-title { font-size: 0.85rem; font-weight: 600; color: var(--navy); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+        .notif-msg { font-size: 0.78rem; color: var(--gray-500); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .notif-time { font-size: 0.7rem; color: var(--gray-400); margin-top: 3px; }
+        .notif-empty { text-align: center; padding: 2rem; color: var(--gray-400); font-size: 0.9rem; }
+        @media (max-width: 768px) { .notif-panel { width: 300px; right: -40px; } }
     </style>
     {% block extra_css %}{% endblock %}
 </head>
@@ -803,598 +447,11 @@
             <a href="/" class="navbar-brand">
                 <img src="/static/logo-white.png" alt="GooCampus" class="navbar-brand-logo">
             </a>
-            <ul class="navbar-nav">
-                {% if session.get('is_admin') %}
-                    <li><a href="/dashboard">Main Dashboard</a></li>
-                    <!-- HR Dropdown (Admin) -->
-                    <li class="nav-dropdown" id="hr-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('hr-dropdown-admin', event)">
-                            HR
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/hr-dashboard">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                                    HR Dashboard
-                                </a>
-                                <a href="/admin/manage-employees">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Employees
-                                </a>
-                                <a href="/leave-info">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                                    Leave Info
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Leave Management</div>
-                                <a href="/admin/add-leave">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><line x1="20" y1="8" x2="20" y2="14"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                                    Add Leave (Employee)
-                                </a>
-                                <a href="/admin/bulk-leave">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/><path d="M9 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
-                                    Bulk Leave
-                                </a>
-                                <a href="/admin/leave-applications">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                    All Leave Applications
-                                </a>
-                                <a href="/admin/pending-approvals">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                    Pending Approvals
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Reports</div>
-                                <a href="/admin/employee-leave-report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/></svg>
-                                    Employee Leave Report
-                                </a>
-                                <a href="/admin/monthly-report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                    Monthly Report
-                                </a>
-                                <a href="/admin/quarterly-report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                                    Quarterly Report
-                                </a>
-                                <a href="/admin/annual-report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
-                                    Annual Report
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Attendance</div>
-                                <a href="/time-log">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    Time Log
-                                </a>
-                                <a href="/admin/upload-attendance">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                                    Upload Attendance
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Work From Home</div>
-                                <a href="/wfh/approvals">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                    WFH Approvals
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- KRA Dropdown (Admin) -->
-                    <li class="nav-dropdown" id="kra-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('kra-dropdown-admin', event)">
-                            KRA
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em;">KRA Management</div>
-                                <a href="/kra/admin/templates">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
-                                    KRA Templates
-                                </a>
-                                <a href="/kra/admin/assignments">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><polyline points="17 11 19 13 23 9"/></svg>
-                                    Assign KRA
-                                </a>
-                                <a href="/kra/admin/report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                                    KRA Report
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">My KRA</div>
-                                <a href="/kra/dashboard">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
-                                    KRA Dashboard
-                                </a>
-                                <a href="/kra/report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    My KRA Report
-                                </a>
-                                <a href="/kra/manager/team">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Team KRA
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Sales Dropdown (Admin) -->
-                    <li class="nav-dropdown" id="sales-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('sales-dropdown-admin', event)">
-                            Sales
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <!-- ── Sales ── -->
-                                <div style="padding:6px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);">Sales</div>
-                                <a href="/sales" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                                    Sales Dashboard
-                                </a>
-                                <a href="/sales/leads">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.39 0 4.68.94 6.36 2.64"/></svg>
-                                    Leads
-                                </a>
-                                <a href="/sales/closures">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                                    Closures
-                                </a>
-                                <a href="/sales/targets">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-                                    Targets
-                                </a>
-                                <a href="/sales/calls">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7a2 2 0 011.72 2z"/></svg>
-                                    Call Reports
-                                </a>
-                                <a href="/sales/team">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Sales Team
-                                </a>
-                                <a href="/sales/stages">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 6h16M4 12h16M4 18h16"/></svg>
-                                    Lead Stages
-                                </a>
-                                <a href="/sales/news">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/></svg>
-                                    Sales News
-                                </a>
-                                <a href="/projects">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                                    Projects
-                                </a>
-                                <a href="/streams">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
-                                    Revenue Streams
-                                </a>
-                                <a href="/products">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
-                                    Products &amp; Services
-                                </a>
-                                <!-- ── Meetings ── -->
-                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>
-                                <a href="/b2b">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Meetings
-                                </a>
-                                <a href="/b2b/add">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                                    New Meeting
-                                </a>
-                                <a href="/admin/meeting-types" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                                    Meeting Clients
-                                </a>
-                                <a href="/admin/module-access">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-                                    Module Access
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Finance Dropdown (Admin Only) -->
-                    <li class="nav-dropdown" id="finance-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('finance-dropdown-admin', event)">
-                            Finance
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/finance/budget">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="2" y="3" width="20" height="18" rx="2"/><line x1="2" y1="9" x2="22" y2="9"/><line x1="12" y1="9" x2="12" y2="21"/></svg>
-                                    Budget Dashboard
-                                </a>
-                                <a href="/finance/budget/expenses" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg>
-                                    Expense Budget
-                                </a>
-                                <a href="/finance/budget/revenue" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
-                                    Sales Projection
-                                </a>
-                                <a href="/finance/budget/report" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-                                    Annual Report
-                                </a>
-                                <a href="/finance/budget/projects">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                                    Project P&L
-                                </a>
-                                <a href="/finance/products">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
-                                    Products (from Sales)
-                                </a>
-                                <a href="/finance/salaries">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
-                                    Salaries
-                                </a>
-                                <a href="/finance/subscriptions">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M2 10h20"/></svg>
-                                    Subscriptions
-                                </a>
-                                <a href="/finance/budget/settings" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
-                                    Finance Settings
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Operations Dropdown (Admin Only) -->
-                    <li class="nav-dropdown" id="ops-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('ops-dropdown-admin', event)">
-                            Operations
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/operations/uk-pathway" style="background: var(--orange-light); font-weight: 600; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/></svg>
-                                    UK Pathway
-                                </a>
-                                <a href="/operations/australia-pathway" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/></svg>
-                                    Australia Pathway
-                                </a>
-                                <a href="/operations/uae-pathway" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/></svg>
-                                    UAE Pathway
-                                </a>
-                                <a href="/operations/consulting" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Consulting
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Partners Dropdown -->
-                    <li class="nav-dropdown" id="partners-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('partners-dropdown-admin', event)">
-                            Partners
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/partners/dashboard" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/></svg>
-                                    Partner Dashboard
-                                </a>
-                                <a href="/partners">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg>
-                                    Partners List
-                                </a>
-                                <div style="padding:0.3rem 1rem 0.15rem;font-size:0.68rem;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--gray-100);margin-top:0.25rem;">Leads</div>
-                                <a href="/partners/leads">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="23" y1="11" x2="17" y2="11"/></svg>
-                                    Student Leads
-                                </a>
-                                <a href="/partners/b2b-leads">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
-                                    School / College Leads
-                                </a>
-                                <div style="padding:0.3rem 1rem 0.15rem;font-size:0.68rem;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:0.05em;border-top:1px solid var(--gray-100);margin-top:0.25rem;">Settings</div>
-                                <a href="/partners/invitations">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>
-                                    Invitations
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Colleges Dropdown -->
-                    <li class="nav-dropdown" id="colleges-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('colleges-dropdown-admin', event)">
-                            Colleges
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/colleges">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.657 2.686 3 6 3s6-1.343 6-3v-5"/></svg>
-                                    College Portal
-                                </a>
-                                <a href="/medical-predictor" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
-                                    Medical Predictor
-                                </a>
-                                <a href="/admin/neetpg-pdfs" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
-                                    NEET PG PDFs
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Company Dropdown -->
-                    <li class="nav-dropdown" id="company-dropdown-admin">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-admin', event)">
-                            Company
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/admin/org-chart">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Org Chart
-                                </a>
-                                <a href="/admin/holidays" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>
-                                    Holidays
-                                </a>
-                                <a href="/admin/calendar" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                    Calendar
-                                </a>
-                                <a href="/company/locations" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                                    State & City Settings
-                                </a>
-                                <div style="border-top:1px solid var(--gray-100);padding:8px 14px 4px;font-size:10px;font-weight:700;color:var(--gray-400);text-transform:uppercase;letter-spacing:.5px;">Landing Pages</div>
-                                <a href="/jss-mauritius" target="_blank" style="padding-top:4px;">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-                                    Mauritius (JSS)
-                                </a>
-                                <a href="/uzbekistan" target="_blank">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-                                    Uzbekistan
-                                </a>
-                                <a href="/vietnam" target="_blank">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-                                    Vietnam
-                                </a>
-                                <a href="/georgia" target="_blank">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-                                    Georgia
-                                </a>
-                                <a href="/russia" target="_blank">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z"/></svg>
-                                    Russia
-                                </a>
-                                {% if session.get('emp_code') == 'admin' %}
-                                <a href="/admin/reset-passwords" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/><circle cx="12" cy="16" r="1"/></svg>
-                                    Reset Passwords
-                                </a>
-                                <a href="/admin/section-visibility" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
-                                    Section Visibility
-                                </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </li>
-                {% else %}
-                    <li><a href="/dashboard">Dashboard</a></li>
-
-                    <!-- HR Dropdown (Employee) -->
-                    <li class="nav-dropdown" id="hr-dropdown-emp">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('hr-dropdown-emp', event)">
-                            HR
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/leave-info">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                                    Leave Info
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Leave</div>
-                                <a href="/apply-leave">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-                                    Apply Leave
-                                </a>
-                                <a href="/apply-late-leave">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    Late Leave
-                                </a>
-                                <a href="/my-applications">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    My Applications
-                                </a>
-                                {% if is_manager %}
-                                <a href="/team-applications">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Team Applications
-                                </a>
-                                <a href="/approvals" style="position: relative;">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                    Approvals
-                                    {% if pending_team_count > 0 %}
-                                    <span class="nav-badge" style="position: static; margin-left: 0.3rem;">{{ pending_team_count }}</span>
-                                    {% endif %}
-                                </a>
-                                {% endif %}
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Reports</div>
-                                <a href="/my-leave-report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    My Leave Report
-                                </a>
-                                <a href="/reports/monthly">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                    Monthly Report
-                                </a>
-                                <a href="/reports/quarterly">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
-                                    Quarterly Report
-                                </a>
-                                <a href="/reports/annual">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
-                                    Annual Report
-                                </a>
-                                {% if is_manager %}
-                                <a href="/reports/team">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/></svg>
-                                    Team Reports
-                                </a>
-                                {% endif %}
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Attendance</div>
-                                <a href="/time-log">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                                    Time Log
-                                </a>
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Work From Home</div>
-                                <a href="/wfh/apply">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-                                    Apply WFH
-                                </a>
-                                <a href="/wfh/my-requests">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    My WFH Requests
-                                </a>
-                                {% if is_manager %}
-                                <a href="/wfh/approvals">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
-                                    WFH Approvals
-                                </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- KRA Dropdown (Employee) -->
-                    <li class="nav-dropdown" id="kra-dropdown-emp">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('kra-dropdown-emp', event)">
-                            KRA
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/kra/dashboard">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg>
-                                    KRA Dashboard
-                                </a>
-                                <a href="/kra/report">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-                                    My KRA Report
-                                </a>
-                                {% if is_manager %}
-                                <div style="padding: 0.3rem 1rem 0.15rem; font-size: 0.68rem; font-weight: 700; color: var(--gray-400); text-transform: uppercase; letter-spacing: 0.05em; border-top: 1px solid var(--gray-100); margin-top: 0.25rem;">Manager</div>
-                                <a href="/kra/manager/team">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Team KRA
-                                </a>
-                                {% endif %}
-                            </div>
-                        </div>
-                    </li>
-
-                    <!-- Sales (Employee - only if has access) -->
-                    {% if has_sales_access %}
-                    <li class="nav-dropdown" id="sales-dropdown-emp">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('sales-dropdown-emp', event)">
-                            Sales
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu nav-dropdown-menu--wide-3" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <!-- ── Sales ── -->
-                                <div style="padding:6px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);">Sales</div>
-                                <a href="/sales" style="background: var(--orange-light); font-weight: 700; color: var(--orange-dark);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--orange)" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
-                                    Sales Dashboard
-                                </a>
-                                <a href="/sales/crm">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                                    Sales CRM
-                                </a>
-                                <a href="/sales/leads">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M9 12l2 2 4-4"/><path d="M21 12c0 4.97-4.03 9-9 9s-9-4.03-9-9 4.03-9 9-9c2.39 0 4.68.94 6.36 2.64"/></svg>
-                                    Leads
-                                </a>
-                                <a href="/sales/closures">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
-                                    Closures
-                                </a>
-                                <a href="/sales/targets">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>
-                                    Targets
-                                </a>
-                                <a href="/sales/calls">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.13.96.36 1.9.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.91.34 1.85.57 2.81.7a2 2 0 011.72 2z"/></svg>
-                                    Call Reports
-                                </a>
-                                <a href="/sales/news">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M4 22h16a2 2 0 002-2V4a2 2 0 00-2-2H8a2 2 0 00-2 2v16a2 2 0 01-2 2zm0 0a2 2 0 01-2-2v-9c0-1.1.9-2 2-2h2"/></svg>
-                                    Sales News
-                                </a>
-                                <a href="/projects">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>
-                                    Projects
-                                </a>
-                                <a href="/streams">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M3 12h4l3-9 4 18 3-9h4"/></svg>
-                                    Revenue Streams
-                                </a>
-                                <a href="/products">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M20 7h-3V5a2 2 0 00-2-2H9a2 2 0 00-2 2v2H4a1 1 0 00-1 1v12a1 1 0 001 1h16a1 1 0 001-1V8a1 1 0 00-1-1zM9 5h6v2H9z"/></svg>
-                                    Products &amp; Services
-                                </a>
-                                <!-- ── Meetings ── -->
-                                <div style="padding:10px 14px 4px;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:1px;color:var(--gray-400);border-top:1px solid var(--gray-100);">Meetings</div>
-                                <a href="/b2b">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Meetings
-                                </a>
-                                <a href="/b2b/add">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                                    New Meeting
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-                    {% endif %}
-
-                    <!-- Company Dropdown -->
-                    <li class="nav-dropdown" id="company-dropdown-emp">
-                        <span class="nav-dropdown-toggle" onclick="toggleDropdown('company-dropdown-emp', event)">
-                            Company
-                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
-                        </span>
-                        <div class="nav-dropdown-menu" style="left: 0; right: auto;">
-                            <div class="nav-dropdown-menu-inner">
-                                <a href="/org-chart">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-                                    Org Chart
-                                </a>
-                                <a href="/holidays" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01"/><path d="M12 14h.01"/><path d="M16 14h.01"/></svg>
-                                    Holidays
-                                </a>
-                                <a href="/calendar" style="border-top: 1px solid var(--gray-100);">
-                                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="var(--gray-500)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                                    Calendar
-                                </a>
-                            </div>
-                        </div>
-                    </li>
-                {% endif %}
-
+            <ul class="navbar-right">
                 {% if session.get('user_id') %}
-                <li class="nav-divider"></li>
                 <!-- Notification Bell -->
                 <li class="nav-dropdown" id="notif-dropdown">
-                    <span class="nav-dropdown-toggle notif-bell-toggle" onclick="toggleNotifications(event)" style="position: relative; cursor: pointer;">
+                    <span class="nav-dropdown-toggle notif-bell-toggle" onclick="toggleNotifications(event)" style="position: relative;">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
                         {% if unread_notification_count > 0 %}
                         <span class="notif-badge" id="notif-badge">{{ unread_notification_count }}</span>
@@ -1448,7 +505,7 @@
             <div style="width:64px;height:64px;background:linear-gradient(135deg,var(--orange),#F59E0B);border-radius:50%;display:flex;align-items:center;justify-content:center;margin:0 auto 1.25rem;">
                 <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
             </div>
-            <h2 style="color:var(--navy);font-size:1.4rem;margin-bottom:0.5rem;">Welcome to GooCampus CRM Portal!</h2>
+            <h2 style="color:var(--navy);font-size:1.4rem;margin-bottom:0.5rem;">Welcome to GooCampus Portal!</h2>
             <p style="color:var(--gray-500);font-size:0.92rem;line-height:1.6;margin-bottom:1.5rem;">
                 We're glad to have you on board. For your account security, please change your default password as soon as possible.
             </p>
@@ -1461,12 +518,7 @@
             </button>
         </div>
     </div>
-    <style>
-        @keyframes popIn {
-            from { opacity: 0; transform: scale(0.85); }
-            to { opacity: 1; transform: scale(1); }
-        }
-    </style>
+    <style>@keyframes popIn { from { opacity:0; transform:scale(0.85); } to { opacity:1; transform:scale(1); } }</style>
     <script>
     function dismissWelcome() {
         document.getElementById('welcome-overlay').style.display = 'none';
@@ -1475,16 +527,276 @@
     </script>
     {% endif %}
 
-    <div class="container">
-        {% with messages = get_flashed_messages(with_categories=true) %}
-            {% if messages %}
-                {% for category, message in messages %}
-                    <div class="alert alert-{{ category }}">{{ message }}</div>
-                {% endfor %}
-            {% endif %}
-        {% endwith %}
+    <div class="app-body">
+        <!-- ===== GLOBAL SIDEBAR ===== -->
+        <aside class="global-sidebar" id="globalSidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">GooCampus Portal</span>
+                <button class="sidebar-toggle" onclick="toggleGlobalSidebar()" title="Toggle sidebar">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                </button>
+            </div>
+            <nav class="sidebar-nav" id="sidebarNav">
+                {% if session.get('is_admin') %}
+                <!-- ══════ ADMIN SIDEBAR ══════ -->
+                <a href="/dashboard" class="sb-item" data-tooltip="Dashboard">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+                    <span class="sb-text">Dashboard</span>
+                </a>
 
-        {% block content %}{% endblock %}
+                <!-- HR -->
+                <div class="sb-section-hdr" data-section="hr-admin" data-tooltip="HR" onclick="toggleSection('hr-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                    <span class="sb-text">HR</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-hr-admin">
+                    <a href="/hr-dashboard" class="sb-child">HR Dashboard</a>
+                    <a href="/admin/manage-employees" class="sb-child">Employees</a>
+                    <a href="/leave-info" class="sb-child">Leave Info</a>
+                    <div class="sb-sub-label">Leave Management</div>
+                    <a href="/admin/add-leave" class="sb-child">Add Leave (Employee)</a>
+                    <a href="/admin/bulk-leave" class="sb-child">Bulk Leave</a>
+                    <a href="/admin/leave-applications" class="sb-child">All Leave Applications</a>
+                    <a href="/admin/pending-approvals" class="sb-child">Pending Approvals</a>
+                    <div class="sb-sub-label">Reports</div>
+                    <a href="/admin/employee-leave-report" class="sb-child">Employee Leave Report</a>
+                    <a href="/admin/monthly-report" class="sb-child">Monthly Report</a>
+                    <a href="/admin/quarterly-report" class="sb-child">Quarterly Report</a>
+                    <a href="/admin/annual-report" class="sb-child">Annual Report</a>
+                    <div class="sb-sub-label">Attendance</div>
+                    <a href="/time-log" class="sb-child">Time Log</a>
+                    <a href="/admin/upload-attendance" class="sb-child">Upload Attendance</a>
+                    <div class="sb-sub-label">Work From Home</div>
+                    <a href="/wfh/approvals" class="sb-child">WFH Approvals</a>
+                </div>
+
+                <!-- KRA -->
+                <div class="sb-section-hdr" data-section="kra-admin" data-tooltip="KRA" onclick="toggleSection('kra-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                    <span class="sb-text">KRA</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-kra-admin">
+                    <div class="sb-sub-label">KRA Management</div>
+                    <a href="/kra/admin/templates" class="sb-child">KRA Templates</a>
+                    <a href="/kra/admin/assignments" class="sb-child">Assign KRA</a>
+                    <a href="/kra/admin/report" class="sb-child">KRA Report</a>
+                    <div class="sb-sub-label">My KRA</div>
+                    <a href="/kra/dashboard" class="sb-child">KRA Dashboard</a>
+                    <a href="/kra/report" class="sb-child">My KRA Report</a>
+                    <a href="/kra/manager/team" class="sb-child">Team KRA</a>
+                </div>
+
+                <!-- Sales -->
+                <div class="sb-section-hdr" data-section="sales-admin" data-tooltip="Sales" onclick="toggleSection('sales-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                    <span class="sb-text">Sales</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-sales-admin">
+                    <a href="/sales" class="sb-child">Sales Dashboard</a>
+                    <a href="/sales/leads" class="sb-child">Leads</a>
+                    <a href="/sales/closures" class="sb-child">Closures</a>
+                    <a href="/sales/targets" class="sb-child">Targets</a>
+                    <a href="/sales/calls" class="sb-child">Call Reports</a>
+                    <a href="/sales/team" class="sb-child">Sales Team</a>
+                    <a href="/sales/stages" class="sb-child">Lead Stages</a>
+                    <a href="/sales/news" class="sb-child">Sales News</a>
+                    <a href="/projects" class="sb-child">Projects</a>
+                    <a href="/streams" class="sb-child">Revenue Streams</a>
+                    <a href="/products" class="sb-child">Products &amp; Services</a>
+                    <div class="sb-sub-label">Meetings</div>
+                    <a href="/b2b" class="sb-child">Meetings</a>
+                    <a href="/b2b/add" class="sb-child">New Meeting</a>
+                    <a href="/admin/meeting-types" class="sb-child">Meeting Clients</a>
+                    <a href="/admin/module-access" class="sb-child">Module Access</a>
+                </div>
+
+                <!-- Finance -->
+                <div class="sb-section-hdr" data-section="finance-admin" data-tooltip="Finance" onclick="toggleSection('finance-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 000 7h5a3.5 3.5 0 010 7H6"/></svg></span>
+                    <span class="sb-text">Finance</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-finance-admin">
+                    <a href="/finance/budget" class="sb-child">Budget Dashboard</a>
+                    <a href="/finance/budget/expenses" class="sb-child">Expense Budget</a>
+                    <a href="/finance/budget/revenue" class="sb-child">Sales Projection</a>
+                    <a href="/finance/budget/report" class="sb-child">Annual Report</a>
+                    <a href="/finance/budget/projects" class="sb-child">Project P&amp;L</a>
+                    <a href="/finance/products" class="sb-child">Products (from Sales)</a>
+                    <a href="/finance/salaries" class="sb-child">Salaries</a>
+                    <a href="/finance/subscriptions" class="sb-child">Subscriptions</a>
+                    <a href="/finance/budget/settings" class="sb-child">Finance Settings</a>
+                </div>
+
+                <!-- Operations -->
+                <div class="sb-section-hdr" data-section="ops-admin" data-tooltip="Operations" onclick="toggleSection('ops-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="10" r="3"/><path d="M12 21.7C17.3 17 20 13 20 10a8 8 0 10-16 0c0 3 2.7 7 8 11.7z"/></svg></span>
+                    <span class="sb-text">Operations</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-ops-admin">
+                    <a href="/operations/uk-pathway" class="sb-child">UK Pathway</a>
+                    <a href="/operations/australia-pathway" class="sb-child">Australia Pathway</a>
+                    <a href="/operations/uae-pathway" class="sb-child">UAE Pathway</a>
+                    <a href="/operations/consulting" class="sb-child">Consulting</a>
+                </div>
+
+                <!-- Partners -->
+                <div class="sb-section-hdr" data-section="partners-admin" data-tooltip="Partners" onclick="toggleSection('partners-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg></span>
+                    <span class="sb-text">Partners</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-partners-admin">
+                    <a href="/partners/dashboard" class="sb-child">Partner Dashboard</a>
+                    <a href="/partners" class="sb-child">Partners List</a>
+                    <div class="sb-sub-label">Leads</div>
+                    <a href="/partners/leads" class="sb-child">Student Leads</a>
+                    <a href="/partners/b2b-leads" class="sb-child">School / College Leads</a>
+                    <div class="sb-sub-label">Settings</div>
+                    <a href="/partners/invitations" class="sb-child">Invitations</a>
+                </div>
+
+                <!-- Colleges -->
+                <div class="sb-section-hdr" data-section="colleges-admin" data-tooltip="Colleges" onclick="toggleSection('colleges-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg></span>
+                    <span class="sb-text">Colleges</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-colleges-admin">
+                    <a href="/colleges" class="sb-child">College Portal</a>
+                    <a href="/medical-predictor" class="sb-child">Medical Predictor</a>
+                    <a href="/admin/neetpg-pdfs" class="sb-child">NEET PG PDFs</a>
+                </div>
+
+                <!-- Company -->
+                <div class="sb-section-hdr" data-section="company-admin" data-tooltip="Company" onclick="toggleSection('company-admin')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+                    <span class="sb-text">Company</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-company-admin">
+                    <a href="/admin/org-chart" class="sb-child">Org Chart</a>
+                    <a href="/admin/holidays" class="sb-child">Holidays</a>
+                    <a href="/admin/calendar" class="sb-child">Calendar</a>
+                    <a href="/company/locations" class="sb-child">State &amp; City Settings</a>
+                    <a href="/landing-pages" class="sb-child">Landing Pages</a>
+                    {% if session.get('emp_code') == 'admin' %}
+                    <div class="sb-sub-label">Admin</div>
+                    <a href="/admin/reset-passwords" class="sb-child">Reset Passwords</a>
+                    <a href="/admin/section-visibility" class="sb-child">Section Visibility</a>
+                    {% endif %}
+                </div>
+
+                {% else %}
+                <!-- ══════ EMPLOYEE SIDEBAR ══════ -->
+                <a href="/dashboard" class="sb-item" data-tooltip="Dashboard">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+                    <span class="sb-text">Dashboard</span>
+                </a>
+
+                <!-- HR -->
+                <div class="sb-section-hdr" data-section="hr-emp" data-tooltip="HR" onclick="toggleSection('hr-emp')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                    <span class="sb-text">HR</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-hr-emp">
+                    <a href="/leave-info" class="sb-child">Leave Info</a>
+                    <div class="sb-sub-label">Leave</div>
+                    <a href="/apply-leave" class="sb-child">Apply Leave</a>
+                    <a href="/apply-late-leave" class="sb-child">Late Leave</a>
+                    <a href="/my-applications" class="sb-child">My Applications</a>
+                    {% if is_manager %}
+                    <a href="/team-applications" class="sb-child">Team Applications</a>
+                    <a href="/approvals" class="sb-child">Approvals{% if pending_team_count > 0 %} <span class="nav-badge" style="margin-left:0.3rem;">{{ pending_team_count }}</span>{% endif %}</a>
+                    {% endif %}
+                    <div class="sb-sub-label">Reports</div>
+                    <a href="/my-leave-report" class="sb-child">My Leave Report</a>
+                    <a href="/reports/monthly" class="sb-child">Monthly Report</a>
+                    <a href="/reports/quarterly" class="sb-child">Quarterly Report</a>
+                    <a href="/reports/annual" class="sb-child">Annual Report</a>
+                    {% if is_manager %}
+                    <a href="/reports/team" class="sb-child">Team Reports</a>
+                    {% endif %}
+                    <div class="sb-sub-label">Attendance</div>
+                    <a href="/time-log" class="sb-child">Time Log</a>
+                    <div class="sb-sub-label">Work From Home</div>
+                    <a href="/wfh/apply" class="sb-child">Apply WFH</a>
+                    <a href="/wfh/my-requests" class="sb-child">My WFH Requests</a>
+                    {% if is_manager %}
+                    <a href="/wfh/approvals" class="sb-child">WFH Approvals</a>
+                    {% endif %}
+                </div>
+
+                <!-- KRA -->
+                <div class="sb-section-hdr" data-section="kra-emp" data-tooltip="KRA" onclick="toggleSection('kra-emp')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span>
+                    <span class="sb-text">KRA</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-kra-emp">
+                    <a href="/kra/dashboard" class="sb-child">KRA Dashboard</a>
+                    <a href="/kra/report" class="sb-child">My KRA Report</a>
+                    {% if is_manager %}
+                    <a href="/kra/manager/team" class="sb-child">Team KRA</a>
+                    {% endif %}
+                </div>
+
+                <!-- Sales (employee — only if has access) -->
+                {% if has_sales_access %}
+                <div class="sb-section-hdr" data-section="sales-emp" data-tooltip="Sales" onclick="toggleSection('sales-emp')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+                    <span class="sb-text">Sales</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-sales-emp">
+                    <a href="/sales" class="sb-child">Sales Dashboard</a>
+                    <a href="/sales/crm" class="sb-child">Sales CRM</a>
+                    <a href="/sales/leads" class="sb-child">Leads</a>
+                    <a href="/sales/closures" class="sb-child">Closures</a>
+                    <a href="/sales/targets" class="sb-child">Targets</a>
+                    <a href="/sales/calls" class="sb-child">Call Reports</a>
+                    <a href="/sales/news" class="sb-child">Sales News</a>
+                    <a href="/projects" class="sb-child">Projects</a>
+                    <a href="/streams" class="sb-child">Revenue Streams</a>
+                    <a href="/products" class="sb-child">Products &amp; Services</a>
+                    <div class="sb-sub-label">Meetings</div>
+                    <a href="/b2b" class="sb-child">Meetings</a>
+                    <a href="/b2b/add" class="sb-child">New Meeting</a>
+                </div>
+                {% endif %}
+
+                <!-- Company -->
+                <div class="sb-section-hdr" data-section="company-emp" data-tooltip="Company" onclick="toggleSection('company-emp')">
+                    <span class="sb-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+                    <span class="sb-text">Company</span>
+                    <svg class="sb-chevron" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                </div>
+                <div class="sb-section-body" id="sec-company-emp">
+                    <a href="/org-chart" class="sb-child">Org Chart</a>
+                    <a href="/holidays" class="sb-child">Holidays</a>
+                    <a href="/calendar" class="sb-child">Calendar</a>
+                </div>
+                {% endif %}
+            </nav>
+        </aside>
+
+        <!-- ===== MAIN CONTENT ===== -->
+        <main class="main-content" id="mainContent">
+            {% with messages = get_flashed_messages(with_categories=true) %}
+                {% if messages %}
+                    {% for category, message in messages %}
+                        <div class="alert alert-{{ category }}">{{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+
+            {% block content %}{% endblock %}
+        </main>
     </div>
 
     <footer class="site-footer">
@@ -1493,210 +805,169 @@
                 <div class="footer-brand">
                     <img src="/static/logo-white.png" alt="GooCampus" style="height: 50px; object-fit: contain;">
                 </div>
-                <p class="footer-desc">Employee leave management and HR operations portal for GooCampus Edu Solutions Pvt Ltd. Streamlining workforce management across all departments.</p>
-            </div>
-            <div>
-                <h4 class="footer-heading">Quick Links</h4>
-                <ul class="footer-links">
-                    {% if session.get('is_admin') %}
-                    <li><a href="/dashboard">Dashboard</a></li>
-                    <li><a href="/admin/manage-employees">Employees</a></li>
-                    <li><a href="/admin/org-chart">Org Chart</a></li>
-                    <li><a href="/admin/holidays">Holidays</a></li>
-                    <li><a href="/admin/calendar">Calendar</a></li>
-                    {% else %}
-                    <li><a href="/dashboard">Dashboard</a></li>
-                    <li><a href="/org-chart">Org Chart</a></li>
-                    <li><a href="/holidays">Holidays</a></li>
-                    <li><a href="/calendar">Calendar</a></li>
-                    <li><a href="/apply-leave">Apply Leave</a></li>
-                    <li><a href="/apply-late-leave">Late Leave</a></li>
-                    {% endif %}
-                </ul>
-            </div>
-            <div>
-                <h4 class="footer-heading">Contact</h4>
-                <ul class="footer-links">
-                    <li><a href="mailto:info@goocampus.in">info@goocampus.in</a></li>
-                    <li><a href="https://goocampus.in" target="_blank">goocampus.in</a></li>
-                    <li><a href="#">Bangalore, India</a></li>
-                </ul>
+                <p class="footer-desc">Company portal for GooCampus Edu Solutions Pvt Ltd. Streamlining workforce management across all departments.</p>
             </div>
         </div>
         <div class="footer-bottom">
             <div class="footer-bottom-inner">
-                &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &nbsp;&middot;&nbsp; GSTIN: 29AAHCG2048J1ZE &nbsp;&middot;&nbsp; All rights reserved
+                &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &middot; All rights reserved
             </div>
         </div>
     </footer>
-    <script>
-    let notifOpen = false;
 
+    <script>
+    /* ===== NOTIFICATION JS ===== */
+    var notifOpen = false;
     function toggleNotifications(e) {
         e.stopPropagation();
-        const panel = document.getElementById('notif-panel');
+        var panel = document.getElementById('notif-panel');
         notifOpen = !notifOpen;
         panel.style.display = notifOpen ? 'block' : 'none';
-        if (notifOpen) {
-            loadNotifications();
-        }
+        if (notifOpen) loadNotifications();
     }
-
     function getIcon(type) {
-        const icons = {
-            'birthday': '🎂',
-            'anniversary': '🌟',
-            'announcement': '📢',
-            'holiday': '🏖️',
-            'leave_request': '📋'
-        };
+        var icons = {'birthday':'🎂','anniversary':'🌟','announcement':'📢','holiday':'🏖️','leave_request':'📋'};
         return icons[type] || '🔔';
     }
-
     function timeAgo(dateStr) {
-        const now = new Date();
-        const d = new Date(dateStr);
-        const diff = Math.floor((now - d) / 1000);
+        var now = new Date(), d = new Date(dateStr), diff = Math.floor((now - d) / 1000);
         if (diff < 60) return 'Just now';
-        if (diff < 3600) return Math.floor(diff / 60) + 'm ago';
-        if (diff < 86400) return Math.floor(diff / 3600) + 'h ago';
-        if (diff < 604800) return Math.floor(diff / 86400) + 'd ago';
+        if (diff < 3600) return Math.floor(diff/60) + 'm ago';
+        if (diff < 86400) return Math.floor(diff/3600) + 'h ago';
+        if (diff < 604800) return Math.floor(diff/86400) + 'd ago';
         return d.toLocaleDateString();
     }
-
     function loadNotifications() {
-        fetch('/api/notifications')
-            .then(r => r.json())
-            .then(data => {
-                const list = document.getElementById('notif-list');
-                if (!data.length) {
-                    list.innerHTML = '<div class="notif-empty">No notifications yet</div>';
-                    return;
-                }
-                let html = '';
-                const typeLabels = {
-                    'birthday': 'Birthday',
-                    'anniversary': 'Anniversary',
-                    'announcement': 'Announcement',
-                    'holiday': 'Holiday',
-                    'leave_request': 'Leave Request'
-                };
-                data.slice(0, 10).forEach(n => {
-                    const readClass = n.is_read ? '' : ' unread';
-                    const typeLabel = typeLabels[n.type] || n.type;
-                    html += `
-                        <div class="notif-item${readClass}" onclick="openNotification(${n.id}, this)">
-                            <div class="notif-icon ${n.type}">${getIcon(n.type)}</div>
-                            <div class="notif-content">
-                                <div style="display:flex; justify-content:space-between; align-items:center;">
-                                    <div class="notif-title">${n.title}</div>
-                                    <span style="font-size:0.65rem; padding:0.1rem 0.4rem; border-radius:0.25rem; background:var(--gray-100); color:var(--gray-500); font-weight:600; flex-shrink:0; margin-left:0.5rem;">${typeLabel}</span>
-                                </div>
-                                <div class="notif-msg">${n.message}</div>
-                                <div class="notif-time">${timeAgo(n.created_at)}</div>
-                            </div>
-                        </div>
-                    `;
-                });
-                list.innerHTML = html;
-            })
-            .catch(() => {
-                document.getElementById('notif-list').innerHTML = '<div class="notif-empty">Failed to load</div>';
+        fetch('/api/notifications').then(function(r){return r.json();}).then(function(data) {
+            var list = document.getElementById('notif-list');
+            if (!data.length) { list.innerHTML = '<div class="notif-empty">No notifications yet</div>'; return; }
+            var typeLabels = {'birthday':'Birthday','anniversary':'Anniversary','announcement':'Announcement','holiday':'Holiday','leave_request':'Leave Request'};
+            var html = '';
+            data.slice(0,10).forEach(function(n) {
+                var readClass = n.is_read ? '' : ' unread';
+                var typeLabel = typeLabels[n.type] || n.type;
+                html += '<div class="notif-item'+readClass+'" onclick="openNotification('+n.id+', this)">' +
+                    '<div class="notif-icon '+n.type+'">'+getIcon(n.type)+'</div>' +
+                    '<div class="notif-content">' +
+                    '<div style="display:flex;justify-content:space-between;align-items:center;">' +
+                    '<div class="notif-title">'+n.title+'</div>' +
+                    '<span style="font-size:0.65rem;padding:0.1rem 0.4rem;border-radius:0.25rem;background:var(--gray-100);color:var(--gray-500);font-weight:600;flex-shrink:0;margin-left:0.5rem;">'+typeLabel+'</span></div>' +
+                    '<div class="notif-msg">'+n.message+'</div>' +
+                    '<div class="notif-time">'+timeAgo(n.created_at)+'</div></div></div>';
             });
+            list.innerHTML = html;
+        }).catch(function() {
+            document.getElementById('notif-list').innerHTML = '<div class="notif-empty">Failed to load</div>';
+        });
     }
-
     function openNotification(id, el) {
-        if (el.classList.contains('unread')) {
-            fetch('/api/notifications/' + id + '/read', {method: 'POST'});
-        }
+        if (el.classList.contains('unread')) fetch('/api/notifications/'+id+'/read', {method:'POST'});
         window.location.href = '/notifications';
     }
-
     function markAllRead(e) {
-        e.preventDefault();
-        e.stopPropagation();
-        fetch('/api/notifications/mark-read', {method: 'POST'})
-            .then(r => r.json())
-            .then(() => {
-                document.querySelectorAll('.notif-item.unread').forEach(el => el.classList.remove('unread'));
-                updateBadge(0, true);
-            });
-    }
-
-    function updateBadge(change, setZero) {
-        const badge = document.getElementById('notif-badge');
-        if (setZero) {
+        e.preventDefault(); e.stopPropagation();
+        fetch('/api/notifications/mark-read', {method:'POST'}).then(function(r){return r.json();}).then(function() {
+            document.querySelectorAll('.notif-item.unread').forEach(function(el){el.classList.remove('unread');});
+            var badge = document.getElementById('notif-badge');
             if (badge) badge.style.display = 'none';
-            return;
-        }
-        if (badge) {
-            let count = parseInt(badge.textContent) + change;
-            if (count <= 0) {
-                badge.style.display = 'none';
-            } else {
-                badge.textContent = count;
-            }
-        }
-    }
-
-    // Generic dropdown toggle for Leave / Reports menus
-    function toggleDropdown(id, e) {
-        e.stopPropagation();
-        const dd = document.getElementById(id);
-        const wasOpen = dd.classList.contains('open');
-        // Close all nav dropdowns first
-        document.querySelectorAll('.nav-dropdown.open').forEach(el => {
-            if (el.id !== 'notif-dropdown') el.classList.remove('open');
         });
-        if (!wasOpen) {
-            dd.classList.add('open');
-            // Reposition if menu overflows viewport on the right
-            const menu = dd.querySelector('.nav-dropdown-menu');
-            if (menu) {
-                menu.style.left = '0';
-                menu.style.right = 'auto';
-                requestAnimationFrame(function() {
-                    const rect = menu.getBoundingClientRect();
-                    const vw = window.innerWidth;
-                    if (rect.right > vw - 8) {
-                        menu.style.left = 'auto';
-                        menu.style.right = '0';
-                        // Re-check: if it now overflows on the left, pin to left edge
-                        const rect2 = menu.getBoundingClientRect();
-                        if (rect2.left < 8) {
-                            menu.style.left = (-dd.getBoundingClientRect().left + 8) + 'px';
-                            menu.style.right = 'auto';
-                        }
-                    }
-                });
-            }
-        }
     }
 
-    // Account dropdown toggle
+    /* ===== ACCOUNT DROPDOWN ===== */
     function toggleAccountMenu(e) {
         e.stopPropagation();
-        document.querySelectorAll('.nav-dropdown.open').forEach(el => {
-            if (el.id !== 'account-dropdown' && el.id !== 'notif-dropdown') el.classList.remove('open');
-        });
-        const dd = document.getElementById('account-dropdown');
-        dd.classList.toggle('open');
+        document.getElementById('account-dropdown').classList.toggle('open');
     }
 
-    // Close dropdowns on outside click
+    /* ===== CLOSE ON OUTSIDE CLICK ===== */
     document.addEventListener('click', function(e) {
-        // Close notification panel
-        const panel = document.getElementById('notif-panel');
-        const dropdown = document.getElementById('notif-dropdown');
-        if (panel && notifOpen && !dropdown.contains(e.target)) {
-            panel.style.display = 'none';
-            notifOpen = false;
+        var panel = document.getElementById('notif-panel');
+        var dropdown = document.getElementById('notif-dropdown');
+        if (panel && notifOpen && dropdown && !dropdown.contains(e.target)) {
+            panel.style.display = 'none'; notifOpen = false;
         }
-        // Close all nav dropdowns
-        document.querySelectorAll('.nav-dropdown.open').forEach(el => {
+        document.querySelectorAll('.nav-dropdown.open').forEach(function(el) {
             if (!el.contains(e.target)) el.classList.remove('open');
         });
     });
+
+    /* ===== SIDEBAR JS ===== */
+    function toggleGlobalSidebar() {
+        var sb = document.getElementById('globalSidebar');
+        sb.classList.toggle('collapsed');
+        try { localStorage.setItem('global_sidebar_collapsed', sb.classList.contains('collapsed') ? '1' : '0'); } catch(e) {}
+    }
+
+    function toggleSection(sectionId) {
+        var sb = document.getElementById('globalSidebar');
+        if (sb.classList.contains('collapsed')) return; // don't toggle when collapsed
+        var hdr = document.querySelector('[data-section="'+sectionId+'"]');
+        var body = document.getElementById('sec-'+sectionId);
+        if (!hdr || !body) return;
+        var isOpen = body.classList.contains('sec-open');
+        if (isOpen) {
+            body.classList.remove('sec-open');
+            hdr.classList.remove('sec-open');
+        } else {
+            body.classList.add('sec-open');
+            hdr.classList.add('sec-open');
+        }
+        // Save open sections
+        saveSectionState();
+    }
+
+    function saveSectionState() {
+        var open = [];
+        document.querySelectorAll('.sb-section-body.sec-open').forEach(function(el) {
+            open.push(el.id.replace('sec-',''));
+        });
+        try { localStorage.setItem('sidebar_sections_open', JSON.stringify(open)); } catch(e) {}
+    }
+
+    function restoreSidebarState() {
+        // Restore collapsed state
+        try {
+            if (localStorage.getItem('global_sidebar_collapsed') === '1') {
+                document.getElementById('globalSidebar').classList.add('collapsed');
+            }
+        } catch(e) {}
+
+        // Highlight active link
+        var path = window.location.pathname;
+        var activeLink = null;
+        document.querySelectorAll('.sb-child, .sb-item').forEach(function(el) {
+            var href = el.getAttribute('href');
+            if (href && (path === href || (href !== '/dashboard' && path.indexOf(href) === 0))) {
+                el.classList.add('active');
+                activeLink = el;
+            }
+        });
+
+        // Auto-open the section containing the active link
+        if (activeLink) {
+            var sectionBody = activeLink.closest('.sb-section-body');
+            if (sectionBody) {
+                sectionBody.classList.add('sec-open');
+                var sectionId = sectionBody.id.replace('sec-','');
+                var hdr = document.querySelector('[data-section="'+sectionId+'"]');
+                if (hdr) { hdr.classList.add('sec-open'); hdr.classList.add('sec-active'); }
+            }
+        }
+
+        // Also restore previously open sections from localStorage
+        try {
+            var saved = JSON.parse(localStorage.getItem('sidebar_sections_open') || '[]');
+            saved.forEach(function(secId) {
+                var body = document.getElementById('sec-'+secId);
+                var hdr = document.querySelector('[data-section="'+secId+'"]');
+                if (body && !body.classList.contains('sec-open')) {
+                    body.classList.add('sec-open');
+                    if (hdr) hdr.classList.add('sec-open');
+                }
+            });
+        } catch(e) {}
+    }
+    restoreSidebarState();
     </script>
     {% block extra_js %}{% endblock %}
 </body>

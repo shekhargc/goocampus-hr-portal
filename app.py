@@ -22724,6 +22724,12 @@ if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL
     start_neetpg_scheduler()
 
 
+@app.route('/landing-pages')
+@login_required
+def landing_pages():
+    return render_template('landing_pages.html')
+
+
 if __name__ == '__main__':
     PORT = int(os.environ.get('PORT', 8080))
     app.run(host='0.0.0.0', port=PORT, debug=False)
