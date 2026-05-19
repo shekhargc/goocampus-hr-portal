@@ -10464,6 +10464,8 @@ def ensure_ops_tables():
             registration_number TEXT REFERENCES plab_clients(registration_number),
             call_date TEXT,
             call_note TEXT,
+            contacted_status TEXT DEFAULT 'Yes',
+            contact_type TEXT DEFAULT 'Call',
             added_by TEXT,
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -12935,11 +12937,15 @@ def ops_call_notes_tracker():
 
     try:
         # Efficient single query with aggregation
+        # Only count contacted_status='Yes' notes for last contact date
         sql = '''
             SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
                    p.current_stage, p.mobile, p.account_status,
-                   MAX(n.call_date) as last_call_date,
-                   COUNT(n.id) as note_count
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.call_date END) as last_call_date,
+                   COUNT(n.id) as note_count,
+                   COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) as contacted_count,
+                   COUNT(CASE WHEN n.contacted_status = 'No' THEN 1 END) as not_contacted_count,
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.contact_type END) as last_contact_type
             FROM plab_clients p
             LEFT JOIN ops_call_notes n ON p.registration_number = n.registration_number
             WHERE p.account_status = 'In Process'
@@ -12973,8 +12979,11 @@ def ops_call_notes_tracker():
         for row in rows:
             last_call_date = row['last_call_date']
             note_count = row['note_count']
+            contacted_count = row['contacted_count'] or 0
+            not_contacted_count = row['not_contacted_count'] or 0
+            last_contact_type = row['last_contact_type'] or ''
 
-            if not last_call_date or note_count == 0:
+            if not last_call_date or contacted_count == 0:
                 category = 'never'
                 days_since = None
             else:
@@ -13017,6 +13026,9 @@ def ops_call_notes_tracker():
                 'mobile': row['mobile'],
                 'last_call_date': last_call_date,
                 'note_count': note_count,
+                'contacted_count': contacted_count,
+                'not_contacted_count': not_contacted_count,
+                'last_contact_type': last_contact_type,
                 'days_since': days_since,
                 'category': category
             })
@@ -13054,6 +13066,134 @@ def ops_call_notes_tracker():
         active_tab='tracker', active_ops_page='call-notes')
 
 
+@app.route('/operations/call-notes/not-contacted')
+@admin_required
+def ops_call_notes_not_contacted():
+    """Not Contacted Tracker: clients with recent 'Not Contacted' notes, prioritised by last successful contact."""
+    from datetime import date
+
+    conn = get_db()
+    search_q = request.args.get('q', '').strip()
+    gap_filter = request.args.get('gap', '').strip()
+
+    try:
+        # Find clients who have at least one 'Not Contacted' note
+        # Priority is based on how long since their last SUCCESSFUL contact
+        sql = '''
+            SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
+                   p.current_stage, p.mobile, p.account_status,
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.call_date END) as last_contact_date,
+                   MAX(CASE WHEN n.contacted_status = 'No' THEN n.call_date END) as last_attempt_date,
+                   COUNT(n.id) as note_count,
+                   COUNT(CASE WHEN n.contacted_status = 'No' THEN 1 END) as not_contacted_count,
+                   COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) as contacted_count
+            FROM plab_clients p
+            INNER JOIN ops_call_notes n ON p.registration_number = n.registration_number
+            WHERE p.account_status = 'In Process'
+              AND EXISTS (SELECT 1 FROM ops_call_notes n2 WHERE n2.registration_number = p.registration_number AND n2.contacted_status = 'No')
+        '''
+        params = []
+
+        if search_q:
+            sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR (p.prefix || ' ' || p.first_name || ' ' || p.last_name) ILIKE ?)"
+            params.extend([f'%{search_q}%'] * 4)
+
+        sql += '''
+            GROUP BY p.registration_number, p.prefix, p.first_name, p.last_name,
+                     p.current_stage, p.mobile, p.account_status
+            ORDER BY last_contact_date ASC NULLS FIRST
+        '''
+
+        rows = conn.execute(sql, params).fetchall()
+
+        today = date.today()
+        tracker_data = []
+        category_counts = {
+            'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0
+        }
+
+        for row in rows:
+            last_contact_date = row['last_contact_date']
+            contacted_count = row['contacted_count'] or 0
+
+            if not last_contact_date or contacted_count == 0:
+                category = 'never'
+                days_since = None
+            else:
+                try:
+                    if isinstance(last_contact_date, str):
+                        last_c = datetime.strptime(last_contact_date, '%Y-%m-%d').date()
+                    else:
+                        last_c = last_contact_date if isinstance(last_contact_date, date) else last_contact_date.date()
+                except:
+                    category = 'never'
+                    days_since = None
+                    last_c = None
+
+                if last_c:
+                    days_since = (today - last_c).days
+                    if days_since >= 60:
+                        category = 'critical'
+                    elif days_since >= 45:
+                        category = 'overdue'
+                    elif days_since >= 30:
+                        category = 'attention'
+                    elif days_since >= 15:
+                        category = 'ok'
+                    else:
+                        category = 'recent'
+                else:
+                    category = 'never'
+                    days_since = None
+
+            category_counts[category] += 1
+
+            client_name = f"{row['prefix']} {row['first_name']} {row['last_name']}" if row['prefix'] else f"{row['first_name']} {row['last_name']}"
+
+            tracker_data.append({
+                'registration_number': row['registration_number'],
+                'name': client_name.strip(),
+                'stage': row['current_stage'],
+                'mobile': row['mobile'],
+                'last_call_date': last_contact_date,
+                'last_attempt_date': row['last_attempt_date'],
+                'note_count': row['note_count'],
+                'not_contacted_count': row['not_contacted_count'],
+                'contacted_count': contacted_count,
+                'last_contact_type': '',
+                'days_since': days_since,
+                'category': category
+            })
+
+        if gap_filter:
+            tracker_data = [d for d in tracker_data if d['category'] == gap_filter]
+
+        summary = {
+            'never': category_counts['never'],
+            'critical': category_counts['critical'],
+            'overdue': category_counts['overdue'],
+            'attention': category_counts['attention'],
+            'ok': category_counts['ok'],
+            'recent': category_counts['recent'],
+            'total': len(tracker_data) if gap_filter else sum(category_counts.values())
+        }
+
+    except Exception as e:
+        logging.error(f"ops_call_notes_not_contacted: {e}")
+        tracker_data = []
+        summary = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0}
+
+    conn.close()
+
+    return render_template('ops_call_notes_list.html',
+        tracker_data=tracker_data, summary=summary,
+        gap_filter=gap_filter, search_q=search_q,
+        records=[], added_by_options=[], has_filters=False,
+        reg='', client_name='', added_by_filter='', note_search='',
+        page=1, per_page=50, total_count=0, total_pages=0,
+        active_tab='not_contacted', active_ops_page='call-notes')
+
+
 @app.route('/operations/api/tracker-details')
 @login_required
 def ops_call_notes_tracker_details():
@@ -13076,7 +13216,7 @@ def ops_call_notes_tracker_details():
 
         # Get all call notes for this client, ordered by date desc
         notes = conn.execute(
-            '''SELECT id, call_date, call_note, added_by FROM ops_call_notes
+            '''SELECT id, call_date, call_note, added_by, contacted_status, contact_type FROM ops_call_notes
                WHERE registration_number = ?
                ORDER BY call_date DESC, created_at DESC''',
             (reg,)
@@ -13089,7 +13229,9 @@ def ops_call_notes_tracker_details():
                 'id': note['id'],
                 'date': note['call_date'],
                 'added_by': note['added_by'],
-                'text': note['call_note']
+                'text': note['call_note'],
+                'contacted_status': note['contacted_status'] or 'Yes',
+                'contact_type': note['contact_type'] or 'Call'
             })
 
         # Client name
@@ -13121,10 +13263,12 @@ def ops_call_notes_add():
     if request.method == 'POST':
         f = request.form
         conn.execute('''INSERT INTO ops_call_notes (
-            registration_number, call_date, call_note, added_by, created_by
-        ) VALUES (?,?,?,?,?)''', (
+            registration_number, call_date, call_note, added_by, created_by,
+            contacted_status, contact_type
+        ) VALUES (?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('call_date'), f.get('call_note'),
-            f.get('added_by', ''), session.get('user_id', 0)
+            f.get('added_by', ''), session.get('user_id', 0),
+            f.get('contacted_status', 'Yes'), f.get('contact_type', 'Call')
         ))
         conn.commit()
         conn.close()
@@ -13149,9 +13293,12 @@ def ops_call_notes_edit(record_id):
     if request.method == 'POST':
         f = request.form
         conn.execute('''UPDATE ops_call_notes SET
-            registration_number=?, call_date=?, call_note=?, added_by=? WHERE id=?''', (
+            registration_number=?, call_date=?, call_note=?, added_by=?,
+            contacted_status=?, contact_type=? WHERE id=?''', (
             f.get('registration_number'), f.get('call_date'), f.get('call_note'),
-            f.get('added_by', ''), record_id
+            f.get('added_by', ''),
+            f.get('contacted_status', 'Yes'), f.get('contact_type', 'Call'),
+            record_id
         ))
         conn.commit()
         conn.close()
@@ -21248,6 +21395,8 @@ def ensure_neetpg_tables():
         conn.commit()
         # Migration helper: each ALTER needs its own commit/rollback for PostgreSQL
         migrations = [
+            "ALTER TABLE ops_call_notes ADD COLUMN contacted_status TEXT DEFAULT 'Yes'",
+            "ALTER TABLE ops_call_notes ADD COLUMN contact_type TEXT DEFAULT 'Call'",
             "ALTER TABLE neetpg_leads ADD COLUMN email TEXT",
             "ALTER TABLE neetpg_leads ALTER COLUMN whatsapp DROP NOT NULL",
             "ALTER TABLE neetpg_pdfs ADD COLUMN state TEXT DEFAULT 'All India/MCC'",

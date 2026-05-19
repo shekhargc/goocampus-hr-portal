@@ -34,12 +34,33 @@
                 </div>
             </div>
 
+            <!-- ===== CONTACT STATUS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact Status</h3>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contacted? *</label>
+                    <select name="contacted_status" id="contacted_status" required onchange="toggleContactType()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Yes" {% if not record or (record and record.contacted_status != 'No') %}selected{% endif %}>Yes</option>
+                        <option value="No" {% if record and record.contacted_status == 'No' %}selected{% endif %}>No</option>
+                    </select>
+                </div>
+                <div id="contact_type_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contact Type *</label>
+                    <select name="contact_type" id="contact_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Call" {% if not record or (record and (record.contact_type or 'Call') == 'Call') %}selected{% endif %}>Call</option>
+                        <option value="WhatsApp" {% if record and record.contact_type == 'WhatsApp' %}selected{% endif %}>WhatsApp</option>
+                        <option value="Email" {% if record and record.contact_type == 'Email' %}selected{% endif %}>Email</option>
+                    </select>
+                </div>
+            </div>
+
             <!-- ===== NOTE DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Note Details</h3>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Call Date *</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date *</label>
                     <input type="date" name="call_date" required value="{{ record.call_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
@@ -48,8 +69,8 @@
                 </div>
             </div>
 
-            <!-- ===== CALL NOTE ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Call Note</h3>
+            <!-- ===== NOTE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Note</h3>
 
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note *</label>
@@ -71,6 +92,21 @@
                 const today = new Date().toISOString().split('T')[0];
                 document.querySelector('input[name="call_date"]').value = today;
             }
+
+            // Toggle contact type visibility based on contacted status
+            function toggleContactType() {
+                const status = document.getElementById('contacted_status').value;
+                const wrapper = document.getElementById('contact_type_wrapper');
+                if (status === 'No') {
+                    wrapper.style.display = 'none';
+                    document.getElementById('contact_type').removeAttribute('required');
+                } else {
+                    wrapper.style.display = '';
+                    document.getElementById('contact_type').setAttribute('required', 'required');
+                }
+            }
+            // Run on page load
+            toggleContactType();
         </script>
     </div>
 </div>

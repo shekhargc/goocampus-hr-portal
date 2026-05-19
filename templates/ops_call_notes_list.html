@@ -124,8 +124,11 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
             <button class="tab-button {% if active_tab == 'tracker' %}active{% endif %}" onclick="window.location.href='/operations/call-notes/tracker'">
                 Follow-up Tracker
             </button>
+            <button class="tab-button {% if active_tab == 'not_contacted' %}active{% endif %}" onclick="window.location.href='/operations/call-notes/not-contacted'">
+                Not Contacted
+            </button>
             <button class="tab-button {% if active_tab == 'notes' %}active{% endif %}" onclick="window.location.href='/operations/call-notes?tab=notes'">
-                Call Notes
+                Notes
             </button>
         </div>
     </div>
@@ -171,8 +174,10 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     <tr>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Call Date</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Call Note</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Contacted</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Type</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Added By</th>
                     </tr>
                 </thead>
@@ -182,6 +187,14 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.call_date|format_date }}</td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            {% if (record.contacted_status or 'Yes') == 'Yes' %}
+                            <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#f0fdf4;color:#16a34a;">Yes</span>
+                            {% else %}
+                            <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fef2f2;color:#dc2626;">No</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.contact_type or 'Call' if (record.contacted_status or 'Yes') == 'Yes' else '—' }}</td>
                         <td style="padding:12px 16px;color:var(--gray-600);font-size:13px;">{{ (record.call_note or '')[:80] }}{% if (record.call_note or '')|length > 80 %}...{% endif %}</td>
                         <td style="padding:12px 16px;">{{ record.added_by or '—' }}</td>
                     </tr>
@@ -272,7 +285,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Client Name</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Stage</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Call</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Contact</th>
                         <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Days Since</th>
                         <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Notes</th>
                         <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
@@ -284,7 +297,10 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.stage or '—' }}</td>
-                        <td style="padding:12px 16px;font-size:13px;">{{ item.last_call_date|format_date if item.last_call_date else '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;">
+                            {{ item.last_call_date|format_date if item.last_call_date else '—' }}
+                            {% if item.last_contact_type %}<br><span style="font-size:11px;color:var(--gray-500);">via {{ item.last_contact_type }}</span>{% endif %}
+                        </td>
                         <td style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">{% if item.days_since != None %}{{ item.days_since }}{% else %}—{% endif %}</td>
                         <td style="padding:12px 16px;text-align:center;color:var(--gray-600);">{{ item.note_count }}</td>
                         <td style="padding:12px 16px;text-align:center;"><span class="status-badge {{ item.category }}">{{ item.category|upper }}</span></td>
@@ -296,6 +312,101 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         {% else %}
         <div class="tracker-empty">
             <p>No clients found matching your criteria.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- NOT CONTACTED TAB -->
+    {% if active_tab == 'not_contacted' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px 0;">Clients with failed contact attempts. Priority based on days since last <strong>successful</strong> contact.</p>
+
+        <!-- Summary Cards -->
+        <div class="tracker-summary">
+            <div class="summary-card never" onclick="filterNotContacted('never')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.never }}</div>
+                <div class="summary-card-label">Never Reached</div>
+            </div>
+            <div class="summary-card critical" onclick="filterNotContacted('critical')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.critical }}</div>
+                <div class="summary-card-label">Critical (60+)</div>
+            </div>
+            <div class="summary-card overdue" onclick="filterNotContacted('overdue')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.overdue }}</div>
+                <div class="summary-card-label">Overdue (45-60)</div>
+            </div>
+            <div class="summary-card attention" onclick="filterNotContacted('attention')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.attention }}</div>
+                <div class="summary-card-label">Attention (30-45)</div>
+            </div>
+            <div class="summary-card ok" onclick="filterNotContacted('ok')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.ok }}</div>
+                <div class="summary-card-label">OK (15-30)</div>
+            </div>
+            <div class="summary-card recent" onclick="filterNotContacted('recent')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.recent }}</div>
+                <div class="summary-card-label">Recent (&lt;15)</div>
+            </div>
+        </div>
+
+        <!-- Filter Badges + Search -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+            <span class="filter-badge never {% if gap_filter == 'never' %}active{% endif %}" onclick="filterNotContacted('never')">Never</span>
+            <span class="filter-badge critical {% if gap_filter == 'critical' %}active{% endif %}" onclick="filterNotContacted('critical')">60+</span>
+            <span class="filter-badge overdue {% if gap_filter == 'overdue' %}active{% endif %}" onclick="filterNotContacted('overdue')">45–60</span>
+            <span class="filter-badge attention {% if gap_filter == 'attention' %}active{% endif %}" onclick="filterNotContacted('attention')">30–45</span>
+            <span class="filter-badge ok {% if gap_filter == 'ok' %}active{% endif %}" onclick="filterNotContacted('ok')">15–30</span>
+            <span class="filter-badge recent {% if gap_filter == 'recent' %}active{% endif %}" onclick="filterNotContacted('recent')">&lt;15</span>
+            {% if gap_filter %}
+            <span class="filter-badge all-btn" onclick="filterNotContacted('')">All</span>
+            {% endif %}
+            <form method="GET" action="/operations/call-notes/not-contacted" style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+                {% if gap_filter %}<input type="hidden" name="gap" value="{{ gap_filter }}" />{% endif %}
+                <input type="text" name="q" placeholder="Search client..." value="{{ search_q or '' }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;width:180px;" />
+                <button type="submit" style="padding:6px 12px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Search</button>
+                {% if search_q or gap_filter %}
+                <a href="/operations/call-notes/not-contacted" style="padding:6px 12px;background:var(--gray-200);color:var(--gray-600);border-radius:6px;font-weight:600;font-size:12px;text-decoration:none;">Clear</a>
+                {% endif %}
+            </form>
+            <span style="font-size:11px;color:var(--gray-500);font-weight:600;">{{ tracker_data|length }}{% if gap_filter %} filtered{% endif %}</span>
+        </div>
+
+        <!-- Not Contacted Table -->
+        {% if tracker_data %}
+        <div style="overflow-x:auto;">
+            <table class="tracker-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Client Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Stage</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Contact</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Attempt</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Days Since Contact</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Attempts</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tracker_data %}
+                    <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.stage or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;">{{ item.last_call_date|format_date if item.last_call_date else 'Never' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:#dc2626;">{{ item.last_attempt_date|format_date if item.last_attempt_date else '—' }}</td>
+                        <td style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">{% if item.days_since != None %}{{ item.days_since }}{% else %}—{% endif %}</td>
+                        <td style="padding:12px 16px;text-align:center;color:#dc2626;font-weight:600;">{{ item.not_contacted_count }}</td>
+                        <td style="padding:12px 16px;text-align:center;"><span class="status-badge {{ item.category }}">{{ item.category|upper }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tracker-empty">
+            <p>No clients with failed contact attempts found.</p>
         </div>
         {% endif %}
     </div>
@@ -322,7 +433,9 @@ const CN_RECORDS = {
         registration_number: {{ (record.registration_number or '')|tojson }},
         call_date: {{ (record.call_date or '')|format_date|tojson }},
         call_note: {{ (record.call_note or '')|tojson }},
-        added_by: {{ (record.added_by or '')|tojson }}
+        added_by: {{ (record.added_by or '')|tojson }},
+        contacted_status: {{ (record.contacted_status or 'Yes')|tojson }},
+        contact_type: {{ (record.contact_type or 'Call')|tojson }}
     },
     {% endfor %}
     {% endif %}
@@ -358,12 +471,14 @@ function openCnDetail(id) {
     </div>
 
     <div class="drawer-grid">
-        ${field('Call Date', r.call_date)}
+        ${field('Date', r.call_date)}
         ${field('Added By', r.added_by)}
+        ${field('Contacted', r.contacted_status === 'Yes' ? '<span style="color:#16a34a;font-weight:700;">Yes</span>' : '<span style="color:#dc2626;font-weight:700;">No</span>')}
+        ${field('Contact Type', r.contacted_status === 'Yes' ? r.contact_type : '—')}
     </div>
 
     <div class="drawer-field full" style="margin-top:24px;">
-        <div class="label">Call Note</div>
+        <div class="label">Note</div>
         <div class="value" style="white-space:pre-wrap;word-break:break-word;">${r.call_note || '<span style="color:var(--gray-400);">—</span>'}</div>
     </div>`;
 
@@ -398,6 +513,11 @@ function filterByGap(gap) {
     window.location.href = url;
 }
 
+function filterNotContacted(gap) {
+    const url = '/operations/call-notes/not-contacted' + (gap ? '?gap=' + gap : '');
+    window.location.href = url;
+}
+
 function openTrackerDetail(reg) {
     fetch('/operations/api/tracker-details?reg=' + encodeURIComponent(reg))
         .then(r => r.json())
@@ -419,13 +539,18 @@ function renderTrackerDetail(data) {
 
     let notesHtml = '';
     if (data.notes && data.notes.length > 0) {
-        notesHtml = '<div class="drawer-section"><h4>Call Note History</h4><div class="timeline">';
+        notesHtml = '<div class="drawer-section"><h4>Contact History</h4><div class="timeline">';
         for (const note of data.notes) {
+            const isContacted = note.contacted_status === 'Yes';
+            const dotColor = isContacted ? 'var(--orange)' : '#ef4444';
+            const statusLabel = isContacted
+                ? `<span style="color:#16a34a;font-size:11px;font-weight:600;">Contacted via ${note.contact_type || 'Call'}</span>`
+                : '<span style="color:#dc2626;font-size:11px;font-weight:600;">Not Contacted</span>';
             notesHtml += `
                 <div class="timeline-item">
-                    <div class="timeline-dot"></div>
+                    <div class="timeline-dot" style="background:${dotColor};"></div>
                     <div class="timeline-content">
-                        <div class="timeline-date">${note.date || '—'}</div>
+                        <div class="timeline-date">${note.date || '—'} &nbsp; ${statusLabel}</div>
                         <div class="timeline-note">${note.text || '(No note text)'}</div>
                         <div class="timeline-by">${note.added_by ? 'by ' + note.added_by : '—'}</div>
                     </div>
@@ -434,7 +559,7 @@ function renderTrackerDetail(data) {
         }
         notesHtml += '</div></div>';
     } else {
-        notesHtml = '<div class="drawer-section"><h4>Call Note History</h4><p style="color:var(--gray-500);font-size:13px;">No call notes yet</p></div>';
+        notesHtml = '<div class="drawer-section"><h4>Contact History</h4><p style="color:var(--gray-500);font-size:13px;">No notes yet</p></div>';
     }
 
     let html = `
