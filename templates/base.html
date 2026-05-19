@@ -385,7 +385,7 @@
                     <li><a href="/operations/uk-pathway" class="{% if active_section == 'operations' %}active{% endif %}">Operations</a></li>
                     <li><a href="/partners/dashboard" class="{% if active_section == 'partners' %}active{% endif %}">Partners</a></li>
                     <li><a href="/colleges" class="{% if active_section == 'colleges' %}active{% endif %}">Colleges</a></li>
-                    <li><a href="/admin/org-chart" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
+                    <li><a href="/admin/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% else %}
                     <li><a href="/dashboard" class="{% if active_section == 'dashboard' %}active{% endif %}">Dashboard</a></li>
                     <li><a href="/leave-info" class="{% if active_section == 'hr' %}active{% endif %}">HR</a></li>
@@ -393,7 +393,7 @@
                     {% if has_sales_access %}
                     <li><a href="/sales" class="{% if active_section == 'sales' %}active{% endif %}">Sales</a></li>
                     {% endif %}
-                    <li><a href="/org-chart" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
+                    <li><a href="/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% endif %}
 
                 {% if session.get('user_id') %}
