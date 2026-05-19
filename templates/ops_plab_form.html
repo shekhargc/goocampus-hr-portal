@@ -159,8 +159,8 @@
                 <input type="email" name="parents_email" value="{{ item.parents_email or '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
             </div>
 
-            <!-- ===== PLAN & TRAINING ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan & Training</h3>
+            <!-- ===== PLAN DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Joined Stage</label>
@@ -182,23 +182,13 @@
                 </div>
             </div>
 
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training</label>
-                <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                    <option value="">— Select —</option>
-                    {% for opt in english_options %}
-                    <option value="{{ opt }}" {% if item and item.english_training == opt %}selected{% endif %}>{{ opt }}</option>
-                    {% endfor %}
-                </select>
-            </div>
-
             <!-- ===== CLIENT STATUS (Edit only) ===== -->
             {% if mode == 'edit' %}
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client Status</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
-                    <select name="account_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="account_status" id="account_status" onchange="toggleSwitchedProgram()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">— Select —</option>
                         {% for status in account_statuses %}
                         <option value="{{ status }}" {% if item and item.account_status == status %}selected{% endif %}>{{ status }}</option>
@@ -219,11 +209,16 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Dropped/Switched Date</label>
-                    <input type="date" name="dropped_switched_date" value="{{ item.dropped_switched_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <input type="date" name="dropped_date" value="{{ item.dropped_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Upgraded To</label>
-                    <input type="text" name="upgraded_to" value="{{ item.upgraded_to or '' }}" placeholder="Plan or stage upgraded to" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <div id="switched_program_wrapper" style="{% if not item or item.account_status != 'Switched Program' %}display:none;{% endif %}">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Switched Program</label>
+                    <select name="switched_program" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for prog in switched_programs %}
+                        <option value="{{ prog }}" {% if item and item.switched_program == prog %}selected{% endif %}>{{ prog }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             {% endif %}
@@ -571,5 +566,18 @@ document.addEventListener('DOMContentLoaded', function() {
     function hideDrop() { cityDropdown.style.display = 'none'; cityDropdown.innerHTML = ''; }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 })();
+</script>
+
+<script>
+function toggleSwitchedProgram() {
+    const sel = document.getElementById('account_status');
+    const wrap = document.getElementById('switched_program_wrapper');
+    if (!sel || !wrap) return;
+    if (sel.value === 'Switched Program') {
+        wrap.style.display = '';
+    } else {
+        wrap.style.display = 'none';
+    }
+}
 </script>
 {% endblock %}

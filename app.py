@@ -10350,6 +10350,7 @@ def ensure_ops_tables():
             current_stage TEXT,
             dropped_date TEXT,
             upgraded_to TEXT,
+            switched_program TEXT,
             counsellor TEXT,
             counsellor_email TEXT,
             counsellor_number TEXT,
@@ -10932,8 +10933,9 @@ def ensure_ops_tables():
         # ── Seed lookup_options — add any missing categories ──
         SEED_DATA = {
                 # Client/Pipeline
-                'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own'],
+                'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage'],
                 'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
+                'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'Neet India', 'Australia'],
                 'plan_type': ['Full Spon', 'Integrated Consulting', '2022 UK - Full Sponsorship', '2022 UK - IC', '2023 UK - PGCP', '2024 UK - PGCP', '2025 UK - PGCP', '2023 UK - PGCP - Dual', '2024 UK - PGCP - Dual', '2025 UK - PGCP - Dual'],
                 'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
                 'english_training': ['IELTS', 'OET'],
@@ -11167,6 +11169,37 @@ def ensure_ops_tables():
                     pass
                 logging.error(f"{category} migration: {e}")
 
+        # Migration: add switched_program column to plab_clients
+        try:
+            conn.execute("SELECT switched_program FROM plab_clients LIMIT 1")
+        except Exception:
+            try:
+                conn.execute("ALTER TABLE plab_clients ADD COLUMN switched_program TEXT")
+                conn.commit()
+                logging.info("Added switched_program column to plab_clients")
+            except Exception as e2:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"switched_program migration: {e2}")
+
+        # Migration: update plab_stage options (remove Job by GC, Job by Own)
+        try:
+            old_job = conn.execute(
+                "SELECT id FROM lookup_options WHERE category = 'plab_stage' AND value IN ('Job by GC', 'Job by Own')"
+            ).fetchone()
+            if old_job:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'plab_stage' AND value IN ('Job by GC', 'Job by Own')")
+                conn.commit()
+                logging.info("Removed 'Job by GC' and 'Job by Own' from plab_stage options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"plab_stage cleanup migration: {e}")
+
         # Migration: update visa & travel dropdown options
         for category, new_values, check_val in [
             ('visa_app_status', ['Started', 'In Process', 'Completed'], 'Started'),
@@ -11210,7 +11243,7 @@ def ensure_ops_tables():
 
 
 # ── Stages & statuses for dropdowns ──
-PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own']
+PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage']
 
 # Stage-wise follow-up intervals (in days) — how often each stage should be contacted
 STAGE_FOLLOWUP_DAYS = {
@@ -11218,8 +11251,6 @@ STAGE_FOLLOWUP_DAYS = {
     'PLAB 1 Stage': 15,
     'PLAB 2 Stage': 15,
     'Job Stage': 30,
-    'Job by GC': 30,
-    'Job by Own': 30,
 }
 STAGE_FOLLOWUP_DEFAULT = 15  # fallback for unknown/empty stages
 
@@ -11511,7 +11542,7 @@ def ops_plab_pathway_dashboard():
 
 
 CATEGORY_GROUPS = {
-    'Client & Pipeline': ['plab_stage', 'account_status', 'plan_type', 'joined_stage', 'english_training', 'lead_source'],
+    'Client & Pipeline': ['plab_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source'],
     'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'ielts_vendor', 'oet_vendor', 'plab1_partner', 'plab2_vendor', 'other_training_vendor', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_english_exam', 'gmc_license_status'],
@@ -11534,7 +11565,7 @@ CATEGORY_LABELS = {
     'account_status': 'Account Statuses',
     'plan_type': 'Plan Types',
     'joined_stage': 'Joined Stages',
-    'english_training': 'English Training',
+    'switched_program': 'Switched Programs',
     'lead_source': 'Lead Sources',
     'coaching_course_type': 'Course Types',
     'coaching_status': 'Coaching Statuses',
@@ -11928,8 +11959,8 @@ def ops_plab_add():
                 mobile, whatsapp1, whatsapp2, email, dob, city, state,
                 instagram, facebook, linkedin,
                 father_name, father_phone, mother_name, mother_phone, parents_email,
-                joined_stage, plan_type, english_training,
-                account_status, current_stage,
+                joined_stage, plan_type,
+                account_status, current_stage, switched_program,
                 counsellor, counsellor_email, counsellor_number,
                 lead_source, referral_type, operations_referral,
                 package_amount, discount_allowed, additional_package_notes,
@@ -11950,8 +11981,9 @@ def ops_plab_add():
                 f.get('instagram', ''), f.get('facebook', ''), f.get('linkedin', ''),
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
-                f.get('joined_stage', ''), f.get('plan_type', ''), f.get('english_training', ''),
+                f.get('joined_stage', ''), f.get('plan_type', ''),
                 f.get('account_status', 'In Process'), f.get('joined_stage', ''),
+                f.get('switched_program', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
                 f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
                 pkg, disc, f.get('additional_package_notes', ''),
@@ -11977,8 +12009,8 @@ def ops_plab_add():
     conn.close()
     return render_template('ops_plab_form.html', mode='add', item=None,
                            plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
-                           english_options=get_lookup_options('english_training'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
+                           switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            active_ops_page='plab')
 
@@ -12002,9 +12034,9 @@ def ops_plab_edit(client_id):
                 mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
                 instagram=?, facebook=?, linkedin=?,
                 father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
-                joined_stage=?, plan_type=?, english_training=?,
-                account_status=?, current_stage=?,
-                dropped_date=?, upgraded_to=?,
+                joined_stage=?, plan_type=?,
+                account_status=?, current_stage=?, switched_program=?,
+                dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
                 lead_source=?, referral_type=?, operations_referral=?,
                 package_amount=?, discount_allowed=?, additional_package_notes=?,
@@ -12028,9 +12060,10 @@ def ops_plab_edit(client_id):
                 f.get('instagram', ''), f.get('facebook', ''), f.get('linkedin', ''),
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
-                f.get('joined_stage', ''), f.get('plan_type', ''), f.get('english_training', ''),
+                f.get('joined_stage', ''), f.get('plan_type', ''),
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
-                f.get('dropped_date', ''), f.get('upgraded_to', ''),
+                f.get('switched_program', ''),
+                f.get('dropped_date', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
                 f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
                 pkg, disc, f.get('additional_package_notes', ''),
@@ -12072,8 +12105,8 @@ def ops_plab_edit(client_id):
         return redirect(url_for('ops_plab_list'))
     return render_template('ops_plab_form.html', mode='edit', item=client,
                            plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
-                           english_options=get_lookup_options('english_training'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
+                           switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            active_ops_page='plab')
 
@@ -12226,8 +12259,8 @@ def ops_plab_import():
                     mobile, whatsapp1, whatsapp2, email, dob, city, state,
                     instagram, facebook, linkedin,
                     father_name, father_phone, mother_name, mother_phone, parents_email,
-                    joined_stage, plan_type, english_training,
-                    account_status, current_stage,
+                    joined_stage, plan_type,
+                    account_status, current_stage, switched_program,
                     counsellor, counsellor_email, counsellor_number,
                     lead_source, referral_type, operations_referral,
                     package_amount, discount_allowed, additional_package_notes,
@@ -12248,8 +12281,8 @@ def ops_plab_import():
                     g(row, 'instagram'), g(row, 'facebook'), g(row, 'linkedin'),
                     g(row, 'father_name'), g(row, 'father_phone'),
                     g(row, 'mother_name'), g(row, 'mother_phone'), g(row, 'parents_email'),
-                    g(row, 'joined_stage'), g(row, 'plan_type'), g(row, 'english_training'),
-                    account_status, g(row, 'current_stage'),
+                    g(row, 'joined_stage'), g(row, 'plan_type'),
+                    account_status, g(row, 'current_stage'), g(row, 'switched_program'),
                     g(row, 'counsellor'), g(row, 'counsellor_email'), g(row, 'counsellor_number'),
                     g(row, 'lead_source'), g(row, 'referral_type'), g(row, 'operations_referral'),
                     pkg, disc, g(row, 'additional_package_notes'),
@@ -18369,6 +18402,185 @@ ensure_kra_tables()
 ensure_notification_tables()
 ensure_budget_tables()
 ensure_ops_tables()
+
+# One-time Excel import: load latest PLAB client data from Excel if available
+def _import_excel_clients_once():
+    """Import PLAB clients from Excel file at startup (upsert by reg number)."""
+    import openpyxl
+    from datetime import datetime as _dt, date as _d
+    excel_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GC_UK_Reg_List.xlsx')
+    if not os.path.exists(excel_path):
+        return  # no file to import
+    try:
+        conn = get_db()
+        # Check if we've already imported (marker)
+        marker = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
+        wb = openpyxl.load_workbook(excel_path, read_only=True)
+        ws = wb.active
+        headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
+        data_rows = list(ws.iter_rows(min_row=2))
+        wb_count = sum(1 for r in data_rows if any(c.value for c in r))
+        if marker >= wb_count:
+            wb.close()
+            conn.close()
+            logging.info(f"Excel import skipped: DB has {marker} rows, Excel has {wb_count}")
+            return
+
+        status_fix = {'Oh Hold': 'On Hold'}
+        def sf(v):
+            if v is None: return 0
+            if isinstance(v, (int, float)): return float(v)
+            s = str(v).strip().replace(',','').replace('₹','').replace('$','')
+            try: return float(s)
+            except: return 0
+        def ss(v):
+            if v is None: return ''
+            return str(v).strip()
+        def sd(v):
+            if v is None: return ''
+            if isinstance(v, (_dt, _d)): return v.strftime('%Y-%m-%d')
+            return str(v).strip()
+
+        import re as _re
+        result = conn.execute("SELECT registration_number FROM plab_clients WHERE registration_number LIKE 'GCUKIP/%' ORDER BY id DESC LIMIT 1").fetchone()
+        if result:
+            m = _re.search(r'/(\d+)$', result['registration_number'])
+            next_seq = int(m.group(1)) + 1 if m else 1
+        else:
+            next_seq = 1
+
+        inserted = 0
+        updated = 0
+        for row_cells in data_rows:
+            vals = [cell.value for cell in row_cells]
+            if not any(vals): continue
+            row = dict(zip(headers, vals))
+            reg_num = ss(row.get('Registration Number'))
+            cname = ss(row.get('Candidate Name'))
+            fn, ln, px = '', '', 'Dr.'
+            if cname:
+                parts = cname.strip().split()
+                if parts and parts[0].rstrip('.') in ('Dr','Mr','Mrs','Ms','Prof'):
+                    px = parts[0] if parts[0].endswith('.') else parts[0]+'.'
+                    parts = parts[1:]
+                if len(parts)>=2: fn, ln = parts[0], ' '.join(parts[1:])
+                elif parts: fn = parts[0]
+            if not fn and not reg_num: continue
+
+            pkg = sf(row.get('Package (Mention Plab Actual Package)'))
+            disc = sf(row.get('Discount Allowed (Discount Offer + Stage Discount)'))
+            final_raw = sf(row.get('Finalised Package')) or sf(row.get('Final Package'))
+            final = final_raw or (pkg - disc)
+            i1,i2,i3,i4 = sf(row.get('1st Installment')),sf(row.get('2nd Installment')),sf(row.get('3rd Installment')),sf(row.get('4th Installment'))
+            total_paid = i1+i2+i3+i4
+            raw_st = ss(row.get('Account Status')) or 'In Process'
+            acct_st = status_fix.get(raw_st, raw_st)
+
+            existing = None
+            if reg_num:
+                existing = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+
+            if existing:
+                conn.execute('''UPDATE plab_clients SET
+                    registration_date=?, customer_id=?, prefix=?, first_name=?, last_name=?,
+                    mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
+                    instagram=?, facebook=?, linkedin=?,
+                    father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
+                    joined_stage=?, plan_type=?, account_status=?, current_stage=?, switched_program=?,
+                    counsellor=?, counsellor_email=?, counsellor_number=?,
+                    lead_source=?, referral_type=?, operations_referral=?,
+                    package_amount=?, discount_allowed=?, additional_package_notes=?,
+                    final_package=?, total_paid=?,
+                    inst1_amount=?, inst1_date=?, inst1_note=?,
+                    inst2_amount=?, inst2_date=?, inst2_note=?,
+                    inst3_amount=?, inst3_date=?, inst3_note=?,
+                    inst4_amount=?, inst4_date=?, inst4_note=?,
+                    dropped_date=?, upgraded_to=?, additional_notes=?, updated_at=CURRENT_TIMESTAMP
+                    WHERE id=?
+                ''', (
+                    sd(row.get('Registration Date (Payment Date)')), ss(row.get('Customer ID')),
+                    px, fn, ln,
+                    ss(row.get('Mobile Number')), ss(row.get('Whats App Number')), ss(row.get('Whats App Number 2')),
+                    ss(row.get('Candidate Email')), sd(row.get('D.O.B')), ss(row.get('CITY')), ss(row.get('STATE')),
+                    ss(row.get('Instagram Name')), ss(row.get('Facebook Name')), ss(row.get('LinkedIn Name')),
+                    ss(row.get('Fathers Name')), ss(row.get('Fathers Mobile Number')),
+                    ss(row.get('Mothers Name')), ss(row.get('Mothers Mobile Number')), ss(row.get('Parents Email ID')),
+                    ss(row.get('Joined Stage')), ss(row.get('Plan Type')),
+                    acct_st, ss(row.get('PLAB Stage (Current Status)')), ss(row.get('Switched Program')),
+                    ss(row.get('Counsellor')), ss(row.get('Counsellor Email')), ss(row.get('Counsellor Number')),
+                    ss(row.get('Lead Source')), ss(row.get('UK Client Referral')), ss(row.get('Operations Team Referral')),
+                    pkg, disc, ss(row.get('Additional Notes (Discount Given, Package reduced reason)')),
+                    final, total_paid,
+                    i1, sd(row.get('1st Instalment Date')), ss(row.get('Ist Installment Note')),
+                    i2, sd(row.get('2nd Instalment Date')), ss(row.get('2nd Installment Note')),
+                    i3, sd(row.get('3rd Instalment Date')), ss(row.get('3rd Installment Note')),
+                    i4, sd(row.get('4th Instalment Date')), ss(row.get('4th Installment Note')),
+                    sd(row.get('Dropped Out / Switched Program Date')), ss(row.get('Upgraded To')),
+                    ss(row.get('Additional Notes')),
+                    existing['id']
+                ))
+                updated += 1
+            else:
+                if not reg_num:
+                    reg_num = f"GCUKIP/25-26/{next_seq:03d}"
+                    next_seq += 1
+                conn.execute('''INSERT INTO plab_clients (
+                    registration_number, registration_date, customer_id,
+                    prefix, first_name, last_name,
+                    mobile, whatsapp1, whatsapp2, email, dob, city, state,
+                    instagram, facebook, linkedin,
+                    father_name, father_phone, mother_name, mother_phone, parents_email,
+                    joined_stage, plan_type, account_status, current_stage, switched_program,
+                    counsellor, counsellor_email, counsellor_number,
+                    lead_source, referral_type, operations_referral,
+                    package_amount, discount_allowed, additional_package_notes,
+                    final_package, total_paid,
+                    inst1_amount, inst1_date, inst1_note,
+                    inst2_amount, inst2_date, inst2_note,
+                    inst3_amount, inst3_date, inst3_note,
+                    inst4_amount, inst4_date, inst4_note,
+                    dropped_date, upgraded_to, additional_notes
+                ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    reg_num, sd(row.get('Registration Date (Payment Date)')), ss(row.get('Customer ID')),
+                    px, fn, ln,
+                    ss(row.get('Mobile Number')), ss(row.get('Whats App Number')), ss(row.get('Whats App Number 2')),
+                    ss(row.get('Candidate Email')), sd(row.get('D.O.B')), ss(row.get('CITY')), ss(row.get('STATE')),
+                    ss(row.get('Instagram Name')), ss(row.get('Facebook Name')), ss(row.get('LinkedIn Name')),
+                    ss(row.get('Fathers Name')), ss(row.get('Fathers Mobile Number')),
+                    ss(row.get('Mothers Name')), ss(row.get('Mothers Mobile Number')), ss(row.get('Parents Email ID')),
+                    ss(row.get('Joined Stage')), ss(row.get('Plan Type')),
+                    acct_st, ss(row.get('PLAB Stage (Current Status)')), ss(row.get('Switched Program')),
+                    ss(row.get('Counsellor')), ss(row.get('Counsellor Email')), ss(row.get('Counsellor Number')),
+                    ss(row.get('Lead Source')), ss(row.get('UK Client Referral')), ss(row.get('Operations Team Referral')),
+                    pkg, disc, ss(row.get('Additional Notes (Discount Given, Package reduced reason)')),
+                    final, total_paid,
+                    i1, sd(row.get('1st Instalment Date')), ss(row.get('Ist Installment Note')),
+                    i2, sd(row.get('2nd Instalment Date')), ss(row.get('2nd Installment Note')),
+                    i3, sd(row.get('3rd Instalment Date')), ss(row.get('3rd Installment Note')),
+                    i4, sd(row.get('4th Instalment Date')), ss(row.get('4th Installment Note')),
+                    sd(row.get('Dropped Out / Switched Program Date')), ss(row.get('Upgraded To')),
+                    ss(row.get('Additional Notes')),
+                ))
+                inserted += 1
+
+        conn.commit()
+        conn.close()
+        wb.close()
+        logging.info(f"Excel client import: inserted={inserted}, updated={updated}")
+    except Exception as e:
+        logging.error(f"Excel client import error: {e}")
+        import traceback
+        traceback.print_exc()
+
+# Copy Excel file to project dir for startup import
+_excel_src = os.path.join(os.path.dirname(os.path.abspath(__file__)), '..', 'mnt', 'uploads', 'GC UK Reg-List.xlsx')
+_excel_dst = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GC_UK_Reg_List.xlsx')
+if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
+    import shutil
+    shutil.copy2(_excel_src, _excel_dst)
+
+_import_excel_clients_once()
+
 seed_kra_categories()
 seed_default_meeting_types()
 seed_budget_categories()

@@ -321,12 +321,6 @@
             <span style="color:var(--navy);font-weight:600;">{{ client.plan_type }}</span>
           </div>
           {% endif %}
-          {% if client.english_training %}
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">English Training:</span>
-            <span style="color:var(--navy);font-weight:600;">{{ client.english_training }}</span>
-          </div>
-          {% endif %}
           {% if client.account_status %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
@@ -351,10 +345,10 @@
             <span style="color:#991B1B;font-weight:600;">{{ client.dropped_date if client.dropped_date else 'N/A' }}</span>
           </div>
           {% endif %}
-          {% if client.upgraded_to %}
+          {% if client.switched_program %}
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Upgraded To:</span>
-            <span style="color:#059669;font-weight:600;">{{ client.upgraded_to }}</span>
+            <span style="color:var(--gray-600);font-weight:500;">Switched Program:</span>
+            <span style="color:#6D28D9;font-weight:600;">{{ client.switched_program }}</span>
           </div>
           {% endif %}
         </div>
