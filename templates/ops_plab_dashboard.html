@@ -18,9 +18,16 @@
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
           {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
         </h1>
-        <p style="margin:0 0 12px 0;font-size:14px;color:var(--gray-500);">
-          Registration #{{ client.registration_number }}
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ client.registration_number }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
         </p>
+        {% if client.registration_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Registered: {{ client.registration_date|format_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
         <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
           {% if client.account_status == 'In Process' %}
             background:#ECFDF5;color:#065F46;
@@ -242,7 +249,7 @@
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:16px;font-weight:700;">{% if client.welcome_call_by %}✓{% else %}—{% endif %}</span>
-            <span style="color:{% if client.welcome_call_by %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Call</span>
+            <span style="color:{% if client.welcome_call_by %}#059669{% else %}var(--gray-500){% endif %};font-weight:500;">Welcome Call{% if client.welcome_call_by %} ({{ client.welcome_call_by }}){% endif %}</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;">
             <span style="font-size:16px;font-weight:700;">{% if client.english_book %}✓{% else %}—{% endif %}</span>
@@ -349,6 +356,12 @@
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Switched Program:</span>
             <span style="color:#6D28D9;font-weight:600;">{{ client.switched_program }}</span>
+          </div>
+          {% endif %}
+          {% if client.upgraded_to %}
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Upgraded To:</span>
+            <span style="color:#059669;font-weight:600;">{{ client.upgraded_to }}</span>
           </div>
           {% endif %}
         </div>
