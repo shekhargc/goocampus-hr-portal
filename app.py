@@ -18413,18 +18413,16 @@ def _import_excel_clients_once():
         return  # no file to import
     try:
         conn = get_db()
-        # Check if we've already imported (marker)
-        marker = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
+        # Check if switched_program data already populated (import marker)
+        sp_count = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()['c']
+        if sp_count > 10:
+            conn.close()
+            logging.info(f"Excel import skipped: {sp_count} records already have switched_program")
+            return
         wb = openpyxl.load_workbook(excel_path, read_only=True)
         ws = wb.active
         headers = [cell.value for cell in next(ws.iter_rows(min_row=1, max_row=1))]
         data_rows = list(ws.iter_rows(min_row=2))
-        wb_count = sum(1 for r in data_rows if any(c.value for c in r))
-        if marker >= wb_count:
-            wb.close()
-            conn.close()
-            logging.info(f"Excel import skipped: DB has {marker} rows, Excel has {wb_count}")
-            return
 
         status_fix = {'Oh Hold': 'On Hold'}
         def sf(v):
