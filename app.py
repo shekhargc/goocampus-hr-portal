@@ -18787,6 +18787,49 @@ if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
 
 _import_excel_clients_once()
 
+# ── One-time backfill: switched_program from dedicated Excel ──────────
+def _backfill_switched_program():
+    """Update switched_program for all clients from the dedicated Excel file."""
+    try:
+        sp_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'GC_UK_Switched_Program.xlsx')
+        if not os.path.exists(sp_path):
+            return
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        marker = conn.execute("SELECT value FROM _import_markers WHERE key = 'switched_program_backfill'").fetchone()
+        if marker and marker['value'] == 'v1':
+            conn.close()
+            return
+        import openpyxl as _opx
+        wb = _opx.load_workbook(sp_path, read_only=True)
+        ws = wb.active
+        updated = 0
+        for row in ws.iter_rows(min_row=2, values_only=True):
+            reg_num = str(row[1]).strip() if row[1] else ''
+            sp_val = str(row[2]).strip() if row[2] else ''
+            if not reg_num:
+                continue
+            conn.execute("UPDATE plab_clients SET switched_program = ? WHERE registration_number = ?", (sp_val, reg_num))
+            if sp_val:
+                updated += 1
+        conn.execute("INSERT INTO _import_markers (key, value) VALUES ('switched_program_backfill', 'v1') ON CONFLICT(key) DO UPDATE SET value='v1'")
+        conn.commit()
+        # Verify
+        sp_check = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
+        logging.info(f"Switched program backfill: updated {updated} clients, total with value: {sp_check['cnt']}")
+        conn.close()
+        wb.close()
+    except Exception as e:
+        logging.error(f"Switched program backfill error: {e}")
+        import traceback
+        traceback.print_exc()
+
+_backfill_switched_program()
+
 seed_kra_categories()
 seed_default_meeting_types()
 seed_budget_categories()
