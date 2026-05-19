@@ -21595,11 +21595,6 @@ def vietnam_verify_otp():
 # GEORGIA LANDING PAGE (public, no login required)
 # ═══════════════════════════════════════════════════════════════════════════════
 
-@app.route('/study-abroad')
-def study_abroad_directory():
-    return render_template('study_abroad_directory.html')
-
-
 @app.route('/georgia')
 def georgia_landing():
     return render_template('georgia_landing.html')
