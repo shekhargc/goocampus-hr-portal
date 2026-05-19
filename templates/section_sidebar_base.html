@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block extra_css %}
+<style>
+    /* ===== SECTION SIDEBAR LAYOUT ===== */
+    .section-layout {
+        display: flex;
+        height: calc(100vh - 70px);
+        margin: -2.5rem -3rem;
+        overflow: hidden;
+    }
+    .site-footer { display: none !important; }
+
+    .section-sidebar {
+        width: 260px;
+        min-width: 260px;
+        background: var(--navy);
+        color: white;
+        display: flex;
+        flex-direction: column;
+        transition: width 0.25s ease, min-width 0.25s ease;
+        overflow: hidden;
+        overflow-y: auto;
+        position: relative;
+        z-index: 10;
+    }
+    .section-sidebar.collapsed { width: 60px; min-width: 60px; }
+
+    .section-sidebar-header {
+        padding: 1.25rem 1rem;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+    }
+    .section-sidebar-title {
+        font-size: 0.95rem; font-weight: 700; color: var(--orange);
+        white-space: nowrap; overflow: hidden; transition: opacity 0.2s;
+    }
+    .section-sidebar.collapsed .section-sidebar-title { opacity: 0; width: 0; }
+
+    .section-sidebar-toggle {
+        background: rgba(255,255,255,0.08); border: none; color: rgba(255,255,255,0.6);
+        cursor: pointer; width: 30px; height: 30px; border-radius: 0.4rem;
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+        transition: background 0.2s, color 0.2s;
+    }
+    .section-sidebar-toggle:hover { background: rgba(255,255,255,0.15); color: white; }
+    .section-sidebar-toggle svg { transition: transform 0.25s; }
+    .section-sidebar.collapsed .section-sidebar-toggle svg { transform: rotate(180deg); }
+
+    .section-sidebar-nav { flex: 1; overflow-y: auto; padding: 0.5rem 0; }
+    .section-sidebar-nav::-webkit-scrollbar { width: 4px; }
+    .section-sidebar-nav::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.15); border-radius: 4px; }
+
+    .sec-nav-group-label {
+        font-size: 0.68rem; font-weight: 600; text-transform: uppercase;
+        letter-spacing: 0.8px; color: rgba(255,255,255,0.35);
+        padding: 1rem 1rem 0.35rem 1rem; white-space: nowrap; overflow: hidden;
+    }
+    .section-sidebar.collapsed .sec-nav-group-label {
+        font-size: 0; padding: 0.5rem 0;
+        border-bottom: 1px solid rgba(255,255,255,0.06); margin: 0 0.75rem;
+    }
+
+    .sec-nav-item {
+        display: flex; align-items: center; gap: 0.65rem;
+        padding: 0.55rem 1rem; color: rgba(255,255,255,0.65);
+        text-decoration: none; font-size: 0.87rem; font-weight: 500;
+        transition: all 0.15s; white-space: nowrap; position: relative;
+    }
+    .sec-nav-item:hover { background: rgba(255,255,255,0.06); color: rgba(255,255,255,0.9); }
+    .sec-nav-item.active {
+        background: rgba(245,130,32,0.12); color: var(--orange); font-weight: 600;
+    }
+    .sec-nav-item.active::before {
+        content: ''; position: absolute; left: 0; top: 0; bottom: 0;
+        width: 3px; background: var(--orange); border-radius: 0 3px 3px 0;
+    }
+
+    .sec-nav-icon {
+        width: 20px; height: 20px; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center;
+    }
+    .sec-nav-text { overflow: hidden; transition: opacity 0.2s; }
+    .section-sidebar.collapsed .sec-nav-text { opacity: 0; width: 0; }
+
+    .section-sidebar.collapsed .sec-nav-item { justify-content: center; padding: 0.65rem 0; }
+    .section-sidebar.collapsed .sec-nav-item:hover::after {
+        content: attr(data-tooltip); position: absolute; left: 64px; top: 50%;
+        transform: translateY(-50%); background: var(--navy); color: white;
+        padding: 0.35rem 0.75rem; border-radius: 0.35rem; font-size: 0.82rem;
+        font-weight: 500; white-space: nowrap; box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        z-index: 100; pointer-events: none;
+    }
+
+    .section-main {
+        flex: 1; padding: 1.5rem 2rem; overflow-y: auto; overflow-x: auto;
+        background: var(--gray-50); min-width: 0;
+    }
+    .section-main h1 { font-size: 1.35rem; }
+    .section-main .table-wrapper { overflow-x: auto; }
+
+    @media (max-width: 1024px) {
+        .section-layout { margin: -2rem; height: calc(100vh - 70px); }
+        .section-main { padding: 1.5rem; }
+        .section-sidebar { width: 220px; min-width: 220px; }
+        .section-sidebar.collapsed { width: 54px; min-width: 54px; }
+    }
+    @media (max-width: 768px) {
+        .section-layout { margin: -1.25rem; flex-direction: column; height: auto; overflow: visible; }
+        .section-sidebar {
+            width: 100% !important; min-width: 100% !important;
+            flex-direction: row; overflow-x: auto; overflow-y: hidden;
+            max-height: none; min-height: auto;
+        }
+        .section-sidebar.collapsed { width: 100% !important; min-width: 100% !important; }
+        .section-sidebar-header { display: none; }
+        .sec-nav-group-label { display: none; }
+        .section-sidebar-nav { display: flex; padding: 0; }
+        .sec-nav-item { padding: 0.75rem 1rem; font-size: 0.82rem; }
+        .section-sidebar.collapsed .sec-nav-text { opacity: 1; width: auto; }
+        .section-sidebar.collapsed .sec-nav-item { justify-content: flex-start; padding: 0.75rem 1rem; }
+        .section-sidebar.collapsed .sec-nav-item:hover::after { display: none; }
+        .section-main { padding: 1.25rem; }
+    }
+</style>
+{% block section_extra_css %}{% endblock %}
+{% endblock %}
+
+{% block content %}
+<div class="section-layout">
+    <aside class="section-sidebar" id="sectionSidebar">
+        <div class="section-sidebar-header">
+            <span class="section-sidebar-title">{% block sidebar_title %}Section{% endblock %}</span>
+            <button class="section-sidebar-toggle" onclick="toggleSectionSidebar()" title="Toggle sidebar">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+            </button>
+        </div>
+        <nav class="section-sidebar-nav">
+            {% block sidebar_nav %}{% endblock %}
+        </nav>
+    </aside>
+    <main class="section-main">
+        {% block section_content %}{% endblock %}
+    </main>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script>
+function toggleSectionSidebar() {
+    var sb = document.getElementById('sectionSidebar');
+    sb.classList.toggle('collapsed');
+    try { localStorage.setItem('section_sidebar_collapsed', sb.classList.contains('collapsed') ? '1' : '0'); } catch(e) {}
+}
+(function() {
+    try {
+        if (localStorage.getItem('section_sidebar_collapsed') === '1') {
+            document.getElementById('sectionSidebar').classList.add('collapsed');
+        }
+    } catch(e) {}
+    // Highlight active nav item
+    var path = window.location.pathname;
+    document.querySelectorAll('.sec-nav-item').forEach(function(el) {
+        var href = el.getAttribute('href');
+        if (href && path === href) el.classList.add('active');
+    });
+})();
+</script>
+{% block section_extra_js %}{% endblock %}
+{% endblock %}

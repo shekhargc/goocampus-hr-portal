@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "hr_sidebar_base.html" %}
 
 {% block title %}My Leave Report - GooCampus HR Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
     .stats-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.5rem; }
@@ -33,7 +33,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="page-header">
     <h1>My Leave Report</h1>
     <p>Financial Year {{ fy_year }}&ndash;{{ fy_year + 1 }} (April {{ fy_year }} to March {{ fy_year + 1 }})</p>

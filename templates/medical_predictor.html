@@ -1,8 +1,8 @@
-{% extends "partner_base.html" if is_partner else "base.html" %}
+{% extends "partner_base.html" if is_partner else "colleges_sidebar_base.html" %}
 
 {% block title %}MBBS Medical Predictor - GooCampus{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     /* Container + base styles needed when extending partner_base */
     .predictor-container {
@@ -213,7 +213,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="predictor-container">
 <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;">
     <div>

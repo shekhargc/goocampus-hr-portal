@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "sales_sidebar_base.html" %}
 
 {% block title %}Manage Meeting Types - GooCampus HR Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .page-title {
         font-size: 2rem;
@@ -169,7 +169,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="container" style="max-width: 1200px; margin: 0 auto; padding: 2.5rem 2rem;">
     <h1 class="page-title">{{ page_title|default('Manage Meeting Types') }}</h1>
 

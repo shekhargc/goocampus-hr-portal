@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "company_sidebar_base.html" %}
 
 {% block title %}Organisation Chart - GooCampus HR Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .org-container { padding: 2rem 0; }
 
@@ -123,7 +123,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 {% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
 
 <div class="page-header">

@@ -51,7 +51,7 @@
             .partner-nav-links { flex-wrap: wrap; justify-content: center; }
         }
     </style>
-    {% block extra_css %}{% endblock %}
+    {% block extra_css %}{% block section_extra_css %}{% endblock %}{% endblock %}
 </head>
 <body>
     <nav class="partner-navbar">
@@ -78,12 +78,12 @@
         </div>
     </nav>
 
-    {% block content %}{% endblock %}
+    {% block content %}{% block section_content %}{% endblock %}{% endblock %}
 
     <footer class="partner-footer">
         &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd &middot; All rights reserved
     </footer>
 
-    {% block extra_js %}{% endblock %}
+    {% block extra_js %}{% block section_extra_js %}{% endblock %}{% endblock %}
 </body>
 </html>

@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "finance_sidebar_base.html" %}
 {% block title %}Budget Dashboard - FY {{ fy_year }}{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .finance-header {
         display: flex;
@@ -235,7 +235,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
 
     <!-- Header -->

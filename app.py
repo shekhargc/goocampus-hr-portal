@@ -794,8 +794,8 @@ def partner_colleges():
         fee_min=fee_min, fee_max=fee_max,
         rates=rates, to_inr=_to_inr,
         is_partner=True,
-        visible_sections=get_partner_visible_sections(partner_id)
-    )
+        visible_sections=get_partner_visible_sections(partner_id),
+                    active_section='colleges')
 
 
 @app.route('/partner/colleges/<slug>')
@@ -861,8 +861,8 @@ def partner_college_profile(slug):
         to_inr=_to_inr, currency_sym=_currency_sym,
         cutoffs=cutoffs, cutoff_years=cutoff_years,
         is_partner=True,
-        visible_sections=get_partner_visible_sections(partner_id)
-    )
+        visible_sections=get_partner_visible_sections(partner_id),
+                    active_section='colleges')
 
 
 # ── Partner: Medical Predictor ──
@@ -897,8 +897,8 @@ def partner_medical_predictor():
     return render_template('medical_predictor.html',
         user=None, states=states, years=year_list,
         is_partner=True,
-        visible_sections=get_partner_visible_sections(partner_id)
-    )
+        visible_sections=get_partner_visible_sections(partner_id),
+                    active_section='colleges')
 
 
 @app.route('/dashboard')
@@ -1385,7 +1385,8 @@ def profile():
             reporting_manager = mgr['name']
 
     conn.close()
-    return render_template('employee_profile.html', user=user, reporting_manager=reporting_manager)
+    return render_template('employee_profile.html', user=user, reporting_manager=reporting_manager,
+                    active_section='hr')
 
 
 @app.route('/profile/upload-photo', methods=['POST'])
@@ -1448,11 +1449,13 @@ def apply_leave():
 
         if not leave_type or not from_date or not reason:
             flash('All fields required', 'error')
-            return render_template('apply_leave.html', user=user)
+            return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
         if leave_type not in ['annual', 'sick', 'casual']:
             flash('Invalid leave type', 'error')
-            return render_template('apply_leave.html', user=user)
+            return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
         # If no to_date, treat as single day
         if not to_date:
@@ -1463,7 +1466,8 @@ def apply_leave():
 
         if to_dt < from_dt:
             flash('To date cannot be before from date', 'error')
-            return render_template('apply_leave.html', user=user)
+            return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
         conn = get_db()
         holidays_db = {row['holiday_date'] for row in conn.execute('SELECT holiday_date FROM holidays').fetchall()}
@@ -1480,7 +1484,8 @@ def apply_leave():
         if not leave_days:
             flash('No working days in the selected date range (weekends and holidays are excluded)', 'error')
             conn.close()
-            return render_template('apply_leave.html', user=user)
+            return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
         # Determine day portions for each day
         import uuid
@@ -1510,7 +1515,8 @@ def apply_leave():
             if existing:
                 flash(f'You already have a leave record for {date_str}', 'error')
                 conn.close()
-                return render_template('apply_leave.html', user=user)
+                return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
             # Auto-cancel overlapping WFH requests for this date
             overlapping_wfh = conn.execute(
@@ -1562,7 +1568,8 @@ def apply_leave():
         flash(msg, 'success')
         return redirect(url_for('dashboard'))
 
-    return render_template('apply_leave.html', user=user)
+    return render_template('apply_leave.html', user=user,
+                    active_section='hr')
 
 
 @app.route('/apply-late-leave', methods=['GET', 'POST'])
@@ -1590,7 +1597,8 @@ def apply_late_leave():
             late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
             conn.close()
             return render_template('apply_late_leave.html', user=user,
-                                 late_leave_count=late_count['late_leave_count'] if late_count else 0)
+                                 late_leave_count=late_count['late_leave_count'] if late_count else 0,
+                    active_section='hr')
 
         if leave_type not in ['annual', 'sick', 'casual']:
             flash('Invalid leave type', 'error')
@@ -1598,7 +1606,8 @@ def apply_late_leave():
             late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
             conn.close()
             return render_template('apply_late_leave.html', user=user,
-                                 late_leave_count=late_count['late_leave_count'] if late_count else 0)
+                                 late_leave_count=late_count['late_leave_count'] if late_count else 0,
+                    active_section='hr')
 
         if not to_date:
             to_date = from_date
@@ -1731,7 +1740,8 @@ def apply_late_leave():
     late_count = conn.execute('SELECT late_leave_count FROM employees WHERE id = ?', (user['id'],)).fetchone()
     conn.close()
     return render_template('apply_late_leave.html', user=user,
-                         late_leave_count=late_count['late_leave_count'] if late_count else 0)
+                         late_leave_count=late_count['late_leave_count'] if late_count else 0,
+                    active_section='hr')
 
 
 @app.route('/cancel-leave/<int:leave_id>', methods=['POST'])
@@ -1915,7 +1925,8 @@ def modify_leave(leave_id):
     # GET: show modification form
     conn.close()
     today_str = datetime.now().strftime('%Y-%m-%d')
-    return render_template('modify_leave.html', user=user, leave=leave, today=today_str)
+    return render_template('modify_leave.html', user=user, leave=leave, today=today_str,
+                    active_section='hr')
 
 
 # ─── Edit Leave (in-place update for future leaves) ───
@@ -1983,7 +1994,8 @@ def edit_leave(leave_id):
 
     # GET: show edit form
     conn.close()
-    return render_template('edit_leave.html', user=user, leave=leave)
+    return render_template('edit_leave.html', user=user, leave=leave,
+                    active_section='hr')
 
 
 @app.route('/approvals')
@@ -2064,7 +2076,8 @@ def employee_approvals():
                          user=user,
                          pending_leaves=pending_grouped,
                          recent_actions=recent,
-                         direct_reports=direct_reports)
+                         direct_reports=direct_reports,
+                    active_section='hr')
 
 @app.route('/approve/<int:leave_id>', methods=['POST'])
 @login_required
@@ -2292,7 +2305,8 @@ def calendar_view():
                          prev_year=prev_year,
                          next_month=next_month,
                          next_year=next_year,
-                         today=today)
+                         today=today,
+                    active_section='company')
 
 @app.route('/holidays')
 @login_required
@@ -2302,7 +2316,8 @@ def employee_holidays():
     holidays = conn.execute('SELECT * FROM holidays ORDER BY holiday_date').fetchall()
     conn.close()
     today_date = datetime.now().strftime('%Y-%m-%d')
-    return render_template('employee_holidays.html', user=user, holidays=holidays, today_date=today_date)
+    return render_template('employee_holidays.html', user=user, holidays=holidays, today_date=today_date,
+                    active_section='company')
 
 @app.route('/org-chart')
 @login_required
@@ -2322,7 +2337,8 @@ def employee_org_chart():
         GROUP BY department ORDER BY department
     ''').fetchall()
     conn.close()
-    return render_template('employee_org_chart.html', user=user, employees=employees, departments=departments)
+    return render_template('employee_org_chart.html', user=user, employees=employees, departments=departments,
+                    active_section='company')
 
 @app.route('/leave-info')
 @login_required
@@ -2343,7 +2359,8 @@ def leave_info():
                          user=user,
                          fy_year=fy_year,
                          my_carry_forward=carry_forward,
-                         my_total_allocation=total_allocation)
+                         my_total_allocation=total_allocation,
+                    active_section='hr')
 
 
 @app.route('/my-leave-report')
@@ -2464,7 +2481,8 @@ def my_leave_report():
                          available_balance=round(available_balance, 2),
                          pending_count=pending_count,
                          carry_forward=carry_forward,
-                         monthly_alloc='Apr=3, Others=2')
+                         monthly_alloc='Apr=3, Others=2',
+                    active_section='hr')
 
 @app.route('/hr-dashboard')
 @login_required
@@ -2647,7 +2665,8 @@ def org_chart():
         GROUP BY department ORDER BY department
     ''').fetchall()
     conn.close()
-    return render_template('org_chart.html', user=user, admin_user=admin_user, employees=employees, departments=departments)
+    return render_template('org_chart.html', user=user, admin_user=admin_user, employees=employees, departments=departments,
+                    active_section='company')
 
 @app.route('/admin/calendar')
 @admin_required
@@ -2713,7 +2732,8 @@ def admin_calendar():
                          prev_year=prev_year,
                          next_month=next_month,
                          next_year=next_year,
-                         today=today)
+                         today=today,
+                    active_section='company')
 
 @app.route('/admin/employee/<int:emp_id>')
 @admin_required
@@ -2781,7 +2801,8 @@ def admin_employee_detail(emp_id):
                          leaves=leaves,
                          total_allocation=total_allocation,
                          days_taken=days_taken,
-                         available_balance=max(0, available))
+                         available_balance=max(0, available),
+                    active_section='hr')
 
 @app.route('/admin/employee/<int:emp_id>/edit', methods=['GET', 'POST'])
 @admin_required
@@ -2843,7 +2864,8 @@ def admin_employee_edit(emp_id):
                          user=user,
                          employee=employee,
                          departments=departments,
-                         managers=managers)
+                         managers=managers,
+                    active_section='hr')
 
 @app.route('/admin/employee/<int:emp_id>/upload-photo', methods=['POST'])
 @admin_required
@@ -2910,17 +2932,20 @@ def admin_add_leave():
 
         if not employee_id or not leave_type or not from_date:
             flash('Required fields missing', 'error')
-            return render_template('admin_add_leave.html', user=user, employees=employees)
+            return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         try:
             employee_id = int(employee_id)
         except ValueError:
             flash('Invalid input', 'error')
-            return render_template('admin_add_leave.html', user=user, employees=employees)
+            return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         if leave_type not in ['annual', 'sick', 'casual']:
             flash('Invalid leave type', 'error')
-            return render_template('admin_add_leave.html', user=user, employees=employees)
+            return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         if not to_date:
             to_date = from_date
@@ -2930,7 +2955,8 @@ def admin_add_leave():
 
         if to_dt < from_dt:
             flash('To date cannot be before from date', 'error')
-            return render_template('admin_add_leave.html', user=user, employees=employees)
+            return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         holidays_db = {row['holiday_date'] for row in conn.execute('SELECT holiday_date FROM holidays').fetchall()}
 
@@ -2946,7 +2972,8 @@ def admin_add_leave():
         if not leave_days:
             flash('No working days in the selected date range (weekends and holidays are excluded)', 'error')
             conn.close()
-            return render_template('admin_add_leave.html', user=user, employees=employees)
+            return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         import uuid
         now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
@@ -3000,7 +3027,8 @@ def admin_add_leave():
 
     conn.close()
 
-    return render_template('admin_add_leave.html', user=user, employees=employees)
+    return render_template('admin_add_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
 @app.route('/admin/bulk-leave', methods=['GET', 'POST'])
 @admin_required
@@ -3019,16 +3047,19 @@ def admin_bulk_leave():
 
         if not department or not leave_type or not leave_date or not days:
             flash('All fields required', 'error')
-            return render_template('admin_bulk_leave.html', user=user, employees=employees)
+            return render_template('admin_bulk_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         try:
             days = float(days)
             if days <= 0:
                 flash('Days must be positive', 'error')
-                return render_template('admin_bulk_leave.html', user=user, employees=employees)
+                return render_template('admin_bulk_leave.html', user=user, employees=employees,
+                    active_section='hr')
         except ValueError:
             flash('Invalid days value', 'error')
-            return render_template('admin_bulk_leave.html', user=user, employees=employees)
+            return render_template('admin_bulk_leave.html', user=user, employees=employees,
+                    active_section='hr')
 
         # Get all employees in department
         dept_employees = conn.execute('SELECT id FROM employees WHERE department = ? AND is_active = 1', (department,)).fetchall()
@@ -3053,7 +3084,8 @@ def admin_bulk_leave():
 
     departments = ['Sales', 'Operations', 'Marketing', 'Admin', 'Senior Management', 'HR', 'Management']
 
-    return render_template('admin_bulk_leave.html', user=user, employees=employees, departments=departments)
+    return render_template('admin_bulk_leave.html', user=user, employees=employees, departments=departments,
+                    active_section='hr')
 
 @app.route('/admin/manage-employees', methods=['GET', 'POST'])
 @admin_required
@@ -3104,7 +3136,8 @@ def manage_employees():
                          user=user,
                          employees=employees,
                          dept_employees=dept_employees,
-                         departments=departments)
+                         departments=departments,
+                    active_section='hr')
 
 @app.route('/admin/delete-employee/<int:emp_id>', methods=['POST'])
 @admin_required
@@ -3167,7 +3200,8 @@ def admin_reset_passwords():
     ).fetchall()
     conn.close()
 
-    return render_template('admin_reset_passwords.html', user=user, employees=employees)
+    return render_template('admin_reset_passwords.html', user=user, employees=employees,
+                    active_section='company')
 
 
 @app.route('/admin/delete-leave/<int:leave_id>', methods=['POST'])
@@ -3251,7 +3285,8 @@ def admin_monthly_report():
                          year=year,
                          month=month,
                          month_name=month_name,
-                         report_data=report_data)
+                         report_data=report_data,
+                    active_section='hr')
 
 @app.route('/admin/monthly-report/download')
 @admin_required
@@ -3369,7 +3404,8 @@ def admin_holidays():
     holidays = conn.execute('SELECT * FROM holidays ORDER BY holiday_date').fetchall()
     conn.close()
 
-    return render_template('admin_holidays.html', user=user, holidays=holidays)
+    return render_template('admin_holidays.html', user=user, holidays=holidays,
+                    active_section='company')
 
 @app.route('/admin/delete-holiday/<int:holiday_id>', methods=['POST'])
 @admin_required
@@ -3531,7 +3567,8 @@ def pending_approvals():
                          active_tab=active_tab,
                          total_count=total_count, late_count=late_count,
                          reapproval_count=reapproval_count,
-                         approved_count=approved_count, rejected_count=rejected_count)
+                         approved_count=approved_count, rejected_count=rejected_count,
+                    active_section='hr')
 
 @app.route('/admin/approve-leave/<int:leave_id>', methods=['POST'])
 @login_required
@@ -3876,7 +3913,8 @@ def announcements():
     ''', ()).fetchall()
     conn.close()
 
-    return render_template('announcements.html', user=user, announcements=all_announcements)
+    return render_template('announcements.html', user=user, announcements=all_announcements,
+                    active_section='company')
 
 
 @app.route('/announcements/create', methods=['POST'])
@@ -4124,7 +4162,8 @@ def admin_quarterly_report():
                          year=year,
                          quarter=quarter,
                          quarter_name=quarter_name,
-                         report_data=report_data)
+                         report_data=report_data,
+                    active_section='hr')
 
 
 @app.route('/admin/quarterly-report/download')
@@ -4255,7 +4294,8 @@ def admin_annual_report():
                          user=user,
                          year=year,
                          fy_label=fy_label,
-                         report_data=report_data)
+                         report_data=report_data,
+                    active_section='hr')
 
 
 @app.route('/admin/annual-report/download')
@@ -4464,7 +4504,8 @@ def admin_employee_leave_report():
                          available_balance=available_balance,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
-                         monthly_alloc=monthly_alloc)
+                         monthly_alloc=monthly_alloc,
+                    active_section='hr')
 
 
 # ─── Team Leave Report Routes ───
@@ -4521,7 +4562,8 @@ def team_leave_report():
                          year=year,
                          month=month,
                          month_name=month_name,
-                         report_data=report_data)
+                         report_data=report_data,
+                    active_section='hr')
 
 
 @app.route('/reports/team/download')
@@ -4734,7 +4776,8 @@ def reports_monthly():
                          total_allocation=total_allocation,
                          available_balance=available_balance,
                          prev_month=prev_month, prev_year=prev_year,
-                         next_month=next_month, next_year=next_year)
+                         next_month=next_month, next_year=next_year,
+                    active_section='hr')
 
 
 @app.route('/reports/quarterly')
@@ -4825,7 +4868,8 @@ def reports_quarterly():
                          sick_total=sick_total,
                          casual_total=casual_total,
                          available_balance=available_balance,
-                         pending_count=pending_count)
+                         pending_count=pending_count,
+                    active_section='hr')
 
 
 @app.route('/reports/annual')
@@ -4909,7 +4953,8 @@ def reports_annual():
                          available_balance=available_balance,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
-                         monthly_alloc='Apr=3, Others=2')
+                         monthly_alloc='Apr=3, Others=2',
+                    active_section='hr')
 
 
 # ─── Forex / Currency Conversion ───
@@ -5456,7 +5501,8 @@ def apply_wfh():
         flash(msg, 'success')
         return redirect(url_for('my_wfh_requests'))
 
-    return render_template('apply_wfh.html', user=user)
+    return render_template('apply_wfh.html', user=user,
+                    active_section='hr')
 
 
 @app.route('/wfh/my-requests')
@@ -5476,7 +5522,8 @@ def my_wfh_requests():
         ORDER BY w.created_at DESC
     ''', (user['id'],)).fetchall()
     conn.close()
-    return render_template('my_wfh_requests.html', user=user, requests=requests_list)
+    return render_template('my_wfh_requests.html', user=user, requests=requests_list,
+                    active_section='hr')
 
 
 @app.route('/wfh/approvals')
@@ -5587,7 +5634,8 @@ def wfh_approvals():
     return render_template('wfh_approvals.html', user=user, requests=enriched,
                            f_employee=f_employee, f_department=f_department, f_status=f_status,
                            total_count=total_count, pending_count=pending_count,
-                           approved_count=approved_count, rejected_count=rejected_count)
+                           approved_count=approved_count, rejected_count=rejected_count,
+                    active_section='hr')
 
 
 @app.route('/wfh/approve/<int:wfh_id>', methods=['POST'])
@@ -5676,7 +5724,8 @@ def projects_list():
         projects.append(d)
     return render_template('projects.html', user=user, projects=projects,
                          can_manage=bool(user['is_admin']),
-                         is_admin=bool(user['is_admin']))
+                         is_admin=bool(user['is_admin']),
+                    active_section='sales')
 
 
 @app.route('/projects/add', methods=['GET', 'POST'])
@@ -5702,7 +5751,8 @@ def add_project():
         flash('Project added successfully', 'success')
         return redirect(url_for('projects_list'))
 
-    return render_template('add_project.html', user=user)
+    return render_template('add_project.html', user=user,
+                    active_section='sales')
 
 
 @app.route('/projects/<int:project_id>')
@@ -5760,7 +5810,8 @@ def project_detail(project_id):
                          all_streams=all_streams,
                          can_manage=bool(user['is_admin']),
                          supported_currencies=SUPPORTED_CURRENCIES,
-                         fx_rates=get_fx_rates_inr())
+                         fx_rates=get_fx_rates_inr(),
+                    active_section='sales')
 
 
 @app.route('/projects/<int:project_id>/edit', methods=['GET', 'POST'])
@@ -5790,7 +5841,8 @@ def edit_project(project_id):
         return redirect(url_for('project_detail', project_id=project_id))
 
     conn.close()
-    return render_template('project_form.html', user=user, project=project, mode='edit')
+    return render_template('project_form.html', user=user, project=project, mode='edit',
+                    active_section='sales')
 
 
 @app.route('/projects/<int:project_id>/delete', methods=['POST'])
@@ -5857,7 +5909,8 @@ def streams_list():
         streams.append(d)
     return render_template('streams.html', user=user, streams=streams,
                            can_manage=bool(user['is_admin']),
-                           is_admin=bool(user['is_admin']))
+                           is_admin=bool(user['is_admin']),
+                    active_section='sales')
 
 
 @app.route('/streams/add', methods=['GET', 'POST'])
@@ -5890,7 +5943,8 @@ def add_revenue_stream():
         finally:
             conn.close()
         return redirect(url_for('streams_list'))
-    return render_template('stream_form.html', user=user, stream=None, mode='add')
+    return render_template('stream_form.html', user=user, stream=None, mode='add',
+                    active_section='sales')
 
 
 @app.route('/streams/<int:stream_id>/edit', methods=['GET', 'POST'])
@@ -5926,7 +5980,8 @@ def edit_revenue_stream(stream_id):
         conn.close()
         return redirect(url_for('streams_list'))
     conn.close()
-    return render_template('stream_form.html', user=user, stream=stream, mode='edit')
+    return render_template('stream_form.html', user=user, stream=stream, mode='edit',
+                    active_section='sales')
 
 
 @app.route('/streams/<int:stream_id>/delete', methods=['POST'])
@@ -6012,7 +6067,8 @@ def products_list():
                            fx_rates=get_fx_rates_inr(),
                            total_cost=total_cost,
                            total_rev=total_rev,
-                           total_margin=total_rev - total_cost)
+                           total_margin=total_rev - total_cost,
+                    active_section='sales')
 
 
 @app.route('/products/add/<int:project_id>', methods=['GET', 'POST'])
@@ -6089,7 +6145,8 @@ def add_product(project_id):
     return render_template('add_product.html', user=user, project=project,
                            streams=streams,
                            supported_currencies=SUPPORTED_CURRENCIES,
-                           fx_rates=get_fx_rates_inr())
+                           fx_rates=get_fx_rates_inr(),
+                    active_section='sales')
 
 
 @app.route('/products/<int:ps_id>/edit', methods=['GET', 'POST'])
@@ -6118,7 +6175,8 @@ def edit_product(ps_id):
         return render_template('product_form.html', user=user, product=product,
                                projects_all=projects_all, streams_all=streams_all,
                                supported_currencies=SUPPORTED_CURRENCIES,
-                               fx_rates=get_fx_rates_inr(), mode='edit')
+                               fx_rates=get_fx_rates_inr(), mode='edit',
+                    active_section='sales')
 
     name = request.form.get('name', '').strip()
     description = request.form.get('description', '').strip()
@@ -6220,7 +6278,8 @@ def sales_news():
     ''').fetchall()
     conn.close()
     return render_template('sales_news.html', user=user, news=news,
-                         can_post=user['is_admin'] or user['emp_code'] in MANAGEMENT_CODES)
+                         can_post=user['is_admin'] or user['emp_code'] in MANAGEMENT_CODES,
+                    active_section='sales')
 
 
 @app.route('/sales/news/add', methods=['GET', 'POST'])
@@ -6249,7 +6308,8 @@ def add_sales_news():
         flash('News posted', 'success')
         return redirect(url_for('sales_news'))
 
-    return render_template('add_sales_news.html', user=user)
+    return render_template('add_sales_news.html', user=user,
+                    active_section='sales')
 
 
 @app.route('/sales/news/delete/<int:news_id>', methods=['POST'])
@@ -6411,7 +6471,8 @@ def b2b_dashboard():
                          active_projects=active_projects, upcoming_meetings=upcoming_meetings,
                          month_name=month_name, current_year=now.year,
                          is_company_view=is_company_view,
-                         sales_role=sales_role)
+                         sales_role=sales_role,
+                    active_section='sales')
 
 
 # ─── B2B Meetings Routes ───
@@ -6460,7 +6521,8 @@ def b2b_trips_list():
 
     return render_template('meetings_list.html', user=user, trips=trips,
                          trip_type=trip_type, f_from=f_from, f_to=f_to,
-                         is_company_view=is_company_view)
+                         is_company_view=is_company_view,
+                    active_section='sales')
 
 
 @app.route('/b2b/add', methods=['GET', 'POST'])
@@ -6484,7 +6546,8 @@ def add_b2b_trip():
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
             meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
             conn.close()
-            return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients)
+            return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
+                    active_section='sales')
 
         conn.execute('''
             INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, project_id, notes)
@@ -6525,7 +6588,8 @@ def add_b2b_trip():
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
     conn.close()
-    return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients)
+    return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
+                    active_section='sales')
 
 
 @app.route('/b2b/<int:trip_id>')
@@ -6560,7 +6624,8 @@ def b2b_trip_detail(trip_id):
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
 
     conn.close()
-    return render_template('meeting_detail.html', user=user, trip=trip, meetings=meetings, meeting_clients=meeting_clients, projects=projects)
+    return render_template('meeting_detail.html', user=user, trip=trip, meetings=meetings, meeting_clients=meeting_clients, projects=projects,
+                    active_section='sales')
 
 
 @app.route('/b2b/<int:trip_id>/add-meeting', methods=['POST'])
@@ -6654,7 +6719,8 @@ def manage_meeting_types():
 
     types = conn.execute('SELECT * FROM meeting_types ORDER BY name').fetchall()
     conn.close()
-    return render_template('manage_meeting_types.html', user=user, types=types, page_title='Meeting Client Types')
+    return render_template('manage_meeting_types.html', user=user, types=types, page_title='Meeting Client Types',
+                    active_section='sales')
 
 
 # ─── Module Access Management (Admin) ───
@@ -6735,7 +6801,8 @@ def manage_module_access():
     modules = ['sales', 'projects', 'b2b_meetings']
     conn.close()
     return render_template('manage_module_access.html', user=user, employees=employees,
-                         access_list=access_list, modules=modules)
+                         access_list=access_list, modules=modules,
+                    active_section='sales')
 
 
 def ensure_management_admins():
@@ -6868,7 +6935,8 @@ def admin_leave_applications():
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_employee=f_employee, f_type=f_type, f_status=f_status,
-        f_from=f_from, f_to=f_to, today=today_str)
+        f_from=f_from, f_to=f_to, today=today_str,
+                    active_section='hr')
 
 
 # ─── My Leave Applications ─── Employee's own leaves ───
@@ -6954,7 +7022,8 @@ def my_leave_applications():
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_type=f_type, f_status=f_status,
-        f_from=f_from, f_to=f_to, today=today_str)
+        f_from=f_from, f_to=f_to, today=today_str,
+                    active_section='hr')
 
 
 # ─── Team Leave Applications ─── Manager view of team leaves ───
@@ -7100,7 +7169,8 @@ def team_leave_applications():
         total=total, pending_count=pending_count,
         approved_count=approved_count, rejected_count=rejected_count,
         f_employee=f_employee, f_type=f_type, f_status=f_status,
-        f_from=f_from, f_to=f_to)
+        f_from=f_from, f_to=f_to,
+                    active_section='hr')
 
 
 # ─── Notification Routes ───
@@ -7178,7 +7248,8 @@ def kra_admin_templates():
         ORDER BY t.fy_year DESC, t.name
     ''').fetchall()
     conn.close()
-    return render_template('kra_admin_templates.html', user=user, templates=templates)
+    return render_template('kra_admin_templates.html', user=user, templates=templates,
+                    active_section='kra')
 
 
 @app.route('/kra/admin/templates/create', methods=['GET', 'POST'])
@@ -7259,7 +7330,8 @@ def kra_admin_template_create():
     conn.close()
     now = datetime.now()
     fy_year = now.year if now.month >= 4 else now.year - 1
-    return render_template('kra_admin_template_create.html', user=user, categories=categories, fy_year=fy_year)
+    return render_template('kra_admin_template_create.html', user=user, categories=categories, fy_year=fy_year,
+                    active_section='kra')
 
 
 @app.route('/kra/admin/templates/<int:template_id>/edit', methods=['GET', 'POST'])
@@ -7349,7 +7421,8 @@ def kra_admin_template_edit(template_id):
     total_weight = sum(item['percentage_sharing'] for item in items)
     conn.close()
     return render_template('kra_admin_template_edit.html', user=user, template=template,
-                         categories=categories, items=items, total_weight=total_weight)
+                         categories=categories, items=items, total_weight=total_weight,
+                    active_section='kra')
 
 
 @app.route('/kra/admin/templates/<int:template_id>/duplicate')
@@ -7443,7 +7516,8 @@ def kra_admin_assignments():
 
     conn.close()
     return render_template('kra_admin_assignments.html', user=user, templates=templates,
-                         employees=employees, assignments=assignments, fy_year=fy_year)
+                         employees=employees, assignments=assignments, fy_year=fy_year,
+                    active_section='kra')
 
 
 @app.route('/kra/admin/assignments/<int:assignment_id>/remove')
@@ -7510,7 +7584,8 @@ def kra_admin_report():
 
     conn.close()
     return render_template('kra_admin_report.html', user=user, report_data=report_data,
-                         fy_year=fy_year, view_month=view_month, view_year=view_year)
+                         fy_year=fy_year, view_month=view_month, view_year=view_year,
+                    active_section='kra')
 
 
 # ─── Employee KRA Routes ───
@@ -7534,7 +7609,8 @@ def kra_dashboard():
     if not assignment:
         conn.close()
         return render_template('kra_dashboard.html', user=user, assignment=None, fy_year=fy_year,
-                             monthly_scores=[], items=[], categories=[])
+                             monthly_scores=[], items=[], categories=[],
+                    active_section='kra')
 
     items = conn.execute('''
         SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
@@ -7591,7 +7667,8 @@ def kra_dashboard():
     conn.close()
     return render_template('kra_dashboard.html', user=user, assignment=assignment,
                          fy_year=fy_year, monthly_scores=monthly_scores,
-                         items=items, cat_scores=cat_scores, categories=categories)
+                         items=items, cat_scores=cat_scores, categories=categories,
+                    active_section='kra')
 
 
 @app.route('/kra/rate/<int:month>/<int:year>', methods=['GET', 'POST'])
@@ -7677,7 +7754,8 @@ def kra_employee_rate(month, year):
     month_name = calendar.month_name[month]
     return render_template('kra_employee_rate.html', user=user, assignment=assignment,
                          items=items, existing_ratings=existing_ratings,
-                         month=month, year=year, month_name=month_name, notes=notes)
+                         month=month, year=year, month_name=month_name, notes=notes,
+                    active_section='kra')
 
 
 # ─── Manager KRA Rating Routes ───
@@ -7738,7 +7816,8 @@ def kra_manager_team():
 
     conn.close()
     return render_template('kra_manager_team.html', user=user, team_data=team_data,
-                         fy_year=fy_year, view_month=view_month, view_year=view_year)
+                         fy_year=fy_year, view_month=view_month, view_year=view_year,
+                    active_section='kra')
 
 
 @app.route('/kra/manager/rate/<int:employee_id>/<int:month>/<int:year>', methods=['GET', 'POST'])
@@ -7854,7 +7933,8 @@ def kra_manager_rate(employee_id, month, year):
     month_name = calendar.month_name[month]
     return render_template('kra_manager_rate.html', user=user, emp=emp, assignment=assignment,
                          items=items, existing_ratings=existing_ratings,
-                         month=month, year=year, month_name=month_name, notes=notes)
+                         month=month, year=year, month_name=month_name, notes=notes,
+                    active_section='kra')
 
 
 @app.route('/kra/report')
@@ -7876,7 +7956,8 @@ def kra_report():
     if not assignment:
         conn.close()
         return render_template('kra_report.html', user=user, assignment=None, fy_year=fy_year,
-                             monthly_data=[], avg_emp=0, avg_mgr=0)
+                             monthly_data=[], avg_emp=0, avg_mgr=0,
+                    active_section='kra')
 
     items = conn.execute('''
         SELECT ti.*, c.name as category_name, c.sort_order as cat_sort
@@ -7935,7 +8016,8 @@ def kra_report():
     conn.close()
     return render_template('kra_report.html', user=user, assignment=assignment,
                          fy_year=fy_year, monthly_data=monthly_data, items=items,
-                         avg_emp=avg_emp, avg_mgr=avg_mgr, rated_months=rated_months)
+                         avg_emp=avg_emp, avg_mgr=avg_mgr, rated_months=rated_months,
+                    active_section='kra')
 
 
 # ─── Budget & Finance Module ───
@@ -8465,7 +8547,8 @@ def finance_dashboard():
                            monthly_revenue_budget=monthly_revenue_budget,
                            monthly_revenue_actual=monthly_revenue_actual,
                            month_labels=month_labels,
-                           quarters=quarters, dept_data=dept_data, locked_months=locked_months)
+                           quarters=quarters, dept_data=dept_data, locked_months=locked_months,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/expenses')
@@ -8609,7 +8692,8 @@ def finance_expenses():
                            annual_budget_total=annual_budget_total,
                            annual_actual_total=annual_actual_total,
                            annual_variance_total=annual_variance_total,
-                           get_quarter_label=get_quarter_label)
+                           get_quarter_label=get_quarter_label,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/revenue')
@@ -8713,7 +8797,8 @@ def finance_revenue():
                            fy_total_actual=fy_total_actual,
                            fy_total_variance=fy_total_variance,
                            monthly_totals=monthly_totals,
-                           get_quarter_label=get_quarter_label)
+                           get_quarter_label=get_quarter_label,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/edit/<int:month>/<int:year>', methods=['GET', 'POST'])
@@ -9279,7 +9364,8 @@ def finance_edit_month(month, year):
                            department_rollup=department_rollup_list,
                            entry_map=entry_map,
                            is_locked=is_locked, get_fy_months=get_fy_months,
-                           projects=projects)
+                           projects=projects,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/lock/<int:month>/<int:year>', methods=['POST'])
@@ -9336,7 +9422,8 @@ def finance_report():
 
     return render_template('finance_report.html', user=user, fy_year=fy_year, fy_months=fy_months,
                            expense_cats=expense_cats, dept_cats=dept_cats, revenue_cats=revenue_cats,
-                           entry_map=entry_map, get_quarter_label=get_quarter_label)
+                           entry_map=entry_map, get_quarter_label=get_quarter_label,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/category/add', methods=['POST'])
@@ -9449,7 +9536,8 @@ def finance_settings():
     conn.close()
     return render_template('finance_settings.html', user=user, fy_year=fy_year,
                            expense_cats=expense_cats, dept_cats=dept_cats,
-                           revenue_cats=revenue_cats, departments=departments)
+                           revenue_cats=revenue_cats, departments=departments,
+                    active_section='finance')
 
 
 @app.route('/finance/budget/category/edit/<int:cat_id>', methods=['POST'])
@@ -9724,7 +9812,8 @@ def finance_project_pl():
                            untagged_data=untagged_data,
                            month_labels=[fm['label'] for fm in fy_months],
                            sales_rollup=sales_rollup,
-                           fx_rates=get_fx_rates_inr())
+                           fx_rates=get_fx_rates_inr(),
+                    active_section='finance')
 
 
 @app.route('/finance/products')
@@ -9797,7 +9886,8 @@ def finance_products():
 
     return render_template('finance_products.html', user=user, products=products,
                            summary=summary, fy_year=fy_year,
-                           fx_rates=get_fx_rates_inr())
+                           fx_rates=get_fx_rates_inr(),
+                    active_section='finance')
 
 
 # ─── Salary master list ───
@@ -9844,7 +9934,8 @@ def finance_salaries():
     total_monthly = sum(float(s['monthly_cost'] or 0) for s in salaries if int(s['is_active'] or 0) == 1)
     return render_template('finance_salaries.html', user=user, salaries=salaries,
                            projects=projects, unlinked_employees=unlinked_employees,
-                           total_monthly=total_monthly)
+                           total_monthly=total_monthly,
+                    active_section='finance')
 
 
 @app.route('/finance/salaries/sync-employees', methods=['POST'])
@@ -9970,7 +10061,8 @@ def finance_salaries_add():
         projects = []
     conn.close()
     return render_template('finance_salary_form.html', user=user, item=None, projects=projects,
-                           available_employees=available_employees, query_error=query_error, mode='add')
+                           available_employees=available_employees, query_error=query_error, mode='add',
+                    active_section='finance')
 
 
 @app.route('/finance/salaries/<int:item_id>/edit', methods=['GET', 'POST'])
@@ -10026,7 +10118,8 @@ def finance_salaries_edit(item_id):
     except Exception:
         projects = []
     conn.close()
-    return render_template('finance_salary_form.html', user=user, item=item, projects=projects, mode='edit')
+    return render_template('finance_salary_form.html', user=user, item=item, projects=projects, mode='edit',
+                    active_section='finance')
 
 
 @app.route('/finance/salaries/<int:item_id>/delete', methods=['POST'])
@@ -10084,7 +10177,8 @@ def finance_subscriptions():
         if f == 'one_time':   return 0.0
         return c
     total_monthly = sum(monthly_equiv(s['cost'], s['frequency']) for s in subs if int(s['is_active'] or 0) == 1)
-    return render_template('finance_subscriptions.html', user=user, subs=subs, total_monthly=total_monthly)
+    return render_template('finance_subscriptions.html', user=user, subs=subs, total_monthly=total_monthly,
+                    active_section='finance')
 
 
 @app.route('/finance/subscriptions/add', methods=['GET', 'POST'])
@@ -10137,7 +10231,8 @@ def finance_subscriptions_add():
     except Exception:
         departments = []
     conn.close()
-    return render_template('finance_subscription_form.html', user=user, item=None, projects=projects, departments=departments, mode='add')
+    return render_template('finance_subscription_form.html', user=user, item=None, projects=projects, departments=departments, mode='add',
+                    active_section='finance')
 
 
 @app.route('/finance/subscriptions/<int:item_id>/edit', methods=['GET', 'POST'])
@@ -10192,7 +10287,8 @@ def finance_subscriptions_edit(item_id):
     except Exception:
         departments = []
     conn.close()
-    return render_template('finance_subscription_form.html', user=user, item=item, projects=projects, departments=departments, mode='edit')
+    return render_template('finance_subscription_form.html', user=user, item=item, projects=projects, departments=departments, mode='edit',
+                    active_section='finance')
 
 
 @app.route('/finance/subscriptions/<int:item_id>/delete', methods=['POST'])
@@ -15513,7 +15609,8 @@ def _render_team_overview(user, role, year, month, quarter, month_label):
         return render_template('sales_crm_dashboard.html', user=user, role=role,
                                rows=[], totals=None, top_products=[], hot_leads=[],
                                news=[], year=year, month=month, quarter=quarter,
-                               month_label=month_label, is_admin=(role == 'admin'))
+                               month_label=month_label, is_admin=(role == 'admin'),
+                    active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     conn = get_db()
     rep_rows_raw = conn.execute(
@@ -15580,7 +15677,8 @@ def _render_team_overview(user, role, year, month, quarter, month_label):
                            rows=rows, totals=totals,
                            top_products=top_products, hot_leads=hot_leads,
                            news=news, year=year, month=month, quarter=quarter,
-                           month_label=month_label, is_admin=(role == 'admin'))
+                           month_label=month_label, is_admin=(role == 'admin'),
+                    active_section='sales')
 
 
 # ---- Sales dashboard (unified CRM landing) -----------------------------
@@ -15622,7 +15720,8 @@ def sales_dashboard():
             return render_template('sales_my.html', user=user, role=role, viewing='self',
                                    member=user, snap=snap, news=news,
                                    year=year, month=month, quarter=quarter,
-                                   month_label=month_label)
+                                   month_label=month_label,
+                    active_section='sales')
         # admin / viewer / manager
         return _render_team_overview(user, role, year, month, quarter, month_label)
     except Exception as e:
@@ -15667,7 +15766,8 @@ def sales_member_detail(employee_id):
                                viewing='other' if employee_id != user['id'] else 'self',
                                member=member, snap=snap, news=[],
                                year=year, month=month, quarter=quarter,
-                               month_label=month_label)
+                               month_label=month_label,
+                    active_section='sales')
     except Exception as e:
         logging.error(f"sales_member_detail ERROR: {e}\n{traceback.format_exc()}")
         flash(f'Sales member view error: {type(e).__name__}: {e}', 'error')
@@ -15737,7 +15837,8 @@ def sales_stages():
         'SELECT * FROM sales_lead_stages ORDER BY is_active DESC, sort_order, name'
     ).fetchall()
     conn.close()
-    return render_template('sales_stages.html', user=user, stages=stages)
+    return render_template('sales_stages.html', user=user, stages=stages,
+                    active_section='sales')
 
 
 # ---- Sales team admin --------------------------------------------------
@@ -15835,7 +15936,8 @@ def sales_team_admin():
     conn.close()
     return render_template('sales_team.html', user=user, members=members,
                            available_emps=available_emps,
-                           no_access_count=no_access_count)
+                           no_access_count=no_access_count,
+                    active_section='sales')
 
 
 # ---- Leads -------------------------------------------------------------
@@ -15847,7 +15949,8 @@ def sales_leads_list():
     role = get_sales_role(user)
     visible_ids = get_visible_sales_employee_ids(user)
     if not visible_ids:
-        return render_template('sales_leads.html', user=user, leads=[], stages=[], owners=[], role=role)
+        return render_template('sales_leads.html', user=user, leads=[], stages=[], owners=[], role=role,
+                    active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     f_stage = request.args.get('stage')
     f_owner = request.args.get('owner')
@@ -15890,7 +15993,8 @@ def sales_leads_list():
         leads_dicts.append(d)
     return render_template('sales_leads.html', user=user, leads=leads_dicts,
                            stages=stages, owners=owners, role=role,
-                           f_stage=f_stage, f_owner=f_owner, f_hot=f_hot)
+                           f_stage=f_stage, f_owner=f_owner, f_hot=f_hot,
+                    active_section='sales')
 
 
 @app.route('/sales/leads/add', methods=['GET', 'POST'])
@@ -16010,7 +16114,8 @@ def sales_leads_add():
     return render_template('sales_lead_form.html', user=user, lead=None, mode='add',
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
-                           already_has_closure=False)
+                           already_has_closure=False,
+                    active_section='sales')
 
 
 @app.route('/sales/leads/<int:lead_id>/edit', methods=['GET', 'POST'])
@@ -16156,7 +16261,8 @@ def sales_leads_edit(lead_id):
     return render_template('sales_lead_form.html', user=user, lead=lead, mode='edit',
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
-                           already_has_closure=already_has_closure)
+                           already_has_closure=already_has_closure,
+                    active_section='sales')
 
 
 @app.route('/sales/leads/<int:lead_id>/delete', methods=['POST'])
@@ -16207,7 +16313,8 @@ def sales_closures_list():
     role = get_sales_role(user)
     visible_ids = get_visible_sales_employee_ids(user)
     if not visible_ids:
-        return render_template('sales_closures.html', user=user, closures=[], owners=[], products=[], role=role)
+        return render_template('sales_closures.html', user=user, closures=[], owners=[], products=[], role=role,
+                    active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     now = datetime.now()
     year = int(request.args.get('year') or now.year)
@@ -16271,7 +16378,8 @@ def sales_closures_list():
                            total_revenue=total_revenue, total_margin=total_margin,
                            total_deals=total_deals, by_product=by_product,
                            year=year, month=month_filter,
-                           f_owner=f_owner, f_product=f_product, role=role)
+                           f_owner=f_owner, f_product=f_product, role=role,
+                    active_section='sales')
 
 
 @app.route('/sales/closures/<int:cid>/edit', methods=['GET', 'POST'])
@@ -16350,7 +16458,8 @@ def sales_closures_edit(cid):
         owners = []
     conn.close()
     return render_template('sales_closure_form.html', user=user, mode='edit', closure=closure,
-                           products=products, owners=owners, leads=[], role=role)
+                           products=products, owners=owners, leads=[], role=role,
+                    active_section='sales')
 
 
 @app.route('/sales/closures/<int:cid>/delete', methods=['POST'])
@@ -16436,7 +16545,8 @@ def sales_targets_view():
     if not visible_ids:
         conn.close()
         return render_template('sales_targets.html', user=user, role=role, year=year,
-                               team=[], can_edit=role in ('admin', 'manager'))
+                               team=[], can_edit=role in ('admin', 'manager'),
+                    active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     team = conn.execute(
         f'''SELECT e.id, e.name, e.emp_code, e.photo_url
@@ -16481,7 +16591,8 @@ def sales_targets_view():
         })
     conn.close()
     return render_template('sales_targets.html', user=user, role=role, year=year,
-                           team=team_data, can_edit=role in ('admin', 'manager'))
+                           team=team_data, can_edit=role in ('admin', 'manager'),
+                    active_section='sales')
 
 
 # ---- Call logs ---------------------------------------------------------
@@ -16545,7 +16656,8 @@ def sales_calls_view():
         return render_template('sales_calls.html', user=user, role=role,
                                year=year, month=month,
                                my_logs=[], rollup=[], owners=[],
-                               total_calls=0, total_minutes=0)
+                               total_calls=0, total_minutes=0,
+                    active_section='sales')
     placeholders = ','.join(['?'] * len(visible_ids))
     # Monthly rollup (per rep) — includes weekday-only stats for avg calculation
     rollup_raw = conn.execute(
@@ -16591,7 +16703,8 @@ def sales_calls_view():
     return render_template('sales_calls.html', user=user, role=role,
                            year=year, month=month,
                            my_logs=my_logs, rollup=rollup, owners=owners,
-                           total_calls=total_calls, total_minutes=total_minutes)
+                           total_calls=total_calls, total_minutes=total_minutes,
+                    active_section='sales')
 
 
 @app.route('/sales/calls/details')
@@ -16732,7 +16845,8 @@ def partners_list():
                          partner_types=get_lookup_options('partner_type'),
                          partner_statuses=get_lookup_options('partner_status'),
                          can_edit=can_edit,
-                         is_admin=is_admin)
+                         is_admin=is_admin,
+                    active_section='partners')
 
 
 @app.route('/partners/dashboard')
@@ -16803,7 +16917,8 @@ def partners_dashboard():
                          partner_types_data=partner_types_data,
                          top_cities=top_cities,
                          top_countries=top_countries,
-                         products_breakdown=products_breakdown)
+                         products_breakdown=products_breakdown,
+                    active_section='partners')
 
 
 @app.route('/partners/add', methods=['GET', 'POST'])
@@ -16874,7 +16989,8 @@ def partners_add():
                          record=None,
                          products=products,
                          partner_types=get_lookup_options('partner_type'),
-                         partner_statuses=get_lookup_options('partner_status'))
+                         partner_statuses=get_lookup_options('partner_status'),
+                    active_section='partners')
 
 
 @app.route('/partners/<int:pid>/edit', methods=['GET', 'POST'])
@@ -16956,7 +17072,8 @@ def partners_edit(pid):
                          linked_product_ids=linked_product_ids,
                          products=products,
                          partner_types=get_lookup_options('partner_type'),
-                         partner_statuses=get_lookup_options('partner_status'))
+                         partner_statuses=get_lookup_options('partner_status'),
+                    active_section='partners')
 
 
 @app.route('/partners/<int:pid>/delete', methods=['POST'])
@@ -17083,7 +17200,8 @@ def partner_invitations_list():
     ''').fetchall()
     conn.close()
 
-    return render_template('partner_invitations.html', invitations=invitations)
+    return render_template('partner_invitations.html', invitations=invitations,
+                    active_section='partners')
 
 
 @app.route('/partners/invitations', methods=['POST'])
@@ -17631,7 +17749,8 @@ def admin_partner_leads():
                          partners=partners,
                          lead_statuses=lead_statuses,
                          selected_partner=partner_id,
-                         selected_status=status_filter)
+                         selected_status=status_filter,
+                    active_section='partners')
 
 
 @app.route('/partners/b2b-leads', methods=['GET'])
@@ -17683,7 +17802,8 @@ def admin_partner_b2b_leads():
                          partners=partners,
                          lead_statuses=lead_statuses,
                          selected_partner=partner_id,
-                         selected_status=status_filter)
+                         selected_status=status_filter,
+                    active_section='partners')
 
 
 @app.route('/partners/leads/<int:lead_id>', methods=['GET'])
@@ -18122,11 +18242,13 @@ def upload_attendance():
         file = request.files.get('attendance_file')
         if not file or not file.filename:
             flash('Please select a file', 'error')
-            return render_template('upload_attendance.html', user=user)
+            return render_template('upload_attendance.html', user=user,
+                    active_section='hr')
 
         if not file.filename.lower().endswith(('.xls', '.xlsx')):
             flash('Only .xls and .xlsx files are supported', 'error')
-            return render_template('upload_attendance.html', user=user)
+            return render_template('upload_attendance.html', user=user,
+                    active_section='hr')
 
         import tempfile
 
@@ -18298,7 +18420,8 @@ def upload_attendance():
 
         return redirect(url_for('upload_attendance'))
 
-    return render_template('upload_attendance.html', user=user)
+    return render_template('upload_attendance.html', user=user,
+                    active_section='hr')
 
 
 @app.route('/time-log')
@@ -18638,7 +18761,8 @@ def time_log():
         month_name=month_names[month - 1],
         f_employee=f_employee,
         month_names=month_names,
-        last_report_sent=last_report_sent)
+        last_report_sent=last_report_sent,
+                    active_section='hr')
 
 
 def _build_and_send_attendance_report(employee_id, month, year):
@@ -19166,7 +19290,8 @@ def company_locations():
         if sel_state_id:
             sel_state = conn.execute("SELECT id, name FROM states WHERE id = ?", (int(sel_state_id),)).fetchone()
             cities = conn.execute("SELECT id, name, is_active FROM cities WHERE state_id = ? ORDER BY name", (int(sel_state_id),)).fetchall()
-        return render_template('company_locations.html', states=states, cities=cities, sel_state=sel_state)
+        return render_template('company_locations.html', states=states, cities=cities, sel_state=sel_state,
+                    active_section='company')
     except Exception as e:
         logging.error(f"company_locations: {e}")
         flash(f"Error: {e}", "danger")
@@ -19810,7 +19935,8 @@ def medical_predictor():
     except Exception as e:
         logging.error(f"medical_predictor route: {e}")
     return render_template('medical_predictor.html', user=user,
-                           states=states, years=year_list)
+                           states=states, years=year_list,
+                    active_section='colleges')
 
 
 @app.route('/api/predictor/import', methods=['POST'])
@@ -20153,8 +20279,8 @@ def colleges_list():
         fee_min=fee_min,
         fee_max=fee_max,
         rates=rates,
-        to_inr=_to_inr
-    )
+        to_inr=_to_inr,
+                    active_section='colleges')
 
 
 # ── College Profile Page ──
@@ -20219,8 +20345,8 @@ def college_profile(slug):
         to_inr=_to_inr,
         currency_sym=_currency_sym,
         cutoffs=cutoffs,
-        cutoff_years=cutoff_years
-    )
+        cutoff_years=cutoff_years,
+                    active_section='colleges')
 
 
 # ── Admin: Add/Edit College ──
@@ -20301,7 +20427,8 @@ def college_add():
     states = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY name").fetchall()
     conn.close()
     return render_template('college_form.html', college=None, mode='add',
-                           countries=countries, states=states)
+                           countries=countries, states=states,
+                    active_section='colleges')
 
 
 @app.route('/colleges/admin/edit/<int:college_id>', methods=['GET', 'POST'])
@@ -20377,7 +20504,8 @@ def college_edit(college_id):
     states = conn.execute("SELECT id, name FROM states WHERE is_active = TRUE ORDER BY name").fetchall()
     conn.close()
     return render_template('college_form.html', college=college, mode='edit',
-                           countries=countries, states=states)
+                           countries=countries, states=states,
+                    active_section='colleges')
 
 
 # ── Admin: Delete College ──
@@ -20945,7 +21073,8 @@ def section_visibility():
 
     return render_template('section_visibility.html', user=user, groups=groups,
                          partner_groups=partner_groups, employees=employees,
-                         departments=departments, partners=partners)
+                         departments=departments, partners=partners,
+                    active_section='company')
 
 
 @app.route('/api/section-permissions/<int:section_id>', methods=['PUT'])
@@ -22437,7 +22566,8 @@ def neetpg_admin():
     return render_template('neetpg_admin.html', pdfs=pdfs, leads=leads, lead_count=lead_count, user=user, analytics=analytics,
                            page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map,
                            doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests,
-                           recent_pdfs=recent_pdfs)
+                           recent_pdfs=recent_pdfs,
+                    active_section='colleges')
 
 
 @app.route('/admin/neetpg-pdfs/upload', methods=['POST'])
@@ -22727,7 +22857,7 @@ if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL
 @app.route('/landing-pages')
 @login_required
 def landing_pages():
-    return render_template('landing_pages.html')
+    return render_template('landing_pages.html', active_section='company')
 
 
 if __name__ == '__main__':

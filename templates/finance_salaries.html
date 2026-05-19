@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{% extends "finance_sidebar_base.html" %}
 {% block title %}Salaries — Finance{% endblock %}
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .fin-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.2rem; flex-wrap: wrap; gap: 0.8rem; }
     .fin-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
@@ -25,7 +25,7 @@
     .empty { padding: 2rem; text-align: center; color: var(--gray-400); }
 </style>
 {% endblock %}
-{% block content %}
+{% block section_content %}
 <div style="max-width: 1100px; margin: 0 auto; padding: 1.5rem;">
     <div class="fin-header">
         <div>

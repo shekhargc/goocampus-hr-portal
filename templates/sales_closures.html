@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{% extends "sales_sidebar_base.html" %}
 {% block title %}Closures - Sales CRM{% endblock %}
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
 .cls-drawer-overlay { position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:998;opacity:0;pointer-events:none;transition:opacity 0.2s ease; }
 .cls-drawer-overlay.open { opacity:1;pointer-events:auto; }
@@ -20,7 +20,7 @@
 .cls-row:hover { background:var(--orange-light); }
 </style>
 {% endblock %}
-{% block content %}
+{% block section_content %}
 <div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">

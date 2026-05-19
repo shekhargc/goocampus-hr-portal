@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "colleges_sidebar_base.html" %}
 {% block title %}NEET PG PDF Management{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
 <style>
     .np-header {
@@ -411,7 +411,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="np-header">
     <div>
         <h1>NEET PG 2025 — PDF Management</h1>
@@ -829,7 +829,7 @@
 <div class="np-toast" id="npToast">Saved</div>
 {% endblock %}
 
-{% block extra_js %}
+{% block section_extra_js %}
 <script>
 function npShowToast(msg) {
     var t = document.getElementById('npToast');

@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{% extends "sales_sidebar_base.html" %}
 {% block title %}{% if viewing == 'other' %}{{ member.name }} — Sales{% else %}My Sales{% endif %} - GooCampus HR Portal{% endblock %}
-{% block content %}
+{% block section_content %}
 <div style="max-width:1400px;margin:0 auto;padding:2rem 1.5rem;">
 
     {% if viewing == 'other' %}

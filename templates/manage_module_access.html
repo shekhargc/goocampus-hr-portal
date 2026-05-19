@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "sales_sidebar_base.html" %}
 
 {% block title %}Module Access Management - GooCampus HR Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .page-header { margin-bottom: 2.5rem; }
     .page-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 0.4rem; }
@@ -158,7 +158,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 {% set dept_colors = {'Admin':'#6366f1','Operations':'#0891b2','Marketing':'#d946ef','Sales':'#f59e0b','Senior Management':'#64748b','HR':'#10b981','Management':'#1a56db'} %}
 
 <div class="page-header">

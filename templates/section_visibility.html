@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "company_sidebar_base.html" %}
 {% block title %}Section Visibility Control{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .sv-header {
         display: flex;
@@ -381,7 +381,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="sv-header">
     <div>
         <h1>Section Visibility Control</h1>
@@ -606,7 +606,7 @@
 
 {% endblock %}
 
-{% block extra_js %}
+{% block section_extra_js %}
 <script>
 var ALL_EMPLOYEES = {{ employees|tojson }};
 var ALL_DEPARTMENTS = {{ departments|tojson }};

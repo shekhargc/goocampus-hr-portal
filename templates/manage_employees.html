@@ -1,8 +1,8 @@
-{% extends "base.html" %}
+{% extends "hr_sidebar_base.html" %}
 
 {% block title %}Manage Employees - GooCampus HR Portal{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .emp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(380px, 1fr)); gap: 1.5rem; }
     .emp-card {
@@ -93,7 +93,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div class="page-top">
     <div class="page-top-title">
         <h1>Employees</h1>

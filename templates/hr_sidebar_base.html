@@ -1,0 +1,150 @@
+{% extends "section_sidebar_base.html" %}
+
+{% block sidebar_title %}HR{% endblock %}
+
+{% block sidebar_nav %}
+{% if session.get('is_admin') %}
+    {# ── Admin View ── #}
+    <a href="/hr-dashboard" class="sec-nav-item" data-tooltip="HR Dashboard">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+        <span class="sec-nav-text">HR Dashboard</span>
+    </a>
+    <a href="/admin/manage-employees" class="sec-nav-item" data-tooltip="Employees">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+        <span class="sec-nav-text">Employees</span>
+    </a>
+    <a href="/leave-info" class="sec-nav-item" data-tooltip="Leave Info">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+        <span class="sec-nav-text">Leave Info</span>
+    </a>
+
+    <div class="sec-nav-group-label">Leave Management</div>
+    <a href="/admin/add-leave" class="sec-nav-item" data-tooltip="Add Leave (Employee)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span>
+        <span class="sec-nav-text">Add Leave (Employee)</span>
+    </a>
+    <a href="/admin/bulk-leave" class="sec-nav-item" data-tooltip="Bulk Leave">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span>
+        <span class="sec-nav-text">Bulk Leave</span>
+    </a>
+    <a href="/admin/leave-applications" class="sec-nav-item" data-tooltip="All Leave Applications">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+        <span class="sec-nav-text">All Leave Applications</span>
+    </a>
+    <a href="/admin/pending-approvals" class="sec-nav-item" data-tooltip="Pending Approvals">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+        <span class="sec-nav-text">Pending Approvals</span>
+    </a>
+
+    <div class="sec-nav-group-label">Reports</div>
+    <a href="/admin/employee-leave-report" class="sec-nav-item" data-tooltip="Employee Leave Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="sec-nav-text">Employee Leave Report</span>
+    </a>
+    <a href="/admin/monthly-report" class="sec-nav-item" data-tooltip="Monthly Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/></svg></span>
+        <span class="sec-nav-text">Monthly Report</span>
+    </a>
+    <a href="/admin/quarterly-report" class="sec-nav-item" data-tooltip="Quarterly Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg></span>
+        <span class="sec-nav-text">Quarterly Report</span>
+    </a>
+    <a href="/admin/annual-report" class="sec-nav-item" data-tooltip="Annual Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        <span class="sec-nav-text">Annual Report</span>
+    </a>
+
+    <div class="sec-nav-group-label">Attendance</div>
+    <a href="/time-log" class="sec-nav-item" data-tooltip="Time Log">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+        <span class="sec-nav-text">Time Log</span>
+    </a>
+    <a href="/admin/upload-attendance" class="sec-nav-item" data-tooltip="Upload Attendance">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+        <span class="sec-nav-text">Upload Attendance</span>
+    </a>
+
+    <div class="sec-nav-group-label">Work From Home</div>
+    <a href="/wfh/approvals" class="sec-nav-item" data-tooltip="WFH Approvals">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        <span class="sec-nav-text">WFH Approvals</span>
+    </a>
+
+{% else %}
+    {# ── Employee View ── #}
+    <a href="/leave-info" class="sec-nav-item" data-tooltip="Leave Info">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+        <span class="sec-nav-text">Leave Info</span>
+    </a>
+
+    <div class="sec-nav-group-label">Leave</div>
+    <a href="/apply-leave" class="sec-nav-item" data-tooltip="Apply Leave">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span>
+        <span class="sec-nav-text">Apply Leave</span>
+    </a>
+    <a href="/apply-late-leave" class="sec-nav-item" data-tooltip="Late Leave">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 8 14"/></svg></span>
+        <span class="sec-nav-text">Late Leave</span>
+    </a>
+    <a href="/my-applications" class="sec-nav-item" data-tooltip="My Applications">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+        <span class="sec-nav-text">My Applications</span>
+    </a>
+    {% if is_manager %}
+    <a href="/team-applications" class="sec-nav-item" data-tooltip="Team Applications">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+        <span class="sec-nav-text">Team Applications</span>
+    </a>
+    <a href="/approvals" class="sec-nav-item" data-tooltip="Approvals">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+        <span class="sec-nav-text">Approvals</span>
+    </a>
+    {% endif %}
+
+    <div class="sec-nav-group-label">Reports</div>
+    <a href="/my-leave-report" class="sec-nav-item" data-tooltip="My Leave Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
+        <span class="sec-nav-text">My Leave Report</span>
+    </a>
+    <a href="/reports/monthly" class="sec-nav-item" data-tooltip="Monthly Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><line x1="8" y1="14" x2="8" y2="14.01"/><line x1="12" y1="14" x2="12" y2="14.01"/><line x1="16" y1="14" x2="16" y2="14.01"/></svg></span>
+        <span class="sec-nav-text">Monthly Report</span>
+    </a>
+    <a href="/reports/quarterly" class="sec-nav-item" data-tooltip="Quarterly Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.21 15.89A10 10 0 118 2.83"/><path d="M22 12A10 10 0 0012 2v10z"/></svg></span>
+        <span class="sec-nav-text">Quarterly Report</span>
+    </a>
+    <a href="/reports/annual" class="sec-nav-item" data-tooltip="Annual Report">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
+        <span class="sec-nav-text">Annual Report</span>
+    </a>
+    {% if is_manager %}
+    <a href="/reports/team" class="sec-nav-item" data-tooltip="Team Reports">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><line x1="22" y1="8" x2="22" y2="14"/><line x1="19" y1="11" x2="25" y2="11"/></svg></span>
+        <span class="sec-nav-text">Team Reports</span>
+    </a>
+    {% endif %}
+
+    <div class="sec-nav-group-label">Attendance</div>
+    <a href="/time-log" class="sec-nav-item" data-tooltip="Time Log">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+        <span class="sec-nav-text">Time Log</span>
+    </a>
+
+    <div class="sec-nav-group-label">Work From Home</div>
+    <a href="/wfh/apply" class="sec-nav-item" data-tooltip="Apply WFH">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
+        <span class="sec-nav-text">Apply WFH</span>
+    </a>
+    <a href="/wfh/my-requests" class="sec-nav-item" data-tooltip="My WFH Requests">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+        <span class="sec-nav-text">My WFH Requests</span>
+    </a>
+    {% if is_manager %}
+    <a href="/wfh/approvals" class="sec-nav-item" data-tooltip="WFH Approvals">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+        <span class="sec-nav-text">WFH Approvals</span>
+    </a>
+    {% endif %}
+{% endif %}
+{% endblock %}

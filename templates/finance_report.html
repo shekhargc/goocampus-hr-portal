@@ -1,7 +1,7 @@
-{% extends "base.html" %}
+{% extends "finance_sidebar_base.html" %}
 {% block title %}Annual Budget Report - FY {{ fy_year }}{% endblock %}
 
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .finance-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem; }
     .finance-header h1 { font-size: 1.5rem; font-weight: 700; color: var(--navy); margin: 0; }
@@ -37,7 +37,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
 
     <div class="finance-header">

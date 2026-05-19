@@ -1,6 +1,6 @@
-{% extends "base.html" %}
+{% extends "sales_sidebar_base.html" %}
 {% block title %}Meeting Details - GooCampus HR Portal{% endblock %}
-{% block extra_css %}
+{% block section_extra_css %}
 <style>
     .page-header { margin-bottom: 2rem; display: flex; align-items: center; gap: 1rem; }
     .page-header h1 { font-size: 2rem; font-weight: 700; color: var(--navy); }
@@ -63,7 +63,7 @@
 </style>
 {% endblock %}
 
-{% block content %}
+{% block section_content %}
 <a href="/b2b" class="back-link" style="margin-bottom: 1rem; display: inline-flex;">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
     Back to Meetings
