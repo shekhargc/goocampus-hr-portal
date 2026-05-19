@@ -343,10 +343,10 @@
         </div>
       </div>
 
-      <!-- Counsellor & Lead Card -->
+      <!-- Counsellor & Lead Status Card -->
       <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">
-          Counsellor & Lead
+          Counsellor & Lead Status
         </h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
@@ -365,6 +365,15 @@
             <span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span>
             <span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span>
           </div>
+        </div>
+      </div>
+
+      <!-- Lead Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">
+          Lead Details
+        </h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Lead Source:</span>
             <span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span>
@@ -382,7 +391,7 @@
             <span style="color:var(--navy);font-weight:600;">{{ client.australia_referral or '—' }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Operations Referral:</span>
+            <span style="color:var(--gray-600);font-weight:500;">Operations Team Referral:</span>
             <span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span>
           </div>
         </div>

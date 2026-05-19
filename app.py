@@ -10938,10 +10938,13 @@ def ensure_ops_tables():
                 'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage'],
                 'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
                 'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'NEET India', 'Australia'],
-                'plan_type': ['Full Spon', 'Integrated Consulting', '2022 Integrated Consulting', '2022 Integrated Consulting - Dual', '2022 Premium Consulting', 'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025'],
+                'plan_type': ['Full Spon', 'Integrated Consulting', 'Integrated Consulting - Dual', '2022 Integrated Consulting', '2022 Integrated Consulting - Dual', '2022 Premium Consulting', '2022 Premium Consulting - Dual', 'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2024 - Dual', 'PGCP 2025'],
                 'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
                 'english_training': ['IELTS', 'OET'],
-                'lead_source': ['Social Media', 'Website', 'Referral', 'Walk-in', 'Event', 'Other'],
+                'lead_source': ['CRM Lead', 'LandLine', 'Social Media DM or Ping', 'UK Client Referral', 'Australia Client Referral', 'Portfolio CLient Referral', 'Not Sure'],
+                'operations_referral': ['Yes', 'No'],
+                'upgraded_to': ['PCP 2022', 'PGCP 2023', 'PGCP 2024'],
+                'counsellor': ['Ashwini', 'Chandan', 'Charan', 'Gopikrishnan', 'Hardik', 'Jeswin Shaju', 'Khateja', 'Kiran', 'Monisha', 'Pollabi Nag', 'Rahul', 'Rajesh', 'Rakshith C', 'Ralph', 'Riza', 'Robin', 'Sindhu', 'Tojo', 'Uzair', 'Vipin'],
                 # Coaching
                 'coaching_course_type': ['Full Course', 'Crash Course'],
                 'coaching_status': ['On Going', 'Completed'],
@@ -11264,13 +11267,17 @@ def ensure_ops_tables():
             new_plan = conn.execute(
                 "SELECT value FROM lookup_options WHERE category = 'plan_type' AND value = 'PGCP 2025'"
             ).fetchone()
-            if old_plan or not new_plan:
+            # Also check for missing dual options
+            dual_check = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'plan_type' AND value = 'PGCP 2024 - Dual'"
+            ).fetchone()
+            if old_plan or not new_plan or not dual_check:
                 conn.execute("DELETE FROM lookup_options WHERE category = 'plan_type'")
                 for sort_idx, val in enumerate([
-                    'Full Spon', 'Integrated Consulting',
+                    'Full Spon', 'Integrated Consulting', 'Integrated Consulting - Dual',
                     '2022 Integrated Consulting', '2022 Integrated Consulting - Dual',
-                    '2022 Premium Consulting',
-                    'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025'
+                    '2022 Premium Consulting', '2022 Premium Consulting - Dual',
+                    'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2024 - Dual', 'PGCP 2025'
                 ], 1):
                     conn.execute(
                         "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
@@ -11314,6 +11321,102 @@ def ensure_ops_tables():
             except Exception:
                 pass
             logging.error(f"switched_program migration: {e}")
+
+        # Migration: force-replace lead_source options to match Zoho form
+        try:
+            old_ls = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'lead_source' AND value = 'Social Media'"
+            ).fetchone()
+            new_ls = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'lead_source' AND value = 'CRM Lead'"
+            ).fetchone()
+            if old_ls or not new_ls:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'lead_source'")
+                for sort_idx, val in enumerate([
+                    'CRM Lead', 'LandLine', 'Social Media DM or Ping',
+                    'UK Client Referral', 'Australia Client Referral',
+                    'Portfolio CLient Referral', 'Not Sure'
+                ], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('lead_source', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Updated lead_source options to match Zoho form")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"lead_source migration: {e}")
+
+        # Migration: force-replace operations_referral options to Yes/No
+        try:
+            ops_ref_check = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'operations_referral' AND value = 'Yes'"
+            ).fetchone()
+            if not ops_ref_check:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'operations_referral'")
+                for sort_idx, val in enumerate(['Yes', 'No'], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('operations_referral', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Added operations_referral Yes/No options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"operations_referral migration: {e}")
+
+        # Migration: seed upgraded_to options
+        try:
+            ut_check = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'upgraded_to' AND value = 'PGCP 2024'"
+            ).fetchone()
+            if not ut_check:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'upgraded_to'")
+                for sort_idx, val in enumerate(['PCP 2022', 'PGCP 2023', 'PGCP 2024'], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('upgraded_to', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Added upgraded_to options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"upgraded_to migration: {e}")
+
+        # Migration: seed counsellor options
+        try:
+            counsellor_check = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'counsellor' AND value = 'Ashwini'"
+            ).fetchone()
+            if not counsellor_check:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'counsellor'")
+                for sort_idx, val in enumerate([
+                    'Ashwini', 'Chandan', 'Charan', 'Gopikrishnan', 'Hardik',
+                    'Jeswin Shaju', 'Khateja', 'Kiran', 'Monisha', 'Pollabi Nag',
+                    'Rahul', 'Rajesh', 'Rakshith C', 'Ralph', 'Riza',
+                    'Robin', 'Sindhu', 'Tojo', 'Uzair', 'Vipin'
+                ], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('counsellor', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Added counsellor options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"counsellor migration: {e}")
 
         conn.close()
     except Exception as e:
@@ -11620,7 +11723,7 @@ def ops_plab_pathway_dashboard():
 
 
 CATEGORY_GROUPS = {
-    'Client & Pipeline': ['plab_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source'],
+    'Client & Pipeline': ['plab_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source', 'operations_referral', 'upgraded_to', 'counsellor'],
     'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'ielts_vendor', 'oet_vendor', 'plab1_partner', 'plab2_vendor', 'other_training_vendor', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_english_exam', 'gmc_license_status'],
@@ -11645,6 +11748,8 @@ CATEGORY_LABELS = {
     'joined_stage': 'Joined Stages',
     'switched_program': 'Switched Programs',
     'lead_source': 'Lead Sources',
+    'operations_referral': 'Operations Team Referral',
+    'counsellor': 'Counsellors',
     'coaching_course_type': 'Course Types',
     'coaching_status': 'Coaching Statuses',
     'coaching_method': 'Coaching Methods',
@@ -12092,6 +12197,8 @@ def ops_plab_add():
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
+                           operations_referrals=get_lookup_options('operations_referral'),
+                           counsellors=get_lookup_options('counsellor'),
                            active_ops_page='plab')
 
 
@@ -12190,6 +12297,8 @@ def ops_plab_edit(client_id):
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
+                           operations_referrals=get_lookup_options('operations_referral'),
+                           counsellors=get_lookup_options('counsellor'),
                            active_ops_page='plab')
 
 
@@ -18496,7 +18605,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v7_all_51_fields_referrals'
+        IMPORT_VERSION = 'v8_zoho_form_match'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()

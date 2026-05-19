@@ -223,12 +223,17 @@
             </div>
             {% endif %}
 
-            <!-- ===== COUNSELLOR & LEAD ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor & Lead</h3>
+            <!-- ===== COUNSELLOR & LEAD STATUS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor & Lead Status</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
-                    <input type="text" name="counsellor" value="{{ item.counsellor or '' }}" placeholder="Counsellor name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="counsellor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for c in counsellors %}
+                        <option value="{{ c }}" {% if item and item.counsellor == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor Email</label>
@@ -241,54 +246,61 @@
                 <input type="tel" name="counsellor_number" value="{{ item.counsellor_number or '' }}" placeholder="Phone number" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
             </div>
 
+            <!-- ===== LEAD DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Lead Details</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source <span style="color:#e53e3e;">*</span></label>
+                <select name="lead_source" id="lead_source" onchange="toggleReferralFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">— Select —</option>
+                    {% for source in lead_sources %}
+                    <option value="{{ source }}" {% if item and item.lead_source == source %}selected{% endif %}>{{ source }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div id="uk_referral_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">UK Client Referral</label>
+                    <input type="text" name="referral_type" value="{{ item.referral_type or '' }}" placeholder="Enter referral name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div id="portfolio_referral_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Portfolio Client Referral</label>
+                    <input type="text" name="portfolio_referral" value="{{ item.portfolio_referral or '' }}" placeholder="Enter referral name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div id="australia_referral_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Australia Client Referral</label>
+                    <input type="text" name="australia_referral" value="{{ item.australia_referral or '' }}" placeholder="Enter referral name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source</label>
-                    <select name="lead_source" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Operations Team Referral <span style="color:#e53e3e;">*</span></label>
+                    <select name="operations_referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">— Select —</option>
-                        {% for source in lead_sources %}
-                        <option value="{{ source }}" {% if item and item.lead_source == source %}selected{% endif %}>{{ source }}</option>
+                        {% for ref in operations_referrals %}
+                        <option value="{{ ref }}" {% if item and item.operations_referral == ref %}selected{% endif %}>{{ ref }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referral Type</label>
-                    <input type="text" name="referral_type" value="{{ item.referral_type or '' }}" placeholder="Type of referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
             </div>
 
+            <!-- ===== PACKAGE & INSTALLMENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package & Installment</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Portfolio Client Referral</label>
-                    <input type="text" name="portfolio_referral" value="{{ item.portfolio_referral or '' }}" placeholder="Portfolio referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Australia Client Referral</label>
-                    <input type="text" name="australia_referral" value="{{ item.australia_referral or '' }}" placeholder="Australia referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Operations Referral</label>
-                <input type="text" name="operations_referral" value="{{ item.operations_referral or '' }}" placeholder="Internal reference" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-            </div>
-
-            <!-- ===== PACKAGE & INSTALLMENTS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package & Installments</h3>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package Amount</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package (Mention Plab Actual Package) <span style="color:#e53e3e;">*</span></label>
                     <input type="number" name="package_amount" id="packageAmount" value="{{ item.package_amount or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Discount Allowed</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Discount Allowed (Discount Offer + Stage Discount)</label>
                     <input type="number" name="discount_allowed" id="discountAllowed" value="{{ item.discount_allowed or '' }}" min="0" step="0.01" placeholder="0.00" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
             </div>
 
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Package Notes</label>
-                <textarea name="additional_package_notes" rows="2" maxlength="500" placeholder="Optional notes about package" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.additional_package_notes or '' }}</textarea>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes (Discount Given, Package reduced reason)</label>
+                <textarea name="additional_package_notes" rows="2" maxlength="500" placeholder="Discount given, package reduced reason" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.additional_package_notes or '' }}</textarea>
             </div>
 
             <div style="margin-bottom:1.1rem;padding:0.8rem;background:var(--gray-50);border-radius:8px;border:1px solid var(--gray-200);">
@@ -590,5 +602,28 @@ function toggleSwitchedProgram() {
         wrap.style.display = 'none';
     }
 }
+
+function toggleReferralFields() {
+    const ls = document.getElementById('lead_source');
+    if (!ls) return;
+    const val = ls.value;
+    const ukWrap = document.getElementById('uk_referral_wrapper');
+    const portfolioWrap = document.getElementById('portfolio_referral_wrapper');
+    const australiaWrap = document.getElementById('australia_referral_wrapper');
+
+    // Show relevant referral field based on Lead Source selection
+    // UK Client Referral visible when Lead Source = 'UK Client Referral'
+    if (ukWrap) ukWrap.style.display = (val === 'UK Client Referral') ? '' : 'none';
+    // Portfolio Client Referral visible when Lead Source = 'Portfolio CLient Referral'
+    if (portfolioWrap) portfolioWrap.style.display = (val === 'Portfolio CLient Referral') ? '' : 'none';
+    // Australia Client Referral visible when Lead Source = 'Australia Client Referral'
+    if (australiaWrap) australiaWrap.style.display = (val === 'Australia Client Referral') ? '' : 'none';
+}
+
+// Run on page load to set initial state
+document.addEventListener('DOMContentLoaded', function() {
+    toggleReferralFields();
+    toggleSwitchedProgram();
+});
 </script>
 {% endblock %}
