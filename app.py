@@ -10935,7 +10935,7 @@ def ensure_ops_tables():
                 # Client/Pipeline
                 'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage'],
                 'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
-                'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'Neet India', 'Australia'],
+                'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'NEET India', 'Australia'],
                 'plan_type': ['Full Spon', 'Integrated Consulting', '2022 Integrated Consulting', '2022 Integrated Consulting - Dual', '2022 Premium Consulting', 'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025'],
                 'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
                 'english_training': ['IELTS', 'OET'],
@@ -11269,13 +11269,20 @@ def ensure_ops_tables():
 
         # Migration: ensure switched_program options exist and match Excel values
         try:
+            # Check for old 'Neet India' (wrong case) or missing 'NEET India' (correct case)
+            old_neet = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'switched_program' AND value = 'Neet India'"
+            ).fetchone()
+            correct_neet = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'switched_program' AND value = 'NEET India'"
+            ).fetchone()
             sp_check = conn.execute(
                 "SELECT value FROM lookup_options WHERE category = 'switched_program' AND value = 'Australia'"
             ).fetchone()
-            if not sp_check:
+            if old_neet or not sp_check or not correct_neet:
                 conn.execute("DELETE FROM lookup_options WHERE category = 'switched_program'")
                 for sort_idx, val in enumerate([
-                    'BAPIO Program', 'IMT', 'USMLE Pathway', 'Neet India', 'Australia'
+                    'BAPIO Program', 'IMT', 'USMLE Pathway', 'NEET India', 'Australia'
                 ], 1):
                     conn.execute(
                         "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
