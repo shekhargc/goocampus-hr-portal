@@ -11211,6 +11211,41 @@ def ensure_ops_tables():
 
 # ── Stages & statuses for dropdowns ──
 PLAB_STAGES = ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage', 'Job by GC', 'Job by Own']
+
+# Stage-wise follow-up intervals (in days) — how often each stage should be contacted
+STAGE_FOLLOWUP_DAYS = {
+    'English Stage': 7,
+    'PLAB 1 Stage': 15,
+    'PLAB 2 Stage': 15,
+    'Job Stage': 30,
+    'Job by GC': 30,
+    'Job by Own': 30,
+}
+STAGE_FOLLOWUP_DEFAULT = 15  # fallback for unknown/empty stages
+
+
+def get_stage_interval(stage):
+    """Return follow-up interval in days for a given stage."""
+    return STAGE_FOLLOWUP_DAYS.get(stage or '', STAGE_FOLLOWUP_DEFAULT)
+
+
+def categorise_by_stage(days_since, stage):
+    """Return priority category based on stage-specific interval.
+    Multipliers: OK (<1x), Attention (1x–1.5x), Overdue (1.5x–2x), Critical (2x+).
+    """
+    interval = get_stage_interval(stage)
+    if days_since is None:
+        return 'never'
+    if days_since >= interval * 2:
+        return 'critical'
+    elif days_since >= int(interval * 1.5):
+        return 'overdue'
+    elif days_since >= interval:
+        return 'attention'
+    elif days_since >= max(1, interval // 2):
+        return 'ok'
+    else:
+        return 'recent'
 ACCOUNT_STATUSES = ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
 PLAN_TYPES = [
     'Full Spon', 'Integrated Consulting',
@@ -12892,7 +12927,7 @@ def ops_call_notes_list():
         added_by_options=added_by_options, has_filters=has_filters,
         page=page, per_page=per_page, total_count=total_count, total_pages=total_pages,
         tracker_data=[], summary={'never':0,'critical':0,'overdue':0,'attention':0,'ok':0,'recent':0,'total':0},
-        gap_filter='', search_q='',
+        gap_filter='', search_q='', stage_filter='', stage_counts={}, stage_intervals=STAGE_FOLLOWUP_DAYS,
         active_tab='notes', active_ops_page='call-notes')
 
 
@@ -12928,16 +12963,15 @@ def ops_client_search_api():
 @app.route('/operations/call-notes/tracker')
 @admin_required
 def ops_call_notes_tracker():
-    """Client Follow-up Tracker: shows all 'In Process' clients and their contact status."""
+    """Client Follow-up Tracker: shows all 'In Process' clients with stage-based priority."""
     from datetime import date
 
     conn = get_db()
     search_q = request.args.get('q', '').strip()
     gap_filter = request.args.get('gap', '').strip()
+    stage_filter = request.args.get('stage', '').strip()
 
     try:
-        # Efficient single query with aggregation
-        # Only count contacted_status='Yes' notes for last contact date
         sql = '''
             SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
                    p.current_stage, p.mobile, p.account_status,
@@ -12952,6 +12986,10 @@ def ops_call_notes_tracker():
         '''
         params = []
 
+        if stage_filter:
+            sql += " AND p.current_stage = ?"
+            params.append(stage_filter)
+
         if search_q:
             sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR (p.prefix || ' ' || p.first_name || ' ' || p.last_name) ILIKE ?)"
             params.extend([f'%{search_q}%'] * 4)
@@ -12964,53 +13002,39 @@ def ops_call_notes_tracker():
 
         rows = conn.execute(sql, params).fetchall()
 
-        # Calculate category and days_since for each row
         today = date.today()
         tracker_data = []
         category_counts = {
-            'never': 0,
-            'critical': 0,
-            'overdue': 0,
-            'attention': 0,
-            'ok': 0,
-            'recent': 0
+            'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0
         }
+        # Count clients per stage for stage filter badges
+        stage_counts = {}
 
         for row in rows:
             last_call_date = row['last_call_date']
-            note_count = row['note_count']
             contacted_count = row['contacted_count'] or 0
             not_contacted_count = row['not_contacted_count'] or 0
             last_contact_type = row['last_contact_type'] or ''
+            client_stage = row['current_stage'] or ''
+
+            # Count stages (before filtering by gap)
+            stage_counts[client_stage] = stage_counts.get(client_stage, 0) + 1
 
             if not last_call_date or contacted_count == 0:
                 category = 'never'
                 days_since = None
             else:
-                # Parse the date string
                 try:
                     if isinstance(last_call_date, str):
                         last_call = datetime.strptime(last_call_date, '%Y-%m-%d').date()
                     else:
                         last_call = last_call_date if isinstance(last_call_date, date) else last_call_date.date()
                 except:
-                    category = 'never'
-                    days_since = None
                     last_call = None
 
                 if last_call:
                     days_since = (today - last_call).days
-
-                    if days_since >= 60:
-                        category = 'critical'
-                    elif days_since >= 45:
-                        category = 'overdue'
-                    elif days_since >= 30:
-                        category = 'attention'
-                    elif days_since >= 15:
-                        category = 'ok'
-                    else:
-                        category = 'recent'
+                    category = categorise_by_stage(days_since, client_stage)
                 else:
                     category = 'never'
                     days_since = None
@@ -13018,26 +13042,27 @@ def ops_call_notes_tracker():
             category_counts[category] += 1
 
             client_name = f"{row['prefix']} {row['first_name']} {row['last_name']}" if row['prefix'] else f"{row['first_name']} {row['last_name']}"
+            interval = get_stage_interval(client_stage)
 
             tracker_data.append({
                 'registration_number': row['registration_number'],
                 'name': client_name.strip(),
-                'stage': row['current_stage'],
+                'stage': client_stage,
                 'mobile': row['mobile'],
                 'last_call_date': last_call_date,
-                'note_count': note_count,
+                'note_count': row['note_count'],
                 'contacted_count': contacted_count,
                 'not_contacted_count': not_contacted_count,
                 'last_contact_type': last_contact_type,
                 'days_since': days_since,
-                'category': category
+                'category': category,
+                'followup_interval': interval,
+                'days_overdue': max(0, (days_since or 0) - interval) if days_since is not None else None
             })
 
-        # Apply gap filter if specified
         if gap_filter:
             tracker_data = [d for d in tracker_data if d['category'] == gap_filter]
 
-        # Summary stats
         summary = {
             'never': category_counts['never'],
             'critical': category_counts['critical'],
@@ -13051,15 +13076,15 @@ def ops_call_notes_tracker():
     except Exception as e:
         logging.error(f"ops_call_notes_tracker: {e}")
         tracker_data = []
-        summary = {
-            'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0
-        }
+        summary = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0}
+        stage_counts = {}
 
     conn.close()
 
     return render_template('ops_call_notes_list.html',
         tracker_data=tracker_data, summary=summary,
-        gap_filter=gap_filter, search_q=search_q,
+        gap_filter=gap_filter, search_q=search_q, stage_filter=stage_filter,
+        stage_counts=stage_counts, stage_intervals=STAGE_FOLLOWUP_DAYS,
         records=[], added_by_options=[], has_filters=False,
         reg='', client_name='', added_by_filter='', note_search='',
         page=1, per_page=50, total_count=0, total_pages=0,
@@ -13069,16 +13094,15 @@ def ops_call_notes_tracker():
 @app.route('/operations/call-notes/not-contacted')
 @admin_required
 def ops_call_notes_not_contacted():
-    """Not Contacted Tracker: clients with recent 'Not Contacted' notes, prioritised by last successful contact."""
+    """Not Contacted Tracker: clients with 'Not Contacted' notes, stage-based priority."""
     from datetime import date
 
     conn = get_db()
     search_q = request.args.get('q', '').strip()
     gap_filter = request.args.get('gap', '').strip()
+    stage_filter = request.args.get('stage', '').strip()
 
     try:
-        # Find clients who have at least one 'Not Contacted' note
-        # Priority is based on how long since their last SUCCESSFUL contact
         sql = '''
             SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
                    p.current_stage, p.mobile, p.account_status,
@@ -13093,6 +13117,10 @@ def ops_call_notes_not_contacted():
               AND EXISTS (SELECT 1 FROM ops_call_notes n2 WHERE n2.registration_number = p.registration_number AND n2.contacted_status = 'No')
         '''
         params = []
+
+        if stage_filter:
+            sql += " AND p.current_stage = ?"
+            params.append(stage_filter)
 
         if search_q:
             sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR (p.prefix || ' ' || p.first_name || ' ' || p.last_name) ILIKE ?)"
@@ -13111,10 +13139,14 @@ def ops_call_notes_not_contacted():
         category_counts = {
             'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0
         }
+        stage_counts = {}
 
         for row in rows:
             last_contact_date = row['last_contact_date']
             contacted_count = row['contacted_count'] or 0
+            client_stage = row['current_stage'] or ''
+
+            stage_counts[client_stage] = stage_counts.get(client_stage, 0) + 1
 
             if not last_contact_date or contacted_count == 0:
                 category = 'never'
@@ -13126,22 +13158,11 @@ def ops_call_notes_not_contacted():
                     else:
                         last_c = last_contact_date if isinstance(last_contact_date, date) else last_contact_date.date()
                 except:
-                    category = 'never'
-                    days_since = None
                     last_c = None
 
                 if last_c:
                     days_since = (today - last_c).days
-                    if days_since >= 60:
-                        category = 'critical'
-                    elif days_since >= 45:
-                        category = 'overdue'
-                    elif days_since >= 30:
-                        category = 'attention'
-                    elif days_since >= 15:
-                        category = 'ok'
-                    else:
-                        category = 'recent'
+                    category = categorise_by_stage(days_since, client_stage)
                 else:
                     category = 'never'
                     days_since = None
@@ -13149,11 +13170,12 @@ def ops_call_notes_not_contacted():
             category_counts[category] += 1
 
             client_name = f"{row['prefix']} {row['first_name']} {row['last_name']}" if row['prefix'] else f"{row['first_name']} {row['last_name']}"
+            interval = get_stage_interval(client_stage)
 
             tracker_data.append({
                 'registration_number': row['registration_number'],
                 'name': client_name.strip(),
-                'stage': row['current_stage'],
+                'stage': client_stage,
                 'mobile': row['mobile'],
                 'last_call_date': last_contact_date,
                 'last_attempt_date': row['last_attempt_date'],
@@ -13162,7 +13184,9 @@ def ops_call_notes_not_contacted():
                 'contacted_count': contacted_count,
                 'last_contact_type': '',
                 'days_since': days_since,
-                'category': category
+                'category': category,
+                'followup_interval': interval,
+                'days_overdue': max(0, (days_since or 0) - interval) if days_since is not None else None
             })
 
         if gap_filter:
@@ -13182,12 +13206,14 @@ def ops_call_notes_not_contacted():
         logging.error(f"ops_call_notes_not_contacted: {e}")
         tracker_data = []
         summary = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0}
+        stage_counts = {}
 
     conn.close()
 
     return render_template('ops_call_notes_list.html',
         tracker_data=tracker_data, summary=summary,
-        gap_filter=gap_filter, search_q=search_q,
+        gap_filter=gap_filter, search_q=search_q, stage_filter=stage_filter,
+        stage_counts=stage_counts, stage_intervals=STAGE_FOLLOWUP_DAYS,
         records=[], added_by_options=[], has_filters=False,
         reg='', client_name='', added_by_filter='', note_search='',
         page=1, per_page=50, total_count=0, total_pages=0,
