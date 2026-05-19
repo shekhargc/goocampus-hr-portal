@@ -11237,6 +11237,59 @@ def ensure_ops_tables():
                     pass
                 logging.error(f"{category} visa migration: {e}")
 
+        # Migration: force-replace plan_type options to match Excel import values
+        try:
+            old_plan = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'plan_type' AND value = '2025 UK - PGCP'"
+            ).fetchone()
+            # Also check if PGCP 2025 is missing (covers fresh DB that seeded old values)
+            new_plan = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'plan_type' AND value = 'PGCP 2025'"
+            ).fetchone()
+            if old_plan or not new_plan:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'plan_type'")
+                for sort_idx, val in enumerate([
+                    'Full Spon', 'Integrated Consulting',
+                    '2022 Integrated Consulting', '2022 Integrated Consulting - Dual',
+                    '2022 Premium Consulting',
+                    'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2025'
+                ], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('plan_type', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Updated plan_type options to match Excel values")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"plan_type migration: {e}")
+
+        # Migration: ensure switched_program options exist and match Excel values
+        try:
+            sp_check = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = 'switched_program' AND value = 'Australia'"
+            ).fetchone()
+            if not sp_check:
+                conn.execute("DELETE FROM lookup_options WHERE category = 'switched_program'")
+                for sort_idx, val in enumerate([
+                    'BAPIO Program', 'IMT', 'USMLE Pathway', 'Neet India', 'Australia'
+                ], 1):
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        ('switched_program', val, val, sort_idx)
+                    )
+                conn.commit()
+                logging.info("Updated switched_program options")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"switched_program migration: {e}")
+
         conn.close()
     except Exception as e:
         logging.error(f"ensure_ops_tables: {e}")
@@ -18414,7 +18467,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v4_fix_float_strings'
+        IMPORT_VERSION = 'v5_field_name_fixes'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()
