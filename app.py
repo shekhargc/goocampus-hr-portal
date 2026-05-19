@@ -11982,7 +11982,7 @@ def ops_plab_add():
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
-                f.get('account_status', 'In Process'), f.get('joined_stage', ''),
+                f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
                 f.get('lead_source', ''), f.get('referral_type', ''), f.get('operations_referral', ''),
@@ -18414,7 +18414,7 @@ def _import_excel_clients_once():
     try:
         conn = get_db()
         # Version-based import marker: only re-import when version changes
-        IMPORT_VERSION = 'v3_plantype_switchprog'
+        IMPORT_VERSION = 'v4_fix_float_strings'
         try:
             conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
             conn.commit()
@@ -18440,6 +18440,8 @@ def _import_excel_clients_once():
             except: return 0
         def ss(v):
             if v is None: return ''
+            if isinstance(v, float) and v == int(v):
+                return str(int(v))
             return str(v).strip()
         def sd(v):
             if v is None: return ''
