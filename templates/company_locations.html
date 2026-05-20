@@ -19,14 +19,26 @@
 
     {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-    {% for cat, msg in messages %}
-    <div style="padding:0.75rem 1rem;border-radius:8px;margin-bottom:1rem;font-size:0.85rem;font-weight:500;
-        {% if cat == 'success' %}background:#ECFDF5;color:#065F46;border:1px solid #A7F3D0;
-        {% elif cat == 'danger' %}background:#FEF2F2;color:#991B1B;border:1px solid #FECACA;
-        {% else %}background:#FFFBEB;color:#92400E;border:1px solid #FDE68A;{% endif %}">
-        {{ msg }}
+    <div class="toast-container" id="toast-container">
+        {% for cat, msg in messages %}
+        <div class="toast toast-{{ cat }}">
+            <span>{% if cat == 'success' %}&#10003;{% elif cat == 'error' or cat == 'danger' %}&#10007;{% else %}&#8505;{% endif %}</span>
+            <span>{{ msg }}</span>
+            <button class="toast-close" onclick="this.parentElement.classList.add('toast-hide');setTimeout(()=>this.parentElement.remove(),300)">&times;</button>
+        </div>
+        {% endfor %}
     </div>
-    {% endfor %}
+    <script>
+    (function(){
+        var toasts = document.querySelectorAll('#toast-container .toast');
+        toasts.forEach(function(t, i) {
+            setTimeout(function() {
+                t.classList.add('toast-hide');
+                setTimeout(function() { t.remove(); }, 300);
+            }, 4000 + i * 500);
+        });
+    })();
+    </script>
     {% endif %}
     {% endwith %}
 
