@@ -11004,6 +11004,27 @@ def ensure_ops_tables():
             conn.commit()
             logging.info("Seeded vendors_providers with existing vendor data")
 
+        # Ensure vendor_service_map has data (may be empty if prior seed partially failed)
+        vsm_count = conn.execute("SELECT COUNT(*) as c FROM vendor_service_map").fetchone()['c']
+        if vsm_count == 0 and vp_count > 0:
+            SERVICE_MAP_SEED = {
+                'Verbis': ['IELTS Training', 'OET Training'],
+                'Britford Training Academy': ['IELTS Training', 'OET Training'],
+                'ABMA': ['PLAB 1 Training'],
+                'Arora PLAB 1': ['PLAB 1 Training'],
+                'Aspire Academy': ['PLAB 2 Training', 'PLAB 2 Mock'],
+                'ABMA & Aspire': ['PLAB 2 Training', 'PLAB 2 Mock'],
+                'Arora PLAB 2': ['PLAB 2 Training'],
+                'Other': ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1'],
+            }
+            for vname, services in SERVICE_MAP_SEED.items():
+                vrow = conn.execute("SELECT id FROM vendors_providers WHERE name = ? AND category = 'Training Programs'", (vname,)).fetchone()
+                if vrow:
+                    for svc in services:
+                        conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vrow['id'], svc))
+            conn.commit()
+            logging.info("Re-seeded vendor_service_map (was empty)")
+
         # Backfill vendor_provider in ops_coaching from old separate columns
         try:
             unfilled = conn.execute("""SELECT id, english_training, ielts_vendor, oet_vendor,
@@ -12163,6 +12184,10 @@ def api_vendors_for_service():
     if not service_name:
         return jsonify([])
     vendors = get_vendors_for_service(service_name, country)
+    # Fallback: if no service-specific vendors found, return all Training Programs vendors
+    if not vendors:
+        logging.info(f"No vendors found for service '{service_name}' country '{country}', falling back to category")
+        vendors = get_vendors_by_category('Training Programs', country)
     return jsonify(vendors)
 
 
