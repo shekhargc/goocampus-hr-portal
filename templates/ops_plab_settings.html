@@ -413,6 +413,17 @@
                 {% endfor %}
             </div>
             {% endfor %}
+
+            <!-- Onboarding group -->
+            <div class="tab-group">
+                <div class="tab-group-title">Onboarding</div>
+                <div class="tab-item" data-group="Onboarding" data-category="kit_items" onclick="switchTab(this)">
+                    Welcome Kit Items
+                </div>
+                <div class="tab-item" data-group="Onboarding" data-category="email_template" onclick="switchTab(this)">
+                    Welcome Email Template
+                </div>
+            </div>
         </div>
 
         <!-- Main content area -->
@@ -467,6 +478,87 @@
                 {% endif %}
                 {% endfor %}
             {% endfor %}
+
+            <!-- ── Onboarding: Welcome Kit Items ── -->
+            <div class="category-card" data-group="Onboarding" data-category="kit_items">
+                <h3>Welcome Kit Items</h3>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 16px;">
+                    Manage the default items included in every new client's welcome kit. Toggle items on/off or add new ones.
+                </p>
+
+                <div class="option-list" id="kitItemsList">
+                    {% for ki in kit_items %}
+                    <div class="option-item {% if not ki.active %}inactive{% endif %}" data-id="{{ ki.id }}">
+                        <div class="option-content">
+                            <span class="option-drag-handle">≡</span>
+                            <span class="option-value">{{ ki.item_name }}</span>
+                        </div>
+                        <span class="option-status-badge {% if ki.active %}active{% else %}inactive{% endif %}">
+                            {% if ki.active %}Active{% else %}Inactive{% endif %}
+                        </span>
+                        <div class="option-actions">
+                            <button class="option-btn btn-toggle" onclick="toggleKitItem({{ ki.id }}, this)">
+                                {% if ki.active %}Deactivate{% else %}Activate{% endif %}
+                            </button>
+                            <button class="option-btn btn-delete" onclick="deleteKitItem({{ ki.id }}, this)">Delete</button>
+                        </div>
+                    </div>
+                    {% endfor %}
+                </div>
+
+                <div class="add-option-box">
+                    <label class="add-option-label">Add New Kit Item</label>
+                    <div class="add-option-form">
+                        <input type="text" class="add-option-input" id="newKitItemInput"
+                               placeholder="Enter item name..."
+                               onkeypress="if (event.key === 'Enter') addKitItem()">
+                        <button class="add-option-btn" onclick="addKitItem()">Add</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Onboarding: Welcome Email Template ── -->
+            <div class="category-card" data-group="Onboarding" data-category="email_template">
+                <h3>Welcome Email Template</h3>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 16px;">
+                    Customise the welcome email sent to new clients. Use placeholders:
+                    <code>{% raw %}{{client_name}}{% endraw %}</code>,
+                    <code>{% raw %}{{registration_number}}{% endraw %}</code>,
+                    <code>{% raw %}{{plan_type}}{% endraw %}</code>,
+                    <code>{% raw %}{{email}}{% endraw %}</code>
+                </p>
+
+                <form id="emailTemplateForm" onsubmit="saveEmailTemplate(event)">
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--gray-500);margin-bottom:4px;">Subject Line</label>
+                        <input type="text" name="subject" value="{{ email_template.subject if email_template else 'Welcome to GooCampus — Your PLAB Journey Starts Now!' }}"
+                               style="width:100%;padding:8px 10px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.85rem;box-sizing:border-box;">
+                    </div>
+                    <div style="margin-bottom:14px;">
+                        <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--gray-500);margin-bottom:4px;">Email Body (HTML)</label>
+                        <textarea name="body_html" rows="16"
+                                  style="width:100%;padding:10px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical;">{{ email_template.body_html if email_template else '' }}</textarea>
+                    </div>
+                    <div style="display:flex;gap:10px;">
+                        <button type="submit" style="padding:10px 22px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer;">
+                            Save Template
+                        </button>
+                        <button type="button" onclick="previewEmailTemplate()" style="padding:10px 22px;background:#F3F4F6;color:#374151;border:none;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer;">
+                            Preview
+                        </button>
+                    </div>
+                </form>
+
+                <!-- Preview modal -->
+                <div id="emailPreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;">
+                    <div style="background:white;border-radius:12px;width:90%;max-width:700px;max-height:80vh;overflow:auto;padding:24px;position:relative;">
+                        <button onclick="document.getElementById('emailPreviewModal').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;">&times;</button>
+                        <h4 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--navy);">Email Preview</h4>
+                        <div id="emailPreviewContent" style="border:1px solid #E5E7EB;border-radius:8px;padding:16px;"></div>
+                    </div>
+                </div>
+            </div>
+
         </div>
     </div>
 </div>
@@ -672,6 +764,99 @@
             }
         })
         .catch(e => alert('Error: ' + e));
+    }
+
+    // ── Kit Items Management ──
+    function toggleKitItem(itemId, button) {
+        fetch('/operations/onboarding/kit-items/' + itemId + '/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            const isActive = data.active;
+            item.classList.toggle('inactive', !isActive);
+            const badge = item.querySelector('.option-status-badge');
+            badge.className = 'option-status-badge ' + (isActive ? 'active' : 'inactive');
+            badge.textContent = isActive ? 'Active' : 'Inactive';
+            button.textContent = isActive ? 'Deactivate' : 'Activate';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function deleteKitItem(itemId, button) {
+        if (!confirm('Delete this kit item?')) return;
+        fetch('/operations/onboarding/kit-items/' + itemId + '/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            item.style.opacity = '0';
+            item.style.transform = 'scale(0.95)';
+            setTimeout(() => item.remove(), 200);
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function addKitItem() {
+        const input = document.getElementById('newKitItemInput');
+        const name = input.value.trim();
+        if (!name) { alert('Please enter an item name'); return; }
+        fetch('/operations/onboarding/kit-items/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_name: name })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const list = document.getElementById('kitItemsList');
+            const newItem = document.createElement('div');
+            newItem.className = 'option-item';
+            newItem.dataset.id = data.id;
+            newItem.innerHTML = '<div class="option-content"><span class="option-drag-handle">≡</span><span class="option-value">' + name + '</span></div>' +
+                '<span class="option-status-badge active">Active</span>' +
+                '<div class="option-actions"><button class="option-btn btn-toggle" onclick="toggleKitItem(' + data.id + ', this)">Deactivate</button>' +
+                '<button class="option-btn btn-delete" onclick="deleteKitItem(' + data.id + ', this)">Delete</button></div>';
+            list.appendChild(newItem);
+            input.value = '';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    // ── Email Template Management ──
+    function saveEmailTemplate(e) {
+        e.preventDefault();
+        const form = document.getElementById('emailTemplateForm');
+        const subject = form.querySelector('[name="subject"]').value;
+        const body_html = form.querySelector('[name="body_html"]').value;
+        fetch('/operations/onboarding/email-template/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject: subject, body_html: body_html })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            alert('Email template saved successfully!');
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function previewEmailTemplate() {
+        const form = document.getElementById('emailTemplateForm');
+        let html = form.querySelector('[name="body_html"]').value;
+        html = html.replace(/\{\{client_name\}\}/g, 'John Doe')
+                   .replace(/\{\{registration_number\}\}/g, 'GC-2025-0001')
+                   .replace(/\{\{plan_type\}\}/g, 'Premium Plan')
+                   .replace(/\{\{email\}\}/g, 'john@example.com');
+        document.getElementById('emailPreviewContent').innerHTML = html;
+        document.getElementById('emailPreviewModal').style.display = 'flex';
     }
 
     // Initialize first tab as active on page load

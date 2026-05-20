@@ -10984,6 +10984,57 @@ def ensure_ops_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Onboarding Kit Items (global defaults) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS onboarding_kit_items (
+            id SERIAL PRIMARY KEY,
+            item_name TEXT NOT NULL,
+            is_default INTEGER DEFAULT 1,
+            sort_order INTEGER DEFAULT 0,
+            active INTEGER DEFAULT 1,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Client Onboarding ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_onboarding (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER NOT NULL REFERENCES plab_clients(id) ON DELETE CASCADE,
+            registration_number TEXT,
+            onboarding_status TEXT DEFAULT 'Pending',
+            welcome_email_sent INTEGER DEFAULT 0,
+            welcome_email_sent_at TIMESTAMP,
+            welcome_email_sent_by INTEGER,
+            welcome_call_date TEXT,
+            welcome_call_by TEXT,
+            welcome_call_confirmed INTEGER DEFAULT 0,
+            welcome_call_notes TEXT,
+            kit_delivery_method TEXT,
+            kit_delivered_date TEXT,
+            kit_tracking_number TEXT,
+            kit_tracking_communicated INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(client_id)
+        )''')
+
+        # ── Client Kit Items (per-client checklist) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_kit_items (
+            id SERIAL PRIMARY KEY,
+            onboarding_id INTEGER NOT NULL REFERENCES client_onboarding(id) ON DELETE CASCADE,
+            item_name TEXT NOT NULL,
+            included INTEGER DEFAULT 1,
+            delivered INTEGER DEFAULT 0,
+            notes TEXT
+        )''')
+
+        # ── Welcome Email Template ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS email_templates (
+            id SERIAL PRIMARY KEY,
+            template_key TEXT NOT NULL UNIQUE,
+            subject TEXT NOT NULL,
+            body_html TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # Migration: add vendor_provider column to ops_coaching
         try:
             conn.execute("SELECT vendor_provider FROM ops_coaching LIMIT 1")
@@ -12014,11 +12065,17 @@ def ops_plab_settings():
                 grouped[cat] = []
             grouped[cat].append(opt)
 
+        # Fetch kit items and email template for onboarding tab
+        kit_items = conn.execute("SELECT * FROM onboarding_kit_items ORDER BY sort_order, id").fetchall()
+        email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+
         conn.close()
         return render_template('ops_plab_settings.html',
                              grouped_options=grouped,
                              category_groups=CATEGORY_GROUPS,
                              category_labels=CATEGORY_LABELS,
+                             kit_items=kit_items,
+                             email_template=email_tpl,
                              active_ops_page='settings')
     except Exception as e:
         logging.error(f"ops_plab_settings error: {e}")
@@ -12389,6 +12446,306 @@ def ops_vendor_delete(vid):
     except Exception as e:
         logging.error(f"ops_vendor_delete error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# ═══════════════════════════════════════════════════════
+#   ONBOARDING SECTION
+# ═══════════════════════════════════════════════════════
+
+def _compute_onboarding_status(onb, kit_items):
+    """Compute onboarding status from current data."""
+    if not onb:
+        return 'Pending'
+    if not onb.get('welcome_email_sent'):
+        return 'Pending'
+    if not onb.get('welcome_call_confirmed'):
+        return 'Email Sent'
+    delivered_count = sum(1 for ki in kit_items if ki.get('delivered'))
+    total_items = len(kit_items)
+    if total_items > 0 and delivered_count == total_items:
+        return 'Completed'
+    if onb.get('kit_delivery_method'):
+        return 'Kit Dispatched'
+    return 'Call Done'
+
+
+def _ensure_client_onboarding(conn, client_id, reg_num):
+    """Create onboarding record + default kit items if not exists. Returns onboarding row."""
+    onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
+    if onb:
+        return onb
+    conn.execute(
+        "INSERT INTO client_onboarding (client_id, registration_number) VALUES (?, ?)",
+        (client_id, reg_num))
+    conn.commit()
+    onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
+    default_items = conn.execute(
+        "SELECT item_name FROM onboarding_kit_items WHERE active = 1 AND is_default = 1 ORDER BY sort_order"
+    ).fetchall()
+    for item in default_items:
+        conn.execute(
+            "INSERT INTO client_kit_items (onboarding_id, item_name, included, delivered) VALUES (?, ?, 1, 0)",
+            (onb['id'], item['item_name']))
+    conn.commit()
+    return onb
+
+
+@app.route('/operations/onboarding')
+@admin_required
+def ops_onboarding_list():
+    """Onboarding list page with Kanban + Table toggle."""
+    conn = get_db()
+    status_filter = request.args.get('status', '')
+    search = request.args.get('search', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = 50
+
+    sql = """SELECT p.id, p.registration_number, p.first_name, p.last_name, p.email, p.mobile,
+                    p.plan_type, p.current_stage, p.account_status, p.registration_date,
+                    COALESCE(o.onboarding_status, 'Pending') as onboarding_status,
+                    o.welcome_email_sent, o.welcome_email_sent_at,
+                    o.welcome_call_date, o.welcome_call_by, o.welcome_call_confirmed,
+                    o.kit_delivery_method, o.kit_delivered_date, o.kit_tracking_number,
+                    o.id as onboarding_id
+             FROM plab_clients p
+             LEFT JOIN client_onboarding o ON o.client_id = p.id
+             WHERE 1=1"""
+    params = []
+    if status_filter:
+        if status_filter == 'Pending':
+            sql += " AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')"
+        else:
+            sql += " AND o.onboarding_status = ?"
+            params.append(status_filter)
+    if search:
+        sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR p.email ILIKE ?)"
+        params.extend([f'%{search}%'] * 4)
+
+    # Count
+    count_sql = "SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE 1=1"
+    count_params = []
+    if status_filter:
+        if status_filter == 'Pending':
+            count_sql += " AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')"
+        else:
+            count_sql += " AND o.onboarding_status = ?"
+            count_params.append(status_filter)
+    if search:
+        count_sql += " AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR p.registration_number ILIKE ? OR p.email ILIKE ?)"
+        count_params.extend([f'%{search}%'] * 4)
+    total = conn.execute(count_sql, count_params).fetchone()['cnt']
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    sql += " ORDER BY p.registration_date DESC NULLS LAST LIMIT ? OFFSET ?"
+    params.extend([per_page, (page - 1) * per_page])
+    clients = conn.execute(sql, params).fetchall()
+
+    # Kanban counts
+    kanban_counts = {}
+    for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
+        if st == 'Pending':
+            c = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE o.onboarding_status IS NULL OR o.onboarding_status = 'Pending'").fetchone()['cnt']
+        else:
+            c = conn.execute("SELECT COUNT(*) as cnt FROM client_onboarding WHERE onboarding_status = ?", (st,)).fetchone()['cnt']
+        kanban_counts[st] = c
+
+    conn.close()
+    return render_template('ops_onboarding.html',
+        clients=clients, page=page, total_pages=total_pages, total=total,
+        status_filter=status_filter, search=search,
+        kanban_counts=kanban_counts,
+        active_ops_page='onboarding', active_section='operations')
+
+
+@app.route('/operations/onboarding/<int:client_id>')
+@admin_required
+def ops_onboarding_detail(client_id):
+    """Client onboarding detail/edit page."""
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('ops_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    kit_items = conn.execute(
+        "SELECT * FROM client_kit_items WHERE onboarding_id = ? ORDER BY id", (onb['id'],)
+    ).fetchall()
+    email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+    conn.close()
+    return render_template('ops_onboarding_detail.html',
+        client=client, onboarding=onb, kit_items=kit_items, email_template=email_tpl,
+        active_ops_page='onboarding', active_section='operations')
+
+
+@app.route('/operations/onboarding/<int:client_id>/update', methods=['POST'])
+@admin_required
+def ops_onboarding_update(client_id):
+    """Update onboarding details for a client."""
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('ops_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    f = request.form
+    conn.execute("""UPDATE client_onboarding SET
+        welcome_call_date=?, welcome_call_by=?, welcome_call_confirmed=?,
+        welcome_call_notes=?,
+        kit_delivery_method=?, kit_delivered_date=?, kit_tracking_number=?,
+        kit_tracking_communicated=?,
+        updated_at=CURRENT_TIMESTAMP
+        WHERE id=?""",
+        (f.get('welcome_call_date', ''), f.get('welcome_call_by', ''),
+         1 if f.get('welcome_call_confirmed') else 0,
+         f.get('welcome_call_notes', ''),
+         f.get('kit_delivery_method', ''), f.get('kit_delivered_date', ''),
+         f.get('kit_tracking_number', ''),
+         1 if f.get('kit_tracking_communicated') else 0,
+         onb['id']))
+    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
+    for ki in kit_items:
+        included = 1 if f.get(f'kit_included_{ki["id"]}') else 0
+        delivered = 1 if f.get(f'kit_delivered_{ki["id"]}') else 0
+        notes = f.get(f'kit_notes_{ki["id"]}', '')
+        conn.execute("UPDATE client_kit_items SET included=?, delivered=?, notes=? WHERE id=?",
+                     (included, delivered, notes, ki['id']))
+    # Recompute status
+    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
+    onb = conn.execute("SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)).fetchone()
+    new_status = _compute_onboarding_status(dict(onb), [dict(ki) for ki in kit_items])
+    conn.execute("UPDATE client_onboarding SET onboarding_status=? WHERE id=?", (new_status, onb['id']))
+    conn.commit()
+    conn.close()
+    flash('Onboarding updated.', 'success')
+    return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+
+
+@app.route('/operations/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
+@admin_required
+def ops_onboarding_send_welcome_email(client_id):
+    """Send welcome email to a client."""
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('ops_onboarding_list'))
+    if not client['email']:
+        conn.close()
+        flash('Client has no email address.', 'error')
+        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+    if not email_tpl:
+        conn.close()
+        flash('Welcome email template not found.', 'error')
+        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+    client_name = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
+    reg_display = format_reg_filter(client['registration_number'])
+    subject = email_tpl['subject'].replace('{{client_name}}', client_name)
+    body = email_tpl['body_html'].replace('{{client_name}}', client_name)
+    body = body.replace('{{registration_number}}', reg_display)
+    body = body.replace('{{plan_type}}', client['plan_type'] or 'N/A')
+    body = body.replace('{{registration_date}}', client['registration_date'] or '')
+    try:
+        from email_utils import send_email
+        success = send_email([client['email']], subject, body)
+        if success:
+            conn.execute("""UPDATE client_onboarding SET
+                welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
+                welcome_email_sent_by=?,
+                onboarding_status = CASE WHEN onboarding_status = 'Pending' THEN 'Email Sent' ELSE onboarding_status END,
+                updated_at=CURRENT_TIMESTAMP
+                WHERE id=?""", (session.get('user_id'), onb['id']))
+            conn.commit()
+            flash(f'Welcome email sent to {client["email"]}', 'success')
+        else:
+            flash('Failed to send email. Check Resend API key.', 'error')
+    except Exception as e:
+        logging.error(f"ops_onboarding_send_welcome_email: {e}")
+        flash(f'Error sending email: {e}', 'error')
+    conn.close()
+    return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+
+
+@app.route('/operations/onboarding/kit-items', methods=['GET'])
+@admin_required
+def ops_onboarding_kit_items_api():
+    """API: return default kit items."""
+    conn = get_db()
+    items = conn.execute("SELECT * FROM onboarding_kit_items WHERE active = 1 ORDER BY sort_order").fetchall()
+    conn.close()
+    return jsonify([{'id': i['id'], 'item_name': i['item_name'], 'is_default': i['is_default']} for i in items])
+
+
+@app.route('/operations/onboarding/kit-items/add', methods=['POST'])
+@admin_required
+def ops_onboarding_kit_items_add():
+    """Add a new default kit item."""
+    item_name = (request.form.get('item_name') or '').strip()
+    if not item_name:
+        flash('Item name is required.', 'error')
+        return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
+    conn = get_db()
+    max_order = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM onboarding_kit_items").fetchone()['m']
+    conn.execute("INSERT INTO onboarding_kit_items (item_name, is_default, sort_order, active) VALUES (?, 1, ?, 1)",
+                 (item_name, max_order + 10))
+    conn.commit()
+    conn.close()
+    flash(f'Kit item "{item_name}" added.', 'success')
+    return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
+
+
+@app.route('/operations/onboarding/kit-items/<int:item_id>/toggle', methods=['POST'])
+@admin_required
+def ops_onboarding_kit_items_toggle(item_id):
+    """Toggle active status of a kit item."""
+    conn = get_db()
+    item = conn.execute("SELECT * FROM onboarding_kit_items WHERE id = ?", (item_id,)).fetchone()
+    if item:
+        new_active = 0 if item['active'] else 1
+        conn.execute("UPDATE onboarding_kit_items SET active = ? WHERE id = ?", (new_active, item_id))
+        conn.commit()
+    conn.close()
+    return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
+
+
+@app.route('/operations/onboarding/kit-items/<int:item_id>/delete', methods=['POST'])
+@admin_required
+def ops_onboarding_kit_items_delete(item_id):
+    """Delete a kit item."""
+    conn = get_db()
+    conn.execute("DELETE FROM onboarding_kit_items WHERE id = ?", (item_id,))
+    conn.commit()
+    conn.close()
+    flash('Kit item deleted.', 'success')
+    return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
+
+
+@app.route('/operations/onboarding/email-template/save', methods=['POST'])
+@admin_required
+def ops_onboarding_email_template_save():
+    """Save welcome email template."""
+    f = request.form
+    subject = f.get('email_subject', '').strip()
+    body_html = f.get('email_body', '').strip()
+    if not subject or not body_html:
+        flash('Subject and body are required.', 'error')
+        return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
+    conn = get_db()
+    existing = conn.execute("SELECT id FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+    if existing:
+        conn.execute("UPDATE email_templates SET subject=?, body_html=?, updated_at=CURRENT_TIMESTAMP WHERE template_key='welcome_email'",
+                     (subject, body_html))
+    else:
+        conn.execute("INSERT INTO email_templates (template_key, subject, body_html) VALUES ('welcome_email', ?, ?)",
+                     (subject, body_html))
+    conn.commit()
+    conn.close()
+    flash('Welcome email template saved.', 'success')
+    return redirect(url_for('ops_plab_settings') + '?tab=kit_items')
 
 
 # ── REPORTS FIELD DEFINITIONS ──
@@ -13014,6 +13371,33 @@ def ops_plab_add():
                 f.get('additional_notes', ''), session['user_id']
             ))
             conn.commit()
+
+            # ── Auto-send welcome email on registration ──
+            try:
+                new_client = conn.execute("SELECT * FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+                if new_client and new_client['email']:
+                    new_cid = new_client['id']
+                    onb = _ensure_client_onboarding(conn, new_cid, reg_num)
+                    email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+                    if email_tpl:
+                        cname = f"{new_client['prefix'] or ''} {new_client['first_name'] or ''} {new_client['last_name'] or ''}".strip()
+                        reg_display = format_reg_filter(reg_num)
+                        subj = email_tpl['subject'].replace('{{client_name}}', cname)
+                        body = email_tpl['body_html'].replace('{{client_name}}', cname)
+                        body = body.replace('{{registration_number}}', reg_display)
+                        body = body.replace('{{plan_type}}', new_client['plan_type'] or 'N/A')
+                        body = body.replace('{{registration_date}}', new_client['registration_date'] or '')
+                        from email_utils import send_email
+                        if send_email([new_client['email']], subj, body):
+                            conn.execute("""UPDATE client_onboarding SET
+                                welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
+                                welcome_email_sent_by=?,
+                                onboarding_status='Email Sent', updated_at=CURRENT_TIMESTAMP
+                                WHERE client_id=?""", (session.get('user_id'), new_cid))
+                            conn.commit()
+            except Exception as e:
+                logging.error(f"ops_plab_add auto-welcome-email: {e}")
+
             flash(f'Client {reg_num} added successfully', 'success')
             conn.close()
             return redirect(url_for('ops_plab_list'))
@@ -19824,6 +20208,134 @@ def _import_call_notes_once():
         traceback.print_exc()
 
 _import_call_notes_once()
+
+# ── Seed onboarding kit items and welcome email template ──
+def _seed_onboarding_defaults():
+    try:
+        conn = get_db()
+        existing = conn.execute("SELECT COUNT(*) as cnt FROM onboarding_kit_items").fetchone()['cnt']
+        if existing == 0:
+            DEFAULT_KIT_ITEMS = [
+                'English Book', 'Oxford Book', 'PLAB Brochure', 'CEO Letter',
+                'Refund Policy', 'Service Agreement', 'Pen', 'Diary',
+                'Laptop Bag', 'Stickers'
+            ]
+            for i, item in enumerate(DEFAULT_KIT_ITEMS):
+                conn.execute(
+                    "INSERT INTO onboarding_kit_items (item_name, is_default, sort_order, active) VALUES (?, 1, ?, 1)",
+                    (item, i * 10)
+                )
+            conn.commit()
+            logging.info(f"Seeded {len(DEFAULT_KIT_ITEMS)} default onboarding kit items")
+
+        # Seed welcome email template if not exists
+        existing_tpl = conn.execute("SELECT COUNT(*) as cnt FROM email_templates WHERE template_key = 'welcome_email'").fetchone()['cnt']
+        if existing_tpl == 0:
+            conn.execute("""INSERT INTO email_templates (template_key, subject, body_html) VALUES (?, ?, ?)""",
+                ('welcome_email',
+                 'Welcome to GooCampus UK Pathway - {{client_name}}!',
+                 '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to GooCampus</h1>
+    <p style="color:#f97316;margin:4px 0 0;font-size:14px;">UK Pathway Programme</p>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Congratulations and welcome to the GooCampus UK Pathway family! We are thrilled to have you on board.</p>
+    <p>Your registration details:</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Registration Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_number}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Plan Type</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{plan_type}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Registration Date</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_date}}</td></tr>
+    </table>
+    <p>Our operations team will reach out to you shortly for a welcome call to guide you through the next steps.</p>
+    <p>If you have any questions, feel free to reach out to us.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+  <div style="background:#f8fafc;padding:16px 32px;text-align:center;font-size:12px;color:#6b7280;border-top:1px solid #e5e7eb;">
+    GooCampus &middot; UK Pathway Programme &middot; info@goocampus.in
+  </div>
+</div>'''))
+            conn.commit()
+            logging.info("Seeded default welcome email template")
+
+        # Migrate existing onboarding data from plab_clients to client_onboarding
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        conn.commit()
+        marker = conn.execute("SELECT value FROM _import_markers WHERE key = 'onboarding_migrated_v1'").fetchone()
+        if not marker:
+            clients = conn.execute("""SELECT id, registration_number, welcome_mail, welcome_call_by, welcome_call_date,
+                english_book, english_book_date, oxford_book, oxford_book_date,
+                plab_brochure, ceo_letter, refund_policy, service_agreement,
+                goodie_pen, goodie_diary, goodie_laptop_bag, goodie_stickers
+                FROM plab_clients""").fetchall()
+            migrated = 0
+            for c in clients:
+                has_data = any([c['welcome_mail'], c['welcome_call_by'], c['welcome_call_date'],
+                               c['english_book'], c['oxford_book'],
+                               c['plab_brochure'], c['ceo_letter'], c['refund_policy'], c['service_agreement'],
+                               c['goodie_pen'], c['goodie_diary'], c['goodie_laptop_bag'], c['goodie_stickers']])
+                if not has_data:
+                    continue
+                # Determine onboarding status
+                status = 'Pending'
+                if c['welcome_mail']:
+                    status = 'Email Sent'
+                if c['welcome_call_date']:
+                    status = 'Call Done'
+                kit_items_done = sum([1 for k in ['plab_brochure','ceo_letter','refund_policy','service_agreement',
+                                                   'goodie_pen','goodie_diary','goodie_laptop_bag','goodie_stickers']
+                                      if c[k]])
+                if kit_items_done > 0:
+                    status = 'Kit Dispatched'
+                if kit_items_done >= 4:
+                    status = 'Completed'
+
+                try:
+                    conn.execute("""INSERT INTO client_onboarding
+                        (client_id, registration_number, onboarding_status,
+                         welcome_email_sent, welcome_call_date, welcome_call_by, welcome_call_confirmed)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                        (c['id'], c['registration_number'], status,
+                         1 if c['welcome_mail'] else 0,
+                         c['welcome_call_date'] or '', c['welcome_call_by'] or '',
+                         1 if c['welcome_call_date'] else 0))
+
+                    onb_id = conn.execute("SELECT id FROM client_onboarding WHERE client_id = ?", (c['id'],)).fetchone()['id']
+
+                    # Migrate kit items
+                    item_map = {
+                        'English Book': (c['english_book'], 1 if c['english_book'] else 0),
+                        'Oxford Book': (c['oxford_book'], 1 if c['oxford_book'] else 0),
+                        'PLAB Brochure': (None, c['plab_brochure'] or 0),
+                        'CEO Letter': (None, c['ceo_letter'] or 0),
+                        'Refund Policy': (None, c['refund_policy'] or 0),
+                        'Service Agreement': (None, c['service_agreement'] or 0),
+                        'Pen': (None, c['goodie_pen'] or 0),
+                        'Diary': (None, c['goodie_diary'] or 0),
+                        'Laptop Bag': (None, c['goodie_laptop_bag'] or 0),
+                        'Stickers': (None, c['goodie_stickers'] or 0),
+                    }
+                    for item_name, (notes, delivered) in item_map.items():
+                        conn.execute(
+                            "INSERT INTO client_kit_items (onboarding_id, item_name, included, delivered, notes) VALUES (?, ?, 1, ?, ?)",
+                            (onb_id, item_name, delivered, notes or ''))
+                    migrated += 1
+                except Exception:
+                    pass
+
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES ('onboarding_migrated_v1', ?)",
+                         (str(migrated),))
+            conn.commit()
+            logging.info(f"Migrated onboarding data for {migrated} clients")
+
+        conn.close()
+    except Exception as e:
+        logging.error(f"_seed_onboarding_defaults: {e}")
+        import traceback
+        traceback.print_exc()
+
+_seed_onboarding_defaults()
 
 # ── One-time backfill: switched_program (hardcoded, no file dependency) ───
 def _backfill_switched_program():
