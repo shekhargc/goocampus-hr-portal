@@ -10932,6 +10932,114 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Vendors & Providers (centralised vendor database) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS vendors_providers (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            country TEXT NOT NULL DEFAULT 'UK Pathway',
+            category TEXT NOT NULL,
+            is_active BOOLEAN DEFAULT TRUE,
+            sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS vendor_service_map (
+            id SERIAL PRIMARY KEY,
+            vendor_id INTEGER NOT NULL REFERENCES vendors_providers(id) ON DELETE CASCADE,
+            service_name TEXT NOT NULL
+        )''')
+
+        # Migration: add vendor_provider column to ops_coaching
+        try:
+            conn.execute("SELECT vendor_provider FROM ops_coaching LIMIT 1")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
+                conn.execute("ALTER TABLE ops_coaching ADD COLUMN vendor_provider TEXT")
+                conn.commit()
+                logging.info("Added vendor_provider column to ops_coaching")
+            except Exception as e2:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                logging.error(f"vendor_provider migration: {e2}")
+
+        # Seed vendors_providers from existing data
+        vp_count = conn.execute("SELECT COUNT(*) as c FROM vendors_providers").fetchone()['c']
+        if vp_count == 0:
+            VENDOR_SEED = [
+                # Training Programs — UK Pathway
+                ('Verbis', 'UK Pathway', 'Training Programs', ['IELTS Training', 'OET Training']),
+                ('Britford Training Academy', 'UK Pathway', 'Training Programs', ['IELTS Training', 'OET Training']),
+                ('ABMA', 'UK Pathway', 'Training Programs', ['PLAB 1 Training']),
+                ('Arora PLAB 1', 'UK Pathway', 'Training Programs', ['PLAB 1 Training']),
+                ('Aspire Academy', 'UK Pathway', 'Training Programs', ['PLAB 2 Training', 'PLAB 2 Mock']),
+                ('ABMA & Aspire', 'UK Pathway', 'Training Programs', ['PLAB 2 Training', 'PLAB 2 Mock']),
+                ('Arora PLAB 2', 'UK Pathway', 'Training Programs', ['PLAB 2 Training']),
+                ('Other', 'UK Pathway', 'Training Programs', ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1']),
+                # Online Courses — UK Pathway
+                ('Coursera', 'UK Pathway', 'Online Courses', []),
+                ('Udemy', 'UK Pathway', 'Online Courses', []),
+                ('BMJ', 'UK Pathway', 'Online Courses', []),
+                ('BMA', 'UK Pathway', 'Online Courses', []),
+                ('RCSI', 'UK Pathway', 'Online Courses', []),
+                # Research & Publications — UK Pathway
+                ('Dr. Jayaraj', 'UK Pathway', 'Research & Publications', []),
+                ('Dr. Mahesh', 'UK Pathway', 'Research & Publications', []),
+                ('Dr. Urvish', 'UK Pathway', 'Research & Publications', []),
+                ('Cognibrain', 'UK Pathway', 'Research & Publications', []),
+                ('The Good Research Project', 'UK Pathway', 'Research & Publications', []),
+            ]
+            for sort_idx, (name, country, category, services) in enumerate(VENDOR_SEED, 1):
+                conn.execute(
+                    "INSERT INTO vendors_providers (name, country, category, is_active, sort_order) VALUES (?, ?, ?, TRUE, ?)",
+                    (name, country, category, sort_idx)
+                )
+                vid = conn.execute("SELECT id FROM vendors_providers WHERE name = ? AND country = ? AND category = ?", (name, country, category)).fetchone()['id']
+                for svc in services:
+                    conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc))
+            conn.commit()
+            logging.info("Seeded vendors_providers with existing vendor data")
+
+        # Backfill vendor_provider in ops_coaching from old separate columns
+        try:
+            unfilled = conn.execute("""SELECT id, english_training, ielts_vendor, oet_vendor,
+                plab1_partner, plab2_vendor, other_vendor FROM ops_coaching
+                WHERE (vendor_provider IS NULL OR vendor_provider = '')
+                AND (ielts_vendor IS NOT NULL AND ielts_vendor != ''
+                  OR oet_vendor IS NOT NULL AND oet_vendor != ''
+                  OR plab1_partner IS NOT NULL AND plab1_partner != ''
+                  OR plab2_vendor IS NOT NULL AND plab2_vendor != ''
+                  OR other_vendor IS NOT NULL AND other_vendor != '')""").fetchall()
+            for r in unfilled:
+                vp = ''
+                et = (r['english_training'] or '').strip()
+                if 'IELTS' in et and r['ielts_vendor']:
+                    vp = r['ielts_vendor']
+                elif 'OET' in et and r['oet_vendor']:
+                    vp = r['oet_vendor']
+                elif 'PLAB 1' in et and r['plab1_partner']:
+                    vp = r['plab1_partner']
+                elif 'PLAB 2' in et and r['plab2_vendor']:
+                    vp = r['plab2_vendor']
+                elif r['other_vendor']:
+                    vp = r['other_vendor']
+                # fallback: take whichever is non-empty
+                if not vp:
+                    vp = r['ielts_vendor'] or r['oet_vendor'] or r['plab1_partner'] or r['plab2_vendor'] or r['other_vendor'] or ''
+                if vp:
+                    conn.execute("UPDATE ops_coaching SET vendor_provider = ? WHERE id = ?", (vp.strip(), r['id']))
+            conn.commit()
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"vendor_provider backfill error: {e}")
+
         # ── Seed lookup_options — add any missing categories ──
         SEED_DATA = {
                 # Client/Pipeline
@@ -11733,16 +11841,16 @@ def ops_plab_pathway_dashboard():
 
 CATEGORY_GROUPS = {
     'Client & Pipeline': ['plab_stage', 'account_status', 'switched_program', 'plan_type', 'joined_stage', 'lead_source', 'operations_referral', 'upgraded_to', 'counsellor'],
-    'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'ielts_vendor', 'oet_vendor', 'plab1_partner', 'plab2_vendor', 'other_training_vendor', 'coaching_blueprint_stage', 'coaching_attendance', 'batch_month'],
+    'Coaching & Training': ['coaching_course_type', 'coaching_status', 'coaching_method', 'training_program', 'coaching_attendance', 'batch_month'],
     'Test Bookings': ['exam_name', 'exam_status', 'exam_result', 'exam_method', 'exam_booked_by', 'exam_country', 'revaluation_option', 'reval_result'],
     'EPIC & GMC': ['epic_reg_status', 'epic_status', 'notary_camp_status', 'doc_stage', 'doc_stage_status', 'gmc_setup_status', 'gmc_english_exam', 'gmc_license_status'],
     'Payments': ['payment_method', 'instalment'],
-    'Research & Publication': ['research_status', 'author_position', 'research_provider'],
+    'Research & Publication': ['research_status', 'author_position'],
     'Subscriptions': ['subscription_type', 'activation_type', 'subscription_booked_by'],
     'Webinars & Events': ['event_type', 'event_value', 'participation_type'],
     'UK Visa & Travel': ['visa_app_status', 'visa_doc_collected', 'visa_doc_status', 'visa_status', 'visa_period', 'visa_type', 'lodging_type', 'quarantine'],
     'Academic Details': ['img_fmg', 'mbbs_status', 'internship_status', 'internship_gap', 'working_status'],
-    'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by', 'course_provider', 'certification_body'],
+    'Online Courses': ['course_name', 'course_type', 'course_status', 'course_booked_by', 'certification_body'],
     'Observerships': ['observership_payment', 'medical_speciality'],
     'NGO Activities': ['ngo_vendor', 'ngo_activity_type'],
     'Mentorship': ['mentorship_payment_status', 'mentorship_attendance', 'mentorship_confirmation'],
@@ -11995,6 +12103,198 @@ def ops_plab_settings_reorder():
         })
     except Exception as e:
         logging.error(f"ops_plab_settings_reorder error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+# ─────────────────────────────────────────────────────────
+#  VENDORS & PROVIDERS — Centralised Vendor Database
+# ─────────────────────────────────────────────────────────
+
+VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
+VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications']
+
+
+def get_vendors_for_service(service_name, country=None):
+    """Return active vendors that provide a specific service (training/course/research name)."""
+    conn = get_db()
+    if country:
+        rows = conn.execute("""
+            SELECT DISTINCT vp.id, vp.name FROM vendors_providers vp
+            JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
+            ORDER BY vp.sort_order, vp.name
+        """, (service_name, country)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT DISTINCT vp.id, vp.name FROM vendors_providers vp
+            JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            WHERE vsm.service_name = ? AND vp.is_active = TRUE
+            ORDER BY vp.sort_order, vp.name
+        """, (service_name,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+def get_vendors_by_category(category, country=None):
+    """Return active vendors for a category (Training Programs / Online Courses / Research & Publications)."""
+    conn = get_db()
+    if country:
+        rows = conn.execute("""
+            SELECT id, name FROM vendors_providers
+            WHERE category = ? AND country = ? AND is_active = TRUE
+            ORDER BY sort_order, name
+        """, (category, country)).fetchall()
+    else:
+        rows = conn.execute("""
+            SELECT id, name FROM vendors_providers
+            WHERE category = ? AND is_active = TRUE
+            ORDER BY sort_order, name
+        """, (category,)).fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+
+@app.route('/api/vendors-for-service')
+@login_required
+def api_vendors_for_service():
+    """AJAX endpoint: return vendors for a given service_name, optionally filtered by country."""
+    service_name = request.args.get('service_name', '').strip()
+    country = request.args.get('country', '').strip() or None
+    if not service_name:
+        return jsonify([])
+    vendors = get_vendors_for_service(service_name, country)
+    return jsonify(vendors)
+
+
+@app.route('/api/vendors-by-category')
+@login_required
+def api_vendors_by_category():
+    """AJAX endpoint: return vendors for a given category, optionally filtered by country."""
+    category = request.args.get('category', '').strip()
+    country = request.args.get('country', '').strip() or None
+    if not category:
+        return jsonify([])
+    vendors = get_vendors_by_category(category, country)
+    return jsonify(vendors)
+
+
+@app.route('/operations/vendors-providers')
+@login_required
+def ops_vendors_providers():
+    """Vendors & Providers management page."""
+    conn = get_db()
+    vendors = conn.execute("""
+        SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
+        FROM vendors_providers vp
+        LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+        GROUP BY vp.id
+        ORDER BY vp.country, vp.category, vp.sort_order, vp.name
+    """).fetchall()
+    # Get all training programs from lookup_options for the service assignment dropdown
+    training_names = get_lookup_options('training_program')
+    course_names = get_lookup_options('course_name')
+    conn.close()
+    return render_template('ops_vendors_providers.html',
+                         vendors=[dict(v) for v in vendors],
+                         countries=VENDOR_COUNTRIES,
+                         categories=VENDOR_CATEGORIES,
+                         training_names=training_names,
+                         course_names=course_names,
+                         active_ops_page='settings')
+
+
+@app.route('/operations/vendors-providers/add', methods=['POST'])
+@login_required
+def ops_vendor_add():
+    """Add a new vendor/provider."""
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        country = data.get('country', '').strip()
+        category = data.get('category', '').strip()
+        services = data.get('services', [])
+
+        if not name or not country or not category:
+            return jsonify({'error': 'Name, country and category are required'}), 400
+
+        conn = get_db()
+        max_order = conn.execute("SELECT MAX(sort_order) as m FROM vendors_providers WHERE country = ? AND category = ?", (country, category)).fetchone()['m']
+        max_order = (max_order or 0) + 1
+        conn.execute("INSERT INTO vendors_providers (name, country, category, is_active, sort_order) VALUES (?, ?, ?, TRUE, ?)",
+                    (name, country, category, max_order))
+        conn.commit()
+        vid = conn.execute("SELECT id FROM vendors_providers WHERE name = ? AND country = ? AND category = ? ORDER BY id DESC LIMIT 1",
+                          (name, country, category)).fetchone()['id']
+        for svc in services:
+            if svc.strip():
+                conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'id': vid, 'message': f'Added {name}'})
+    except Exception as e:
+        logging.error(f"ops_vendor_add error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/vendors-providers/<int:vid>/edit', methods=['POST'])
+@login_required
+def ops_vendor_edit(vid):
+    """Edit a vendor/provider."""
+    try:
+        data = request.json
+        name = data.get('name', '').strip()
+        country = data.get('country', '').strip()
+        category = data.get('category', '').strip()
+        services = data.get('services', [])
+
+        if not name:
+            return jsonify({'error': 'Name is required'}), 400
+
+        conn = get_db()
+        conn.execute("UPDATE vendors_providers SET name=?, country=?, category=? WHERE id=?",
+                    (name, country, category, vid))
+        # Replace services
+        conn.execute("DELETE FROM vendor_service_map WHERE vendor_id = ?", (vid,))
+        for svc in services:
+            if svc.strip():
+                conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': f'Updated {name}'})
+    except Exception as e:
+        logging.error(f"ops_vendor_edit error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/vendors-providers/<int:vid>/toggle', methods=['POST'])
+@login_required
+def ops_vendor_toggle(vid):
+    """Toggle vendor active status."""
+    try:
+        conn = get_db()
+        conn.execute("UPDATE vendors_providers SET is_active = NOT is_active WHERE id = ?", (vid,))
+        conn.commit()
+        new_status = conn.execute("SELECT is_active FROM vendors_providers WHERE id = ?", (vid,)).fetchone()['is_active']
+        conn.close()
+        return jsonify({'success': True, 'is_active': bool(new_status)})
+    except Exception as e:
+        logging.error(f"ops_vendor_toggle error: {e}")
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/operations/vendors-providers/<int:vid>/delete', methods=['POST'])
+@login_required
+def ops_vendor_delete(vid):
+    """Delete a vendor/provider."""
+    try:
+        conn = get_db()
+        conn.execute("DELETE FROM vendor_service_map WHERE vendor_id = ?", (vid,))
+        conn.execute("DELETE FROM vendors_providers WHERE id = ?", (vid,))
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'message': 'Vendor deleted'})
+    except Exception as e:
+        logging.error(f"ops_vendor_delete error: {e}")
         return jsonify({'error': str(e)}), 500
 
 
@@ -12706,18 +13006,23 @@ def ops_coaching_add():
     conn = get_db()
     if request.method == 'POST':
         f = request.form
+        vendor_provider = f.get('vendor_provider', '').strip()
         conn.execute('''INSERT INTO ops_coaching (
             registration_number, course_type, coaching_method, coaching_status,
             batch_month, batch_year, start_date, end_date, english_training,
-            blueprint_stage, attendance, ielts_vendor, oet_vendor, other_vendor,
+            attendance, vendor_provider, ielts_vendor, oet_vendor, other_vendor,
             plab1_partner, plab2_vendor, created_by
         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('course_type'), f.get('coaching_method'),
             f.get('coaching_status'), f.get('batch_month'), f.get('batch_year'),
             f.get('start_date'), f.get('end_date'), f.get('english_training'),
-            f.get('blueprint_stage'), f.get('attendance'), f.get('ielts_vendor'),
-            f.get('oet_vendor'), f.get('other_vendor'), f.get('plab1_partner'),
-            f.get('plab2_vendor'), session.get('user_id', 0)
+            f.get('attendance'), vendor_provider,
+            vendor_provider if 'IELTS' in (f.get('english_training') or '') else '',
+            vendor_provider if 'OET' in (f.get('english_training') or '') else '',
+            vendor_provider if 'MRCP' in (f.get('english_training') or '') else '',
+            vendor_provider if 'PLAB 1' in (f.get('english_training') or '') else '',
+            vendor_provider if 'PLAB 2' in (f.get('english_training') or '') else '',
+            session.get('user_id', 0)
         ))
         conn.commit()
         conn.close()
@@ -12730,12 +13035,6 @@ def ops_coaching_add():
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
-                           ielts_vendors=get_lookup_options('ielts_vendor'),
-                           oet_vendors=get_lookup_options('oet_vendor'),
-                           plab1_partners=get_lookup_options('plab1_partner'),
-                           plab2_vendors=get_lookup_options('plab2_vendor'),
-                           other_vendors=get_lookup_options('other_training_vendor'),
-                           blueprint_stages=get_lookup_options('coaching_blueprint_stage'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
                            pre_reg=pre_reg, active_ops_page='coaching')
@@ -12753,17 +13052,22 @@ def ops_coaching_edit(record_id):
         return redirect(url_for('ops_coaching_list'))
     if request.method == 'POST':
         f = request.form
+        vendor_provider = f.get('vendor_provider', '').strip()
         conn.execute('''UPDATE ops_coaching SET
             registration_number=?, course_type=?, coaching_method=?, coaching_status=?,
             batch_month=?, batch_year=?, start_date=?, end_date=?, english_training=?,
-            blueprint_stage=?, attendance=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
+            attendance=?, vendor_provider=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
             plab1_partner=?, plab2_vendor=? WHERE id=?''', (
             f.get('registration_number'), f.get('course_type'), f.get('coaching_method'),
             f.get('coaching_status'), f.get('batch_month'), f.get('batch_year'),
             f.get('start_date'), f.get('end_date'), f.get('english_training'),
-            f.get('blueprint_stage'), f.get('attendance'), f.get('ielts_vendor'),
-            f.get('oet_vendor'), f.get('other_vendor'), f.get('plab1_partner'),
-            f.get('plab2_vendor'), record_id
+            f.get('attendance'), vendor_provider,
+            vendor_provider if 'IELTS' in (f.get('english_training') or '') else '',
+            vendor_provider if 'OET' in (f.get('english_training') or '') else '',
+            vendor_provider if 'MRCP' in (f.get('english_training') or '') else '',
+            vendor_provider if 'PLAB 1' in (f.get('english_training') or '') else '',
+            vendor_provider if 'PLAB 2' in (f.get('english_training') or '') else '',
+            record_id
         ))
         conn.commit()
         conn.close()
@@ -12775,12 +13079,6 @@ def ops_coaching_edit(record_id):
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
-                           ielts_vendors=get_lookup_options('ielts_vendor'),
-                           oet_vendors=get_lookup_options('oet_vendor'),
-                           plab1_partners=get_lookup_options('plab1_partner'),
-                           plab2_vendors=get_lookup_options('plab2_vendor'),
-                           other_vendors=get_lookup_options('other_training_vendor'),
-                           blueprint_stages=get_lookup_options('coaching_blueprint_stage'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
                            pre_reg='', active_ops_page='coaching')
@@ -12840,6 +13138,8 @@ def ops_coaching_import():
                 plab1_partner = _s('PLAB 1 Training Partner')
                 plab2_vendor = _s('PLAB 2 Training Vendor')
                 other_vendor = _s('Other Training Vendor')
+                # Derive unified vendor_provider from whichever vendor field is populated
+                vendor_provider = ielts_vendor or oet_vendor or plab1_partner or plab2_vendor or other_vendor
 
                 # Upsert by reg_number + training_program + start_date (unique combo)
                 exists = conn.execute(
@@ -12852,11 +13152,11 @@ def ops_coaching_import():
                     conn.execute('''UPDATE ops_coaching SET
                         course_type=?, coaching_method=?, coaching_status=?,
                         batch_month=?, batch_year=?, start_date=?, end_date=?,
-                        attendance=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
+                        attendance=?, vendor_provider=?, ielts_vendor=?, oet_vendor=?, other_vendor=?,
                         plab1_partner=?, plab2_vendor=? WHERE id=?''', (
                         course_type, coaching_method, coaching_status,
                         batch_month, batch_year, start_date, end_date,
-                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        attendance, vendor_provider, ielts_vendor, oet_vendor, other_vendor,
                         plab1_partner, plab2_vendor, exists['id']
                     ))
                     updated += 1
@@ -12864,12 +13164,12 @@ def ops_coaching_import():
                     conn.execute('''INSERT INTO ops_coaching (
                         registration_number, english_training, course_type, coaching_method,
                         coaching_status, batch_month, batch_year, start_date, end_date,
-                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        attendance, vendor_provider, ielts_vendor, oet_vendor, other_vendor,
                         plab1_partner, plab2_vendor, created_by
-                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
                         reg_num, training_program, course_type, coaching_method,
                         coaching_status, batch_month, batch_year, start_date, end_date,
-                        attendance, ielts_vendor, oet_vendor, other_vendor,
+                        attendance, vendor_provider, ielts_vendor, oet_vendor, other_vendor,
                         plab1_partner, plab2_vendor, session.get('user_id', 0)
                     ))
                     imported += 1
@@ -14231,9 +14531,11 @@ def ops_research_add():
         return redirect(request.args.get('next') or url_for('ops_research_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    research_vendors = get_vendors_by_category('Research & Publications', 'UK Pathway')
+    research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=None,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=get_lookup_options('research_provider'), pre_reg=pre_reg,
+                           research_providers=research_provider_names, pre_reg=pre_reg,
                            active_ops_page='research')
 
 
@@ -14261,9 +14563,11 @@ def ops_research_edit(rid):
         flash('Research record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_research_list'))
     conn.close()
+    research_vendors = get_vendors_by_category('Research & Publications', 'UK Pathway')
+    research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=record,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=get_lookup_options('research_provider'), pre_reg='',
+                           research_providers=research_provider_names, pre_reg='',
                            active_ops_page='research')
 
 
@@ -15144,10 +15448,12 @@ def ops_courses_add():
         return redirect(request.args.get('next') or url_for('ops_courses_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
+    course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
     return render_template('ops_courses_form.html', record=None,
                            course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
                            course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'),
-                           course_providers=get_lookup_options('course_provider'), certification_bodies=get_lookup_options('certification_body'),
+                           course_providers=course_provider_names, certification_bodies=get_lookup_options('certification_body'),
                            pre_reg=pre_reg, active_ops_page='online-courses')
 
 
@@ -15175,9 +15481,12 @@ def ops_courses_edit(rid):
         flash('Course record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_courses_list'))
     conn.close()
+    course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
+    course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
     return render_template('ops_courses_form.html', record=record,
                            course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
-                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'), pre_reg='',
+                           course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'),
+                           course_providers=course_provider_names, pre_reg='',
                            active_ops_page='online-courses')
 
 

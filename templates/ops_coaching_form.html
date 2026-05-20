@@ -79,53 +79,15 @@
                 </div>
             </div>
 
-            <!-- ===== VENDOR (conditional based on Training Program) ===== -->
+            <!-- ===== PROVIDER / VENDOR (populated via AJAX based on Training Program) ===== -->
             <div id="vendor_section" style="margin-bottom:1.1rem;display:none;">
-                <div id="vendor_ielts" style="display:none;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">IELTS Training Vendor</label>
-                    <select name="ielts_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in ielts_vendors %}
-                        <option value="{{ v }}" {% if record and record.ielts_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="vendor_oet" style="display:none;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">OET Training Vendor</label>
-                    <select name="oet_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in oet_vendors %}
-                        <option value="{{ v }}" {% if record and record.oet_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="vendor_plab1" style="display:none;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB 1 Training Partner</label>
-                    <select name="plab1_partner" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Partner</option>
-                        {% for p in plab1_partners %}
-                        <option value="{{ p }}" {% if record and record.plab1_partner == p %}selected{% endif %}>{{ p }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="vendor_plab2" style="display:none;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">PLAB 2 Training Vendor</label>
-                    <select name="plab2_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in plab2_vendors %}
-                        <option value="{{ v }}" {% if record and record.plab2_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div id="vendor_other" style="display:none;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Training Vendor</label>
-                    <select name="other_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Vendor</option>
-                        {% for v in other_vendors %}
-                        <option value="{{ v }}" {% if record and record.other_vendor == v %}selected{% endif %}>{{ v }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Provider / Vendor</label>
+                <select name="vendor_provider" id="vendor_provider" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">Select Provider</option>
+                    {% if record and record.vendor_provider %}
+                    <option value="{{ record.vendor_provider }}" selected>{{ record.vendor_provider }}</option>
+                    {% endif %}
+                </select>
             </div>
 
             <!-- ===== SCHEDULE ===== -->
@@ -160,15 +122,6 @@
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Blueprint Stage</label>
-                    <select name="blueprint_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Stage</option>
-                        {% for bs in blueprint_stages %}
-                        <option value="{{ bs }}" {% if record and record.blueprint_stage == bs %}selected{% endif %}>{{ bs }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Attendance</label>
                     <select name="attendance" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select</option>
@@ -177,6 +130,7 @@
                         {% endfor %}
                     </select>
                 </div>
+                <div></div>
             </div>
 
             <!-- ===== ACTIONS ===== -->
@@ -194,24 +148,40 @@
 function updateVendorFields() {
     const program = document.getElementById('training_program').value;
     const section = document.getElementById('vendor_section');
-    const vendorDivs = {
-        'IELTS Training': 'vendor_ielts',
-        'OET Training': 'vendor_oet',
-        'PLAB 1 Training': 'vendor_plab1',
-        'PLAB 2 Training': 'vendor_plab2',
-        'PLAB 2 Mock': 'vendor_plab2',
-        'MRCP 1': 'vendor_other'
-    };
-    // Hide all vendor divs
-    ['vendor_ielts','vendor_oet','vendor_plab1','vendor_plab2','vendor_other'].forEach(function(id) {
-        document.getElementById(id).style.display = 'none';
-    });
-    if (program && vendorDivs[program]) {
-        section.style.display = 'block';
-        document.getElementById(vendorDivs[program]).style.display = 'block';
-    } else {
+    const vendorSelect = document.getElementById('vendor_provider');
+
+    if (!program) {
         section.style.display = 'none';
+        return;
     }
+
+    section.style.display = 'block';
+
+    // Save current selection
+    const currentVal = vendorSelect.value;
+
+    // Fetch vendors for this training program via AJAX
+    fetch('/api/vendors-for-service?service_name=' + encodeURIComponent(program) + '&country=UK%20Pathway')
+        .then(r => r.json())
+        .then(vendors => {
+            vendorSelect.innerHTML = '<option value="">Select Provider</option>';
+            vendors.forEach(v => {
+                const opt = document.createElement('option');
+                opt.value = v.name;
+                opt.textContent = v.name;
+                if (v.name === currentVal) opt.selected = true;
+                vendorSelect.appendChild(opt);
+            });
+            // If current value not in list but exists, keep it as an option
+            if (currentVal && !vendorSelect.value) {
+                const opt = document.createElement('option');
+                opt.value = currentVal;
+                opt.textContent = currentVal;
+                opt.selected = true;
+                vendorSelect.appendChild(opt);
+            }
+        })
+        .catch(err => console.error('Vendor fetch error:', err));
 }
 // Run on page load for edit mode
 document.addEventListener('DOMContentLoaded', updateVendorFields);
