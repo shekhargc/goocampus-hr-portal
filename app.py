@@ -10972,6 +10972,18 @@ def ensure_ops_tables():
             service_name TEXT NOT NULL
         )''')
 
+        # ── Report Templates ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS report_templates (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            section TEXT NOT NULL DEFAULT 'plab_clients',
+            selected_fields TEXT NOT NULL,
+            filters TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # Migration: add vendor_provider column to ops_coaching
         try:
             conn.execute("SELECT vendor_provider FROM ops_coaching LIMIT 1")
@@ -12377,6 +12389,438 @@ def ops_vendor_delete(vid):
     except Exception as e:
         logging.error(f"ops_vendor_delete error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# ── REPORTS FIELD DEFINITIONS ──
+REPORT_FIELD_DEFS = {
+    'plab_clients': {
+        'label': 'PLAB Pathway Clients',
+        'table': 'plab_clients',
+        'groups': [
+            {
+                'label': 'Basic Information',
+                'fields': [
+                    ('registration_number', 'Registration Number'),
+                    ('customer_id', 'Customer ID'),
+                    ('registration_date', 'Registration Date'),
+                    ('prefix', 'Prefix'),
+                    ('first_name', 'First Name'),
+                    ('last_name', 'Last Name'),
+                    ('mobile', 'Mobile'),
+                    ('whatsapp1', 'WhatsApp 1'),
+                    ('whatsapp2', 'WhatsApp 2'),
+                    ('email', 'Email'),
+                    ('dob', 'Date of Birth'),
+                    ('city', 'City'),
+                    ('state', 'State'),
+                ]
+            },
+            {
+                'label': 'Social Media',
+                'fields': [
+                    ('instagram', 'Instagram'),
+                    ('facebook', 'Facebook'),
+                    ('linkedin', 'LinkedIn'),
+                ]
+            },
+            {
+                'label': 'Family Details',
+                'fields': [
+                    ('father_name', 'Father Name'),
+                    ('father_phone', 'Father Phone'),
+                    ('mother_name', 'Mother Name'),
+                    ('mother_phone', 'Mother Phone'),
+                    ('parents_email', 'Parents Email'),
+                ]
+            },
+            {
+                'label': 'Pipeline & Status',
+                'fields': [
+                    ('joined_stage', 'Joined Stage'),
+                    ('plan_type', 'Plan Type'),
+                    ('english_training', 'English Training'),
+                    ('account_status', 'Account Status'),
+                    ('current_stage', 'Current Stage'),
+                    ('dropped_date', 'Dropped Date'),
+                    ('upgraded_to', 'Upgraded To'),
+                    ('switched_program', 'Switched Program'),
+                ]
+            },
+            {
+                'label': 'Counsellor & Lead Source',
+                'fields': [
+                    ('counsellor', 'Counsellor'),
+                    ('counsellor_email', 'Counsellor Email'),
+                    ('counsellor_number', 'Counsellor Number'),
+                    ('lead_source', 'Lead Source'),
+                    ('referral_type', 'Referral Type'),
+                    ('operations_referral', 'Operations Referral'),
+                    ('portfolio_referral', 'Portfolio Referral'),
+                    ('australia_referral', 'Australia Referral'),
+                ]
+            },
+            {
+                'label': 'Package & Payment',
+                'fields': [
+                    ('package_amount', 'Package Amount'),
+                    ('discount_allowed', 'Discount Allowed'),
+                    ('additional_package_notes', 'Additional Package Notes'),
+                    ('final_package', 'Final Package'),
+                    ('inst1_amount', 'Installment 1 Amount'),
+                    ('inst1_date', 'Installment 1 Date'),
+                    ('inst1_note', 'Installment 1 Note'),
+                    ('inst2_amount', 'Installment 2 Amount'),
+                    ('inst2_date', 'Installment 2 Date'),
+                    ('inst2_note', 'Installment 2 Note'),
+                    ('inst3_amount', 'Installment 3 Amount'),
+                    ('inst3_date', 'Installment 3 Date'),
+                    ('inst3_note', 'Installment 3 Note'),
+                    ('inst4_amount', 'Installment 4 Amount'),
+                    ('inst4_date', 'Installment 4 Date'),
+                    ('inst4_note', 'Installment 4 Note'),
+                    ('total_paid', 'Total Paid'),
+                ]
+            },
+            {
+                'label': 'Onboarding',
+                'fields': [
+                    ('welcome_mail', 'Welcome Mail'),
+                    ('welcome_call_by', 'Welcome Call By'),
+                    ('welcome_call_date', 'Welcome Call Date'),
+                    ('english_book', 'English Book'),
+                    ('english_book_date', 'English Book Date'),
+                    ('oxford_book', 'Oxford Book'),
+                    ('oxford_book_date', 'Oxford Book Date'),
+                    ('plab_brochure', 'PLAB Brochure'),
+                    ('ceo_letter', 'CEO Letter'),
+                    ('refund_policy', 'Refund Policy'),
+                    ('service_agreement', 'Service Agreement'),
+                    ('goodie_pen', 'Goodie - Pen'),
+                    ('goodie_diary', 'Goodie - Diary'),
+                    ('goodie_laptop_bag', 'Goodie - Laptop Bag'),
+                    ('goodie_stickers', 'Goodie - Stickers'),
+                ]
+            },
+            {
+                'label': 'Other',
+                'fields': [
+                    ('additional_notes', 'Additional Notes'),
+                    ('created_at', 'Created At'),
+                    ('updated_at', 'Updated At'),
+                ]
+            },
+        ],
+        'filter_fields': [
+            {'key': 'account_status', 'label': 'Account Status', 'type': 'select',
+             'options': ['In Process', 'Active', 'On Hold', 'Dropped', 'Completed']},
+            {'key': 'current_stage', 'label': 'Current Stage', 'type': 'select',
+             'options': ['PLAB 1 Stage', 'PLAB 2 Stage', 'Internship/FY', 'Post CREST / S2', 'GMC Registration', 'EPIC Registration']},
+            {'key': 'plan_type', 'label': 'Plan Type', 'type': 'select',
+             'options': ['PLAB Lite', 'PLAB Pro', 'PLAB Pro Plus', 'PLAB Ace', 'PLAB Ace Plus', 'PLAB 2 Only', 'PLAB 2 Only Plus']},
+            {'key': 'english_training', 'label': 'English Training', 'type': 'select',
+             'options': ['IELTS Training', 'OET Training', 'None']},
+            {'key': 'lead_source', 'label': 'Lead Source', 'type': 'select',
+             'options': ['Organic', 'Referral', 'Social Media', 'Google Ads', 'Partner']},
+            {'key': 'state', 'label': 'State', 'type': 'text'},
+            {'key': 'registration_date_from', 'label': 'Registered From', 'type': 'date'},
+            {'key': 'registration_date_to', 'label': 'Registered To', 'type': 'date'},
+        ]
+    }
+}
+
+
+@app.route('/operations/reports')
+@admin_required
+def ops_reports():
+    """Reports page with template management and quick download."""
+    conn = get_db()
+    try:
+        templates = conn.execute(
+            "SELECT * FROM report_templates ORDER BY updated_at DESC"
+        ).fetchall()
+    except Exception:
+        templates = []
+    conn.close()
+
+    return render_template('ops_reports.html',
+        templates=templates,
+        field_defs=REPORT_FIELD_DEFS,
+        active_ops_page='reports',
+        active_section='operations')
+
+
+@app.route('/operations/reports/template', methods=['POST'])
+@admin_required
+def ops_reports_save_template():
+    """Save or update a report template."""
+    import json
+    template_id = request.form.get('template_id')
+    name = request.form.get('name', '').strip()
+    section = request.form.get('section', 'plab_clients')
+    selected_fields = request.form.getlist('fields')
+    filters_data = {}
+    for ff in REPORT_FIELD_DEFS.get(section, {}).get('filter_fields', []):
+        val = request.form.get(f"filter_{ff['key']}", '').strip()
+        if val:
+            filters_data[ff['key']] = val
+
+    if not name or not selected_fields:
+        flash('Template name and at least one field are required.', 'error')
+        return redirect(url_for('ops_reports'))
+
+    conn = get_db()
+    try:
+        if template_id:
+            conn.execute(
+                "UPDATE report_templates SET name=?, section=?, selected_fields=?, filters=?, updated_at=CURRENT_TIMESTAMP WHERE id=?",
+                (name, section, json.dumps(selected_fields), json.dumps(filters_data), template_id)
+            )
+        else:
+            conn.execute(
+                "INSERT INTO report_templates (name, section, selected_fields, filters, created_by) VALUES (?, ?, ?, ?, ?)",
+                (name, section, json.dumps(selected_fields), json.dumps(filters_data), session.get('user_id'))
+            )
+        conn.commit()
+        flash(f'Template "{name}" saved successfully.', 'success')
+    except Exception as e:
+        logging.error(f"ops_reports_save_template: {e}")
+        flash('Error saving template.', 'error')
+    conn.close()
+    return redirect(url_for('ops_reports'))
+
+
+@app.route('/operations/reports/template/<int:tid>/delete', methods=['POST'])
+@admin_required
+def ops_reports_delete_template(tid):
+    """Delete a report template."""
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM report_templates WHERE id = ?", (tid,))
+        conn.commit()
+        flash('Template deleted.', 'success')
+    except Exception as e:
+        logging.error(f"ops_reports_delete_template: {e}")
+        flash('Error deleting template.', 'error')
+    conn.close()
+    return redirect(url_for('ops_reports'))
+
+
+@app.route('/operations/reports/template/<int:tid>/json')
+@admin_required
+def ops_reports_template_json(tid):
+    """Return template data as JSON for editing."""
+    import json
+    conn = get_db()
+    try:
+        t = conn.execute("SELECT * FROM report_templates WHERE id = ?", (tid,)).fetchone()
+        if not t:
+            conn.close()
+            return jsonify({'error': 'Not found'}), 404
+        result = {
+            'id': t['id'],
+            'name': t['name'],
+            'section': t['section'],
+            'selected_fields': json.loads(t['selected_fields']),
+            'filters': json.loads(t['filters']) if t['filters'] else {}
+        }
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+    conn.close()
+    return jsonify(result)
+
+
+@app.route('/operations/reports/download')
+@admin_required
+def ops_reports_download():
+    """Generate and download Excel report. Accepts fields/filters via query params or template_id."""
+    import json
+    import io
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+
+    section = request.args.get('section', 'plab_clients')
+    template_id = request.args.get('template_id')
+    report_name = 'PLAB Clients Report'
+
+    # Get fields and filters from template or query params
+    if template_id:
+        conn = get_db()
+        t = conn.execute("SELECT * FROM report_templates WHERE id = ?", (template_id,)).fetchone()
+        conn.close()
+        if not t:
+            flash('Template not found.', 'error')
+            return redirect(url_for('ops_reports'))
+        selected_fields = json.loads(t['selected_fields'])
+        filters_data = json.loads(t['filters']) if t['filters'] else {}
+        report_name = t['name']
+    else:
+        selected_fields = request.args.getlist('fields')
+        if not selected_fields:
+            # Quick download: get fields from JSON body (via POST fallback) or use all
+            field_def = REPORT_FIELD_DEFS.get(section, {})
+            selected_fields = []
+            for grp in field_def.get('groups', []):
+                for col, label in grp['fields']:
+                    selected_fields.append(col)
+        filters_data = {}
+        for ff in REPORT_FIELD_DEFS.get(section, {}).get('filter_fields', []):
+            val = request.args.get(f"filter_{ff['key']}", '').strip()
+            if val:
+                filters_data[ff['key']] = val
+
+    # Build label map
+    field_def = REPORT_FIELD_DEFS.get(section, {})
+    label_map = {}
+    for grp in field_def.get('groups', []):
+        for col, label in grp['fields']:
+            label_map[col] = label
+
+    # Build SQL query
+    valid_cols = [f for f in selected_fields if f in label_map]
+    if not valid_cols:
+        flash('No valid fields selected.', 'error')
+        return redirect(url_for('ops_reports'))
+
+    sql = f"SELECT {', '.join(valid_cols)} FROM plab_clients WHERE 1=1"
+    params = []
+
+    if filters_data.get('account_status'):
+        sql += " AND account_status = ?"
+        params.append(filters_data['account_status'])
+    if filters_data.get('current_stage'):
+        sql += " AND current_stage = ?"
+        params.append(filters_data['current_stage'])
+    if filters_data.get('plan_type'):
+        sql += " AND plan_type = ?"
+        params.append(filters_data['plan_type'])
+    if filters_data.get('english_training'):
+        sql += " AND english_training = ?"
+        params.append(filters_data['english_training'])
+    if filters_data.get('lead_source'):
+        sql += " AND lead_source = ?"
+        params.append(filters_data['lead_source'])
+    if filters_data.get('state'):
+        sql += " AND state ILIKE ?"
+        params.append(f"%{filters_data['state']}%")
+    if filters_data.get('registration_date_from'):
+        sql += " AND registration_date >= ?"
+        params.append(filters_data['registration_date_from'])
+    if filters_data.get('registration_date_to'):
+        sql += " AND registration_date <= ?"
+        params.append(filters_data['registration_date_to'])
+
+    sql += " ORDER BY registration_number"
+
+    conn = get_db()
+    try:
+        rows = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_reports_download: {e}")
+        conn.close()
+        flash('Error generating report.', 'error')
+        return redirect(url_for('ops_reports'))
+    conn.close()
+
+    # Generate Excel
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Report'
+
+    header_font = Font(name='Arial', bold=True, color='FFFFFF', size=11)
+    header_fill = PatternFill('solid', fgColor='0F1B33')
+    header_align = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    header_border = Border(
+        bottom=Side(style='thin', color='F58220'),
+        right=Side(style='thin', color='333333')
+    )
+    data_font = Font(name='Arial', size=10)
+    data_border = Border(
+        bottom=Side(style='thin', color='E5E7EB'),
+        right=Side(style='thin', color='E5E7EB')
+    )
+    alt_fill = PatternFill('solid', fgColor='F9FAFB')
+
+    # Write headers
+    headers = [label_map[col] for col in valid_cols]
+    for col_idx, header in enumerate(headers, 1):
+        cell = ws.cell(row=1, column=col_idx, value=header)
+        cell.font = header_font
+        cell.fill = header_fill
+        cell.alignment = header_align
+        cell.border = header_border
+
+    # Write data
+    for row_idx, row in enumerate(rows, 2):
+        for col_idx, col_name in enumerate(valid_cols, 1):
+            value = row[col_name] if row[col_name] is not None else ''
+            # Format registration number
+            if col_name == 'registration_number' and value:
+                value = format_reg_filter(str(value))
+            cell = ws.cell(row=row_idx, column=col_idx, value=value)
+            cell.font = data_font
+            cell.border = data_border
+            if row_idx % 2 == 0:
+                cell.fill = alt_fill
+
+    # Auto-fit column widths
+    for col_idx, col_name in enumerate(valid_cols, 1):
+        max_len = len(label_map[col_name])
+        for row in ws.iter_rows(min_row=2, max_row=min(len(rows) + 1, 102), min_col=col_idx, max_col=col_idx):
+            for cell in row:
+                if cell.value:
+                    max_len = max(max_len, len(str(cell.value)))
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = min(max_len + 3, 40)
+
+    # Freeze header row
+    ws.freeze_panes = 'A2'
+
+    # Add auto-filter
+    ws.auto_filter.ref = f"A1:{ws.cell(row=1, column=len(valid_cols)).column_letter}{len(rows) + 1}"
+
+    # Add summary sheet
+    ws_summary = wb.create_sheet('Summary', 0)
+    ws_summary['A1'] = report_name
+    ws_summary['A1'].font = Font(name='Arial', bold=True, size=14, color='0F1B33')
+    ws_summary['A3'] = 'Generated On'
+    ws_summary['B3'] = datetime.now().strftime('%d-%b-%Y %I:%M %p')
+    ws_summary['A4'] = 'Total Records'
+    ws_summary['B4'] = len(rows)
+    ws_summary['A5'] = 'Fields Included'
+    ws_summary['B5'] = len(valid_cols)
+    ws_summary['A3'].font = Font(name='Arial', bold=True, size=10)
+    ws_summary['A4'].font = Font(name='Arial', bold=True, size=10)
+    ws_summary['A5'].font = Font(name='Arial', bold=True, size=10)
+    ws_summary['B3'].font = Font(name='Arial', size=10)
+    ws_summary['B4'].font = Font(name='Arial', size=10)
+    ws_summary['B5'].font = Font(name='Arial', size=10)
+
+    if filters_data:
+        ws_summary['A7'] = 'Active Filters'
+        ws_summary['A7'].font = Font(name='Arial', bold=True, size=10)
+        row_n = 8
+        for k, v in filters_data.items():
+            ws_summary.cell(row=row_n, column=1, value=k.replace('_', ' ').title()).font = Font(name='Arial', size=10)
+            ws_summary.cell(row=row_n, column=2, value=v).font = Font(name='Arial', size=10)
+            row_n += 1
+
+    ws_summary.column_dimensions['A'].width = 20
+    ws_summary.column_dimensions['B'].width = 35
+
+    # Save to bytes
+    output = io.BytesIO()
+    wb.save(output)
+    output.seek(0)
+
+    safe_name = re.sub(r'[^a-zA-Z0-9_-]', '_', report_name)
+    filename = f"{safe_name}_{datetime.now().strftime('%Y%m%d_%H%M')}.xlsx"
+
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name=filename
+    )
 
 
 @app.route('/operations/plab')

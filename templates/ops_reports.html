@@ -1,0 +1,370 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Reports - Operations{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .reports-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:24px; flex-wrap:wrap; gap:12px; }
+    .reports-header h1 { margin:0; font-size:1.35rem; font-weight:700; color:var(--navy); }
+
+    /* Template cards */
+    .templates-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(300px, 1fr)); gap:16px; margin-bottom:32px; }
+    .tpl-card { background:white; border-radius:10px; border:1px solid #E5E7EB; padding:20px; display:flex; flex-direction:column; gap:12px; transition:box-shadow 0.2s; }
+    .tpl-card:hover { box-shadow:0 4px 12px rgba(0,0,0,0.08); }
+    .tpl-card-header { display:flex; justify-content:space-between; align-items:flex-start; gap:8px; }
+    .tpl-card-name { font-weight:700; font-size:0.95rem; color:var(--navy); }
+    .tpl-card-meta { font-size:0.75rem; color:var(--gray-400); }
+    .tpl-card-fields { font-size:0.78rem; color:var(--gray-500); line-height:1.5; }
+    .tpl-card-filters { display:flex; flex-wrap:wrap; gap:4px; margin-top:2px; }
+    .tpl-filter-badge { display:inline-block; padding:2px 8px; background:#F3F4F6; border-radius:999px; font-size:0.7rem; color:#374151; }
+    .tpl-card-actions { display:flex; gap:8px; margin-top:auto; padding-top:8px; border-top:1px solid #F3F4F6; }
+    .tpl-btn { padding:7px 14px; border-radius:6px; font-size:0.8rem; font-weight:600; border:none; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:5px; }
+    .tpl-btn-download { background:var(--orange); color:white; }
+    .tpl-btn-download:hover { background:#E0740A; }
+    .tpl-btn-edit { background:#F3F4F6; color:#374151; }
+    .tpl-btn-edit:hover { background:#E5E7EB; }
+    .tpl-btn-delete { background:transparent; color:#DC2626; font-size:0.78rem; }
+    .tpl-btn-delete:hover { background:#FEF2F2; }
+
+    /* Create / edit card placeholder */
+    .tpl-card-new { border:2px dashed #D1D5DB; display:flex; align-items:center; justify-content:center; cursor:pointer; min-height:160px; transition:border-color 0.2s, background 0.2s; }
+    .tpl-card-new:hover { border-color:var(--orange); background:#FFF7ED; }
+    .tpl-card-new span { font-size:0.9rem; color:var(--gray-400); font-weight:600; }
+
+    /* Quick download section */
+    .quick-section { background:white; border-radius:10px; border:1px solid #E5E7EB; padding:24px; margin-bottom:24px; }
+    .quick-section h2 { font-size:1.05rem; font-weight:700; color:var(--navy); margin:0 0 16px 0; }
+
+    /* Field picker */
+    .field-groups { display:grid; grid-template-columns:repeat(auto-fill, minmax(240px, 1fr)); gap:16px; }
+    .field-group { background:#F9FAFB; border-radius:8px; padding:14px; }
+    .field-group-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+    .field-group-title { font-weight:700; font-size:0.82rem; color:var(--navy); }
+    .field-group-toggle { font-size:0.72rem; color:var(--orange); cursor:pointer; font-weight:600; border:none; background:none; }
+    .field-group-toggle:hover { text-decoration:underline; }
+    .field-item { display:flex; align-items:center; gap:6px; padding:3px 0; }
+    .field-item input[type="checkbox"] { accent-color:var(--orange); width:15px; height:15px; cursor:pointer; }
+    .field-item label { font-size:0.8rem; color:#374151; cursor:pointer; }
+
+    /* Filter fields */
+    .filter-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(200px, 1fr)); gap:12px; margin-top:16px; }
+    .filter-field label { display:block; font-size:0.75rem; font-weight:600; color:var(--gray-500); margin-bottom:4px; }
+    .filter-field select, .filter-field input { width:100%; padding:7px 10px; border:1px solid #D1D5DB; border-radius:6px; font-size:0.82rem; background:white; }
+
+    /* Actions row */
+    .actions-row { display:flex; gap:10px; margin-top:20px; align-items:center; flex-wrap:wrap; }
+    .btn-primary { padding:10px 22px; background:var(--orange); color:white; border:none; border-radius:6px; font-weight:600; font-size:0.85rem; cursor:pointer; }
+    .btn-primary:hover { background:#E0740A; }
+    .btn-secondary { padding:10px 22px; background:#F3F4F6; color:#374151; border:none; border-radius:6px; font-weight:600; font-size:0.85rem; cursor:pointer; }
+    .btn-secondary:hover { background:#E5E7EB; }
+
+    /* Modal */
+    .modal-overlay { display:none; position:fixed; top:0; left:0; right:0; bottom:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+    .modal-overlay.open { display:flex; }
+    .modal-content { background:white; border-radius:12px; width:90%; max-width:900px; max-height:85vh; overflow-y:auto; padding:28px; box-shadow:0 20px 60px rgba(0,0,0,0.25); }
+    .modal-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; }
+    .modal-header h2 { margin:0; font-size:1.15rem; font-weight:700; color:var(--navy); }
+    .modal-close { background:none; border:none; font-size:1.5rem; color:var(--gray-400); cursor:pointer; line-height:1; }
+    .modal-close:hover { color:var(--navy); }
+
+    .select-all-row { display:flex; align-items:center; gap:8px; padding:8px 0; margin-bottom:12px; border-bottom:1px solid #E5E7EB; }
+    .select-all-row label { font-weight:700; font-size:0.85rem; color:var(--navy); }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="reports-header">
+    <h1>Reports</h1>
+</div>
+
+<!-- Saved Templates Section -->
+<div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--navy);">Saved Report Templates</div>
+<div class="templates-grid">
+    {% for t in templates %}
+    <div class="tpl-card">
+        <div class="tpl-card-header">
+            <div>
+                <div class="tpl-card-name">{{ t.name }}</div>
+                <div class="tpl-card-meta">{{ t.section|replace('_', ' ')|title }} &middot; Updated {{ t.updated_at|format_date if t.updated_at else '—' }}</div>
+            </div>
+        </div>
+        {% set fields_list = t.selected_fields|default('[]') %}
+        <div class="tpl-card-fields">
+            {% set parsed = fields_list if fields_list is iterable and fields_list is not string else [] %}
+            {{ (parsed|length if parsed is iterable and parsed is not string else 0) }} fields selected
+        </div>
+        {% set filters_json = t.filters|default('{}') %}
+        {% if filters_json and filters_json != '{}' and filters_json != 'null' %}
+        <div class="tpl-card-filters">
+            <span class="tpl-filter-badge">Has filters</span>
+        </div>
+        {% endif %}
+        <div class="tpl-card-actions">
+            <a href="/operations/reports/download?template_id={{ t.id }}" class="tpl-btn tpl-btn-download">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download
+            </a>
+            <button class="tpl-btn tpl-btn-edit" onclick="editTemplate({{ t.id }})">Edit</button>
+            <form method="POST" action="/operations/reports/template/{{ t.id }}/delete" style="margin:0;" onsubmit="return confirm('Delete this template?')">
+                <button type="submit" class="tpl-btn tpl-btn-delete">Delete</button>
+            </form>
+        </div>
+    </div>
+    {% endfor %}
+
+    <!-- Create new card -->
+    <div class="tpl-card tpl-card-new" onclick="openModal()">
+        <span>+ Create New Template</span>
+    </div>
+</div>
+
+<!-- Quick Download Section -->
+<div class="quick-section">
+    <h2>Quick Download</h2>
+    <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 16px 0;">Select fields and apply filters to generate an ad-hoc Excel report.</p>
+
+    <form id="quickDownloadForm" action="/operations/reports/download" method="GET">
+        <input type="hidden" name="section" value="plab_clients">
+
+        <!-- Select All -->
+        <div class="select-all-row">
+            <input type="checkbox" id="selectAllQuick" checked onchange="toggleAllQuick(this.checked)">
+            <label for="selectAllQuick">Select All Fields</label>
+        </div>
+
+        <!-- Field Groups -->
+        <div class="field-groups">
+            {% for section_key, sec in field_defs.items() %}
+            {% for grp in sec.groups %}
+            <div class="field-group">
+                <div class="field-group-header">
+                    <span class="field-group-title">{{ grp.label }}</span>
+                    <button type="button" class="field-group-toggle" onclick="toggleGroup(this, 'quick')">Deselect All</button>
+                </div>
+                {% for col, label in grp.fields %}
+                <div class="field-item">
+                    <input type="checkbox" name="fields" value="{{ col }}" id="q_{{ col }}" class="quick-field-cb" checked>
+                    <label for="q_{{ col }}">{{ label }}</label>
+                </div>
+                {% endfor %}
+            </div>
+            {% endfor %}
+            {% endfor %}
+        </div>
+
+        <!-- Filters -->
+        <div style="margin-top:20px;">
+            <div style="font-size:0.85rem;font-weight:700;color:var(--navy);margin-bottom:8px;">Filters (optional)</div>
+            <div class="filter-grid">
+                {% for section_key, sec in field_defs.items() %}
+                {% for ff in sec.filter_fields %}
+                <div class="filter-field">
+                    <label>{{ ff.label }}</label>
+                    {% if ff.type == 'select' %}
+                    <select name="filter_{{ ff.key }}">
+                        <option value="">All</option>
+                        {% for opt in ff.options %}
+                        <option value="{{ opt }}">{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                    {% elif ff.type == 'date' %}
+                    <input type="date" name="filter_{{ ff.key }}">
+                    {% else %}
+                    <input type="text" name="filter_{{ ff.key }}" placeholder="Search...">
+                    {% endif %}
+                </div>
+                {% endfor %}
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="actions-row">
+            <button type="submit" class="btn-primary">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px;"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+                Download Excel
+            </button>
+            <button type="button" class="btn-secondary" onclick="resetQuickForm()">Reset</button>
+        </div>
+    </form>
+</div>
+
+<!-- Create/Edit Template Modal -->
+<div class="modal-overlay" id="templateModal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h2 id="modalTitle">Create Report Template</h2>
+            <button class="modal-close" onclick="closeModal()">&times;</button>
+        </div>
+        <form method="POST" action="/operations/reports/template" id="templateForm">
+            <input type="hidden" name="template_id" id="tplId" value="">
+
+            <!-- Template Name -->
+            <div style="margin-bottom:16px;">
+                <label style="display:block;font-size:0.82rem;font-weight:600;color:var(--navy);margin-bottom:4px;">Template Name *</label>
+                <input type="text" name="name" id="tplName" required placeholder="e.g. Active Clients - Basic Info" style="width:100%;padding:9px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.88rem;">
+            </div>
+
+            <input type="hidden" name="section" value="plab_clients">
+
+            <!-- Select All -->
+            <div class="select-all-row">
+                <input type="checkbox" id="selectAllModal" onchange="toggleAllModal(this.checked)">
+                <label for="selectAllModal">Select All Fields</label>
+            </div>
+
+            <!-- Field Groups -->
+            <div class="field-groups">
+                {% for section_key, sec in field_defs.items() %}
+                {% for grp in sec.groups %}
+                <div class="field-group">
+                    <div class="field-group-header">
+                        <span class="field-group-title">{{ grp.label }}</span>
+                        <button type="button" class="field-group-toggle" onclick="toggleGroup(this, 'modal')">Select All</button>
+                    </div>
+                    {% for col, label in grp.fields %}
+                    <div class="field-item">
+                        <input type="checkbox" name="fields" value="{{ col }}" id="m_{{ col }}" class="modal-field-cb">
+                        <label for="m_{{ col }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                {% endfor %}
+                {% endfor %}
+            </div>
+
+            <!-- Filters -->
+            <div style="margin-top:20px;">
+                <div style="font-size:0.85rem;font-weight:700;color:var(--navy);margin-bottom:8px;">Filters (optional)</div>
+                <div class="filter-grid">
+                    {% for section_key, sec in field_defs.items() %}
+                    {% for ff in sec.filter_fields %}
+                    <div class="filter-field">
+                        <label>{{ ff.label }}</label>
+                        {% if ff.type == 'select' %}
+                        <select name="filter_{{ ff.key }}" id="mf_{{ ff.key }}">
+                            <option value="">All</option>
+                            {% for opt in ff.options %}
+                            <option value="{{ opt }}">{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+                        {% elif ff.type == 'date' %}
+                        <input type="date" name="filter_{{ ff.key }}" id="mf_{{ ff.key }}">
+                        {% else %}
+                        <input type="text" name="filter_{{ ff.key }}" id="mf_{{ ff.key }}" placeholder="Search...">
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+
+            <div class="actions-row" style="margin-top:24px;">
+                <button type="submit" class="btn-primary">Save Template</button>
+                <button type="button" class="btn-secondary" onclick="closeModal()">Cancel</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}
+
+{% block ops_extra_js %}
+<script>
+/* ── Quick Download helpers ── */
+function toggleAllQuick(checked) {
+    document.querySelectorAll('.quick-field-cb').forEach(function(cb) { cb.checked = checked; });
+}
+function resetQuickForm() {
+    var form = document.getElementById('quickDownloadForm');
+    form.querySelectorAll('select').forEach(function(s) { s.selectedIndex = 0; });
+    form.querySelectorAll('input[type="text"], input[type="date"]').forEach(function(i) { i.value = ''; });
+    document.querySelectorAll('.quick-field-cb').forEach(function(cb) { cb.checked = true; });
+    document.getElementById('selectAllQuick').checked = true;
+}
+
+/* ── Group toggle ── */
+function toggleGroup(btn, ctx) {
+    var group = btn.closest('.field-group');
+    var cbs = group.querySelectorAll('input[type="checkbox"]');
+    var allChecked = Array.from(cbs).every(function(c) { return c.checked; });
+    cbs.forEach(function(c) { c.checked = !allChecked; });
+    btn.textContent = allChecked ? 'Select All' : 'Deselect All';
+    updateSelectAll(ctx);
+}
+function updateSelectAll(ctx) {
+    if (ctx === 'quick') {
+        var all = document.querySelectorAll('.quick-field-cb');
+        document.getElementById('selectAllQuick').checked = Array.from(all).every(function(c) { return c.checked; });
+    } else {
+        var all = document.querySelectorAll('.modal-field-cb');
+        document.getElementById('selectAllModal').checked = Array.from(all).every(function(c) { return c.checked; });
+    }
+}
+
+/* ── Modal helpers ── */
+function toggleAllModal(checked) {
+    document.querySelectorAll('.modal-field-cb').forEach(function(cb) { cb.checked = checked; });
+}
+function openModal() {
+    document.getElementById('tplId').value = '';
+    document.getElementById('tplName').value = '';
+    document.getElementById('modalTitle').textContent = 'Create Report Template';
+    document.querySelectorAll('.modal-field-cb').forEach(function(cb) { cb.checked = false; });
+    document.getElementById('selectAllModal').checked = false;
+    var form = document.getElementById('templateForm');
+    form.querySelectorAll('select').forEach(function(s) { s.selectedIndex = 0; });
+    form.querySelectorAll('input[type="text"][id^="mf_"], input[type="date"][id^="mf_"]').forEach(function(i) { i.value = ''; });
+    document.getElementById('templateModal').classList.add('open');
+}
+function closeModal() {
+    document.getElementById('templateModal').classList.remove('open');
+}
+function editTemplate(tid) {
+    fetch('/operations/reports/template/' + tid + '/json')
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.error) { alert(data.error); return; }
+            document.getElementById('tplId').value = data.id;
+            document.getElementById('tplName').value = data.name;
+            document.getElementById('modalTitle').textContent = 'Edit Template: ' + data.name;
+            // Reset all checkboxes
+            document.querySelectorAll('.modal-field-cb').forEach(function(cb) { cb.checked = false; });
+            // Check saved fields
+            (data.selected_fields || []).forEach(function(f) {
+                var cb = document.getElementById('m_' + f);
+                if (cb) cb.checked = true;
+            });
+            updateSelectAll('modal');
+            // Set filters
+            var form = document.getElementById('templateForm');
+            form.querySelectorAll('select[id^="mf_"]').forEach(function(s) { s.selectedIndex = 0; });
+            form.querySelectorAll('input[type="text"][id^="mf_"], input[type="date"][id^="mf_"]').forEach(function(i) { i.value = ''; });
+            var filters = data.filters || {};
+            for (var key in filters) {
+                var el = document.getElementById('mf_' + key);
+                if (el) el.value = filters[key];
+            }
+            // Update group toggle labels
+            document.querySelectorAll('#templateModal .field-group').forEach(function(grp) {
+                var cbs = grp.querySelectorAll('input[type="checkbox"]');
+                var btn = grp.querySelector('.field-group-toggle');
+                if (btn) {
+                    var allChecked = Array.from(cbs).every(function(c) { return c.checked; });
+                    btn.textContent = allChecked ? 'Deselect All' : 'Select All';
+                }
+            });
+            document.getElementById('templateModal').classList.add('open');
+        })
+        .catch(function(err) { alert('Error loading template.'); });
+}
+
+/* Close modal on overlay click */
+document.getElementById('templateModal').addEventListener('click', function(e) {
+    if (e.target === this) closeModal();
+});
+
+/* Update group toggles on checkbox change */
+document.querySelectorAll('.quick-field-cb').forEach(function(cb) {
+    cb.addEventListener('change', function() { updateSelectAll('quick'); });
+});
+</script>
+{% endblock %}
