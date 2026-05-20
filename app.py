@@ -6,7 +6,7 @@ import secrets
 import random
 from datetime import datetime, timedelta
 from functools import wraps
-from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file, make_response
+from flask import Flask, render_template, request, redirect, url_for, session, jsonify, flash, send_file, make_response, send_from_directory
 from itsdangerous import URLSafeTimedSerializer, SignatureExpired, BadSignature
 from io import BytesIO
 from openpyxl import Workbook
@@ -25090,6 +25090,12 @@ def start_neetpg_scheduler():
 # Start scheduler on app boot (only in production, not in reloader child)
 if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL'):
     start_neetpg_scheduler()
+
+
+@app.route('/psychometric-test')
+def psychometric_test():
+    """Public psychometric test — Career Discovery Kiosk by 12thPlus.com."""
+    return send_from_directory('static', 'psychometric_test.html')
 
 
 @app.route('/landing-pages')

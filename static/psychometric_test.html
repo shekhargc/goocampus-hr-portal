@@ -1,0 +1,1141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Career Discovery Kiosk — 12thPlus.com</title>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:'Poppins',sans-serif;background:#fafafa;color:#1d1d1f;-webkit-font-smoothing:antialiased;overflow:hidden;height:100vh}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes slideUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideDown{from{opacity:0;transform:translateY(-20px)}to{opacity:1;transform:translateY(0)}}
+@keyframes scaleIn{from{opacity:0;transform:scale(0.9)}to{opacity:1;transform:scale(1)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.5}}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.3}}
+.fade-in{animation:fadeIn .5s ease}
+.slide-up{animation:slideUp .6s cubic-bezier(.22,1,.36,1)}
+.slide-down{animation:slideDown .4s ease}
+.scale-in{animation:scaleIn .5s cubic-bezier(.22,1,.36,1)}
+::-webkit-scrollbar{width:6px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:#ccc;border-radius:3px}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ============================================================
+// BRAND TOKENS
+// ============================================================
+const B = {
+  navy:'#1f3662', teal:'#16aec8', tealLight:'#e8f7fa',
+  dark:'#0f1d32', bg:'#fafafa', white:'#fff',
+  border:'#e8e8ed', text:'#1d1d1f', muted:'#6e6e73',
+  green:'#059669', amber:'#d97706', red:'#ef4444', slate:'#94a3b8',
+  grad:'linear-gradient(135deg, #1f3662 0%, #16aec8 100%)',
+};
+
+const { useState, useEffect, useRef, useCallback } = React;
+
+// ============================================================
+// QUICK TEST — 15 QUESTIONS
+// ============================================================
+const QUICK_QUESTIONS = [
+  {id:1,section:'Aptitude & Thinking Style',q:'When your teacher gives a tough problem in class, you usually...',opts:[{l:'A',t:'Try to break it into smaller parts and solve logically',s:{Analytical:2},ef:'STEM/Research',ei:'High'},{l:'B',t:'Think of a completely new or creative approach',s:{Creative:2},ef:'Design/Innovation',ei:'Medium'},{l:'C',t:'Ask friends to discuss and solve it together',s:{Social:2},ef:'People/Management',ei:'Medium'},{l:'D',t:'Skip the theory — try things until something works',s:{Practical:2},ef:'Trades/Applied',ei:'Medium'}]},
+  {id:2,section:'Aptitude & Thinking Style',q:'Which school activity would you choose if you had a free hour?',opts:[{l:'A',t:'Science experiment or coding challenge',s:{Investigative:2},ef:'Science/Tech',ei:'High'},{l:'B',t:'Drawing, photography, or writing a story',s:{Artistic:2},ef:'Arts/Media',ei:'Medium'},{l:'C',t:'Organising a class event or volunteering',s:{Social:2},ef:'Social Work/HR',ei:'Medium'},{l:'D',t:'A hands-on project — building, repairing, or cooking',s:{Realistic:2},ef:'Engineering/Applied',ei:'Medium-High'}]},
+  {id:3,section:'Aptitude & Thinking Style',q:'You feel most confident when...',opts:[{l:'A',t:"You've studied every detail and know you're fully prepared",s:{Conscientious:2},ef:'CA/Law/Medicine',ei:'High'},{l:'B',t:"You've created something original and different from everyone else",s:{Openness:2},ef:'Design/Film/Advertising',ei:'Medium'},{l:'C',t:"You've helped a friend or your team succeed at something",s:{Agreeableness:2},ef:'Healthcare/Teaching',ei:'Medium-High'},{l:'D',t:"You've led the group and the plan worked out",s:{Enterprising:2},ef:'Business/Entrepreneurship',ei:'Medium'}]},
+  {id:4,section:'Aptitude & Thinking Style',q:"When reading or watching something, you're drawn to...",opts:[{l:'A',t:'Science, tech, space — how the world works',s:{Investigative:1},ef:'STEM Industries',ei:'High'},{l:'B',t:'Stories, art, music — how people express themselves',s:{Artistic:1},ef:'Creative Industries',ei:'Medium'},{l:'C',t:"News, debates, society — what's happening in the world",s:{Social:1},ef:'Public/Social Sector',ei:'Medium'},{l:'D',t:'Business, money, startups — how people build wealth',s:{Enterprising:1},ef:'Finance/Business',ei:'Medium-High'}]},
+  {id:5,section:'Personality & Work Style',q:'In a group project at school, you naturally...',opts:[{l:'A',t:"Take charge — you plan, assign tasks, and make sure it's done",s:{Enterprising:2,Leadership:1},ef:'Management/Law',ei:'Medium-High'},{l:'B',t:'Do the research — you want every fact to be right',s:{Investigative:2,Detail:1},ef:'Research/Audit',ei:'High'},{l:'C',t:"Make sure everyone gets along and no one is left out",s:{Social:2,Agreeableness:1},ef:'HR/Teaching/Counselling',ei:'Medium'},{l:'D',t:'Do the creative part — poster, presentation design, video',s:{Artistic:2,Openness:1},ef:'Design/Media',ei:'Medium'}]},
+  {id:6,section:'Personality & Work Style',q:'When you imagine your ideal work day, it looks like...',opts:[{l:'A',t:'Meetings, decisions, leading a team — fast-paced and high-energy',s:{Enterprising:2},ef:'Corporate/Finance',ei:'Medium-High'},{l:'B',t:'Quiet focus — a lab, studio, or desk where you can go deep',s:{Investigative:2,Specialist:1},ef:'R&D/Academia',ei:'High'},{l:'C',t:'Meeting people — a hospital, school, or community setting',s:{Social:2},ef:'Healthcare/Education',ei:'Medium-High'},{l:'D',t:"Outdoors or on-site — not stuck behind a desk all day",s:{Realistic:2},ef:'Agriculture/Engineering/Sports',ei:'Varied'}]},
+  {id:7,section:'Personality & Work Style',q:'How do you handle exam pressure?',opts:[{l:'A',t:'I make a strict timetable and follow it religiously',s:{Conscientious:2},ef:'Structured careers',ei:'High'},{l:'B',t:'I study in intense bursts — pressure actually helps me focus',s:{Resilience:2},ef:'High-pressure careers',ei:'High'},{l:'C',t:"I study with friends — we test each other and it sticks better",s:{Extraversion:2},ef:'Team careers',ei:'Medium'},{l:'D',t:"I focus on understanding concepts — once I get it, I remember it",s:{Openness:2},ef:'Conceptual careers',ei:'Medium'}]},
+  {id:8,section:'Personality & Work Style',q:'Your friends would say you are...',opts:[{l:'A',t:'The ambitious one — always pushing to be the best',s:{Ambitious:2,Enterprising:1},ef:'Competitive industries',ei:'High'},{l:'B',t:"The creative one — always coming up with something different",s:{Openness:2,Creative:1},ef:'Creative industries',ei:'Medium'},{l:'C',t:"The kind one — always there when someone needs help",s:{Agreeableness:2,Social:1},ef:'Service industries',ei:'Medium'},{l:'D',t:'The reliable one — the person who actually gets things done',s:{Conscientious:2,Practical:1},ef:'Execution roles',ei:'Medium'}]},
+  {id:9,section:'Values & Motivation',q:'What matters MOST to you in a future career?',opts:[{l:'A',t:'High salary and a powerful position',s:{Ambitious:2},ef:'Finance/Law/Medicine',ei:'High'},{l:'B',t:'Stability — a secure job with a clear path',s:{Security:2},ef:'Government/Banking',ei:'Medium'},{l:'C',t:"Passion — I'd rather earn less doing what I love",s:{Openness:2},ef:'Arts/Design/Sports',ei:'Varied'},{l:'D',t:'Impact — I want to help people or change something',s:{Purpose:2},ef:'Healthcare/NGO/Teaching',ei:'Medium-High'}]},
+  {id:10,section:'Values & Motivation',q:"If you could start any project right now, you'd choose...",opts:[{l:'A',t:'A tech startup or business that makes money',s:{Enterprising:2},ef:'Business/Startup',ei:'Medium'},{l:'B',t:'A YouTube channel, podcast, or creative brand',s:{Artistic:2},ef:'Media/Content',ei:'Low-Medium'},{l:'C',t:'An NGO, community project, or awareness campaign',s:{Social:2},ef:'Social Sector',ei:'Medium'},{l:'D',t:'A science experiment, research project, or invention',s:{Investigative:2},ef:'Research/Innovation',ei:'High'}]},
+  {id:11,section:'Values & Motivation',q:'When choosing between two options, you usually go with...',opts:[{l:'A',t:"The one with the highest payoff, even if it's harder",s:{Ambitious:1,Resilience:1},ef:'High-effort paths',ei:'High'},{l:'B',t:'The one that feels safe and predictable',s:{Security:1,Conscientious:1},ef:'Stable paths',ei:'Medium'},{l:'C',t:'The one that aligns with what I believe in',s:{Purpose:1,Agreeableness:1},ef:'Purpose-driven paths',ei:'Medium'},{l:'D',t:"The one that's different — I don't like doing what everyone does",s:{Openness:1,Enterprising:1},ef:'Unconventional paths',ei:'Medium'}]},
+  {id:12,section:'Values & Motivation',q:'Your biggest fear about your career is...',opts:[{l:'A',t:'Being average — I want to stand out and succeed big',s:{Ambitious:2},ef:'Competitive industries',ei:'High'},{l:'B',t:'Being unstable — I need financial security for my family',s:{Security:2},ef:'Government/Corporate',ei:'Medium'},{l:'C',t:'Being stuck — doing something I hate every day',s:{Openness:2,Passion:1},ef:'Creative/Dynamic industries',ei:'Medium'},{l:'D',t:'Being useless — I want my work to matter to someone',s:{Purpose:2},ef:'Social impact careers',ei:'Medium-High'}]},
+  {id:13,section:'Effort & Future Vision',q:'How many years of studying AFTER 12th are you willing to do to get your dream career?',opts:[{l:'A',t:'3 years max — I want to start working fast',s:{LowEffort:3},ef:'BCA, B.Com, Diploma',ei:'Low'},{l:'B',t:"4-5 years — I'm okay with a bachelor's degree journey",s:{MedEffort:3},ef:'B.Tech, BBA, B.Sc',ei:'Medium'},{l:'C',t:"5-7 years — willing to do post-graduation or professional courses",s:{HighEffort:3},ef:'CA, Law, M.Tech, MBA',ei:'High'},{l:'D',t:"7+ years — I'll do whatever it takes, even MBBS + specialisation",s:{VeryHighEffort:3},ef:'MBBS+PG, PhD, IAS',ei:'Very High'}]},
+  {id:14,section:'Effort & Future Vision',q:'How do you feel about competitive entrance exams (JEE, NEET, CLAT etc.)?',opts:[{l:'A',t:"I'll give it my all — competitive exams motivate me",s:{Competitive:2,Resilience:1},ef:'JEE/NEET/CLAT paths',ei:'High'},{l:'B',t:'I\'ll try but I also want a backup plan without heavy exams',s:{Balanced:2},ef:'State CET + CUET paths',ei:'Medium'},{l:'C',t:'I prefer courses where marks/percentage matter more than entrance exams',s:{Merit:2},ef:'University percentage-based',ei:'Medium'},{l:'D',t:"I want to avoid heavy exams entirely — I learn better in other ways",s:{Alternative:2},ef:'Skills/Portfolio/Diploma paths',ei:'Low'}]},
+  {id:15,section:'Effort & Future Vision',q:'In 10 years, you dream of being...',opts:[{l:'A',t:'A top professional — the expert everyone respects in my field',s:{Specialist:2,HighEffort:1},ef:'Medicine/Law/Engineering specialist',ei:'High'},{l:'B',t:'Running my own company or leading a big team',s:{Enterprising:2,Leadership:1},ef:'CEO/Entrepreneur/IAS',ei:'Medium-High'},{l:'C',t:'Someone who made a real difference — in health, education, or society',s:{Purpose:2,Social:1},ef:'Doctor/Teacher/Social entrepreneur',ei:'Medium-High'},{l:'D',t:'Living comfortably with a great work-life balance',s:{Security:2,Balance:1},ef:'Corporate/Government/Established profession',ei:'Medium'}]},
+];
+
+const QUICK_PERSONALITY_TYPES = {
+  'The Architect':{brief:'You think in systems — logical, analytical, and driven by precision.',desc:'You have a sharp analytical mind that naturally breaks complex problems into structured parts. You thrive in environments that reward deep thinking, research, and evidence-based decisions.',streams:{Science:90,Commerce:60,Arts:30,Vocational:40},careers:['Data Scientist','Research Analyst','Software Engineer','Doctor (Specialist)','Structural Engineer'],courses:['B.Tech (CS/IT)','MBBS','B.Sc Research','Integrated M.Sc','B.E. Electronics'],industries:['STEM/Research','Healthcare','Technology'],color:'#2563eb',emoji:'\u{1F3D7}️'},
+  'The Visionary':{brief:'You see the world differently — creative, expressive, and original.',desc:"You are drawn to beauty, meaning, and self-expression. You find energy in creating something new — whether it's a design, a story, a performance, or an invention.",streams:{Science:40,Commerce:30,Arts:95,Vocational:50},careers:['Graphic Designer','Film Director','Architect','Content Creator','UX Designer'],courses:['B.Des','B.Arch','BFA','BA Film Studies','B.Sc Animation'],industries:['Creative/Design/Media','Technology','Entrepreneurship'],color:'#7c3aed',emoji:'\u{1F3A8}'},
+  'The Leader':{brief:'You take charge naturally — ambitious, strategic, and competitive.',desc:"You gravitate towards influence, decision-making, and building things at scale. Whether it's a business, a team, or a movement — you want to lead it.",streams:{Science:50,Commerce:90,Arts:35,Vocational:30},careers:['Business Consultant','Investment Banker','IAS Officer','Startup Founder','Corporate Lawyer'],courses:['BBA/BMS','B.Com (Hons)','BA LLB','Integrated MBA','CA Foundation'],industries:['Finance/Business','Government/Civil Services','Entrepreneurship'],color:'#dc2626',emoji:'\u{1F454}'},
+  'The Guardian':{brief:'You care deeply about people — empathetic, supportive, and purpose-driven.',desc:'You find fulfilment in helping others grow, heal, or succeed. Your empathy and communication skills make you a natural in roles where human connection matters.',streams:{Science:65,Commerce:40,Arts:70,Vocational:45},careers:['Doctor (General/Paediatric)','Psychologist','Teacher','Social Worker','HR Manager'],courses:['MBBS','BA Psychology','B.Ed','BSW','BA Sociology'],industries:['Healthcare/Medicine','Education/Social Impact','People/Management'],color:'#059669',emoji:'\u{1F91D}'},
+  'The Builder':{brief:'You learn by doing — practical, dependable, and hands-on.',desc:"You prefer action over theory. You're the person who actually gets things done — building, fixing, executing. You thrive in structured, applied environments.",streams:{Science:70,Commerce:55,Arts:25,Vocational:90},careers:['Mechanical Engineer','Sports Coach','Chef','Pilot','Physiotherapist'],courses:['B.Tech (Mech)','B.Sc Sports Science','B.Sc Hotel Mgmt','BPT','B.Sc Aviation'],industries:['Engineering/Applied','Sports/Vocational','Healthcare'],color:'#d97706',emoji:'\u{1F527}'},
+  'The Strategist':{brief:'You plan ahead — disciplined, organised, and detail-oriented.',desc:"You value structure, reliability, and precision. You're the student with colour-coded notes and the timetable that actually works.",streams:{Science:60,Commerce:85,Arts:25,Vocational:50},careers:['Chartered Accountant','Bank Manager','Civil Servant','Auditor','Operations Manager'],courses:['B.Com + CA','B.Com (Hons)','BA Economics','B.Sc Statistics','BBA Finance'],industries:['Finance/Business','Government','Corporate'],color:'#0891b2',emoji:'\u{1F4CA}'},
+};
+
+const QUICK_DIM_TO_TYPE = {
+  Analytical:'The Architect',Investigative:'The Architect',Detail:'The Architect',
+  Creative:'The Visionary',Artistic:'The Visionary',Openness:'The Visionary',Passion:'The Visionary',
+  Enterprising:'The Leader',Leadership:'The Leader',Ambitious:'The Leader',Competitive:'The Leader',
+  Social:'The Guardian',Agreeableness:'The Guardian',Purpose:'The Guardian',
+  Realistic:'The Builder',Practical:'The Builder',Kinesthetic:'The Builder',
+  Conscientious:'The Strategist',Security:'The Strategist',Specialist:'The Strategist',Merit:'The Strategist',
+  Balanced:'The Strategist',Balance:'The Strategist',Alternative:'The Visionary',
+  Resilience:'The Leader',Extraversion:'The Guardian',
+};
+
+function computeQuickResults(answers) {
+  const dims={};const effortScores={LowEffort:0,MedEffort:0,HighEffort:0,VeryHighEffort:0};const industries={};
+  answers.forEach((optIdx,qIdx)=>{
+    const opt=QUICK_QUESTIONS[qIdx].opts[optIdx];
+    Object.entries(opt.s).forEach(([dim,val])=>{
+      if(effortScores.hasOwnProperty(dim))effortScores[dim]+=val;
+      else dims[dim]=(dims[dim]||0)+val;
+    });
+    if(opt.ef)industries[opt.ef]=(industries[opt.ef]||0)+1;
+  });
+  const typeScores={};Object.keys(QUICK_PERSONALITY_TYPES).forEach(t=>{typeScores[t]=0;});
+  Object.entries(dims).forEach(([dim,val])=>{const t=QUICK_DIM_TO_TYPE[dim];if(t)typeScores[t]+=val;});
+  const sortedTypes=Object.entries(typeScores).sort((a,b)=>b[1]-a[1]);
+  const topType=sortedTypes[0][0];
+  const totalScore=sortedTypes.reduce((s,t)=>s+t[1],0)||1;
+  const typePercentages={};
+  sortedTypes.forEach(([type,score])=>{typePercentages[type]=Math.round((score/totalScore)*100);});
+  const pSum=Object.values(typePercentages).reduce((a,b)=>a+b,0);
+  if(pSum!==100)typePercentages[sortedTypes[0][0]]+=(100-pSum);
+  const effortEntries=Object.entries(effortScores).sort((a,b)=>b[1]-a[1]);
+  let effortTier='Medium (4-5 years)';
+  if(effortEntries[0][1]>0){const map={LowEffort:'Low (3 years)',MedEffort:'Medium (4-5 years)',HighEffort:'High (5-7 years)',VeryHighEffort:'Very High (7-10+ years)'};effortTier=map[effortEntries[0][0]];}
+  const sortedIndustries=Object.entries(industries).sort((a,b)=>b[1]-a[1]).slice(0,3).map(i=>i[0]);
+  const typeData=QUICK_PERSONALITY_TYPES[topType];
+  const streamEntries=Object.entries(typeData.streams).sort((a,b)=>b[1]-a[1]);
+  return {personality:topType,personalityData:typeData,typePercentages,topStream:streamEntries[0][0],streamScores:typeData.streams,effortTier,topIndustries:sortedIndustries.length?sortedIndustries:typeData.industries.slice(0,3),dims,dimToType:QUICK_DIM_TO_TYPE,testType:'quick'};
+}
+
+// ============================================================
+// STREAM FINDER — 35 QUESTIONS
+// ============================================================
+const SF_SECTIONS = [
+  {key:'A',name:'Natural Abilities',framework:"Gardner's Multiple Intelligences",count:8},
+  {key:'B',name:'Interest Areas',framework:"Holland's RIASEC",count:10},
+  {key:'C',name:'Learning & Work Style',framework:'Big Five Personality',count:8},
+  {key:'D',name:'Values & Motivation',framework:'Schwartz + SDT',count:5},
+  {key:'E',name:'Cross-Validation',framework:'Consistency Check',count:4},
+];
+
+const SF_QUESTIONS = [
+  {id:1,sec:'A',q:"Which of these school activities feels the EASIEST for you (not your favourite — the one you're naturally good at)?",opts:[{l:'A',t:'Solving maths problems or puzzles',s:{'Logical-Mathematical':2},sm:{Science:2,Commerce:1}},{l:'B',t:'Writing essays, stories, or poems',s:{Linguistic:2},sm:{Arts:2,Commerce:1}},{l:'C',t:'Drawing, painting, or making diagrams',s:{Spatial:2},sm:{Arts:2,Science:1}},{l:'D',t:'Playing sports, dancing, or hands-on crafts',s:{Kinesthetic:2},sm:{Vocational:2,Science:1}}]},
+  {id:2,sec:'A',q:'When your teacher explains something new, you understand best when...',opts:[{l:'A',t:'They show diagrams, charts, or videos',s:{Spatial:2},sm:{Science:1}},{l:'B',t:'They explain it step by step with logic',s:{Logical:2},sm:{Science:1,Commerce:1}},{l:'C',t:'They let you try it yourself — hands-on',s:{Kinesthetic:2},sm:{Vocational:2}},{l:'D',t:'They tell a story or give a real-world example',s:{Linguistic:2},sm:{Arts:1,Commerce:1}}]},
+  {id:3,sec:'A',q:'Outside school, you spend the most time...',opts:[{l:'A',t:'Playing video games, coding, or building things on a computer',s:{Logical:1,Spatial:1},sm:{Science:2}},{l:'B',t:'Reading, writing, or watching documentaries',s:{Linguistic:1,Intrapersonal:1},sm:{Arts:1,Commerce:1}},{l:'C',t:'Playing sports, cycling, or physical activities',s:{Kinesthetic:1,Naturalistic:1},sm:{Vocational:1,Science:1}},{l:'D',t:'Chatting with friends, organising things, or helping at home',s:{Interpersonal:1,Social:1},sm:{Commerce:1,Arts:1}}]},
+  {id:4,sec:'A',q:'When working on a school project, the part you enjoy most is...',opts:[{l:'A',t:'The research — finding facts, data, and information',s:{Investigative:2},sm:{Science:2}},{l:'B',t:'The presentation — making it look good visually',s:{Spatial:2,Artistic:1},sm:{Arts:2}},{l:'C',t:'The writing — putting ideas into words clearly',s:{Linguistic:2},sm:{Arts:1,Commerce:1}},{l:'D',t:'Leading the group and making sure everything gets done',s:{Interpersonal:2,Enterprising:1},sm:{Commerce:2}}]},
+  {id:5,sec:'A',q:'You remember things better when...',opts:[{l:'A',t:'You see them — pictures, colours, maps, diagrams',s:{Spatial:2},sm:{Science:1,Arts:1}},{l:'B',t:'You hear them — someone explaining or discussing',s:{Linguistic:1,Musical:1},sm:{Arts:1}},{l:'C',t:'You write them down — notes, summaries, lists',s:{Linguistic:1,Logical:1},sm:{Commerce:1,Science:1}},{l:'D',t:'You do them — practice, experiments, physical involvement',s:{Kinesthetic:2},sm:{Vocational:2,Science:1}}]},
+  {id:6,sec:'A',q:'If you could be famous for ONE thing, it would be...',opts:[{l:'A',t:'Inventing something that changes the world',s:{Logical:2,Naturalistic:1},sm:{Science:2}},{l:'B',t:'Writing a book or creating a film that moves people',s:{Linguistic:2,Musical:1},sm:{Arts:2}},{l:'C',t:'Leading a country, company, or movement',s:{Interpersonal:2,Enterprising:1},sm:{Commerce:2}},{l:'D',t:'Curing a disease or saving lives',s:{Naturalistic:2,Interpersonal:1},sm:{Science:2,Vocational:1}}]},
+  {id:7,sec:'A',q:'In your friend group, your role is usually...',opts:[{l:'A',t:'The smart one who knows random interesting facts',s:{Logical:1,Intrapersonal:1},sm:{Science:1}},{l:'B',t:'The creative one who has unique ideas',s:{Spatial:1,Musical:1},sm:{Arts:1}},{l:'C',t:'The social one who connects everyone',s:{Interpersonal:2},sm:{Commerce:1,Arts:1}},{l:'D',t:'The practical one who actually makes things happen',s:{Kinesthetic:1,Logical:1},sm:{Vocational:1,Science:1}}]},
+  {id:8,sec:'A',q:'Which subject combination feels most natural (not what you score best in)?',opts:[{l:'A',t:'Maths + Science — I like logical, structured subjects',s:{Logical:2,Science:2},sm:{Science:3}},{l:'B',t:'Languages + Social Studies — I like expression and understanding people',s:{Linguistic:2,Arts:2},sm:{Arts:3}},{l:'C',t:'Art + Computers — I like creating visual or digital things',s:{Spatial:2},sm:{Arts:1,Science:1}},{l:'D',t:'Physical Education + Practical subjects — I like doing, not just studying',s:{Kinesthetic:2,Vocational:2},sm:{Vocational:3}}]},
+  {id:9,sec:'B',q:'Which of these Saturday afternoon activities excites you most?',opts:[{l:'A',t:'Taking apart a gadget to see how it works / building a model',s:{Realistic:2},sm:{Vocational:1,Science:1}},{l:'B',t:'Watching a science documentary or solving brain teasers',s:{Investigative:2},sm:{Science:2}},{l:'C',t:'Painting, sketching, writing a song, or editing a video',s:{Artistic:2},sm:{Arts:2}},{l:'D',t:'Volunteering at an old age home or teaching younger kids',s:{Social:2},sm:{Arts:1,Science:1}}]},
+  {id:10,sec:'B',q:'And which of THESE would be your second choice?',opts:[{l:'A',t:'Starting a small business — selling something to classmates',s:{Enterprising:2},sm:{Commerce:2}},{l:'B',t:'Organising your room, making a to-do list, or planning a trip',s:{Conventional:2},sm:{Commerce:2}},{l:'C',t:'Fixing something broken at home — bike, toy, appliance',s:{Realistic:2},sm:{Vocational:2}},{l:'D',t:'Reading about history, psychology, or how societies work',s:{Investigative:1,Social:1},sm:{Arts:1}}]},
+  {id:11,sec:'B',q:'In a career fair at school, which booth would you visit FIRST?',opts:[{l:'A',t:'Robotics / Space / AI / Gadgets',s:{Investigative:2,Realistic:1},sm:{Science:2}},{l:'B',t:'Hospital / Psychology clinic / Veterinary',s:{Social:2,Investigative:1},sm:{Science:1,Arts:1}},{l:'C',t:'Film studio / Music label / Design agency',s:{Artistic:2},sm:{Arts:2}},{l:'D',t:'Stock market / Startup / Business consulting',s:{Enterprising:2,Conventional:1},sm:{Commerce:2}}]},
+  {id:12,sec:'B',q:"If your school offered these electives, you'd pick...",opts:[{l:'A',t:'Coding & App Development',s:{Investigative:1,Realistic:1},sm:{Science:2}},{l:'B',t:'Creative Writing & Journalism',s:{Artistic:1,Linguistic:1},sm:{Arts:2}},{l:'C',t:'Business & Entrepreneurship',s:{Enterprising:2},sm:{Commerce:2}},{l:'D',t:'Health Science & First Aid',s:{Social:1,Investigative:1},sm:{Science:1,Vocational:1}}]},
+  {id:13,sec:'B',q:"When you grow up, you'd rather be known as someone who...",opts:[{l:'A',t:'Built or invented something that millions of people use',s:{Realistic:1,Investigative:1},sm:{Science:1,Vocational:1}},{l:'B',t:"Healed, taught, or improved people's lives",s:{Social:2},sm:{Science:1,Arts:1}},{l:'C',t:'Created art, films, music, or content that inspired people',s:{Artistic:2},sm:{Arts:2}},{l:'D',t:'Built a successful business or led a powerful organisation',s:{Enterprising:2},sm:{Commerce:2}}]},
+  {id:14,sec:'B',q:"You're happiest when you're...",opts:[{l:'A',t:'Solving a puzzle, problem, or challenge',s:{Investigative:2},sm:{Science:1,Commerce:1}},{l:'B',t:'Creating something — writing, drawing, building',s:{Artistic:2,Realistic:1},sm:{Arts:2}},{l:'C',t:'Helping someone — explaining, supporting, caring',s:{Social:2},sm:{Arts:1,Science:1}},{l:'D',t:'Winning something — competition, debate, game',s:{Enterprising:2,Competitive:1},sm:{Commerce:2}}]},
+  {id:15,sec:'B',q:'Which type of YouTube/Instagram content do you watch the most?',opts:[{l:'A',t:'Tech reviews, science experiments, coding tutorials',s:{Investigative:1,Realistic:1},sm:{Science:2}},{l:'B',t:'Art, photography, fashion, travel, music covers',s:{Artistic:2},sm:{Arts:2}},{l:'C',t:'Motivational, business tips, stock market, startup stories',s:{Enterprising:2},sm:{Commerce:2}},{l:'D',t:'Study tips, college life, exam strategies, career advice',s:{Conventional:1,Social:1},sm:{}}]},
+  {id:16,sec:'B',q:"If you could shadow a professional for a day, you'd choose...",opts:[{l:'A',t:'A scientist at ISRO or a coder at Google',s:{Investigative:2},sm:{Science:2}},{l:'B',t:'A doctor at AIIMS or a teacher at a school',s:{Social:2},sm:{Science:1,Arts:1}},{l:'C',t:'A filmmaker at Dharma or a designer at Apple',s:{Artistic:2},sm:{Arts:2}},{l:'D',t:'A CEO at Infosys or a CA at a big firm',s:{Enterprising:1,Conventional:1},sm:{Commerce:2}}]},
+  {id:17,sec:'B',q:'Which of these problems would you want to solve?',opts:[{l:'A',t:'Climate change — through technology and science',s:{Investigative:1,Realistic:1},sm:{Science:2}},{l:'B',t:'Mental health crisis — through awareness and care',s:{Social:2},sm:{Arts:1,Science:1}},{l:'C',t:'Inequality — through business, policy, and opportunity',s:{Enterprising:1,Social:1},sm:{Commerce:1,Arts:1}},{l:'D',t:'Cultural loss — through art, storytelling, and preservation',s:{Artistic:2},sm:{Arts:2}}]},
+  {id:18,sec:'B',q:'Which school event role suits you best?',opts:[{l:'A',t:'Technical head — managing sound, lights, or backstage logistics',s:{Realistic:2,Conventional:1},sm:{Science:1,Vocational:1}},{l:'B',t:'Stage performer — acting, dancing, singing, or presenting',s:{Artistic:2},sm:{Arts:2}},{l:'C',t:'Organiser — planning everything, managing teams and budget',s:{Enterprising:2},sm:{Commerce:2}},{l:'D',t:'Volunteer coordinator — handling registrations and helping others',s:{Social:2,Conventional:1},sm:{Commerce:1,Arts:1}}]},
+  {id:19,sec:'C',q:'When you start a new topic in school, you prefer to...',opts:[{l:'A',t:'Read ahead in the textbook and prepare before the class',s:{Conscientious:2},sm:{Science:1,Commerce:1}},{l:'B',t:'Wait for the teacher to explain, then take notes carefully',s:{Conscientious:1,Structured:1},sm:{}},{l:'C',t:'Watch YouTube videos and explore related topics on your own',s:{Openness:2},sm:{Arts:1}},{l:'D',t:'Skip the theory — just give me the problems to solve',s:{Practical:2},sm:{Vocational:1,Science:1}}]},
+  {id:20,sec:'C',q:"When you disagree with a friend's opinion, you usually...",opts:[{l:'A',t:'Debate it out — I like arguing my point with logic',s:{Extraversion:1,Enterprising:1},sm:{Commerce:1}},{l:'B',t:'Listen first, then share my view calmly',s:{Agreeableness:2},sm:{}},{l:'C',t:"Let it go — it's not worth fighting about",s:{Agreeableness:1,Introversion:1},sm:{}},{l:'D',t:'Get excited — I love discussing different perspectives',s:{Openness:2,Extraversion:1},sm:{Arts:1}}]},
+  {id:21,sec:'C',q:'How organised is your study space / bag / notes?',opts:[{l:'A',t:'Very organised — everything is labelled and in place',s:{Conscientious:3},sm:{Commerce:1,Science:1}},{l:'B',t:'Mostly organised — I try but it gets messy sometimes',s:{Conscientious:1},sm:{}},{l:'C',t:'Creative chaos — I know where things are even if it looks messy',s:{Openness:2},sm:{Arts:1}},{l:'D',t:"I don't think about it — I just need the basics",s:{Practical:1},sm:{Vocational:1}}]},
+  {id:22,sec:'C',q:"When you're in a new group (new class, tuition, camp), you...",opts:[{l:'A',t:'Wait and observe — I take time to open up',s:{Introversion:2},sm:{}},{l:'B',t:'Introduce myself quickly — I love meeting new people',s:{Extraversion:2},sm:{Commerce:1}},{l:'C',t:'Find one person I connect with and stick with them',s:{Ambiversion:2},sm:{}},{l:'D',t:"Don't worry about socialising — I focus on the work",s:{TaskOriented:2},sm:{Science:1}}]},
+  {id:23,sec:'C',q:'How do you feel about trying something completely new?',opts:[{l:'A',t:'Excited — I love new experiences and challenges',s:{Openness:3},sm:{Arts:1}},{l:'B',t:"Cautious but open — I'll try if it seems reasonable",s:{Openness:1,Conscientious:1},sm:{}},{l:'C',t:"Nervous — I prefer things I already know I'm good at",s:{Security:2},sm:{Commerce:1}},{l:'D',t:"Depends — if it helps my goals, I'm in; otherwise, no",s:{GoalOriented:2},sm:{}}]},
+  {id:24,sec:'C',q:'When you make a mistake on a test, you...',opts:[{l:'A',t:'Analyse exactly what went wrong so it never happens again',s:{Analytical:2,Conscientious:1},sm:{Science:1}},{l:'B',t:"Feel upset but move on — there's always next time",s:{BalancedEmotional:1},sm:{}},{l:'C',t:'Talk to friends or teacher to understand what I missed',s:{Social:1,Collaborative:1},sm:{}},{l:'D',t:"Don't stress much — one test doesn't define me",s:{Resilient:2},sm:{}}]},
+  {id:25,sec:'C',q:'Do you prefer working alone or in a team?',opts:[{l:'A',t:'Alone — I work best independently with no distractions',s:{Intrapersonal:2},sm:{Science:1}},{l:'B',t:'Small team — 2-3 people I trust and work well with',s:{Balanced:2},sm:{}},{l:'C',t:'Big team — the more people and ideas, the better',s:{Interpersonal:2,Extraversion:1},sm:{Commerce:1}},{l:'D',t:"It depends on the task — some things need a team, some don't",s:{Adaptable:2},sm:{}}]},
+  {id:26,sec:'C',q:'How important are rules and structure to you?',opts:[{l:'A',t:"Very — I like clear rules, deadlines, and knowing what's expected",s:{Conventional:2,Conscientious:1},sm:{Commerce:1}},{l:'B',t:'Somewhat — guidelines are helpful but I need freedom too',s:{Balanced:1},sm:{}},{l:'C',t:'Not much — I prefer figuring things out my own way',s:{Openness:2,Artistic:1},sm:{Arts:1}},{l:'D',t:'I follow rules if they make sense, but I question unfair ones',s:{Enterprising:1,Critical:1},sm:{}}]},
+  {id:27,sec:'D',q:"If money wasn't a factor, you'd spend your life...",opts:[{l:'A',t:'Exploring science, technology, and discovering new things',s:{Investigative:2,Curiosity:1},sm:{Science:2}},{l:'B',t:'Creating art, music, films, or writing books',s:{Artistic:2,Expression:1},sm:{Arts:2}},{l:'C',t:'Helping communities, teaching, or healing people',s:{Social:2,Purpose:1},sm:{Arts:1,Science:1}},{l:'D',t:'Building businesses, managing projects, or running an organisation',s:{Enterprising:2,Achievement:1},sm:{Commerce:2}}]},
+  {id:28,sec:'D',q:'What kind of impact do you want your career to have?',opts:[{l:'A',t:'Make India or the world more technologically advanced',s:{Investigative:1,Achievement:1},sm:{Science:2}},{l:'B',t:'Make people healthier, happier, or mentally stronger',s:{Social:2},sm:{Science:1,Arts:1}},{l:'C',t:'Make people think differently through stories, art, or ideas',s:{Artistic:1,Openness:1},sm:{Arts:2}},{l:'D',t:'Create jobs, grow the economy, or build successful enterprises',s:{Enterprising:2},sm:{Commerce:2}}]},
+  {id:29,sec:'D',q:'Which of these makes you feel MOST proud?',opts:[{l:'A',t:'Getting the highest marks in a tough exam',s:{Achievement:2,Conscientious:1},sm:{Science:1}},{l:'B',t:'Winning a competition — sports, quiz, debate, art',s:{Competitive:2,Enterprising:1},sm:{Commerce:1}},{l:'C',t:"Being told 'you really helped me' by someone",s:{Relatedness:2,Social:1},sm:{}},{l:'D',t:'Finishing something you built or created from scratch',s:{Autonomy:2,Creative:1},sm:{Arts:1,Vocational:1}}]},
+  {id:30,sec:'D',q:'What scares you most about growing up?',opts:[{l:'A',t:'Not being good enough or failing in competitive exams',s:{AchievementDriven:2},sm:{Science:1}},{l:'B',t:"Ending up in a boring job that doesn't excite me",s:{PassionDriven:2},sm:{Arts:1}},{l:'C',t:'Not earning enough to support my family',s:{SecurityDriven:2},sm:{Commerce:1}},{l:'D',t:'Not making any real difference in the world',s:{PurposeDriven:2},sm:{}}]},
+  {id:31,sec:'D',q:"If your parents said 'do whatever you want', your FIRST reaction would be...",opts:[{l:'A',t:"Finally! I'll study what I'm actually interested in",s:{Intrinsic:2,Openness:1},sm:{}},{l:'B',t:"Great — but I still want a career that's respected and pays well",s:{Achievement:1,Security:1},sm:{Commerce:1}},{l:'C',t:"I'd choose something where I can help people every day",s:{Social:2,Purpose:1},sm:{}},{l:'D',t:"I'd start building something of my own — business, brand, project",s:{Enterprising:2,Autonomy:1},sm:{Commerce:1}}]},
+  {id:32,sec:'E',q:"Your cousin asks you to help them choose between Science and Commerce after 10th. You'd say...",opts:[{l:'A',t:"Science — if you love logic, experiments, and challenges. It's tough but opens the most doors.",s:{ScienceLeaning:2},sm:{Science:3}},{l:'B',t:"Commerce — if you're practical, like numbers, and want a stable career without extreme entrance exams.",s:{CommerceLeaning:2},sm:{Commerce:3}},{l:'C',t:"Arts — don't forget Arts! If you love expression, people, or creative work, it's the smartest choice.",s:{ArtsLeaning:2},sm:{Arts:3}},{l:'D',t:"It depends on what YOU enjoy — don't choose based on what others say.",s:{ValuesDriven:2},sm:{}}]},
+  {id:33,sec:'E',q:"You win a surprise ₹1 lakh scholarship. You'd use it for...",opts:[{l:'A',t:'A coding bootcamp, science camp, or robotics course',s:{Investigative:1},sm:{Science:2}},{l:'B',t:'An art workshop, music lessons, or filmmaking course',s:{Artistic:1},sm:{Arts:2}},{l:'C',t:'A leadership or public speaking programme',s:{Enterprising:1},sm:{Commerce:2}},{l:'D',t:'Save it for college admission fees — be practical',s:{Conventional:1,Security:1},sm:{Commerce:1}}]},
+  {id:34,sec:'E',q:'A new student joins your class and sits alone. You...',opts:[{l:'A',t:"Notice but wait — they'll settle in on their own",s:{Intrapersonal:1},sm:{}},{l:'B',t:'Go say hi and invite them to sit with your group',s:{Interpersonal:2,Social:1},sm:{}},{l:'C',t:'Ask the teacher to introduce them to the class',s:{Social:1,Conventional:1},sm:{}},{l:'D',t:"Don't notice — you're focused on your own work",s:{TaskOriented:1},sm:{}}]},
+  {id:35,sec:'E',q:'Your dream school trip would be to...',opts:[{l:'A',t:'A space centre, tech company, or science museum',s:{Investigative:1},sm:{Science:2}},{l:'B',t:'A film city, art gallery, or cultural festival',s:{Artistic:1},sm:{Arts:2}},{l:'C',t:'A hospital, NGO, or community service project',s:{Social:1},sm:{Science:1}},{l:'D',t:'A stock exchange, startup hub, or business expo',s:{Enterprising:1},sm:{Commerce:2}}]},
+];
+
+const SF_PERSONALITY_TYPES = {
+  'The Explorer':{emoji:'\u{1F52C}',color:'#2563eb',brief:"You're curious, analytical, and love solving problems.",desc:'You have a naturally curious mind that asks "why" and "how" about everything. You enjoy research, experiments, and understanding how things work.',careers:['Data Scientist','Research Scientist','Doctor (Specialist)','Software Engineer','Astronomer','Biotechnologist'],courses:['B.Tech (CS/IT)','MBBS','B.Sc (Research)','Integrated M.Sc','B.E. (Electronics)','B.Pharma'],industries:['STEM/Research','Healthcare','Technology']},
+  'The Creator':{emoji:'\u{1F3A8}',color:'#7c3aed',brief:'You see the world differently — creative, expressive, and original.',desc:"You find energy in creating something new — whether it's a sketch, a story, a video, or a design. You prefer freedom over structure.",careers:['Graphic Designer','Film Director','Architect','Content Creator','Fashion Designer','UX Designer'],courses:['B.Des','B.Arch','BFA','BA Film Studies','B.Sc Animation','BA Mass Communication'],industries:['Creative/Design/Media','Architecture','Entertainment']},
+  'The Changemaker':{emoji:'\u{1F91D}',color:'#059669',brief:'You care deeply about people — empathetic, supportive, and purpose-driven.',desc:'You find fulfilment in helping others grow, heal, or succeed. Your empathy and communication skills make you a natural in people-focused roles.',careers:['Doctor (General)','Psychologist','Teacher','Social Worker','HR Manager','Counsellor'],courses:['MBBS','BA Psychology','B.Ed','BSW','BA Sociology','B.Sc Nursing'],industries:['Healthcare/Medicine','Education/Social Impact','NGO/Social Enterprise']},
+  'The Achiever':{emoji:'\u{1F454}',color:'#dc2626',brief:"You're ambitious, competitive, and love leading from the front.",desc:'You naturally take charge in groups. You enjoy strategy, decision-making, and building things at scale.',careers:['Business Consultant','Investment Banker','IAS Officer','Startup Founder','Corporate Lawyer','CA'],courses:['BBA/BMS','B.Com (Hons)','BA LLB','BBA LLB','Integrated MBA','CA Foundation'],industries:['Finance/Business','Government/Civil Services','Law']},
+  'The Builder':{emoji:'\u{1F527}',color:'#d97706',brief:'You learn by doing — practical, dependable, and hands-on.',desc:"You prefer action over theory. You're the person who actually gets things done — building, fixing, executing.",careers:['Mechanical Engineer','Pilot','Chef','Sports Coach','Physiotherapist','Automobile Designer'],courses:['Diploma Engineering','B.Sc Sports Science','B.Sc Hotel Management','BPT','B.Sc Aviation','ITI + Apprenticeship'],industries:['Engineering/Applied','Sports/Fitness','Hospitality/Aviation']},
+  'The Planner':{emoji:'\u{1F4CA}',color:'#0891b2',brief:"You're disciplined, detail-oriented, and love structure.",desc:"You value reliability, precision, and planning. Careers that reward consistency and careful execution are your sweet spot.",careers:['Chartered Accountant','Bank Manager','Civil Servant','Auditor','Operations Manager','Actuary'],courses:['B.Com','CA Foundation','BBA (Finance)','B.Sc Statistics','BA Economics','CS Foundation'],industries:['Finance/Banking','Government','Corporate Operations']},
+};
+
+const SF_STREAM_WEIGHTS = {
+  'Logical-Mathematical':{Science:3,Commerce:2,Arts:0,Vocational:1},Logical:{Science:3,Commerce:2,Arts:0,Vocational:1},Linguistic:{Science:0,Commerce:1,Arts:3,Vocational:0},Spatial:{Science:2,Commerce:0,Arts:3,Vocational:1},Musical:{Science:0,Commerce:0,Arts:2,Vocational:0},Kinesthetic:{Science:1,Commerce:0,Arts:0,Vocational:3},Interpersonal:{Science:0,Commerce:2,Arts:2,Vocational:0},Intrapersonal:{Science:2,Commerce:1,Arts:1,Vocational:0},Naturalistic:{Science:2,Commerce:0,Arts:0,Vocational:2},Realistic:{Science:2,Commerce:0,Arts:0,Vocational:3},Investigative:{Science:3,Commerce:1,Arts:0,Vocational:0},Artistic:{Science:0,Commerce:0,Arts:3,Vocational:1},Social:{Science:1,Commerce:1,Arts:2,Vocational:1},Enterprising:{Science:0,Commerce:3,Arts:1,Vocational:0},Conventional:{Science:0,Commerce:3,Arts:0,Vocational:1},Openness:{Science:1,Commerce:0,Arts:2,Vocational:0},Conscientious:{Science:2,Commerce:2,Arts:0,Vocational:1},Extraversion:{Science:0,Commerce:2,Arts:1,Vocational:0},Agreeableness:{Science:1,Commerce:1,Arts:2,Vocational:0},Introversion:{Science:2,Commerce:0,Arts:1,Vocational:0},
+};
+
+const SF_DIM_TO_TYPE = {
+  Investigative:'The Explorer',Logical:'The Explorer','Logical-Mathematical':'The Explorer',Analytical:'The Explorer',Curiosity:'The Explorer',Intrapersonal:'The Explorer',
+  Artistic:'The Creator',Spatial:'The Creator',Musical:'The Creator',Creative:'The Creator',Expression:'The Creator',Openness:'The Creator',PassionDriven:'The Creator',
+  Social:'The Changemaker',Agreeableness:'The Changemaker',Interpersonal:'The Changemaker',Purpose:'The Changemaker',Relatedness:'The Changemaker',PurposeDriven:'The Changemaker',Collaborative:'The Changemaker',Extraversion:'The Changemaker',
+  Enterprising:'The Achiever',Competitive:'The Achiever',Achievement:'The Achiever',AchievementDriven:'The Achiever',CommerceLeaning:'The Achiever',
+  Realistic:'The Builder',Kinesthetic:'The Builder',Practical:'The Builder',Naturalistic:'The Builder',Vocational:'The Builder',TaskOriented:'The Builder',
+  Conscientious:'The Planner',Conventional:'The Planner',Structured:'The Planner',Security:'The Planner',SecurityDriven:'The Planner',GoalOriented:'The Planner',BalancedEmotional:'The Planner',Adaptable:'The Planner',Balanced:'The Planner',
+  Resilient:'The Achiever',Autonomy:'The Creator',Intrinsic:'The Creator',ScienceLeaning:'The Explorer',ArtsLeaning:'The Creator',ValuesDriven:'The Changemaker',Critical:'The Achiever',Ambiversion:'The Planner',Science:'The Explorer',Arts:'The Creator',
+  Linguistic:'The Creator',Introversion:'The Explorer',
+};
+
+function computeStreamFinderResults(answers) {
+  const dims={};const streamDirect={Science:0,Commerce:0,Arts:0,Vocational:0};
+  answers.forEach((optIdx,qIdx)=>{
+    const opt=SF_QUESTIONS[qIdx].opts[optIdx];
+    Object.entries(opt.s).forEach(([dim,val])=>{dims[dim]=(dims[dim]||0)+val;});
+    if(opt.sm)Object.entries(opt.sm).forEach(([stream,val])=>{streamDirect[stream]+=val;});
+  });
+  const streamFromDims={Science:0,Commerce:0,Arts:0,Vocational:0};
+  Object.entries(dims).forEach(([dim,val])=>{const w=SF_STREAM_WEIGHTS[dim];if(w)Object.entries(w).forEach(([s,wt])=>{streamFromDims[s]+=val*wt;});});
+  const streamRaw={};['Science','Commerce','Arts','Vocational'].forEach(s=>{streamRaw[s]=(streamDirect[s]*0.4)+(streamFromDims[s]*0.6);});
+  const streamTotal=Object.values(streamRaw).reduce((a,b)=>a+b,0)||1;
+  const streamScores={};Object.entries(streamRaw).sort((a,b)=>b[1]-a[1]).forEach(([s,v])=>{streamScores[s]=Math.round((v/streamTotal)*100);});
+  const pctSum=Object.values(streamScores).reduce((a,b)=>a+b,0);if(pctSum!==100){const top=Object.keys(streamScores)[0];streamScores[top]+=(100-pctSum);}
+  const topStream=Object.entries(streamScores).sort((a,b)=>b[1]-a[1])[0][0];
+  const typeScores={};Object.keys(SF_PERSONALITY_TYPES).forEach(t=>{typeScores[t]=0;});
+  Object.entries(dims).forEach(([dim,val])=>{const t=SF_DIM_TO_TYPE[dim];if(t&&typeScores[t]!==undefined)typeScores[t]+=val;});
+  const sortedTypes=Object.entries(typeScores).sort((a,b)=>b[1]-a[1]);const topType=sortedTypes[0][0];
+  const typeTotalScore=sortedTypes.reduce((s,t)=>s+t[1],0)||1;
+  const typePercentages={};sortedTypes.forEach(([type,score])=>{typePercentages[type]=Math.round((score/typeTotalScore)*100);});
+  const tpSum=Object.values(typePercentages).reduce((a,b)=>a+b,0);if(tpSum!==100)typePercentages[sortedTypes[0][0]]+=(100-tpSum);
+  const miDims=['Logical-Mathematical','Linguistic','Spatial','Musical','Kinesthetic','Interpersonal','Intrapersonal','Naturalistic'];
+  const miScores={};miDims.forEach(d=>{miScores[d]=dims[d]||0;});
+  miScores['Logical-Mathematical']=(dims['Logical-Mathematical']||0)+(dims['Logical']||0);
+  const sortedMI=Object.entries(miScores).sort((a,b)=>b[1]-a[1]).filter(x=>x[1]>0).slice(0,3);
+  const typeData=SF_PERSONALITY_TYPES[topType];
+  return {personality:topType,personalityData:typeData,typePercentages,streamScores,topStream,miProfile:sortedMI,dims,dimToType:SF_DIM_TO_TYPE,testType:'stream'};
+}
+
+// ============================================================
+// CAREER COMPASS — 40 QUESTIONS
+// ============================================================
+const CC_SECTIONS = [
+  {key:'A',name:'Career Interest Profile',framework:"Holland's RIASEC (Full)",count:12},
+  {key:'B',name:'Personality & Work Style',framework:'Big Five OCEAN',count:10},
+  {key:'C',name:'Aptitude Indicators',framework:'Cognitive Assessment',count:8},
+  {key:'D',name:'Values & Career Priorities',framework:'Schwartz + SDT',count:6},
+  {key:'E',name:'Effort Mapping & Vision',framework:'Effort Mapping',count:4},
+];
+
+const CC_QUESTIONS = [
+  {id:1,sec:'A',q:'Which of these career environments appeals to you the most?',opts:[{l:'A',t:'A research lab — testing hypotheses, running experiments, discovering truths',s:{Investigative:3},ind:'Research/STEM'},{l:'B',t:'A design studio — creating visuals, products, campaigns, or experiences',s:{Artistic:3},ind:'Design/Media'},{l:'C',t:'A corporate boardroom — making strategic decisions that move businesses',s:{Enterprising:3},ind:'Business/Finance'},{l:'D',t:"A hospital or community centre — directly improving people's health and lives",s:{Social:3},ind:'Healthcare/Education'}]},
+  {id:2,sec:'A',q:'If you could master ONE skill instantly, it would be...',opts:[{l:'A',t:'Programming / data analysis / advanced mathematics',s:{Investigative:2,Realistic:1},ind:'Tech/Engineering'},{l:'B',t:'Public speaking / negotiation / leadership',s:{Enterprising:2,Social:1},ind:'Management/Law'},{l:'C',t:'Design / filmmaking / writing / music production',s:{Artistic:3},ind:'Creative/Media'},{l:'D',t:'Counselling / diagnosis / teaching / healing',s:{Social:2,Investigative:1},ind:'Healthcare/Education'}]},
+  {id:3,sec:'A',q:"Which headline would make you think 'I wish that was me'?",opts:[{l:'A',t:"'IIT Graduate's AI Startup Valued at ₹500 Crore'",s:{Investigative:1,Enterprising:1,Tech:1},ind:'Tech+Startup'},{l:'B',t:"'Young Indian Doctor Performs Rare Surgery, Saves 8-Year-Old'",s:{Social:2,Investigative:1},ind:'Medicine'},{l:'C',t:"'24-Year-Old's Short Film Wins Cannes Award'",s:{Artistic:3},ind:'Film/Media'},{l:'D',t:"'India's Youngest IAS Officer Transforms Tribal District'",s:{Enterprising:1,Social:1,Purpose:1},ind:'Civil Services'}]},
+  {id:4,sec:'A',q:"You've been given a day off from all responsibilities. You'd spend it...",opts:[{l:'A',t:'Reading research papers, watching TED talks, or learning something new',s:{Investigative:2},ind:'Research/Academia'},{l:'B',t:'Working on a side project — coding, writing, designing, or building',s:{Realistic:1,Artistic:1},ind:'Applied/Creative'},{l:'C',t:'Meeting people — networking, mentoring, or attending an event',s:{Enterprising:1,Social:1},ind:'Business/Social'},{l:'D',t:'Relaxing with friends, family, or doing something physical',s:{Realistic:1,Social:1},ind:'Balanced'}]},
+  {id:5,sec:'A',q:'Which of these industries feels most exciting to you?',opts:[{l:'A',t:'Technology — AI, blockchain, space tech, cybersecurity',s:{Investigative:2,Tech:2},ind:'Technology'},{l:'B',t:'Healthcare — hospitals, pharma, biotech, mental health',s:{Social:1,Science:2},ind:'Healthcare'},{l:'C',t:'Finance — investment banking, VC, fintech, insurance',s:{Enterprising:2,Commerce:2},ind:'Finance'},{l:'D',t:'Creative — advertising, film, fashion, gaming, media',s:{Artistic:2,Creative:2},ind:'Creative/Media'}]},
+  {id:6,sec:'A',q:'And your second choice of industry?',opts:[{l:'A',t:'Education — edtech, coaching, universities, skill development',s:{Social:1,Teaching:1},ind:'Education'},{l:'B',t:'Government — civil services, policy, defence, public administration',s:{Conventional:1,Social:1},ind:'Government'},{l:'C',t:'Legal — corporate law, litigation, IP rights, compliance',s:{Investigative:1,Enterprising:1},ind:'Legal'},{l:'D',t:'Entrepreneurship — starting a company, consulting, freelancing',s:{Enterprising:2},ind:'Entrepreneurship'}]},
+  {id:7,sec:'A',q:"When working on something, you get frustrated when...",opts:[{l:'A',t:"People don't use logic or data to make decisions",s:{Investigative:2},ind:'Analytical'},{l:'B',t:"There's no room for creativity — everything is by the book",s:{Artistic:2,Openness:1},ind:'Creative'},{l:'C',t:'Nobody is taking charge and things are disorganised',s:{Enterprising:2,Leader:1},ind:'Leadership'},{l:'D',t:"People don't consider how decisions affect others",s:{Social:2,Agreeableness:1},ind:'People-oriented'}]},
+  {id:8,sec:'A',q:'Your ideal college experience involves...',opts:[{l:'A',t:'Labs, hackathons, research projects, and internships at tech companies',s:{Investigative:1,Realistic:1},ind:'IIT/NIT/IISC'},{l:'B',t:'Clubs, fests, NGO work, diverse friendships, and real-world exposure',s:{Social:2},ind:'Liberal arts/DU'},{l:'C',t:'Case studies, simulations, competitions, and corporate connections',s:{Enterprising:2,Conventional:1},ind:'IIM/SRCC/Symbiosis'},{l:'D',t:'Studios, portfolios, exhibitions, performances, and creative residencies',s:{Artistic:2},ind:'NID/FTII/Srishti'}]},
+  {id:9,sec:'A',q:'Which of these tasks would you be most comfortable doing for 8 hours straight?',opts:[{l:'A',t:'Coding, solving complex problems, or analysing data',s:{Investigative:2,Realistic:1},ind:'Tech/Engineering'},{l:'B',t:'Writing, designing, editing videos, or creating content',s:{Artistic:2},ind:'Creative/Media'},{l:'C',t:'Talking to people — selling, managing, consulting, or teaching',s:{Enterprising:1,Social:1},ind:'Business/Education'},{l:'D',t:'Caring for patients, counselling, or working on social projects',s:{Social:2},ind:'Healthcare/Social'}]},
+  {id:10,sec:'A',q:'What type of problems do you ENJOY solving?',opts:[{l:'A',t:'Technical — bugs, equations, systems, optimisation',s:{Investigative:2,Logical:1},ind:'Engineering/Data'},{l:'B',t:'People — conflicts, team dynamics, motivation, health',s:{Social:2},ind:'HR/Medicine/Teaching'},{l:'C',t:'Creative — design challenges, storytelling, branding',s:{Artistic:2},ind:'Design/Advertising'},{l:'D',t:'Strategic — business problems, market positioning, growth',s:{Enterprising:2},ind:'Consulting/Finance'}]},
+  {id:11,sec:'A',q:'If you started a YouTube channel today, it would be about...',opts:[{l:'A',t:'Tech reviews, coding tutorials, or science explained',s:{Investigative:1,Realistic:1},ind:'Tech/Science'},{l:'B',t:'Personal finance, business tips, or career advice',s:{Enterprising:2},ind:'Finance/Business'},{l:'C',t:'Art, photography, travel, fashion, or music',s:{Artistic:2},ind:'Creative/Lifestyle'},{l:'D',t:'Health, fitness, mental wellness, or life coaching',s:{Social:1,Interpersonal:1},ind:'Health/Wellness'}]},
+  {id:12,sec:'A',q:'Which of these role models do you relate to most?',opts:[{l:'A',t:'Sundar Pichai / Elon Musk — building technology that changes the world',s:{Investigative:1,Enterprising:1,Tech:1},ind:'Tech+Leadership'},{l:'B',t:'Dr. Devi Shetty / Sudha Murty — serving people, creating social impact',s:{Social:2,Purpose:1},ind:'Healthcare/Social'},{l:'C',t:'AR Rahman / Zaha Hadid — creating art and beauty that inspires millions',s:{Artistic:2},ind:'Creative'},{l:'D',t:'Ratan Tata / Indra Nooyi — leading massive organisations with vision',s:{Enterprising:2,Leader:1},ind:'Business/Corporate'}]},
+  {id:13,sec:'B',q:'How much do you enjoy trying completely new things — new food, new places, new subjects?',opts:[{l:'A',t:'Love it — novelty energises me',s:{Openness:3},ind:''},{l:'B',t:'I like some variety but also need my comfort zone',s:{Openness:1},ind:''},{l:'C',t:"I'm cautious — I research before trying new things",s:{Openness:1,Conscientious:1},ind:''},{l:'D',t:'I prefer what I know — familiar is comfortable',s:{Conventional:2},ind:''}]},
+  {id:14,sec:'B',q:'When a deadline is approaching, you typically...',opts:[{l:'A',t:'I finished days ago — I plan ahead and hate last-minute rush',s:{Conscientious:3},ind:''},{l:'B',t:"I'm on track — steady progress, will finish on time",s:{Conscientious:2},ind:''},{l:'C',t:'I work better under pressure — the urgency helps me focus',s:{Resilience:2},ind:''},{l:'D',t:'I struggle with deadlines — I wish I could manage time better',s:{LowC:1},ind:''}]},
+  {id:15,sec:'B',q:'At a party or social gathering, you...',opts:[{l:'A',t:"Talk to everyone — I'm energised by meeting people",s:{Extraversion:3},ind:''},{l:'B',t:'Have a few meaningful conversations with close friends',s:{Ambiversion:1},ind:''},{l:'C',t:'Stay near people I know but enjoy observing',s:{Introversion:1},ind:''},{l:'D',t:'Prefer smaller, quieter settings — large groups drain me',s:{Introversion:2},ind:''}]},
+  {id:16,sec:'B',q:'When someone criticises your work, your first reaction is...',opts:[{l:'A',t:'I listen, consider it, and improve — feedback is useful',s:{Agreeableness:2,Stability:1},ind:''},{l:'B',t:'I defend my work but stay calm — I believe in what I did',s:{Assertiveness:2},ind:''},{l:'C',t:"I feel hurt but try not to show it",s:{Agreeableness:1,Sensitivity:1},ind:''},{l:'D',t:"I get annoyed — I put a lot of effort into my work",s:{LowAgreeableness:1},ind:''}]},
+  {id:17,sec:'B',q:'How often do you feel stressed or anxious about school, exams, or the future?',opts:[{l:'A',t:'Rarely — I stay calm even when things are tough',s:{Stability:3},ind:''},{l:'B',t:'Sometimes — but I manage it and move on',s:{Stability:2},ind:''},{l:'C',t:'Often — I overthink and worry a lot about outcomes',s:{Neuroticism:2},ind:''},{l:'D',t:'A lot — I feel pressure from expectations constantly',s:{Neuroticism:3},ind:''}]},
+  {id:18,sec:'B',q:'How important is it to you to be THE BEST in your field?',opts:[{l:'A',t:"Extremely — I'm very competitive and driven to be #1",s:{Achievement:3,Competitive:2},ind:''},{l:'B',t:"Important — I want to be among the top, but not obsessed",s:{Achievement:2},ind:''},{l:'C',t:'Moderately — I want to be good, but work-life balance matters more',s:{Balance:2},ind:''},{l:'D',t:"Not much — I'd rather be happy and fulfilled than ranked",s:{Wellbeing:2},ind:''}]},
+  {id:19,sec:'B',q:'When you have a decision to make, you usually...',opts:[{l:'A',t:'Research thoroughly — pros/cons list, data, opinions, then decide',s:{Analytical:2,Conscientious:1},ind:''},{l:'B',t:'Trust my gut — I have good instincts and decide quickly',s:{Enterprising:1,Openness:1},ind:''},{l:'C',t:'Ask people I trust — their perspective helps me see clearly',s:{Social:1,Agreeableness:1},ind:''},{l:'D',t:"Take my time — I don't like being rushed into decisions",s:{Careful:1,Intrapersonal:1},ind:''}]},
+  {id:20,sec:'B',q:'Which of these describes your relationship with rules and authority?',opts:[{l:'A',t:'I follow rules — they exist for a reason and I respect structure',s:{Conventional:2,Conscientious:1},ind:''},{l:'B',t:"I follow rules but question ones that don't make sense",s:{Balanced:1,Critical:1},ind:''},{l:'C',t:'I prefer guidelines over strict rules — I need some flexibility',s:{Openness:1},ind:''},{l:'D',t:'I dislike rigid rules — I work best when I can do things my way',s:{Openness:2,Autonomy:1},ind:''}]},
+  {id:21,sec:'B',q:'How do you recharge after a long, tiring week?',opts:[{l:'A',t:'Alone time — books, music, walks, or just quiet',s:{Introversion:2},ind:''},{l:'B',t:'Social time — friends, outings, parties, or conversations',s:{Extraversion:2},ind:''},{l:'C',t:'Creative time — making something, writing, drawing, or playing music',s:{Artistic:1,Openness:1},ind:''},{l:'D',t:'Physical activity — sports, gym, hiking, or yoga',s:{Realistic:1,Kinesthetic:1},ind:''}]},
+  {id:22,sec:'B',q:'In a team, you prefer to be the person who...',opts:[{l:'A',t:'Sets the vision and strategy — the leader',s:{Enterprising:2,Leader:1},ind:'CEO/Director'},{l:'B',t:'Does the deep work — the expert on the topic',s:{Investigative:2,Specialist:1},ind:'Researcher/Analyst'},{l:'C',t:'Keeps the team together — the communicator and mediator',s:{Social:2,Interpersonal:1},ind:'HR/Counsellor'},{l:'D',t:'Gets things done — executes tasks reliably and on time',s:{Conscientious:2,Practical:1},ind:'Engineer/Accountant'}]},
+  {id:23,sec:'C',q:'Which of these problems would you find EASIEST to solve?',opts:[{l:'A',t:'A maths puzzle involving patterns and logic',s:{Logical:2},ind:'Engineering/Data Science'},{l:'B',t:'Summarising a complex article into 3 key points',s:{Verbal:2},ind:'Law/Journalism/MBA'},{l:'C',t:'Estimating the budget for a school event from scratch',s:{Numerical:2},ind:'CA/Finance/Economics'},{l:'D',t:'Arranging furniture in a room for the best layout and look',s:{Spatial:2},ind:'Architecture/Design'}]},
+  {id:24,sec:'C',q:'When explaining something complicated to a friend, you usually...',opts:[{l:'A',t:"Use analogies and simple comparisons — 'think of it like...'",s:{Verbal:2},ind:'Teaching/Consulting'},{l:'B',t:"Draw a diagram or show a visual — 'look at this picture'",s:{Spatial:2},ind:'Design/Architecture'},{l:'C',t:'Walk them through it step by step logically',s:{Logical:2},ind:'Research/Engineering'},{l:'D',t:"Give them a real-world example — 'imagine you're at a shop...'",s:{Practical:2},ind:'Applied careers'}]},
+  {id:25,sec:'C',q:'Which of these academic tasks would you be most comfortable being tested on?',opts:[{l:'A',t:'Solving 10 integration or differentiation problems under time pressure',s:{Mathematical:2},ind:'IIT/Engineering'},{l:'B',t:'Writing a 1000-word opinion piece on a current issue in 45 minutes',s:{Verbal:2,Expression:1},ind:'Law/CUET/Journalism'},{l:'C',t:"Analysing a company's financial statement and presenting findings",s:{Analytical:1,Business:1},ind:'CA/CFA/MBA'},{l:'D',t:'Creating a poster or 3D model for a science project',s:{Spatial:2,Creative:1},ind:'NID/Architecture'}]},
+  {id:26,sec:'C',q:'How comfortable are you with numbers and calculations?',opts:[{l:'A',t:'Very comfortable — I enjoy numerical work and it comes naturally',s:{Numerical:3},ind:'CA/Engineering/Data'},{l:'B',t:"Somewhat — I can do it if needed but don't love it",s:{Numerical:1},ind:''},{l:'C',t:'Not very — I prefer words and ideas over numbers',s:{Verbal:1},ind:'Law/Media/Design'},{l:'D',t:'I actively avoid heavy maths whenever possible',s:{AntiNumerical:1},ind:'Arts/Creative'}]},
+  {id:27,sec:'C',q:'When reading a news article, you notice...',opts:[{l:'A',t:'The data and statistics — I want evidence, not opinions',s:{Analytical:2,Investigative:1},ind:'Data/Research'},{l:'B',t:'The writing quality and how arguments are structured',s:{Verbal:2,Artistic:1},ind:'Journalism/Law'},{l:'C',t:"The human impact — who's affected and how",s:{Social:2,Empathy:1},ind:'Healthcare/Social'},{l:'D',t:"The business angle — who's winning, losing, or investing",s:{Enterprising:2,Business:1},ind:'Business/Finance'}]},
+  {id:28,sec:'C',q:'How quickly do you pick up new technology or apps?',opts:[{l:'A',t:"Very fast — I'm the one who teaches others how to use new tech",s:{Tech:3,Digital:2},ind:'CS/AI/Data'},{l:'B',t:'Fairly fast — I figure things out after some exploration',s:{Tech:2},ind:''},{l:'C',t:"Average — I can use tech but don't geek out about it",s:{Tech:1},ind:''},{l:'D',t:'Slow — I prefer traditional methods and tools',s:{LowTech:1},ind:'Traditional'}]},
+  {id:29,sec:'C',q:"How good are you at understanding other people's emotions?",opts:[{l:'A',t:"Very — I often know how someone's feeling before they say it",s:{EQ:3,Social:1},ind:'Medicine/HR/Counselling'},{l:'B',t:"Good — I'm attentive but not always right",s:{EQ:2},ind:''},{l:'C',t:"Average — I understand if they tell me, but I don't always catch subtle cues",s:{EQ:1},ind:''},{l:'D',t:'I struggle with this — I focus more on facts than feelings',s:{Logical:1,LowEQ:1},ind:'Engineering/Research'}]},
+  {id:30,sec:'C',q:'When you look at a building, product, or advertisement, you notice...',opts:[{l:'A',t:'The design, aesthetics, and visual appeal first',s:{Spatial:2,Artistic:1},ind:'Design/Architecture'},{l:'B',t:'The engineering — how it works, the mechanics behind it',s:{Logical:2,Realistic:1},ind:'Engineering'},{l:'C',t:"The message — what it's trying to communicate",s:{Verbal:1,Social:1},ind:'Marketing/Communication'},{l:'D',t:'The price or business model — is it a good deal?',s:{Business:2,Enterprising:1},ind:'Finance/Business'}]},
+  {id:31,sec:'D',q:'Rank what matters MOST in your ideal career (pick ONE):',opts:[{l:'A',t:'High income — I want to be financially very comfortable',s:{Wealth:3},ind:'Finance/Medicine/Tech'},{l:'B',t:'Job security — I want a guaranteed, stable career',s:{Security:3},ind:'Government/Banking'},{l:'C',t:'Passion alignment — I want to love what I do every day',s:{Passion:3},ind:'Creative/Research'},{l:'D',t:'Social impact — I want my work to help people or change things',s:{Impact:3},ind:'Healthcare/NGO'}]},
+  {id:32,sec:'D',q:'How much risk are you willing to take in your career?',opts:[{l:'A',t:"High risk — startup, freelance, unconventional path — I'll figure it out",s:{Entrepreneur:3,Risk:3},ind:'Startup/Freelance'},{l:'B',t:'Moderate risk — try something interesting but keep a safety net',s:{Moderate:2},ind:'Corporate/Tech'},{l:'C',t:'Low risk — I want a clear, proven path with predictable growth',s:{LowRisk:2,Conventional:1},ind:'Medicine/CA'},{l:'D',t:'Zero risk — I want a government job or family business — guaranteed stability',s:{ZeroRisk:2,Security:1},ind:'Government'}]},
+  {id:33,sec:'D',q:'Where do you see yourself at age 30?',opts:[{l:'A',t:'Leading a team at a top company or my own startup',s:{Leadership:2,Enterprising:1},ind:'MBA/IAS/Entrepreneur'},{l:'B',t:'A highly specialised expert — the go-to person in my field',s:{Specialist:2,Mastery:1},ind:'MD/PhD/IITian'},{l:'C',t:'Comfortably settled — good income, family, work-life balance',s:{Security:2,Balance:1},ind:'Corporate/Government'},{l:'D',t:'Doing meaningful work — healthcare, education, or social impact',s:{Purpose:2,Social:1},ind:'Doctor/Teacher/NGO'}]},
+  {id:34,sec:'D',q:'How do you feel about working long hours (60-80 hrs/week) in your 20s?',opts:[{l:'A',t:"Totally fine — I'll grind now to succeed later",s:{HighIntensity:3},ind:'IB/Surgery/Big Law'},{l:'B',t:'Acceptable for 2-3 years — then I need balance',s:{MedIntensity:2},ind:'Consulting/Corporate'},{l:'C',t:"I'd prefer a 40-50 hour week from the start",s:{Balanced:2},ind:'Government/Teaching'},{l:'D',t:'Absolutely not — my mental health and personal life come first',s:{Wellbeing:3},ind:'Freelance/Creative'}]},
+  {id:35,sec:'D',q:'What would make you QUIT a well-paying job?',opts:[{l:'A',t:"If I wasn't learning or growing anymore",s:{Growth:2,Openness:1},ind:''},{l:'B',t:'If it was hurting my health or relationships',s:{Wellbeing:2,Balance:1},ind:''},{l:'C',t:'If the work was unethical or harming people',s:{Ethics:2,Purpose:1},ind:''},{l:'D',t:"I wouldn't quit a well-paying job — stability matters most",s:{Security:2},ind:''}]},
+  {id:36,sec:'D',q:"Which of these 'perks' matters most to you in a job?",opts:[{l:'A',t:'Big bonuses and fast promotions',s:{Achievement:2,Money:1},ind:'Finance/Consulting'},{l:'B',t:'Flexibility — work from home, choose your hours',s:{Autonomy:2},ind:'Tech/Freelance'},{l:'C',t:'A great team and mentors who help you grow',s:{Relatedness:2},ind:'Corporate/Education'},{l:'D',t:'Making a visible difference — seeing the impact of your work',s:{Purpose:2},ind:'Healthcare/NGO'}]},
+  {id:37,sec:'E',q:'How many years of intense studying AFTER 12th are you prepared for?',opts:[{l:'A',t:'3 years — I want a quick degree and to start working',s:{LowEffort:3},ind:'BCA/B.Com/BBA'},{l:'B',t:"4-5 years — a bachelor's degree is fine",s:{MedEffort:3},ind:'B.Tech/B.Sc/BA'},{l:'C',t:"5-7 years — I'm ready for professional courses (CA, Law, PG)",s:{HighEffort:3},ind:'CA/LLB/M.Tech/MBA'},{l:'D',t:'7+ years — MBBS + MD, PhD, IAS prep — whatever it takes',s:{VeryHighEffort:3},ind:'MBBS+PG/PhD/IAS'}]},
+  {id:38,sec:'E',q:'How do you feel about competitive entrance exams?',opts:[{l:'A',t:'Bring it on — I thrive under competitive pressure',s:{Competitive:3},ind:'JEE/NEET/CLAT'},{l:'B',t:"I'll prepare seriously, but I want backup options too",s:{Balanced:2},ind:'JEE+State CET'},{l:'C',t:"I'd prefer university/board percentage-based admissions",s:{Merit:2},ind:'CUET/University'},{l:'D',t:'I want skill-based or portfolio-based entry — no exam stress',s:{Alternative:2},ind:'NID/NIFT/Portfolio'}]},
+  {id:39,sec:'E',q:"If one career had a 90% chance of a ₹8 LPA job, and another had a 30% chance of a ₹30 LPA job, you'd choose...",opts:[{l:'A',t:'The ₹30 LPA gamble — high risk, high reward is my style',s:{HighRisk:2,Ambitious:1},ind:'Startup/IB/Surgery'},{l:'B',t:'The ₹8 LPA certainty — I want stability, not risk',s:{Security:2,Conventional:1},ind:'Government/CA'},{l:'C',t:"I'd find a career that has maybe 60% chance of ₹15 LPA — balanced",s:{Balanced:2},ind:'Consulting/IT'},{l:'D',t:"Neither — salary isn't my primary decision factor",s:{ValuesDriven:2},ind:'Creative/Social'}]},
+  {id:40,sec:'E',q:"Final question — complete this sentence: 'After 12th, the most important thing for me is...'",opts:[{l:'A',t:'Getting into the BEST college — ranking and brand matter',s:{Brand:2,Achievement:1},ind:'IIT/AIIMS/NLU/IIM'},{l:'B',t:'Choosing the RIGHT course — it should match who I am',s:{Fit:2,SelfAwareness:1},ind:'Course-fit-driven'},{l:'C',t:"Keeping my options open — I don't want to be locked in",s:{Flexibility:2,Openness:1},ind:'Liberal arts/Broad'},{l:'D',t:'Starting to build — skills, portfolio, network, or business',s:{Execution:2,Entrepreneur:1},ind:'Skill-based/Startup'}]},
+];
+
+const CC_PERSONALITY_TYPES = {
+  'The Analyst':{emoji:'\u{1F52C}',color:'#2563eb',brief:'You think in systems — analytical, precise, and driven by data.',desc:'You have a sharp analytical mind that naturally breaks complex problems into structured parts. You thrive in environments that reward deep thinking, research, and evidence-based decisions.',careers:['Data Scientist','Software Engineer','Research Scientist','Doctor (Specialist)','Biotechnologist','AI/ML Engineer','Cybersecurity Analyst','Astrophysicist','Pharmacologist','Biomedical Engineer'],courses:['B.Tech (CS/IT/ECE)','MBBS','B.Sc (Hons) Research','Integrated M.Sc','B.E. (Electronics)','B.Tech (AI/ML)','B.Pharma','B.Sc Data Science','BS (IISc/IISER)','B.Tech (Biotech)'],industries:['Technology/AI','Healthcare/Biotech','Research/Academia','Data/Analytics']},
+  'The Creative':{emoji:'\u{1F3A8}',color:'#7c3aed',brief:"You express ideas others haven't imagined — original, intuitive, and bold.",desc:"You're drawn to beauty, meaning, and self-expression. You find energy in creating something entirely new. Structured environments feel limiting; you thrive with creative freedom.",careers:['Graphic Designer','Film Director','Architect','UX/UI Designer','Content Creator','Fashion Designer','Animator','Interior Designer','Music Producer','Game Designer'],courses:['B.Des (NID/NIFT)','B.Arch','BFA','BA Film Studies','B.Sc Animation','BA Mass Communication','B.Des (Interaction Design)','BA Liberal Arts','Diploma in Film','B.Sc Interior Design'],industries:['Design/Creative','Film/Media/Entertainment','Architecture','Gaming/Animation']},
+  'The Trailblazer':{emoji:'\u{1F680}',color:'#dc2626',brief:'You lead, compete, and build — ambitious, strategic, and unstoppable.',desc:"You gravitate towards influence, decision-making, and building things at scale. Whether it's a business, a team, or a movement — you want to lead it.",careers:['Management Consultant','Investment Banker','Startup Founder','Corporate Lawyer','IAS Officer','Product Manager','Marketing Director','Venture Capitalist','Business Analyst','Policy Advisor'],courses:['BBA/BMS','BA LLB (5-year)','B.Com (Hons)','Integrated BBA-MBA','CA Foundation','BBA LLB','B.Com + CFA Prep','BA Economics (Hons)','BS in Business (Abroad)','CS Foundation'],industries:['Finance/Investment Banking','Consulting/Strategy','Entrepreneurship/Startup','Law/Policy','Corporate Leadership']},
+  'The Healer':{emoji:'\u{1F49A}',color:'#059669',brief:'You serve, heal, and uplift — empathetic, patient, and purpose-driven.',desc:'You find deepest fulfilment in helping others grow, heal, or succeed. Your empathy and communication skills make you a natural in people-focused roles.',careers:['Doctor (General/Paediatric)','Clinical Psychologist','School Counsellor','Social Worker','Nurse Practitioner','Public Health Specialist','NGO Director','Occupational Therapist','Special Educator','Community Health Worker'],courses:['MBBS','BA/B.Sc Psychology','B.Ed','BSW (Social Work)','B.Sc Nursing','BPT (Physiotherapy)','BA Sociology','B.Sc (Allied Health)','BASLP (Speech Therapy)','B.Sc Occupational Therapy'],industries:['Healthcare/Medicine','Education/Teaching','Social Impact/NGO','Mental Health/Counselling']},
+  'The Operator':{emoji:'\u{2699}️',color:'#d97706',brief:'You execute, build, and deliver — reliable, hands-on, and results-oriented.',desc:"You prefer action over theory. You're the person who actually gets things done. You thrive in structured environments where your work has tangible, measurable results.",careers:['Mechanical Engineer','Civil Engineer','Pilot','Hotel Manager','Sports Scientist','Automobile Engineer','Supply Chain Manager','Quality Control Engineer','Food Technologist','Aviation Manager'],courses:['B.Tech (Mechanical/Civil)','B.Sc Aviation','B.Sc Hotel Management','BPT','Diploma Engineering','B.Sc Sports Science','B.Tech (Automobile)','B.Sc Food Technology','Merchant Navy (B.Sc Nautical)','B.Sc Agriculture'],industries:['Engineering/Manufacturing','Aviation/Defence','Hospitality/Tourism','Sports/Fitness','Agriculture/Food']},
+  'The Strategist':{emoji:'\u{1F4CA}',color:'#0891b2',brief:'You plan, organise, and optimise — disciplined, structured, and detail-perfect.',desc:"You value reliability, precision, and long-term planning. Careers that reward consistency, attention to detail, and careful execution are where you excel.",careers:['Chartered Accountant','Bank Manager','Civil Servant','Company Secretary','Actuary','Tax Consultant','Insurance Analyst','Risk Manager','Government Officer','Compliance Manager'],courses:['B.Com + CA','B.Com (Hons)','BA Economics','B.Sc Statistics','BBA (Finance)','CS Foundation','Actuarial Science','B.Com + CMA','BA Public Administration','B.Sc Mathematics'],industries:['Finance/Banking/Insurance','Government/Civil Services','Accounting/Audit','Corporate Operations']},
+};
+
+const CC_DIM_TO_TYPE = {
+  Investigative:'The Analyst',Logical:'The Analyst',Analytical:'The Analyst',Tech:'The Analyst',Digital:'The Analyst',Mathematical:'The Analyst',Numerical:'The Analyst',Science:'The Analyst',Specialist:'The Analyst',
+  Artistic:'The Creative',Spatial:'The Creative',Creative:'The Creative',Openness:'The Creative',Expression:'The Creative',Passion:'The Creative',Alternative:'The Creative',Flexibility:'The Creative',Autonomy:'The Creative',
+  Enterprising:'The Trailblazer',Leader:'The Trailblazer',Competitive:'The Trailblazer',Achievement:'The Trailblazer',Ambitious:'The Trailblazer',Wealth:'The Trailblazer',Business:'The Trailblazer',Money:'The Trailblazer',Brand:'The Trailblazer',Entrepreneur:'The Trailblazer',Risk:'The Trailblazer',HighRisk:'The Trailblazer',Assertiveness:'The Trailblazer',HighIntensity:'The Trailblazer',
+  Social:'The Healer',Agreeableness:'The Healer',Purpose:'The Healer',Impact:'The Healer',Empathy:'The Healer',Interpersonal:'The Healer',Relatedness:'The Healer',Ethics:'The Healer',EQ:'The Healer',Teaching:'The Healer',Extraversion:'The Healer',Sensitivity:'The Healer',ValuesDriven:'The Healer',
+  Realistic:'The Operator',Practical:'The Operator',Kinesthetic:'The Operator',Execution:'The Operator',Fit:'The Operator',
+  Conscientious:'The Strategist',Conventional:'The Strategist',Security:'The Strategist',Stability:'The Strategist',Balanced:'The Strategist',Balance:'The Strategist',LowRisk:'The Strategist',ZeroRisk:'The Strategist',Moderate:'The Strategist',Merit:'The Strategist',Careful:'The Strategist',Intrapersonal:'The Strategist',Mastery:'The Strategist',Commerce:'The Strategist',Wellbeing:'The Strategist',MedIntensity:'The Strategist',
+  Growth:'The Trailblazer',SelfAwareness:'The Healer',Resilience:'The Trailblazer',Introversion:'The Analyst',Ambiversion:'The Strategist',Structured:'The Strategist',LowC:'The Creative',LowAgreeableness:'The Trailblazer',Neuroticism:'The Healer',LowTech:'The Operator',LowEQ:'The Analyst',AntiNumerical:'The Creative',Verbal:'The Creative',TaskOriented:'The Operator',
+  Critical:'The Trailblazer',Leadership:'The Trailblazer',
+};
+
+function computeCareerCompassResults(answers) {
+  const dims={};const effortScores={LowEffort:0,MedEffort:0,HighEffort:0,VeryHighEffort:0};const industryHits={};
+  answers.forEach((optIdx,qIdx)=>{
+    const opt=CC_QUESTIONS[qIdx].opts[optIdx];
+    Object.entries(opt.s).forEach(([dim,val])=>{
+      if(effortScores.hasOwnProperty(dim))effortScores[dim]+=val;
+      else dims[dim]=(dims[dim]||0)+val;
+    });
+    if(opt.ind&&opt.ind!==''){opt.ind.split('/').forEach(ind=>{const trimmed=ind.trim();if(trimmed)industryHits[trimmed]=(industryHits[trimmed]||0)+1;});}
+  });
+  const typeScores={};Object.keys(CC_PERSONALITY_TYPES).forEach(t=>{typeScores[t]=0;});
+  Object.entries(dims).forEach(([dim,val])=>{const t=CC_DIM_TO_TYPE[dim];if(t&&typeScores[t]!==undefined)typeScores[t]+=val;});
+  const sortedTypes=Object.entries(typeScores).sort((a,b)=>b[1]-a[1]);const topType=sortedTypes[0][0];
+  const typeTotalScore=sortedTypes.reduce((s,t)=>s+t[1],0)||1;
+  const typePercentages={};sortedTypes.forEach(([type,score])=>{typePercentages[type]=Math.round((score/typeTotalScore)*100);});
+  const typePctSum=Object.values(typePercentages).reduce((a,b)=>a+b,0);if(typePctSum!==100&&sortedTypes.length>0)typePercentages[sortedTypes[0][0]]+=(100-typePctSum);
+  const riasecDims=['Realistic','Investigative','Artistic','Social','Enterprising','Conventional'];
+  const riasecScores={};riasecDims.forEach(d=>{riasecScores[d]=dims[d]||0;});
+  const riasecTotal=Object.values(riasecScores).reduce((a,b)=>a+b,0)||1;
+  const riasecPcts={};Object.entries(riasecScores).sort((a,b)=>b[1]-a[1]).forEach(([d,v])=>{riasecPcts[d]=Math.round((v/riasecTotal)*100);});
+  const riasecPctSum=Object.values(riasecPcts).reduce((a,b)=>a+b,0);
+  if(riasecPctSum!==100){const topR=Object.entries(riasecPcts).sort((a,b)=>b[1]-a[1])[0];if(topR)riasecPcts[topR[0]]+=(100-riasecPctSum);}
+  const topRIASEC=Object.entries(riasecScores).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+  const effortEntries=Object.entries(effortScores).sort((a,b)=>b[1]-a[1]);
+  let effortTier='Medium (4-5 years)';
+  if(effortEntries[0][1]>0){const map={LowEffort:'Low (3 years)',MedEffort:'Medium (4-5 years)',HighEffort:'High (5-7 years)',VeryHighEffort:'Very High (7-10+ years)'};effortTier=map[effortEntries[0][0]];}
+  const topIndustries=Object.entries(industryHits).sort((a,b)=>b[1]-a[1]).slice(0,3).map(x=>x[0]);
+  const typeData=CC_PERSONALITY_TYPES[topType];
+  return {personality:topType,personalityData:typeData,typePercentages,riasecPcts,topRIASEC,effortTier,topIndustries:topIndustries.length>=2?topIndustries:typeData.industries.slice(0,3),dims,dimToType:CC_DIM_TO_TYPE,testType:'compass'};
+}
+
+// ============================================================
+// METHODOLOGY DATA (Rich)
+// ============================================================
+const FRAMEWORK_DB = {
+  mi:{
+    name:"Gardner's Multiple Intelligences",
+    icon:'\u{1F9E0}',
+    color:'#7c3aed',
+    origin:'Harvard University, 1983',
+    author:'Dr. Howard Gardner',
+    desc:'Your brain isn\'t just "smart" or "not smart." Gardner proved that intelligence comes in 8 distinct forms — everyone is a genius in at least one.',
+    measures:'Your natural cognitive strengths',
+    dims:[
+      {label:'Logical-Math',icon:'\u{1F9EE}',tip:'Numbers, patterns, reasoning'},
+      {label:'Linguistic',icon:'\u{1F4DD}',tip:'Words, reading, storytelling'},
+      {label:'Spatial',icon:'\u{1F3A8}',tip:'Visuals, design, 3D thinking'},
+      {label:'Musical',icon:'\u{1F3B5}',tip:'Rhythm, tone, sound patterns'},
+      {label:'Kinesthetic',icon:'\u{1F3C3}',tip:'Body movement, hands-on'},
+      {label:'Interpersonal',icon:'\u{1F91D}',tip:'Understanding others'},
+      {label:'Intrapersonal',icon:'\u{1F9D8}',tip:'Self-awareness, reflection'},
+      {label:'Naturalistic',icon:'\u{1F33F}',tip:'Nature, classification'},
+    ],
+  },
+  riasec:{
+    name:"Holland's RIASEC",
+    icon:'\u{1F3AF}',
+    color:'#2563eb',
+    origin:'Johns Hopkins University, 1959',
+    author:'Dr. John L. Holland',
+    desc:'The gold standard for career matching. Holland discovered that people and careers fall into 6 interest types — the closer the match, the happier your career.',
+    measures:'Your dominant interest area',
+    dims:[
+      {label:'Realistic',icon:'\u{1F527}',tip:'Hands-on, practical, building'},
+      {label:'Investigative',icon:'\u{1F52C}',tip:'Research, analysis, data'},
+      {label:'Artistic',icon:'\u{1F3AD}',tip:'Creative, expressive, original'},
+      {label:'Social',icon:'\u{2764}️',tip:'Helping, teaching, healing'},
+      {label:'Enterprising',icon:'\u{1F4BC}',tip:'Leading, selling, persuading'},
+      {label:'Conventional',icon:'\u{1F4CA}',tip:'Organising, data, systems'},
+    ],
+  },
+  ocean:{
+    name:'Big Five (OCEAN)',
+    icon:'\u{1F30A}',
+    color:'#0891b2',
+    origin:'Multiple universities, 1980s',
+    author:'Costa, McCrae & Goldberg',
+    desc:'The most scientifically validated personality model in modern psychology. Used in 3,000+ published studies. It measures how you naturally think, feel, and behave at work.',
+    measures:'Your work style and personality traits',
+    dims:[
+      {label:'Openness',icon:'\u{1F4A1}',tip:'Curiosity, creativity'},
+      {label:'Conscientiousness',icon:'\u{2705}',tip:'Discipline, planning'},
+      {label:'Extraversion',icon:'\u{1F4E2}',tip:'Social energy, assertiveness'},
+      {label:'Agreeableness',icon:'\u{1F932}',tip:'Empathy, cooperation'},
+      {label:'Neuroticism',icon:'\u{1F4AD}',tip:'Emotional sensitivity'},
+    ],
+  },
+  schwartz:{
+    name:'Schwartz Value Theory',
+    icon:'\u{1F48E}',
+    color:'#059669',
+    origin:'Hebrew University, 1992',
+    author:'Dr. Shalom H. Schwartz',
+    desc:'Validated across 82 countries. Schwartz mapped the 10 universal human values that drive every major life decision — including your career.',
+    measures:'Your core life values',
+    dims:[
+      {label:'Achievement',icon:'\u{1F3C6}',tip:'Success, ambition'},
+      {label:'Security',icon:'\u{1F6E1}️',tip:'Safety, stability'},
+      {label:'Self-Direction',icon:'\u{1F9ED}',tip:'Freedom, independence'},
+      {label:'Benevolence',icon:'\u{1F49A}',tip:'Caring for others'},
+      {label:'Stimulation',icon:'\u{26A1}',tip:'Excitement, novelty'},
+    ],
+  },
+  sdt:{
+    name:'Self-Determination Theory',
+    icon:'\u{1F525}',
+    color:'#dc2626',
+    origin:'University of Rochester, 1985',
+    author:'Deci & Ryan',
+    desc:'Explains why some people are deeply motivated while others burn out. SDT identifies the 3 psychological needs that fuel lasting career satisfaction.',
+    measures:'What drives and motivates you',
+    dims:[
+      {label:'Autonomy',icon:'\u{1F3AF}',tip:'Control over your work'},
+      {label:'Competence',icon:'\u{1F4AA}',tip:'Mastery and growth'},
+      {label:'Relatedness',icon:'\u{1F465}',tip:'Connection and belonging'},
+    ],
+  },
+  effort:{
+    name:'Effort-Industry Mapping',
+    icon:'\u{1F4C8}',
+    color:'#d97706',
+    origin:'12thPlus Proprietary Model',
+    author:'12thPlus Research Team',
+    desc:'Our proprietary framework that maps your willingness to invest years of study against real career paths and salary outcomes across Indian industries.',
+    measures:'Your effort ceiling and career-fit industries',
+    dims:[
+      {label:'3yr (Low)',icon:'\u{1F3C3}',tip:'BCA, B.Com, Diploma'},
+      {label:'4-5yr (Med)',icon:'\u{1F6B6}',tip:'B.Tech, BBA, B.Sc'},
+      {label:'5-7yr (High)',icon:'\u{1F9D7}',tip:'CA, Law, M.Tech, MBA'},
+      {label:'7-10yr+ (Elite)',icon:'\u{1F680}',tip:'MBBS+MD, PhD, IAS'},
+    ],
+  },
+};
+
+const METHODOLOGY = {
+  quick:['riasec','ocean','sdt'],
+  stream:['mi','riasec','ocean','schwartz','sdt'],
+  compass:['mi','riasec','ocean','schwartz','sdt','effort'],
+};
+
+
+// ============================================================
+// DASHBOARD SCREEN
+// ============================================================
+function Dashboard({onSelectClass}){
+  const dayNames=['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const monthNames=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  const now=new Date();
+  const dateStr=dayNames[now.getDay()]+', '+now.getDate()+' '+monthNames[now.getMonth()];
+
+  return(
+    <div className="fade-in" style={{display:'flex',flexDirection:'column',height:'100%',overflow:'auto'}}>
+      <div style={{padding:'24px 32px'}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:2,marginBottom:4}}>Career Discovery</div>
+        <div style={{fontSize:13,color:B.muted}}>{dateStr}</div>
+      </div>
+
+      {/* START HERE Cards */}
+      <div style={{padding:'0 32px 24px'}}>
+        <div style={{display:'flex',alignItems:'center',gap:8,marginBottom:16}}>
+          <div style={{width:8,height:8,borderRadius:4,background:B.teal}}/>
+          <span style={{fontSize:13,fontWeight:700,color:B.navy,textTransform:'uppercase',letterSpacing:1.5}}>START HERE</span>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:16}}>
+          {/* Class 5-10 Card */}
+          <div onClick={()=>onSelectClass('5-10')} style={{
+            background:'linear-gradient(135deg, #0d9488 0%, #2563eb 100%)',borderRadius:20,padding:'28px 24px',cursor:'pointer',
+            position:'relative',overflow:'hidden',minHeight:180,display:'flex',flexDirection:'column',justifyContent:'space-between',
+            transition:'transform .2s',boxShadow:'0 4px 20px rgba(13,148,136,.3)',
+          }}
+          onMouseOver={e=>e.currentTarget.style.transform='scale(1.02)'}
+          onMouseOut={e=>e.currentTarget.style.transform='scale(1)'}
+          >
+            <div style={{position:'absolute',top:-10,right:-10,fontSize:80,opacity:.1}}>&#x1F9ED;</div>
+            <div>
+              <div style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,.7)',marginBottom:4}}>Class 5 to 10</div>
+              <div style={{fontSize:20,fontWeight:800,color:B.white,lineHeight:1.3,marginBottom:8}}>Discover your stream</div>
+              <div style={{fontSize:12,color:'rgba(255,255,255,.6)',lineHeight:1.5}}>Science &middot; Commerce &middot; Arts &middot; Vocational</div>
+            </div>
+            <div style={{fontSize:14,fontWeight:700,color:B.white,marginTop:12}}>Begin &#x2192;</div>
+          </div>
+
+          {/* Class 11-12 Card */}
+          <div onClick={()=>onSelectClass('11-12')} style={{
+            background:'linear-gradient(135deg, #7c3aed 0%, #ec4899 100%)',borderRadius:20,padding:'28px 24px',cursor:'pointer',
+            position:'relative',overflow:'hidden',minHeight:180,display:'flex',flexDirection:'column',justifyContent:'space-between',
+            transition:'transform .2s',boxShadow:'0 4px 20px rgba(124,58,237,.3)',
+          }}
+          onMouseOver={e=>e.currentTarget.style.transform='scale(1.02)'}
+          onMouseOut={e=>e.currentTarget.style.transform='scale(1)'}
+          >
+            <div style={{position:'absolute',top:10,right:10,width:50,height:50,border:'2px solid rgba(255,255,255,.2)',borderRadius:8,transform:'rotate(15deg)'}}/>
+            <div>
+              <div style={{fontSize:12,fontWeight:600,color:'rgba(255,255,255,.7)',marginBottom:4}}>Class 11 to 12</div>
+              <div style={{fontSize:20,fontWeight:800,color:B.white,lineHeight:1.3,marginBottom:8}}>Find your course & career</div>
+              <div style={{fontSize:12,color:'rgba(255,255,255,.6)',lineHeight:1.5}}>Map your path to college and beyond</div>
+            </div>
+            <div style={{fontSize:14,fontWeight:700,color:B.white,marginTop:12}}>Begin &#x2192;</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// QUIZ PICKER (Class 5-10)
+// ============================================================
+function QuizPicker({onSelect,onBack}){
+  return(
+    <div className="slide-up" style={{padding:'32px',height:'100%',overflow:'auto'}}>
+      <button onClick={onBack} style={{background:'none',border:'none',color:B.teal,fontSize:14,fontWeight:600,fontFamily:'Poppins',cursor:'pointer',marginBottom:20,padding:0}}>&#x2190; Back</button>
+      <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:2,marginBottom:4}}>STEP 2 OF 3 &middot; Class 5-10</div>
+      <div style={{fontSize:24,fontWeight:800,color:B.navy,marginBottom:24}}>Pick your quiz</div>
+
+      <div style={{display:'flex',flexDirection:'column',gap:16}}>
+        <div onClick={()=>onSelect('quick')} style={{background:B.white,borderRadius:16,padding:'24px',border:`2px solid ${B.border}`,cursor:'pointer',transition:'all .2s',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}
+          onMouseOver={e=>{e.currentTarget.style.borderColor=B.teal;e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)';}}
+          onMouseOut={e=>{e.currentTarget.style.borderColor=B.border;e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';}}
+        >
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:18,fontWeight:700,color:B.navy}}>Quick Quiz</div>
+            <div style={{background:B.teal,color:B.white,borderRadius:12,padding:'4px 12px',fontSize:10,fontWeight:700}}>MOST POPULAR</div>
+          </div>
+          <div style={{fontSize:13,color:B.muted}}>15Q &middot; ~5 min</div>
+        </div>
+
+        <div onClick={()=>onSelect('stream')} style={{background:B.white,borderRadius:16,padding:'24px',border:`2px solid ${B.border}`,cursor:'pointer',transition:'all .2s',boxShadow:'0 2px 8px rgba(0,0,0,.04)'}}
+          onMouseOver={e=>{e.currentTarget.style.borderColor=B.navy;e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.1)';}}
+          onMouseOut={e=>{e.currentTarget.style.borderColor=B.border;e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';}}
+        >
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+            <div style={{fontSize:18,fontWeight:700,color:B.navy}}>Stream Discovery</div>
+            <div style={{background:B.navy,color:B.white,borderRadius:12,padding:'4px 12px',fontSize:10,fontWeight:700}}>MOST ACCURATE</div>
+          </div>
+          <div style={{fontSize:13,color:B.muted}}>35Q &middot; ~12 min</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// METHODOLOGY SCREEN (Cards Grid — always open)
+// ============================================================
+
+// Mini SVG diagrams
+function RiasecHex(){
+  const labels=['R','I','A','S','E','C'];
+  const colors=['#d97706','#2563eb','#7c3aed','#059669','#dc2626','#0891b2'];
+  const cx=50,cy=46,r=32;
+  return(
+    <svg viewBox="0 0 100 92" style={{width:'100%',maxWidth:100}}>
+      {labels.map((l,i)=>{
+        const a=(Math.PI/3)*i-Math.PI/2;
+        const x=cx+r*Math.cos(a),y=cy+r*Math.sin(a);
+        return(<g key={i}>
+          <line x1={cx} y1={cy} x2={cx+r*.55*Math.cos(a)} y2={cy+r*.55*Math.sin(a)} stroke={colors[i]} strokeWidth="1" opacity=".3"/>
+          <circle cx={x} cy={y} r="11" fill={colors[i]+'18'} stroke={colors[i]} strokeWidth="1.2"/>
+          <text x={x} y={y+3.5} textAnchor="middle" fill={colors[i]} fontSize="9" fontWeight="800" fontFamily="Poppins">{l}</text>
+        </g>);
+      })}
+      <polygon points={labels.map((_,i)=>{const a=(Math.PI/3)*i-Math.PI/2;return `${cx+r*.55*Math.cos(a)},${cy+r*.55*Math.sin(a)}`;}).join(' ')} fill="#16aec815" stroke="#16aec8" strokeWidth=".8" strokeDasharray="2,2"/>
+    </svg>
+  );
+}
+function OceanBars(){
+  const d=[{l:'O',c:'#7c3aed',w:80},{l:'C',c:'#059669',w:68},{l:'E',c:'#d97706',w:55},{l:'A',c:'#2563eb',w:72},{l:'N',c:'#dc2626',w:38}];
+  return(
+    <svg viewBox="0 0 110 80" style={{width:'100%',maxWidth:110}}>
+      {d.map((x,i)=>(
+        <g key={i}><text x="8" y={12+i*15} fill={x.c} fontSize="9" fontWeight="800" fontFamily="Poppins">{x.l}</text>
+        <rect x="20" y={4+i*15} width={x.w} height="10" rx="5" fill={x.c+'20'}/><rect x="20" y={4+i*15} width={x.w*.7} height="10" rx="5" fill={x.c} opacity=".55"/></g>
+      ))}
+    </svg>
+  );
+}
+function MiBrain(){
+  const s=[{l:'\u{1F9EE}',c:'#2563eb'},{l:'\u{1F4DD}',c:'#7c3aed'},{l:'\u{1F3A8}',c:'#ec4899'},{l:'\u{1F3B5}',c:'#d97706'},{l:'\u{1F3C3}',c:'#059669'},{l:'\u{1F91D}',c:'#0891b2'},{l:'\u{1F9D8}',c:'#6366f1'},{l:'\u{1F33F}',c:'#16a34a'}];
+  const cx=50,cy=50,r=38;
+  return(
+    <svg viewBox="0 0 100 100" style={{width:'100%',maxWidth:100}}>
+      {s.map((sl,i)=>{
+        const a1=(Math.PI*2/8)*i-Math.PI/2,a2=(Math.PI*2/8)*(i+1)-Math.PI/2;
+        const x1=cx+r*Math.cos(a1),y1=cy+r*Math.sin(a1),x2=cx+r*Math.cos(a2),y2=cy+r*Math.sin(a2);
+        const mx=cx+r*.62*Math.cos((a1+a2)/2),my=cy+r*.62*Math.sin((a1+a2)/2);
+        return(<g key={i}><path d={`M${cx},${cy} L${x1},${y1} A${r},${r} 0 0,1 ${x2},${y2} Z`} fill={sl.c+'18'} stroke={sl.c} strokeWidth=".8"/>
+        <text x={mx} y={my+4} textAnchor="middle" fontSize="10">{sl.l}</text></g>);
+      })}
+      <circle cx={cx} cy={cy} r="12" fill="white" stroke="#e8e8ed" strokeWidth=".8"/>
+      <text x={cx} y={cy+3} textAnchor="middle" fontSize="7" fontWeight="700" fill="#1f3662" fontFamily="Poppins">MI</text>
+    </svg>
+  );
+}
+function SchwartzCircle(){
+  const v=[{l:'Ach',c:'#dc2626'},{l:'Pow',c:'#7c3aed'},{l:'Sec',c:'#2563eb'},{l:'Trd',c:'#0891b2'},{l:'Ben',c:'#059669'},{l:'Uni',c:'#16a34a'},{l:'S-D',c:'#d97706'},{l:'Stm',c:'#ec4899'},{l:'Hed',c:'#f59e0b'},{l:'Cnf',c:'#6366f1'}];
+  const cx=50,cy=50,r=36;
+  return(
+    <svg viewBox="0 0 100 100" style={{width:'100%',maxWidth:100}}>
+      <circle cx={cx} cy={cy} r={r+2} fill="none" stroke="#e8e8ed" strokeWidth=".8" strokeDasharray="3,2"/>
+      {v.map((x,i)=>{const a=(Math.PI*2/10)*i-Math.PI/2;const px=cx+r*Math.cos(a),py=cy+r*Math.sin(a);
+      return(<g key={i}><circle cx={px} cy={py} r="10" fill={x.c+'18'} stroke={x.c} strokeWidth=".8"/>
+      <text x={px} y={py+2.5} textAnchor="middle" fontSize="6" fontWeight="700" fill={x.c} fontFamily="Poppins">{x.l}</text></g>);})}
+    </svg>
+  );
+}
+function SdtTriangle(){
+  const p=[{x:50,y:10,c:'#dc2626',i:'\u{1F3AF}'},{x:10,y:82,c:'#2563eb',i:'\u{1F4AA}'},{x:90,y:82,c:'#059669',i:'\u{1F465}'}];
+  return(
+    <svg viewBox="0 0 100 92" style={{width:'100%',maxWidth:100}}>
+      <polygon points="50,16 14,80 86,80" fill="#16aec808" stroke="#16aec8" strokeWidth="1.2" strokeDasharray="4,3"/>
+      {p.map((pt,i)=>(<g key={i}><circle cx={pt.x} cy={pt.y} r="11" fill={pt.c+'18'} stroke={pt.c} strokeWidth="1.2"/>
+      <text x={pt.x} y={pt.y+4} textAnchor="middle" fontSize="10">{pt.i}</text></g>))}
+      <text x="50" y="56" textAnchor="middle" fontSize="9" fill="#1f3662" fontWeight="700">{'\u{1F525}'}</text>
+    </svg>
+  );
+}
+function EffortLadder(){
+  const t=[{l:'Elite',y:4,w:46,c:'#dc2626'},{l:'High',y:22,w:60,c:'#d97706'},{l:'Medium',y:40,w:74,c:'#2563eb'},{l:'Low',y:58,w:88,c:'#059669'}];
+  return(
+    <svg viewBox="0 0 100 78" style={{width:'100%',maxWidth:100}}>
+      {t.map((x,i)=>(<g key={i}><rect x={(100-x.w)/2} y={x.y} width={x.w} height="14" rx="7" fill={x.c+'18'} stroke={x.c} strokeWidth=".8"/>
+      <text x="50" y={x.y+10} textAnchor="middle" fontSize="7" fontWeight="700" fill={x.c} fontFamily="Poppins">{x.l}</text></g>))}
+      <text x="6" y="70" fontSize="6" fill="#6e6e73" fontFamily="Poppins">3yr</text>
+      <text x="80" y="13" fontSize="6" fill="#6e6e73" fontFamily="Poppins">10yr+</text>
+    </svg>
+  );
+}
+
+const DIAGRAM_MAP={mi:MiBrain,riasec:RiasecHex,ocean:OceanBars,schwartz:SchwartzCircle,sdt:SdtTriangle,effort:EffortLadder};
+
+function MethodologyScreen({testType,onStart,onBack}){
+  const fwKeys=METHODOLOGY[testType];
+  const testNames={quick:'Quick Quiz',stream:'Stream Finder',compass:'Career Compass'};
+  const testQCounts={quick:15,stream:35,compass:40};
+  const testTimes={quick:'~5 min',stream:'~12 min',compass:'~15 min'};
+
+  // Build rows: stream=3+2, compass=3+3, quick=3
+  const rows=[];
+  if(fwKeys.length<=3){rows.push(fwKeys);}
+  else{rows.push(fwKeys.slice(0,3));rows.push(fwKeys.slice(3));}
+
+  return(
+    <div className="slide-up" style={{height:'100%',overflow:'auto',background:B.bg}}>
+
+      {/* Hero Banner */}
+      <div style={{background:B.grad,padding:'22px 32px 18px',position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:-20,right:-20,fontSize:120,opacity:.06,pointerEvents:'none'}}>{'\u{1F52C}'}</div>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'space-between',flexWrap:'wrap',gap:12}}>
+          <div>
+            <button onClick={onBack} style={{background:'rgba(255,255,255,.15)',border:'1px solid rgba(255,255,255,.25)',color:B.white,borderRadius:10,padding:'5px 14px',fontSize:11,fontWeight:600,fontFamily:'Poppins',cursor:'pointer',marginBottom:10,backdropFilter:'blur(8px)'}}>&#x2190; Back</button>
+            <div style={{fontSize:22,fontWeight:900,color:B.white,marginBottom:4}}>{testNames[testType]}</div>
+            <div style={{display:'flex',gap:14}}>
+              <span style={{fontSize:11,color:'rgba(255,255,255,.75)'}}>{'\u{1F4CB}'} {testQCounts[testType]} Questions</span>
+              <span style={{fontSize:11,color:'rgba(255,255,255,.75)'}}>{'\u{231B}'} {testTimes[testType]}</span>
+              <span style={{fontSize:11,color:'rgba(255,255,255,.75)'}}>{'\u{1F3AF}'} {fwKeys.length} Frameworks</span>
+            </div>
+          </div>
+          {/* CTA in hero */}
+          <button onClick={onStart} style={{
+            background:B.white,color:B.navy,border:'none',borderRadius:16,padding:'14px 32px',
+            fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'Poppins',
+            boxShadow:'0 4px 16px rgba(0,0,0,.15)',transition:'transform .2s',
+            display:'flex',alignItems:'center',gap:8,flexShrink:0,
+          }}
+          onMouseOver={e=>e.currentTarget.style.transform='scale(1.04)'}
+          onMouseOut={e=>e.currentTarget.style.transform='scale(1)'}
+          >
+            Start Test <span style={{fontSize:18}}>&#x2192;</span>
+          </button>
+        </div>
+      </div>
+
+      {/* How It Works — compact flow */}
+      <div style={{padding:'16px 32px 6px'}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:0}}>
+          {[{icon:'\u{1F4CB}',l:'Answer'},{icon:'\u{1F9E0}',l:'Score'},{icon:'\u{1F4CA}',l:'Map'},{icon:'\u{1F3AF}',l:'Match'}].map((s,i)=>(
+            <React.Fragment key={i}>
+              <div style={{display:'flex',flexDirection:'column',alignItems:'center',gap:3}}>
+                <div style={{width:36,height:36,borderRadius:10,background:B.white,border:`2px solid ${B.teal}`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:16,boxShadow:'0 2px 6px rgba(22,174,200,.12)'}}>{s.icon}</div>
+                <span style={{fontSize:8,fontWeight:600,color:B.muted}}>{s.l}</span>
+              </div>
+              {i<3&&<div style={{width:28,height:2,background:`linear-gradient(90deg, ${B.teal}, ${B.teal}40)`,marginBottom:14,flexShrink:0}}/>}
+            </React.Fragment>
+          ))}
+        </div>
+      </div>
+
+      {/* Framework Cards Grid */}
+      <div style={{padding:'6px 32px 12px'}}>
+        <div style={{fontSize:10,fontWeight:700,color:B.navy,textTransform:'uppercase',letterSpacing:1.5,marginBottom:10}}>Frameworks powering this test</div>
+
+        {rows.map((row,ri)=>(
+          <div key={ri} style={{display:'flex',gap:14,marginBottom:14,justifyContent:row.length<3?'center':'stretch'}}>
+            {row.map((key)=>{
+              const fw=FRAMEWORK_DB[key];
+              const Diagram=DIAGRAM_MAP[key];
+              return(
+                <div key={key} style={{
+                  flex:row.length>=3?'1 1 0':'0 1 calc(33.33% - 10px)',
+                  maxWidth:row.length<3?'calc(33.33% - 10px)':'none',
+                  background:B.white,borderRadius:16,border:`1px solid ${fw.color}25`,
+                  boxShadow:`0 3px 12px ${fw.color}10`,overflow:'hidden',
+                  display:'flex',flexDirection:'column',
+                }}>
+                  {/* Card top accent */}
+                  <div style={{height:4,background:`linear-gradient(90deg, ${fw.color}, ${fw.color}60)`}}/>
+
+                  {/* Header row */}
+                  <div style={{padding:'14px 14px 0',display:'flex',alignItems:'center',gap:10}}>
+                    <div style={{width:38,height:38,borderRadius:11,background:fw.color+'12',border:`1.5px solid ${fw.color}30`,display:'flex',alignItems:'center',justifyContent:'center',fontSize:20,flexShrink:0}}>{fw.icon}</div>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{fontSize:12,fontWeight:700,color:B.navy,lineHeight:1.3}}>{fw.name}</div>
+                      <div style={{fontSize:8,color:fw.color,fontWeight:600,marginTop:1}}>{fw.origin}</div>
+                    </div>
+                  </div>
+
+                  {/* Diagram */}
+                  <div style={{display:'flex',justifyContent:'center',padding:'10px 10px 4px'}}>
+                    {Diagram&&<Diagram/>}
+                  </div>
+
+                  {/* Description */}
+                  <div style={{padding:'0 14px',flex:1}}>
+                    <p style={{fontSize:10,color:B.muted,lineHeight:1.6,margin:'0 0 8px'}}>{fw.desc}</p>
+                  </div>
+
+                  {/* Dimension pills */}
+                  <div style={{padding:'0 14px 14px'}}>
+                    <div style={{display:'flex',flexWrap:'wrap',gap:4}}>
+                      {fw.dims.map((d,j)=>(
+                        <div key={j} style={{display:'flex',alignItems:'center',gap:3,background:fw.color+'0A',border:`1px solid ${fw.color}18`,borderRadius:8,padding:'3px 7px'}}>
+                          <span style={{fontSize:10}}>{d.icon}</span>
+                          <span style={{fontSize:9,fontWeight:600,color:B.navy}}>{d.label}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Measures badge */}
+                  <div style={{borderTop:`1px solid ${B.border}`,padding:'8px 14px',background:fw.color+'06'}}>
+                    <div style={{fontSize:9,fontWeight:600,color:fw.color}}>{'\u{1F4CF}'} Measures: {fw.measures}</div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ))}
+      </div>
+
+      {/* Bottom credibility + CTA */}
+      <div style={{padding:'0 32px 24px',display:'flex',gap:14,alignItems:'stretch'}}>
+        <div style={{flex:1,background:B.tealLight,borderRadius:14,padding:'14px 16px',display:'flex',alignItems:'center',gap:12,border:`1px solid ${B.teal}18`}}>
+          <div style={{fontSize:24,flexShrink:0}}>{'\u{1F3DB}'}</div>
+          <div>
+            <div style={{fontSize:11,fontWeight:700,color:B.navy,marginBottom:1}}>Peer-reviewed science</div>
+            <div style={{fontSize:9,color:B.muted,lineHeight:1.5}}>Published in top psychology journals. Used by career counsellors in 80+ countries.</div>
+          </div>
+        </div>
+        <button onClick={onStart} style={{
+          background:B.grad,color:B.white,border:'none',borderRadius:16,padding:'14px 36px',
+          fontSize:16,fontWeight:700,cursor:'pointer',fontFamily:'Poppins',
+          boxShadow:'0 4px 16px rgba(22,174,200,.3)',transition:'transform .2s',
+          display:'flex',alignItems:'center',gap:8,flexShrink:0,whiteSpace:'nowrap',
+        }}
+        onMouseOver={e=>e.currentTarget.style.transform='scale(1.03)'}
+        onMouseOut={e=>e.currentTarget.style.transform='scale(1)'}
+        >
+          Start Test <span style={{fontSize:18}}>&#x2192;</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// QUIZ SCREEN (Unified)
+// ============================================================
+function QuizScreen({questions,sections,onComplete,onBack}){
+  const [current,setCurrent]=useState(0);
+  const [answers,setAnswers]=useState([]);
+  const [selected,setSelected]=useState(null);
+  const [animKey,setAnimKey]=useState(0);
+
+  const q=questions[current];
+  const progress=(current/questions.length)*100;
+  const secInfo=sections?sections.find(s=>s.key===q.sec):null;
+  const optColors=['#2563eb','#7c3aed','#059669','#d97706'];
+
+  function selectOption(idx){
+    setSelected(idx);
+    setTimeout(()=>{
+      const newAnswers=[...answers,idx];
+      if(current<questions.length-1){setAnswers(newAnswers);setCurrent(current+1);setSelected(null);setAnimKey(k=>k+1);}
+      else{onComplete(newAnswers);}
+    },400);
+  }
+
+  function goBack(){
+    if(current>0){setAnswers(answers.slice(0,-1));setCurrent(current-1);setSelected(null);setAnimKey(k=>k+1);}
+    else{onBack();}
+  }
+
+  return(
+    <div style={{height:'100%',display:'flex',flexDirection:'column'}}>
+      {/* Progress */}
+      <div style={{background:B.white,padding:'16px 24px 12px',borderBottom:`1px solid ${B.border}`}}>
+        <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginBottom:8}}>
+          <button onClick={goBack} style={{background:'none',border:'none',color:B.teal,cursor:'pointer',fontSize:14,fontWeight:600,fontFamily:'Poppins',padding:0}}>&#x2190; Back</button>
+          <span style={{fontSize:13,fontWeight:600,color:B.muted}}>{current+1} of {questions.length}</span>
+        </div>
+        <div style={{height:6,background:B.border,borderRadius:3,overflow:'hidden'}}>
+          <div style={{height:'100%',borderRadius:3,background:B.grad,width:`${progress}%`,transition:'width .4s cubic-bezier(.22,1,.36,1)'}}/>
+        </div>
+        {secInfo&&(
+          <div style={{display:'flex',justifyContent:'space-between',alignItems:'center',marginTop:8}}>
+            <span style={{fontSize:11,color:B.teal,fontWeight:600,textTransform:'uppercase',letterSpacing:1.2}}>Section {q.sec}: {secInfo.name}</span>
+            <span style={{fontSize:10,color:B.slate}}>{secInfo.framework}</span>
+          </div>
+        )}
+        {!secInfo&&q.section&&(
+          <div style={{fontSize:11,color:B.teal,fontWeight:600,textTransform:'uppercase',letterSpacing:1.2,marginTop:8,textAlign:'center'}}>{q.section}</div>
+        )}
+      </div>
+
+      {/* Question + Options */}
+      <div key={animKey} className="slide-up" style={{flex:1,overflow:'auto',padding:'24px'}}>
+        <h2 style={{fontSize:'clamp(16px,3vw,20px)',fontWeight:700,color:B.navy,lineHeight:1.5,marginBottom:24,textAlign:'center'}}>{q.q}</h2>
+        <div style={{display:'flex',flexDirection:'column',gap:12}}>
+          {q.opts.map((opt,idx)=>{
+            const isSelected=selected===idx;
+            return(
+              <button key={idx} onClick={()=>selected===null&&selectOption(idx)}
+                style={{display:'flex',alignItems:'flex-start',gap:12,background:isSelected?B.navy:B.white,border:`2px solid ${isSelected?B.navy:B.border}`,borderRadius:14,padding:'16px 18px',cursor:'pointer',textAlign:'left',fontFamily:'Poppins',transition:'all .3s ease',transform:isSelected?'scale(0.98)':'scale(1)',boxShadow:isSelected?'0 4px 16px rgba(31,54,98,.2)':'0 2px 8px rgba(0,0,0,.04)'}}
+                onMouseOver={e=>{if(selected===null){e.currentTarget.style.borderColor=optColors[idx];e.currentTarget.style.boxShadow='0 4px 16px rgba(0,0,0,.08)';}}}
+                onMouseOut={e=>{if(!isSelected){e.currentTarget.style.borderColor=B.border;e.currentTarget.style.boxShadow='0 2px 8px rgba(0,0,0,.04)';}}}
+              >
+                <div style={{width:32,height:32,borderRadius:8,flexShrink:0,background:isSelected?B.teal:optColors[idx]+'18',color:isSelected?B.white:optColors[idx],display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:14,transition:'all .3s'}}>
+                  {isSelected?'✓':opt.l}
+                </div>
+                <span style={{fontSize:14,lineHeight:1.5,fontWeight:500,color:isSelected?B.white:B.text,transition:'color .3s',paddingTop:4}}>{opt.t}</span>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ============================================================
+// RESULTS SCREEN (Full Report)
+// ============================================================
+function ResultsScreen({results,onReset}){
+  const {personality,personalityData,typePercentages,dims,dimToType,testType}=results;
+  const [barsVisible,setBarsVisible]=useState(false);
+  useEffect(()=>{setTimeout(()=>setBarsVisible(true),300);},[]);
+
+  const personalityTypes=testType==='quick'?QUICK_PERSONALITY_TYPES:testType==='stream'?SF_PERSONALITY_TYPES:CC_PERSONALITY_TYPES;
+
+  // Raw dimensions sorted
+  const rawDims=Object.entries(dims||{}).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]);
+
+  const streamColors={Science:'#2563eb',Commerce:'#059669',Arts:'#7c3aed',Vocational:'#d97706'};
+  const riasecColors={Realistic:'#d97706',Investigative:'#2563eb',Artistic:'#7c3aed',Social:'#059669',Enterprising:'#dc2626',Conventional:'#0891b2'};
+
+  return(
+    <div style={{height:'100%',overflow:'auto',padding:'24px'}}>
+      {/* Hero */}
+      <div className="slide-up" style={{background:B.grad,borderRadius:20,padding:'32px 24px',textAlign:'center',marginBottom:20,position:'relative',overflow:'hidden'}}>
+        <div style={{position:'absolute',top:'50%',left:'50%',transform:'translate(-50%,-50%)',fontSize:160,opacity:.06,pointerEvents:'none'}}>{personalityData.emoji}</div>
+        <div style={{fontSize:48,marginBottom:8}}>{personalityData.emoji}</div>
+        <div style={{fontSize:28,fontWeight:900,color:B.white,marginBottom:6}}>{personality}</div>
+        <div style={{fontSize:14,color:'rgba(255,255,255,.85)',lineHeight:1.6,maxWidth:500,margin:'0 auto'}}>{personalityData.brief}</div>
+      </div>
+
+      {/* Full Description */}
+      <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:8}}>PERSONALITY DESCRIPTION</div>
+        <p style={{fontSize:13,color:B.muted,lineHeight:1.7}}>{personalityData.desc}</p>
+      </div>
+
+      {/* Personality Breakdown */}
+      <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>PERSONALITY BREAKDOWN</div>
+        {Object.entries(typePercentages).sort((a,b)=>b[1]-a[1]).map(([type,pct],i)=>(
+          <div key={type} style={{marginBottom:10}}>
+            <div style={{display:'flex',justifyContent:'space-between',fontSize:12,color:i===0?B.navy:B.muted,fontWeight:i===0?600:400,marginBottom:4}}>
+              <span>{personalityTypes[type]?.emoji} {type.replace('The ','')}</span>
+              <span>{pct}%</span>
+            </div>
+            <div style={{height:8,background:B.border,borderRadius:4,overflow:'hidden'}}>
+              <div style={{height:'100%',borderRadius:4,background:i===0?B.grad:(i===1?B.teal+'80':B.border),width:barsVisible?`${pct}%`:'0%',transition:`width .8s cubic-bezier(.22,1,.36,1) ${i*0.1}s`}}/>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Stream Recommendation (Quick + Stream Finder) */}
+      {(testType==='quick'||testType==='stream')&&results.streamScores&&(
+        <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>STREAM RECOMMENDATION</div>
+          <div style={{fontSize:24,fontWeight:800,color:streamColors[results.topStream]||B.navy,marginBottom:16}}>{results.topStream}</div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:10}}>
+            {Object.entries(results.streamScores).sort((a,b)=>b[1]-a[1]).map(([stream,pct],i)=>(
+              <div key={stream} style={{background:i===0?(streamColors[stream])+'0D':B.bg,borderRadius:12,padding:'14px',border:i===0?`2px solid ${streamColors[stream]}40`:`1px solid ${B.border}`,textAlign:'center'}}>
+                <div style={{fontSize:13,fontWeight:700,color:streamColors[stream]}}>{stream}</div>
+                <div style={{fontSize:22,fontWeight:900,color:streamColors[stream]}}>{pct}%</div>
+                <div style={{fontSize:10,color:B.muted}}>{i===0?'Best fit':i===1?'Good fit':'Moderate'}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* MI Profile (Stream Finder) */}
+      {testType==='stream'&&results.miProfile&&results.miProfile.length>0&&(
+        <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>TOP INTELLIGENCES (Gardner's MI)</div>
+          {results.miProfile.map(([name,score],i)=>(
+            <div key={name} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:i<results.miProfile.length-1?`1px solid ${B.border}`:'none'}}>
+              <div style={{width:28,height:28,borderRadius:8,background:i===0?B.green+'15':B.tealLight,color:i===0?B.green:B.teal,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:800,fontSize:14}}>{i+1}</div>
+              <div style={{flex:1,fontWeight:600,fontSize:13,color:B.navy}}>{name}</div>
+              <div style={{fontWeight:700,fontSize:13,color:i===0?B.green:B.muted}}>Score: {score}</div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* RIASEC Profile (Career Compass) */}
+      {testType==='compass'&&results.riasecPcts&&(
+        <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>HOLLAND'S CODE</div>
+          <div style={{fontSize:22,fontWeight:900,color:B.navy,marginBottom:14,letterSpacing:2}}>
+            {results.topRIASEC.map(r=>r[0]).join('')}
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'1fr 1fr 1fr',gap:8}}>
+            {Object.entries(results.riasecPcts).sort((a,b)=>b[1]-a[1]).map(([dim,pct],i)=>(
+              <div key={dim} style={{textAlign:'center',padding:'10px 6px',borderRadius:10,background:i<3?riasecColors[dim]+'0D':B.bg,border:i<3?`1px solid ${riasecColors[dim]}30`:`1px solid ${B.border}`}}>
+                <div style={{fontSize:10,fontWeight:600,color:riasecColors[dim]||B.muted}}>{dim}</div>
+                <div style={{fontSize:16,fontWeight:800,color:i<3?riasecColors[dim]:B.muted}}>{pct}%</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ALL Careers */}
+      <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>ALL CAREER MATCHES</div>
+        {personalityData.careers.map((career,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:i<personalityData.careers.length-1?`1px solid ${B.border}`:'none'}}>
+            <div style={{width:24,height:24,borderRadius:6,background:i<3?B.green+'15':B.bg,color:i<3?B.green:B.muted,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0}}>{i+1}</div>
+            <div style={{fontWeight:i<3?600:400,fontSize:13,color:B.navy}}>{career}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* ALL Courses */}
+      <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>ALL COURSE MATCHES</div>
+        {personalityData.courses.map((course,i)=>(
+          <div key={i} style={{display:'flex',alignItems:'center',gap:12,padding:'10px 0',borderBottom:i<personalityData.courses.length-1?`1px solid ${B.border}`:'none'}}>
+            <div style={{width:24,height:24,borderRadius:6,background:i<3?B.teal+'15':B.bg,color:i<3?B.teal:B.muted,display:'flex',alignItems:'center',justifyContent:'center',fontWeight:700,fontSize:12,flexShrink:0}}>{i+1}</div>
+            <div style={{fontWeight:i<3?600:400,fontSize:13,color:B.navy}}>{course}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* Effort Tier */}
+      {results.effortTier&&(
+        <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:4}}>EFFORT LEVEL</div>
+          <div style={{fontSize:20,fontWeight:800,color:B.navy,marginBottom:6}}>{results.effortTier}</div>
+          <p style={{fontSize:12,color:B.muted,lineHeight:1.6}}>
+            {results.effortTier.includes('Low')?"You prefer a faster path. 3-year degrees like BCA, B.Com, or Diplomas suit you.":
+             results.effortTier.includes('Very High')?"You're ready for the long haul. MBBS + MD, PhD, IAS — 7-10+ years of dedication.":
+             results.effortTier.includes('High')?"You're willing to invest serious time. CA, Law, M.Tech, or MBA (5-7 years).":
+             "A standard 4-5 year bachelor's degree path suits you — B.Tech, B.Sc, BBA, or B.Des."}
+          </p>
+        </div>
+      )}
+
+      {/* Industry Fit */}
+      {results.topIndustries&&(
+        <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+          <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>TOP INDUSTRIES</div>
+          <div style={{display:'flex',flexWrap:'wrap',gap:8}}>
+            {results.topIndustries.map((ind,i)=>(
+              <div key={i} style={{background:i===0?B.navy:B.tealLight,color:i===0?B.white:B.navy,borderRadius:16,padding:'8px 16px',fontSize:12,fontWeight:600}}>{ind}</div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* HOW YOUR SCORE WAS CALCULATED */}
+      <div className="slide-up" style={{background:B.white,borderRadius:16,padding:'24px',border:`1px solid ${B.border}`,marginBottom:16}}>
+        <div style={{fontSize:11,fontWeight:600,color:B.teal,textTransform:'uppercase',letterSpacing:1.5,marginBottom:12}}>HOW YOUR SCORE WAS CALCULATED</div>
+
+        {/* Formula */}
+        <div style={{background:B.tealLight,borderRadius:12,padding:'16px',marginBottom:16}}>
+          <div style={{fontSize:12,fontWeight:600,color:B.navy,marginBottom:8}}>The Formula</div>
+          <ol style={{fontSize:12,color:B.muted,lineHeight:1.8,paddingLeft:18}}>
+            <li>Each answer adds points to psychological <strong>dimensions</strong> (e.g. Investigative +2, Social +1).</li>
+            <li>Dimensions are mapped to <strong>personality types</strong> using established psychology frameworks.</li>
+            <li>The type with the <strong>highest total score</strong> becomes your primary type.</li>
+            {testType==='stream'&&<li>Stream scores use <strong>dual scoring</strong>: 40% direct stream mapping from each answer + 60% dimension-weighted calculation via stream weight matrix.</li>}
+          </ol>
+        </div>
+
+        {/* Raw Dimensions */}
+        <div style={{fontSize:12,fontWeight:600,color:B.navy,marginBottom:8}}>Raw Dimension Scores</div>
+        <div style={{display:'flex',flexWrap:'wrap',gap:6,marginBottom:16}}>
+          {rawDims.slice(0,20).map(([dim,val],i)=>(
+            <div key={dim} style={{background:i<5?B.navy+'0D':B.bg,borderRadius:8,padding:'6px 10px',fontSize:11,border:`1px solid ${i<5?B.navy+'30':B.border}`}}>
+              <span style={{fontWeight:600,color:B.navy}}>{dim}</span>
+              <span style={{color:B.teal,fontWeight:700,marginLeft:6}}>{val}</span>
+            </div>
+          ))}
+        </div>
+
+        {/* Dimension to Type mapping */}
+        <div style={{fontSize:12,fontWeight:600,color:B.navy,marginBottom:8}}>Dimension-to-Type Mapping (Your top scores)</div>
+        <div style={{fontSize:11,color:B.muted,lineHeight:1.8}}>
+          {rawDims.slice(0,8).map(([dim])=>{
+            const mapped=dimToType[dim];
+            return mapped?<div key={dim}><span style={{fontWeight:600}}>{dim}</span> &#x2192; {mapped}</div>:null;
+          })}
+        </div>
+      </div>
+
+      {/* Disclaimer */}
+      <div style={{background:'#fef3c7',borderRadius:14,padding:'18px 20px',border:'1px solid #fbbf24',marginBottom:16}}>
+        <p style={{fontSize:12,fontWeight:600,color:'#92400e',marginBottom:4}}>Important Note</p>
+        <p style={{fontSize:11,color:'#92400e',lineHeight:1.7}}>
+          This assessment is a scientifically-informed starting point for career exploration, not a final verdict. Your results reflect patterns in your responses today — interests and priorities evolve. We recommend discussing your results with a career counsellor. The 12thPlus team is here to help — call us at <strong>6363613135</strong>.
+        </p>
+      </div>
+
+      {/* Take Another Test */}
+      <button onClick={onReset} style={{
+        width:'100%',background:B.grad,color:B.white,border:'none',borderRadius:20,padding:'16px',
+        fontSize:15,fontWeight:700,cursor:'pointer',fontFamily:'Poppins',boxShadow:'0 4px 16px rgba(22,174,200,.3)',marginBottom:24,
+      }}>
+        &#x2190; Back to Dashboard
+      </button>
+    </div>
+  );
+}
+
+// ============================================================
+// MAIN APP
+// ============================================================
+function App(){
+  const [screen,setScreen]=useState('dashboard');
+  const [classLevel,setClassLevel]=useState(null);
+  const [testType,setTestType]=useState(null);
+  const [results,setResults]=useState(null);
+  const [resetTimer,setResetTimer]=useState(90);
+  const timerRef=useRef(null);
+  const lastActivity=useRef(Date.now());
+
+  // Reset timer logic
+  const resetToHome=useCallback(()=>{
+    setScreen('dashboard');setClassLevel(null);setTestType(null);setResults(null);setResetTimer(90);
+  },[]);
+
+  useEffect(()=>{
+    function handleActivity(){lastActivity.current=Date.now();setResetTimer(90);}
+    window.addEventListener('click',handleActivity);
+    window.addEventListener('keydown',handleActivity);
+    window.addEventListener('touchstart',handleActivity);
+    timerRef.current=setInterval(()=>{
+      const elapsed=Math.floor((Date.now()-lastActivity.current)/1000);
+      const remaining=Math.max(0,90-elapsed);
+      setResetTimer(remaining);
+      if(remaining===0)resetToHome();
+    },1000);
+    return()=>{clearInterval(timerRef.current);window.removeEventListener('click',handleActivity);window.removeEventListener('keydown',handleActivity);window.removeEventListener('touchstart',handleActivity);};
+  },[resetToHome]);
+
+  function handleSelectClass(level){
+    setClassLevel(level);
+    if(level==='11-12'){setTestType('compass');setScreen('methodology');}
+    else{setScreen('picker');}
+  }
+
+  function handleSelectQuiz(type){setTestType(type);setScreen('methodology');}
+
+  function handleStartTest(){setScreen('quiz');}
+
+  function handleQuizComplete(answers){
+    let r;
+    if(testType==='quick')r=computeQuickResults(answers);
+    else if(testType==='stream')r=computeStreamFinderResults(answers);
+    else r=computeCareerCompassResults(answers);
+    setResults(r);setScreen('results');
+  }
+
+  function getQuestions(){
+    if(testType==='quick')return QUICK_QUESTIONS;
+    if(testType==='stream')return SF_QUESTIONS;
+    return CC_QUESTIONS;
+  }
+
+  function getSections(){
+    if(testType==='quick')return null;
+    if(testType==='stream')return SF_SECTIONS;
+    return CC_SECTIONS;
+  }
+
+
+  return(
+    <div style={{display:'flex',flexDirection:'column',height:'100vh',overflow:'hidden',background:B.bg}}>
+
+      {/* Header */}
+      <div style={{background:B.white,borderBottom:`1px solid ${B.border}`,padding:'12px 24px',display:'flex',justifyContent:'space-between',alignItems:'center',flexShrink:0}}>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          <div style={{width:36,height:36,borderRadius:10,background:B.teal,display:'flex',alignItems:'center',justifyContent:'center'}}>
+            <span style={{fontSize:16,fontWeight:900,color:B.white}}>12</span>
+          </div>
+          <span style={{fontSize:16,fontWeight:800,color:B.navy}}>12thplus.com</span>
+          <span style={{fontSize:13,color:B.muted}}>|</span>
+          <span style={{fontSize:13,color:B.muted}}>Demo Public School &middot; Bengaluru</span>
+        </div>
+        <div style={{display:'flex',alignItems:'center',gap:12}}>
+          {screen!=='dashboard'&&(
+            <button onClick={resetToHome} style={{background:B.navy,color:B.white,border:'none',borderRadius:14,padding:'6px 16px',fontSize:12,fontWeight:600,cursor:'pointer',fontFamily:'Poppins'}}>&#x1F3E0; Home</button>
+          )}
+          <div style={{display:'flex',alignItems:'center',gap:8,background:resetTimer<30?'#fef2f2':B.bg,borderRadius:20,padding:'6px 14px'}}>
+            <div style={{width:8,height:8,borderRadius:4,background:resetTimer<30?B.red:B.green,animation:resetTimer<15?'blink 1s infinite':'none'}}/>
+            <span style={{fontSize:12,fontWeight:600,color:resetTimer<30?B.red:B.muted}}>Resets in {resetTimer}s</span>
+          </div>
+        </div>
+      </div>
+
+      {/* Content Area */}
+      <div style={{flex:1,overflow:'hidden'}}>
+        {screen==='dashboard'&&<Dashboard onSelectClass={handleSelectClass}/>}
+        {screen==='picker'&&<QuizPicker onSelect={handleSelectQuiz} onBack={resetToHome}/>}
+        {screen==='methodology'&&<MethodologyScreen testType={testType} onStart={handleStartTest} onBack={()=>{if(classLevel==='5-10')setScreen('picker');else resetToHome();}}/>}
+        {screen==='quiz'&&<QuizScreen questions={getQuestions()} sections={getSections()} onComplete={handleQuizComplete} onBack={()=>setScreen('methodology')}/>}
+        {screen==='results'&&<ResultsScreen results={results} onReset={resetToHome}/>}
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>
