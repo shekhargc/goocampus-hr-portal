@@ -12536,9 +12536,14 @@ def ops_onboarding_list():
     total = conn.execute(count_sql, count_params).fetchone()['cnt']
     total_pages = max(1, (total + per_page - 1) // per_page)
 
-    sql += " ORDER BY p.registration_date DESC NULLS LAST LIMIT ? OFFSET ?"
-    params.extend([per_page, (page - 1) * per_page])
-    clients = conn.execute(sql, params).fetchall()
+    # Full set for Kanban (all matching clients, no pagination)
+    kanban_sql = sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_clients = conn.execute(kanban_sql, params).fetchall()
+
+    # Paginated set for Table view
+    table_sql = sql + " ORDER BY p.registration_date DESC NULLS LAST LIMIT ? OFFSET ?"
+    table_params = params + [per_page, (page - 1) * per_page]
+    table_clients = conn.execute(table_sql, table_params).fetchall()
 
     # Kanban counts
     kanban_counts = {}
@@ -12551,7 +12556,8 @@ def ops_onboarding_list():
 
     conn.close()
     return render_template('ops_onboarding.html',
-        clients=clients, page=page, total_pages=total_pages, total=total,
+        clients=table_clients, kanban_clients=kanban_clients,
+        page=page, total_pages=total_pages, total=total,
         status_filter=status_filter, search=search,
         kanban_counts=kanban_counts,
         active_ops_page='onboarding', active_section='operations')

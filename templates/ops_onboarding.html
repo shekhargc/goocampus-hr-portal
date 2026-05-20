@@ -84,7 +84,7 @@
             {{ st }}
             <span class="kanban-count">{{ kanban_counts.get(st, 0) }}</span>
         </div>
-        {% for c in clients if c.onboarding_status == st %}
+        {% for c in kanban_clients if c.onboarding_status == st %}
         <a href="/operations/onboarding/{{ c.id }}" class="kanban-card" style="display:block;text-decoration:none;">
             <div class="kanban-card-name">{{ c.first_name }} {{ c.last_name or '' }}</div>
             <div class="kanban-card-reg">{{ (c.registration_number or '')|format_reg }}</div>
