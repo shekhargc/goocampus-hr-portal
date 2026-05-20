@@ -116,6 +116,13 @@ class DatabaseConnection:
             sql
         )
 
+        # Convert GROUP_CONCAT(col, ', ') -> STRING_AGG(col, ', ')
+        sql = re.sub(
+            r"GROUP_CONCAT\((\S+?),\s*'([^']+)'\)",
+            r"STRING_AGG(\1, '\2')",
+            sql
+        )
+
         return sql
 
     @property
