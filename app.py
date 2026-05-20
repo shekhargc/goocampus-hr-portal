@@ -11175,9 +11175,14 @@ def ensure_ops_tables():
                 logging.error(f"{category} migration: {e}")
 
         # Migration: add switched_program column to plab_clients
+        # NOTE: PostgreSQL requires ROLLBACK after a failed query before new queries
         try:
             conn.execute("SELECT switched_program FROM plab_clients LIMIT 1")
         except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
             try:
                 conn.execute("ALTER TABLE plab_clients ADD COLUMN switched_program TEXT")
                 conn.commit()
@@ -11194,6 +11199,10 @@ def ensure_ops_tables():
             try:
                 conn.execute(f"SELECT {col_name} FROM plab_clients LIMIT 1")
             except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
                 try:
                     conn.execute(f"ALTER TABLE plab_clients ADD COLUMN {col_name} TEXT")
                     conn.commit()
@@ -12559,14 +12568,33 @@ def ops_plab_fix_switched_program():
         'GCUKIP/2019/003': 'BAPIO Program',
     }
     try:
-        # Step 1: Check column exists
+        # Step 1: Check column exists (PostgreSQL needs ROLLBACK after failed query)
+        col_exists = False
         try:
             conn.execute("SELECT switched_program FROM plab_clients LIMIT 1")
+            col_exists = True
             results.append("✅ switched_program column exists")
         except Exception as col_err:
-            conn.execute("ALTER TABLE plab_clients ADD COLUMN switched_program TEXT")
-            conn.commit()
-            results.append(f"⚠️ Column was missing — added it: {col_err}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            results.append(f"⚠️ Column missing: {col_err}")
+            try:
+                conn.execute("ALTER TABLE plab_clients ADD COLUMN switched_program TEXT")
+                conn.commit()
+                col_exists = True
+                results.append("✅ Column added successfully")
+            except Exception as add_err:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                results.append(f"❌ Could not add column: {add_err}")
+
+        if not col_exists:
+            conn.close()
+            return '<br>'.join(results)
 
         # Step 2: Check before state
         before = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
