@@ -145,6 +145,9 @@
 </div>
 
 <script>
+// Vendor map embedded from server — no AJAX needed
+var VENDOR_MAP = {{ vendor_map | tojson }};
+
 function updateVendorFields() {
     const program = document.getElementById('training_program').value;
     const section = document.getElementById('vendor_section');
@@ -160,28 +163,24 @@ function updateVendorFields() {
     // Save current selection
     const currentVal = vendorSelect.value;
 
-    // Fetch vendors for this training program via AJAX
-    fetch('/api/vendors-for-service?service_name=' + encodeURIComponent(program) + '&country=UK%20Pathway')
-        .then(r => r.json())
-        .then(vendors => {
-            vendorSelect.innerHTML = '<option value="">Select Provider</option>';
-            vendors.forEach(v => {
-                const opt = document.createElement('option');
-                opt.value = v.name;
-                opt.textContent = v.name;
-                if (v.name === currentVal) opt.selected = true;
-                vendorSelect.appendChild(opt);
-            });
-            // If current value not in list but exists, keep it as an option
-            if (currentVal && !vendorSelect.value) {
-                const opt = document.createElement('option');
-                opt.value = currentVal;
-                opt.textContent = currentVal;
-                opt.selected = true;
-                vendorSelect.appendChild(opt);
-            }
-        })
-        .catch(err => console.error('Vendor fetch error:', err));
+    // Get vendors from inline map
+    const vendors = VENDOR_MAP[program] || [];
+    vendorSelect.innerHTML = '<option value="">Select Provider</option>';
+    vendors.forEach(function(name) {
+        const opt = document.createElement('option');
+        opt.value = name;
+        opt.textContent = name;
+        if (name === currentVal) opt.selected = true;
+        vendorSelect.appendChild(opt);
+    });
+    // If current value not in list but exists, keep it as an option
+    if (currentVal && !vendorSelect.value) {
+        const opt = document.createElement('option');
+        opt.value = currentVal;
+        opt.textContent = currentVal;
+        opt.selected = true;
+        vendorSelect.appendChild(opt);
+    }
 }
 // Run on page load for edit mode
 document.addEventListener('DOMContentLoaded', updateVendorFields);

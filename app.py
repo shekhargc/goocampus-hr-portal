@@ -12134,6 +12134,38 @@ def ops_plab_settings_reorder():
 VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications']
 
+# Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
+VENDOR_SERVICE_MAP = {
+    'IELTS Training': ['Verbis', 'Britford Training Academy', 'Other'],
+    'OET Training': ['Verbis', 'Britford Training Academy', 'Other'],
+    'PLAB 1 Training': ['ABMA', 'Arora PLAB 1', 'Other'],
+    'PLAB 2 Training': ['Aspire Academy', 'ABMA & Aspire', 'Arora PLAB 2', 'Other'],
+    'PLAB 2 Mock': ['Aspire Academy', 'ABMA & Aspire', 'Other'],
+    'MRCP 1': ['Other'],
+}
+
+def _build_vendor_map():
+    """Build vendor map from DB, falling back to hard-coded map."""
+    try:
+        conn = get_db()
+        rows = conn.execute("""
+            SELECT vsm.service_name, vp.name
+            FROM vendor_service_map vsm
+            JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+            WHERE vp.is_active = TRUE AND vp.country = 'UK Pathway'
+            ORDER BY vp.sort_order, vp.name
+        """).fetchall()
+        conn.close()
+        if rows:
+            vm = {}
+            for r in rows:
+                vm.setdefault(r['service_name'], []).append(r['name'])
+            return vm
+    except Exception as e:
+        logging.error(f"_build_vendor_map DB error: {e}")
+    # Fallback to hard-coded map
+    return VENDOR_SERVICE_MAP
+
 
 def get_vendors_for_service(service_name, country=None):
     """Return active vendors that provide a specific service (training/course/research name)."""
@@ -13054,6 +13086,8 @@ def ops_coaching_add():
         flash('Coaching record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_coaching_list'))
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    # Build vendor map: {service_name: [vendor_name, ...]}
+    vendor_map = _build_vendor_map()
     conn.close()
     pre_reg = request.args.get('client', '')
     return render_template('ops_coaching_form.html', record=None, clients=clients,
@@ -13062,6 +13096,7 @@ def ops_coaching_add():
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
+                           vendor_map=vendor_map,
                            pre_reg=pre_reg, active_ops_page='coaching')
 
 
@@ -13099,6 +13134,7 @@ def ops_coaching_edit(record_id):
         flash('Coaching record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_coaching_list'))
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
+    vendor_map = _build_vendor_map()
     conn.close()
     return render_template('ops_coaching_form.html', record=record, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
@@ -13106,6 +13142,7 @@ def ops_coaching_edit(record_id):
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
+                           vendor_map=vendor_map,
                            pre_reg='', active_ops_page='coaching')
 
 
