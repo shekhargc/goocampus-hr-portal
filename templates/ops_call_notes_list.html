@@ -185,7 +185,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for record in records %}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCnDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
-                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ (record.registration_number or '')|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.call_date|format_date }}</td>
                         <td style="padding:12px 16px;text-align:center;">
                             {% if (record.contacted_status or 'Yes') == 'Yes' %}
@@ -213,11 +213,11 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
     {% if total_pages > 1 %}
     <div class="pagination">
         {% if page > 1 %}
-        <a href="/operations/call-notes?page={{ page - 1 }}{% if search %}&q={{ search }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Previous</a>
+        <a href="/operations/call-notes?tab=notes&page={{ page - 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">← Previous</a>
         {% endif %}
-        <span>Page {{ page }} of {{ total_pages }}</span>
+        <span>Page {{ page }} of {{ total_pages }} ({{ total_count }} notes)</span>
         {% if page < total_pages %}
-        <a href="/operations/call-notes?page={{ page + 1 }}{% if search %}&q={{ search }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Next</a>
+        <a href="/operations/call-notes?tab=notes&page={{ page + 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Next →</a>
         {% endif %}
     </div>
     {% endif %}
@@ -310,7 +310,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for item in tracker_data %}
                     <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
-                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number|format_reg }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
                             {{ item.stage or '—' }}
                             <br><span style="font-size:10px;color:var(--gray-400);">every {{ item.followup_interval }}d</span>
@@ -425,7 +425,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for item in tracker_data %}
                     <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
-                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number|format_reg }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
                             {{ item.stage or '—' }}
                             <br><span style="font-size:10px;color:var(--gray-400);">every {{ item.followup_interval }}d</span>
@@ -468,6 +468,7 @@ const CN_RECORDS = {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
+        formatted_reg: {{ (record.registration_number or '')|format_reg|tojson }},
         call_date: {{ (record.call_date or '')|format_date|tojson }},
         call_note: {{ (record.call_note or '')|tojson }},
         added_by: {{ (record.added_by or '')|tojson }},
@@ -503,7 +504,7 @@ function openCnDetail(id) {
         <div class="emp-avatar-lg-ph">${initials}</div>
         <div>
             <p class="name">${r.name}</p>
-            <div class="meta">${r.registration_number}</div>
+            <div class="meta">${r.formatted_reg}</div>
         </div>
     </div>
 
@@ -618,7 +619,7 @@ function renderTrackerDetail(data) {
         <div class="emp-avatar-lg-ph">${initials}</div>
         <div>
             <p class="name">${data.name}</p>
-            <div class="meta">${data.registration_number}</div>
+            <div class="meta">${data.formatted_reg || data.registration_number}</div>
         </div>
     </div>
 
@@ -679,7 +680,7 @@ function renderTrackerDetail(data) {
                 dropdown.innerHTML = data.map((d, i) =>
                     '<div class="suggestion-item" data-idx="' + i + '">' +
                     '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                    '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span></div>'
                 ).join('');
                 dropdown.querySelectorAll('.suggestion-item').forEach(el => {
                     el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });

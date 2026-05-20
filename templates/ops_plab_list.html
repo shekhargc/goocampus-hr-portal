@@ -691,7 +691,7 @@
       <tbody>
         {% for client in clients %}
         <tr class="clickable-row" id="row-{{ client.id }}" onclick="openPlabDetail({{ client.id }})">
-          <td>{{ client.registration_number }}</td>
+          <td>{{ client.registration_number|format_reg }}</td>
           <td>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}</td>
           <td>{{ client.current_stage or '–' }}</td>
           <td>
@@ -761,6 +761,7 @@
           id: {{ client.id }},
           name: {{ (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or ''))|trim)|tojson }},
           registration_number: {{ (client.registration_number or '')|tojson }},
+          formatted_reg: {{ (client.registration_number or '')|format_reg|tojson }},
           current_stage: {{ (client.current_stage or '')|tojson }},
           account_status: {{ (client.account_status or '')|tojson }},
           plan_type: {{ (client.plan_type or '')|tojson }},
@@ -801,7 +802,7 @@
       let html = '<div class="drawer-emp">' +
           '<div class="emp-avatar-lg-ph">' + initials + '</div>' +
           '<div><p class="name">' + r.name + '</p>' +
-          '<div class="meta">' + r.registration_number + '</div></div></div>' +
+          '<div class="meta">' + r.formatted_reg + '</div></div></div>' +
           '<div class="drawer-grid">' +
           field('Current Stage', r.current_stage) +
           field('Status', statusBadge(r.account_status)) +
@@ -955,7 +956,7 @@
           dropdown.innerHTML = data.map((d, i) =>
             '<div class="suggestion-item" data-idx="' + i + '">' +
               '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-              '<span class="suggestion-reg">' + esc(d.reg) + '</span>' +
+              '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span>' +
             '</div>'
           ).join('');
           dropdown.querySelectorAll('.suggestion-item').forEach(el => {

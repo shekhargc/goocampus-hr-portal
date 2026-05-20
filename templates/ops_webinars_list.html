@@ -269,7 +269,7 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
                 dropdown.innerHTML = data.map((d, i) =>
                     '<div class="suggestion-item" data-idx="' + i + '">' +
                     '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                    '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span></div>'
                 ).join('');
                 dropdown.querySelectorAll('.suggestion-item').forEach(el => {
                     el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });

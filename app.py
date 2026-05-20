@@ -51,6 +51,30 @@ def format_date_filter(value):
     except (AttributeError, ValueError):
         return value
 
+@app.template_filter('format_reg')
+def format_reg_filter(value):
+    """Normalize registration number to GCUKIP/YY-YY/NNN format.
+    Converts GCUKIP/2022/042 → GCUKIP/22-23/042
+    Leaves GCUKIP/22-23/042 or GCUKIP/25-26/009 as-is.
+    """
+    if not value or not isinstance(value, str):
+        return value or '—'
+    value = value.strip()
+    if not value:
+        return '—'
+    import re as _re
+    # Match GCUKIP/YYYY/NNN (4-digit year)
+    m = _re.match(r'^(GCUKIP)/(\d{4})/(\d+)$', value)
+    if m:
+        prefix, year_str, num = m.group(1), m.group(2), m.group(3)
+        year = int(year_str)
+        yy = year % 100
+        next_yy = (yy + 1) % 100
+        return f"{prefix}/{yy:02d}-{next_yy:02d}/{num}"
+    # Already in YY-YY format or other — return as-is
+    return value
+
+
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
 ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
@@ -13688,7 +13712,7 @@ def ops_client_search_api():
         results = []
         for r in rows:
             name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"
-            results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number']})
+            results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number'], 'display_reg': format_reg_filter(r['registration_number'])})
     except Exception as e:
         logging.error(f"ops_client_search_api: {e}")
         results = []
@@ -14001,6 +14025,7 @@ def ops_call_notes_tracker_details():
 
         result = {
             'registration_number': client['registration_number'],
+            'formatted_reg': format_reg_filter(client['registration_number']),
             'name': client_name.strip(),
             'stage': client['current_stage'],
             'mobile': client['mobile'],
@@ -19307,6 +19332,54 @@ if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
     shutil.copy2(_excel_src, _excel_dst)
 
 _import_excel_clients_once()
+
+# ── One-time import: Call Notes from Zoho export ───
+def _import_call_notes_once():
+    """Import call notes from call_notes_import_data.py (8423 rows, upsert by reg+date+note)."""
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        try:
+            conn.commit()
+        except Exception:
+            pass
+        CN_VERSION = 'v1_zoho_may2026'
+        marker = conn.execute("SELECT value FROM _import_markers WHERE key = 'call_notes_import'").fetchone()
+        if marker and marker['value'] == CN_VERSION:
+            conn.close()
+            return
+        logging.info(f"Running call notes import {CN_VERSION}...")
+        from call_notes_import_data import CALL_NOTES_DATA
+        inserted = 0
+        skipped = 0
+        for reg, call_date, call_note, added_by in CALL_NOTES_DATA:
+            # Check for duplicate: same reg + date + first 100 chars of note
+            note_check = call_note[:100] if call_note else ''
+            existing = conn.execute(
+                "SELECT id FROM ops_call_notes WHERE registration_number = ? AND call_date = ? AND LEFT(call_note, 100) = ?",
+                (reg, call_date, note_check)
+            ).fetchone()
+            if existing:
+                skipped += 1
+                continue
+            conn.execute(
+                "INSERT INTO ops_call_notes (registration_number, call_date, call_note, added_by, contacted_status, contact_type) VALUES (?, ?, ?, ?, 'Yes', 'Call')",
+                (reg, call_date, call_note, added_by)
+            )
+            inserted += 1
+            if inserted % 500 == 0:
+                conn.commit()
+        conn.execute("INSERT INTO _import_markers (key, value) VALUES ('call_notes_import', ?) ON CONFLICT(key) DO UPDATE SET value=?",
+                    (CN_VERSION, CN_VERSION))
+        conn.commit()
+        logging.info(f"Call notes import {CN_VERSION}: inserted={inserted}, skipped={skipped}")
+        conn.close()
+    except Exception as e:
+        logging.error(f"Call notes import error: {e}")
+        import traceback
+        traceback.print_exc()
+
+_import_call_notes_once()
 
 # ── One-time backfill: switched_program (hardcoded, no file dependency) ───
 def _backfill_switched_program():

@@ -82,7 +82,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for record in records %}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openEngDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
-                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ (record.registration_number or '')|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.ielts_login_id or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.oet_login_id or '—' }}</td>
                     </tr>
@@ -116,6 +116,7 @@ const ENG_RECORDS = {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
+        formatted_reg: {{ (record.registration_number or '')|format_reg|tojson }},
         ielts_login_id: {{ (record.ielts_login_id or '')|tojson }},
         ielts_password: {{ (record.ielts_password or '')|tojson }},
         ielts_hint_question: {{ (record.ielts_hint_question or '')|tojson }},
@@ -154,7 +155,7 @@ function openEngDetail(id) {
         <div class="emp-avatar-lg-ph">${initials}</div>
         <div>
             <p class="name">${r.name}</p>
-            <div class="meta">${r.registration_number}</div>
+            <div class="meta">${r.formatted_reg}</div>
         </div>
     </div>
 
@@ -242,7 +243,7 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
                 dropdown.innerHTML = data.map((d, i) =>
                     '<div class="suggestion-item" data-idx="' + i + '">' +
                     '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                    '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span></div>'
                 ).join('');
                 dropdown.querySelectorAll('.suggestion-item').forEach(el => {
                     el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });

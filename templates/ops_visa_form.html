@@ -270,7 +270,7 @@
                 dropdown.innerHTML = data.map((d, i) =>
                     '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
                     '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
-                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.reg) + '</span></div>'
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>'
                 ).join('');
                 dropdown.querySelectorAll('[data-idx]').forEach(el => {
                     el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });

@@ -19,7 +19,7 @@
           {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
         </h1>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
-          Registration #{{ client.registration_number }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
+          Registration #{{ client.registration_number|format_reg }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
         </p>
         {% if client.registration_date %}
         <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">

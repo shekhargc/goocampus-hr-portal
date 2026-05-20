@@ -112,7 +112,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                             {{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}
                         </td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
-                            {{ record.registration_number or '—' }}
+                            {{ (record.registration_number or '')|format_reg }}
                         </td>
                         <td style="padding:12px 16px;">
                             {% if record.epic_registration %}
@@ -159,6 +159,7 @@ const EPIC_RECORDS = {
         id: {{ record.id }},
         name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
         registration_number: {{ (record.registration_number or '')|tojson }},
+        formatted_reg: {{ (record.registration_number or '')|format_reg|tojson }},
         epic_registration: {{ (record.epic_registration or '')|tojson }},
         epic_status: {{ (record.epic_status or '')|tojson }},
         notary_camp: {{ (record.notary_camp or '')|tojson }},
@@ -217,7 +218,7 @@ function openEpicDetail(id) {
         <div class="emp-avatar-lg-ph">${initials}</div>
         <div>
             <p class="name">${r.name}</p>
-            <div class="meta">${r.registration_number}</div>
+            <div class="meta">${r.formatted_reg}</div>
         </div>
     </div>
 
@@ -317,7 +318,7 @@ document.addEventListener('keydown', function(e) { if (e.key === 'Escape') close
                 dropdown.innerHTML = data.map((d, i) =>
                     '<div class="suggestion-item" data-idx="' + i + '">' +
                     '<span class="suggestion-name">' + esc(d.name) + '</span>' +
-                    '<span class="suggestion-reg">' + esc(d.reg) + '</span></div>'
+                    '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span></div>'
                 ).join('');
                 dropdown.querySelectorAll('.suggestion-item').forEach(el => {
                     el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
