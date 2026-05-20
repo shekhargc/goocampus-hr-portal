@@ -12497,6 +12497,128 @@ def ops_plab_import():
     return render_template('ops_plab_import.html', active_ops_page='import')
 
 
+@app.route('/operations/plab/fix-switched-program')
+@admin_required
+def ops_plab_fix_switched_program():
+    """Diagnostic + fix: directly update switched_program for all 53 clients."""
+    conn = get_db()
+    results = []
+    SP_DATA = {
+        'GCUKIP/25-26/017': 'Australia',
+        'GCUKIP/25-26/008': 'Australia',
+        'GCUKIP/25-26/004': 'Australia',
+        'GCUKIP/24-25/008': 'Australia',
+        'GCUKIP/24-25/005': 'NEET India',
+        'GCUKIP/23-24/088': 'Australia',
+        'GCUKIP/23-24/087': 'Australia',
+        'GCUKIP/2023/070': 'Australia',
+        'GCUKIP/2023/062': 'Australia',
+        'GCUKIP/2023/058': 'Australia',
+        'GCUKIP/2023/040': 'NEET India',
+        'GCUKIP/2023/036': 'NEET India',
+        'GCUKIP/2023/029': 'BAPIO Program',
+        'GCUKIP/2023/019': 'Australia',
+        'GCUKIP/2023/012': 'Australia',
+        'GCUKIP/2023/001': 'USMLE Pathway',
+        'GCUKIP/2022/103': 'Australia',
+        'GCUKIP/2022/096': 'Australia',
+        'GCUKIP/2022/089': 'NEET India',
+        'GCUKIP/2022/076': 'Australia',
+        'GCUKIP/2022/065': 'Australia',
+        'GCUKIP/2022/062': 'USMLE Pathway',
+        'GCUKIP/2022/044': 'NEET India',
+        'GCUKIP/2022/036': 'USMLE Pathway',
+        'GCUKIP/2022/024': 'NEET India',
+        'GCUKIP/2022/014': 'BAPIO Program',
+        'GCUKIP/2022/009': 'NEET India',
+        'GCUKIP/2022/008': 'NEET India',
+        'GCUKIP/2022/006': 'NEET India',
+        'GCUKIP/2021/093': 'USMLE Pathway',
+        'GCUKIP/2021/077': 'BAPIO Program',
+        'GCUKIP/2021/073': 'BAPIO Program',
+        'GCUKIP/2021/064': 'NEET India',
+        'GCUKIP/2021/059': 'USMLE Pathway',
+        'GCUKIP/2021/054': 'NEET India',
+        'GCUKIP/2021/039': 'NEET India',
+        'GCUKIP/2021/037': 'NEET India',
+        'GCUKIP/2021/034': 'USMLE Pathway',
+        'GCUKIP/2021/027': 'NEET India',
+        'GCUKIP/2021/019': 'NEET India',
+        'GCUKIP/2021/012': 'USMLE Pathway',
+        'GCUKIP/2021/005': 'USMLE Pathway',
+        'GCUKIP/2021/004': 'NEET India',
+        'GCUKIP/2021/002': 'Australia',
+        'GCUKIP/2020/050': 'BAPIO Program',
+        'GCUKIP/2020/045': 'NEET India',
+        'GCUKIP/2020/034': 'NEET India',
+        'GCUKIP/2020/029': 'NEET India',
+        'GCUKIP/2020/025': 'USMLE Pathway',
+        'GCUKIP/2020/004': 'BAPIO Program',
+        'GCUKIP/2020/003': 'NEET India',
+        'GCUKIP/2019/011': 'NEET India',
+        'GCUKIP/2019/003': 'BAPIO Program',
+    }
+    try:
+        # Step 1: Check column exists
+        try:
+            conn.execute("SELECT switched_program FROM plab_clients LIMIT 1")
+            results.append("✅ switched_program column exists")
+        except Exception as col_err:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN switched_program TEXT")
+            conn.commit()
+            results.append(f"⚠️ Column was missing — added it: {col_err}")
+
+        # Step 2: Check before state
+        before = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
+        results.append(f"Before fix: {before['cnt']} clients have switched_program")
+
+        # Step 3: Run updates one by one
+        updated = 0
+        not_found = []
+        for reg_num, sp_val in SP_DATA.items():
+            # Check if client exists
+            client = conn.execute("SELECT id, registration_number, switched_program FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+            if client:
+                conn.execute("UPDATE plab_clients SET switched_program = ? WHERE id = ?", (sp_val, client['id']))
+                updated += 1
+            else:
+                # Try with TRIM in case of spaces
+                client2 = conn.execute("SELECT id, registration_number FROM plab_clients WHERE TRIM(registration_number) = ?", (reg_num,)).fetchone()
+                if client2:
+                    conn.execute("UPDATE plab_clients SET switched_program = ? WHERE id = ?", (sp_val, client2['id']))
+                    updated += 1
+                    results.append(f"⚠️ {reg_num} matched with TRIM (had spaces)")
+                else:
+                    not_found.append(reg_num)
+        conn.commit()
+
+        # Step 4: Check after state
+        after = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients WHERE switched_program IS NOT NULL AND switched_program != ''").fetchone()
+        results.append(f"Updated: {updated} clients")
+        results.append(f"After fix: {after['cnt']} clients have switched_program")
+        if not_found:
+            results.append(f"Not found in DB: {', '.join(not_found[:10])}{'...' if len(not_found)>10 else ''}")
+
+        # Step 5: Show Dr. Ashwin Rahul specifically
+        ashwin = conn.execute("SELECT id, registration_number, first_name, last_name, switched_program, account_status FROM plab_clients WHERE registration_number = 'GCUKIP/25-26/017'").fetchone()
+        if ashwin:
+            results.append(f"Dr. Ashwin Rahul: switched_program=[{ashwin['switched_program']}], status=[{ashwin['account_status']}]")
+        else:
+            # Try LIKE match
+            ashwin2 = conn.execute("SELECT id, registration_number, first_name, last_name, switched_program, account_status FROM plab_clients WHERE registration_number LIKE '%25-26/017%'").fetchone()
+            if ashwin2:
+                results.append(f"Found via LIKE: reg=[{ashwin2['registration_number']}], sp=[{ashwin2['switched_program']}]")
+            else:
+                results.append("❌ GCUKIP/25-26/017 NOT FOUND in plab_clients")
+
+        conn.close()
+    except Exception as e:
+        results.append(f"❌ Error: {e}")
+        import traceback
+        results.append(traceback.format_exc())
+
+    return '<br>'.join(results)
+
 
 def _safe_float(val):
     """Parse a float from a string, stripping currency symbols and commas."""
