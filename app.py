@@ -25724,16 +25724,40 @@ def wa_test_send():
 
 @app.route('/whatsapp/debug')
 def wa_debug():
-    """Debug endpoint to check WA table status."""
+    """Debug endpoint to check WA table status and Infobip account."""
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    headers = {"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"}
+
     conn = get_db()
-    results = {}
+    results = {'tables': {}}
     for table in ['wa_contacts', 'wa_templates', 'wa_campaigns', 'wa_messages']:
         try:
             row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table}").fetchone()
-            results[table] = row['cnt']
+            results['tables'][table] = row['cnt']
         except Exception as e:
-            results[table] = f"ERROR: {str(e)}"
+            results['tables'][table] = f"ERROR: {str(e)}"
     conn.close()
+
+    # Check Infobip senders
+    try:
+        resp = requests.get(f"https://{INFOBIP_BASE}/whatsapp/1/senders", headers=headers, timeout=10)
+        results['senders'] = resp.json()
+    except Exception as e:
+        results['senders'] = str(e)
+
+    # Check message log for last message
+    msg_id = request.args.get('msg_id', '')
+    if msg_id:
+        try:
+            resp = requests.get(f"https://{INFOBIP_BASE}/whatsapp/1/message/{msg_id}/status", headers=headers, timeout=10)
+            results['message_status'] = resp.json()
+        except Exception as e:
+            results['message_status'] = str(e)
+
+    results['infobip_base'] = INFOBIP_BASE
+    results['api_key_set'] = bool(INFOBIP_KEY)
+
     return jsonify(results)
 
 
