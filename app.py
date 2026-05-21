@@ -25458,7 +25458,7 @@ def wa_campaign_send(campaign_id):
                         }]
                     }
                     resp = requests.post(
-                        f"{INFOBIP_BASE}/whatsapp/1/message/template",
+                        f"https://{INFOBIP_BASE}/whatsapp/1/message/template",
                         json=payload,
                         headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
                         timeout=15
@@ -25472,7 +25472,7 @@ def wa_campaign_send(campaign_id):
                     "content": {"text": campaign['freeform_text'] or ''}
                 }
                 resp = requests.post(
-                    f"{INFOBIP_BASE}/whatsapp/1/message/text",
+                    f"https://{INFOBIP_BASE}/whatsapp/1/message/text",
                     json=payload,
                     headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
                     timeout=15
@@ -25542,7 +25542,7 @@ def wa_templates_sync():
 
     try:
         resp = requests.get(
-            f"{INFOBIP_BASE}/whatsapp/2/senders/{sender}/templates",
+            f"https://{INFOBIP_BASE}/whatsapp/2/senders/{sender}/templates",
             headers={"Authorization": f"App {INFOBIP_KEY}"},
             timeout=15
         )
@@ -25665,7 +25665,7 @@ def wa_chat_send(contact_id):
             "content": {"text": text}
         }
         resp = requests.post(
-            f"{INFOBIP_BASE}/whatsapp/1/message/text",
+            f"https://{INFOBIP_BASE}/whatsapp/1/message/text",
             json=payload,
             headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
             timeout=15
@@ -25712,7 +25712,7 @@ def wa_test_send():
     try:
         payload = {"from": sender, "to": phone, "content": {"text": text}}
         resp = requests.post(
-            f"{INFOBIP_BASE}/whatsapp/1/message/text",
+            f"https://{INFOBIP_BASE}/whatsapp/1/message/text",
             json=payload,
             headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
             timeout=15
