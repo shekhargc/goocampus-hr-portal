@@ -25181,33 +25181,44 @@ def psychometric_test():
 @admin_required
 def wa_dashboard():
     conn = get_db()
-    # Campaign stats
-    total_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns").fetchone()[0]
-    active_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns WHERE status='sending'").fetchone()[0]
-    total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
-    total_messages = conn.execute("SELECT COUNT(*) FROM wa_messages").fetchone()[0]
-    delivered = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='delivered' OR status='read'").fetchone()[0]
-    read_count = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='read'").fetchone()[0]
-    failed = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='failed'").fetchone()[0]
-    delivery_rate = round((delivered / total_messages * 100), 1) if total_messages > 0 else 0
-    read_rate = round((read_count / total_messages * 100), 1) if total_messages > 0 else 0
+    try:
+        # Campaign stats
+        total_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns").fetchone()[0]
+        active_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns WHERE status='sending'").fetchone()[0]
+        total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
+        total_messages = conn.execute("SELECT COUNT(*) FROM wa_messages").fetchone()[0]
+        delivered = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='delivered' OR status='read'").fetchone()[0]
+        read_count = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='read'").fetchone()[0]
+        failed = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='failed'").fetchone()[0]
+        delivery_rate = round((delivered / total_messages * 100), 1) if total_messages > 0 else 0
+        read_rate = round((read_count / total_messages * 100), 1) if total_messages > 0 else 0
 
-    # Recent campaigns
-    recent_campaigns = conn.execute("""
-        SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name
-        FROM wa_campaigns c
-        LEFT JOIN employees e ON c.created_by = e.id
-        ORDER BY c.created_at DESC LIMIT 10
-    """).fetchall()
+        # Recent campaigns
+        recent_campaigns = conn.execute("""
+            SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name
+            FROM wa_campaigns c
+            LEFT JOIN employees e ON c.created_by = e.id
+            ORDER BY c.created_at DESC LIMIT 10
+        """).fetchall()
 
-    # Recent messages
-    recent_messages = conn.execute("""
-        SELECT m.*, wc.name as contact_name, wc.phone as contact_phone
-        FROM wa_messages m
-        LEFT JOIN wa_contacts wc ON m.contact_id = wc.id
-        ORDER BY m.created_at DESC LIMIT 20
-    """).fetchall()
+        # Recent messages
+        recent_messages = conn.execute("""
+            SELECT m.*, wc.name as contact_name, wc.phone as contact_phone
+            FROM wa_messages m
+            LEFT JOIN wa_contacts wc ON m.contact_id = wc.id
+            ORDER BY m.created_at DESC LIMIT 20
+        """).fetchall()
+    except Exception as e:
+        logging.error(f"wa_dashboard error: {e}")
+        conn.close()
+        return render_template('wa_dashboard.html',
+            active_section='whatsapp',
+            total_campaigns=0, active_campaigns=0, total_contacts=0,
+            total_messages=0, delivered=0, read_count=0, failed=0,
+            delivery_rate=0, read_rate=0, recent_campaigns=[], recent_messages=[]
+        )
 
+    conn.close()
     return render_template('wa_dashboard.html',
         active_section='whatsapp',
         total_campaigns=total_campaigns,
