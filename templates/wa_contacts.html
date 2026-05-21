@@ -1,0 +1,119 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Contacts - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-contacts { max-width: 1200px; }
+    .wa-contacts h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
+    .wa-contacts .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
+    .filters { display: flex; gap: 10px; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; }
+    .filters input, .filters select { padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem; }
+    .filters input { width: 260px; }
+    .sync-btn {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: var(--orange); color: white; border: none; padding: 8px 16px;
+        border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    }
+    .sync-btn:hover { background: var(--orange-dark); }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .data-table th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .data-table td { padding: 10px 12px; border-bottom: 1px solid #F3F4F6; }
+    .data-table tr:hover { background: #F9FAFB; }
+    .source-badge { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+    .source-neetpg_lead { background: #DBEAFE; color: #1E40AF; }
+    .source-plab_client { background: #D1FAE5; color: #065F46; }
+    .source-inbound { background: #FEF3C7; color: #92400E; }
+    .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 20px; }
+    .pagination a, .pagination span { padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; text-decoration: none; }
+    .pagination a { background: #F3F4F6; color: #374151; }
+    .pagination a:hover { background: var(--orange); color: white; }
+    .pagination .current { background: var(--orange); color: white; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-contacts">
+    <h1>Contacts</h1>
+    <p class="subtitle">{{ total }} contact{{ 's' if total != 1 }} across all sources</p>
+
+    <div class="filters">
+        <input type="text" id="searchInput" placeholder="Search by name, phone, email..." value="{{ search }}" onkeyup="debounceSearch(this.value)">
+        <select id="sourceFilter" onchange="applyFilters()">
+            <option value="">All Sources</option>
+            {% for s in sources %}
+            <option value="{{ s }}" {% if source_filter == s %}selected{% endif %}>{{ s }}</option>
+            {% endfor %}
+        </select>
+        <form action="/whatsapp/contacts/sync" method="POST" style="display:inline;">
+            <button type="submit" class="sync-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Sync Contacts
+            </button>
+        </form>
+        <span style="font-size:0.82rem;color:var(--gray-400);">{{ total }} total</span>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Phone</th>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Source</th>
+                    <th>Last Message</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in contacts %}
+                <tr>
+                    <td style="font-weight:600;">{{ c.phone }}</td>
+                    <td>{{ c.name or '—' }}</td>
+                    <td>{{ c.email or '—' }}</td>
+                    <td><span class="source-badge source-{{ c.source or '' }}">{{ c.source or '—' }}</span></td>
+                    <td>{{ c.last_message_at|format_date if c.last_message_at else '—' }}</td>
+                    <td><a href="/whatsapp/chat/{{ c.id }}" style="color:var(--orange);font-weight:600;text-decoration:none;">Chat</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/whatsapp/contacts?page={{ page-1 }}&search={{ search }}&source={{ source_filter }}">← Prev</a>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <span class="current">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
+            <a href="/whatsapp/contacts?page={{ p }}&search={{ search }}&source={{ source_filter }}">{{ p }}</a>
+            {% elif p == 4 or p == total_pages - 2 %}
+            <span style="color:#9CA3AF;">...</span>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="/whatsapp/contacts?page={{ page+1 }}&search={{ search }}&source={{ source_filter }}">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+var searchTimer;
+function debounceSearch(val) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function() { if (val.length >= 2 || val.length === 0) applyFilters(); }, 400);
+}
+function applyFilters() {
+    var s = document.getElementById('searchInput').value;
+    var src = document.getElementById('sourceFilter').value;
+    var url = '/whatsapp/contacts?page=1';
+    if (s) url += '&search=' + encodeURIComponent(s);
+    if (src) url += '&source=' + encodeURIComponent(src);
+    window.location.href = url;
+}
+</script>
+{% endblock %}

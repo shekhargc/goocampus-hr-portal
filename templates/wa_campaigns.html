@@ -1,0 +1,125 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Campaigns - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-camp { max-width: 1200px; }
+    .wa-camp h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
+    .wa-camp .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 10px; }
+    .top-bar select { padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem; }
+    .new-btn {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: var(--orange); color: white; text-decoration: none;
+        padding: 0.55rem 1.15rem; border-radius: 0.5rem; font-size: 0.85rem; font-weight: 600;
+    }
+    .new-btn:hover { background: var(--orange-dark); }
+    .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .data-table th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .data-table td { padding: 10px 12px; border-bottom: 1px solid #F3F4F6; }
+    .data-table tr:hover { background: #F9FAFB; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .badge-draft { background: #F3F4F6; color: #6B7280; }
+    .badge-sending { background: #DBEAFE; color: #1E40AF; }
+    .badge-completed { background: #D1FAE5; color: #065F46; }
+    .badge-failed { background: #FEE2E2; color: #991B1B; }
+    .send-btn {
+        background: #059669; color: white; border: none; padding: 4px 12px;
+        border-radius: 4px; font-size: 0.75rem; font-weight: 600; cursor: pointer;
+    }
+    .send-btn:hover { background: #047857; }
+    .pagination { display: flex; gap: 6px; justify-content: center; margin-top: 20px; }
+    .pagination a, .pagination span { padding: 6px 12px; border-radius: 6px; font-size: 0.82rem; text-decoration: none; }
+    .pagination a { background: #F3F4F6; color: #374151; }
+    .pagination a:hover { background: var(--orange); color: white; }
+    .pagination .current { background: var(--orange); color: white; font-weight: 600; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-camp">
+    <h1>Campaigns</h1>
+    <p class="subtitle">{{ total }} campaign{{ 's' if total != 1 }}</p>
+
+    <div class="top-bar">
+        <select onchange="window.location.href='/whatsapp/campaigns?status='+this.value">
+            <option value="">All Statuses</option>
+            {% for st in ['draft','sending','completed','failed'] %}
+            <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st|capitalize }}</option>
+            {% endfor %}
+        </select>
+        <a href="/whatsapp/campaigns/new" class="new-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            New Campaign
+        </a>
+    </div>
+
+    <div style="overflow-x:auto;">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Type</th>
+                    <th>Recipients</th>
+                    <th>Sent</th>
+                    <th>Delivered</th>
+                    <th>Read</th>
+                    <th>Failed</th>
+                    <th>Status</th>
+                    <th>Created By</th>
+                    <th>Created</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in campaigns %}
+                <tr>
+                    <td style="font-weight:600;">{{ c.name }}</td>
+                    <td>{{ c.message_type or 'freeform' }}</td>
+                    <td>{{ c.total_recipients or 0 }}</td>
+                    <td>{{ c.sent_count or 0 }}</td>
+                    <td>{{ c.delivered_count or 0 }}</td>
+                    <td>{{ c.read_count or 0 }}</td>
+                    <td>{{ c.failed_count or 0 }}</td>
+                    <td><span class="badge badge-{{ c.status or 'draft' }}">{{ (c.status or 'draft')|capitalize }}</span></td>
+                    <td>{{ c.created_by_name or '—' }}</td>
+                    <td>{{ c.created_at|format_date if c.created_at else '—' }}</td>
+                    <td>
+                        {% if c.status in ('draft', 'failed') %}
+                        <form action="/whatsapp/campaigns/{{ c.id }}/send" method="POST" style="display:inline;" onsubmit="return confirm('Send this campaign to all matching contacts?');">
+                            <button type="submit" class="send-btn">Send</button>
+                        </form>
+                        {% else %}
+                        <span style="color:#9CA3AF;font-size:0.75rem;">—</span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+                {% if not campaigns %}
+                <tr><td colspan="11" style="text-align:center;color:var(--gray-400);padding:2rem;">No campaigns yet. Create your first one!</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/whatsapp/campaigns?page={{ page-1 }}&status={{ status_filter }}">← Prev</a>
+        {% endif %}
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}
+            <span class="current">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
+            <a href="/whatsapp/campaigns?page={{ p }}&status={{ status_filter }}">{{ p }}</a>
+            {% elif p == 4 or p == total_pages - 2 %}
+            <span style="color:#9CA3AF;">...</span>
+            {% endif %}
+        {% endfor %}
+        {% if page < total_pages %}
+        <a href="/whatsapp/campaigns?page={{ page+1 }}&status={{ status_filter }}">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

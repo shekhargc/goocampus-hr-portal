@@ -1,0 +1,122 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}New Campaign - WhatsApp - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-create { max-width: 720px; }
+    .wa-create h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 1.5rem; }
+    .form-card {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        padding: 1.75rem; margin-bottom: 1.5rem;
+    }
+    .form-card h2 { font-size: 1rem; font-weight: 700; color: var(--navy); margin-bottom: 1rem; }
+    .form-group { margin-bottom: 1.15rem; }
+    .form-group label { display: block; font-size: 0.82rem; font-weight: 600; color: var(--navy); margin-bottom: 0.35rem; }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%; padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px;
+        font-size: 0.85rem; font-family: inherit;
+    }
+    .form-group textarea { min-height: 120px; resize: vertical; }
+    .radio-group { display: flex; gap: 1rem; }
+    .radio-group label { display: flex; align-items: center; gap: 0.35rem; font-weight: 500; cursor: pointer; }
+    .audience-info {
+        background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px;
+        padding: 1rem; font-size: 0.82rem; color: #166534;
+    }
+    .audience-info strong { display: block; margin-bottom: 0.5rem; }
+    .btn-row { display: flex; gap: 0.75rem; }
+    .btn-submit {
+        background: var(--orange); color: white; border: none; padding: 0.65rem 1.5rem;
+        border-radius: 0.5rem; font-size: 0.88rem; font-weight: 600; cursor: pointer;
+    }
+    .btn-submit:hover { background: var(--orange-dark); }
+    .btn-cancel {
+        background: #F3F4F6; color: #374151; border: none; padding: 0.65rem 1.5rem;
+        border-radius: 0.5rem; font-size: 0.88rem; font-weight: 600; cursor: pointer; text-decoration: none;
+    }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-create">
+    <h1>New Campaign</h1>
+
+    <form method="POST">
+        <div class="form-card">
+            <h2>Campaign Details</h2>
+            <div class="form-group">
+                <label>Campaign Name *</label>
+                <input type="text" name="name" required placeholder="e.g. NEET PG 2025 Results Update">
+            </div>
+            <div class="form-group">
+                <label>Message Type</label>
+                <div class="radio-group">
+                    <label><input type="radio" name="message_type" value="freeform" checked onchange="toggleType()"> Free-form Text</label>
+                    <label><input type="radio" name="message_type" value="template" onchange="toggleType()"> Template</label>
+                </div>
+            </div>
+            <div class="form-group" id="freeformSection">
+                <label>Message Text</label>
+                <textarea name="freeform_text" placeholder="Type your message here..."></textarea>
+            </div>
+            <div class="form-group" id="templateSection" style="display:none;">
+                <label>Select Template</label>
+                <select name="template_id">
+                    <option value="">-- Choose template --</option>
+                    {% for t in templates %}
+                    <option value="{{ t.id }}">{{ t.name }} ({{ t.language }}) — {{ t.status }}</option>
+                    {% endfor %}
+                </select>
+                {% if not templates %}
+                <p style="font-size:0.78rem;color:var(--gray-400);margin-top:0.5rem;">No approved templates. Sync templates from Infobip first.</p>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="form-card">
+            <h2>Audience</h2>
+            <div class="audience-info">
+                <strong>Total Opted-in Contacts: {{ total_contacts }}</strong>
+                {% for sc in source_counts %}
+                {{ sc.source or 'Unknown' }}: {{ sc.cnt }}{% if not loop.last %}, {% endif %}
+                {% endfor %}
+            </div>
+            <div class="form-group" style="margin-top:1rem;">
+                <label>Filter by Source (optional)</label>
+                <select name="audience_source" id="audienceSource">
+                    <option value="">All Contacts</option>
+                    {% for sc in source_counts %}
+                    <option value="{{ sc.source }}">{{ sc.source }} ({{ sc.cnt }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group">
+                <label>Filter by Tag (optional)</label>
+                <input type="text" name="audience_tags" placeholder="e.g. neet2025, plab_active">
+            </div>
+            <input type="hidden" name="audience_filter" id="audienceFilterJSON" value="{}">
+        </div>
+
+        <div class="btn-row">
+            <button type="submit" class="btn-submit" onclick="buildFilter()">Create Campaign</button>
+            <a href="/whatsapp/campaigns" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+
+<script>
+function toggleType() {
+    var isFreeform = document.querySelector('input[name="message_type"]:checked').value === 'freeform';
+    document.getElementById('freeformSection').style.display = isFreeform ? 'block' : 'none';
+    document.getElementById('templateSection').style.display = isFreeform ? 'none' : 'block';
+}
+function buildFilter() {
+    var source = document.getElementById('audienceSource').value;
+    var tags = document.querySelector('input[name="audience_tags"]').value.trim();
+    var filter = {};
+    if (source) filter.source = source;
+    if (tags) filter.tags = tags;
+    document.getElementById('audienceFilterJSON').value = JSON.stringify(filter);
+}
+</script>
+{% endblock %}

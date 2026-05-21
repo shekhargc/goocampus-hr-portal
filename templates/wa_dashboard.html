@@ -1,0 +1,166 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Dashboard - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-dash { max-width: 1200px; }
+    .wa-dash h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 1.5rem; }
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 2rem; }
+    @media (max-width: 900px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat-card {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .stat-card .stat-label { font-size: 0.78rem; color: var(--gray-500); font-weight: 500; margin-bottom: 0.35rem; }
+    .stat-card .stat-value { font-size: 1.6rem; font-weight: 800; color: var(--navy); }
+    .stat-card .stat-sub { font-size: 0.75rem; color: var(--gray-400); margin-top: 0.25rem; }
+    .wa-section { margin-bottom: 2rem; }
+    .wa-section h2 { font-size: 1.1rem; font-weight: 700; color: var(--navy); margin-bottom: 1rem; }
+    .wa-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
+    .wa-table th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
+    .wa-table td { padding: 10px 12px; border-bottom: 1px solid #F3F4F6; }
+    .wa-table tr:hover { background: #F9FAFB; }
+    .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.72rem; font-weight: 600; }
+    .badge-draft { background: #F3F4F6; color: #6B7280; }
+    .badge-sending { background: #DBEAFE; color: #1E40AF; }
+    .badge-completed { background: #D1FAE5; color: #065F46; }
+    .badge-failed { background: #FEE2E2; color: #991B1B; }
+    .badge-sent { background: #DBEAFE; color: #1E40AF; }
+    .badge-delivered { background: #D1FAE5; color: #065F46; }
+    .badge-read { background: #E0E7FF; color: #3730A3; }
+    .quick-actions { display: flex; gap: 0.75rem; margin-bottom: 2rem; flex-wrap: wrap; }
+    .quick-btn {
+        display: inline-flex; align-items: center; gap: 0.5rem;
+        padding: 0.65rem 1.25rem; border-radius: 0.5rem; font-size: 0.85rem;
+        font-weight: 600; text-decoration: none; border: none; cursor: pointer; transition: all 0.15s;
+    }
+    .quick-btn-primary { background: var(--orange); color: white; }
+    .quick-btn-primary:hover { background: var(--orange-dark); }
+    .quick-btn-outline { background: white; color: var(--navy); border: 1px solid var(--gray-200); }
+    .quick-btn-outline:hover { background: var(--gray-50); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-dash">
+    <h1>WhatsApp Messaging</h1>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-label">Total Contacts</div>
+            <div class="stat-value">{{ total_contacts|default(0) }}</div>
+            <div class="stat-sub">Opted-in recipients</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Campaigns</div>
+            <div class="stat-value">{{ total_campaigns|default(0) }}</div>
+            <div class="stat-sub">{{ active_campaigns|default(0) }} active</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Messages Sent</div>
+            <div class="stat-value">{{ total_messages|default(0) }}</div>
+            <div class="stat-sub">{{ delivered|default(0) }} delivered</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-label">Delivery Rate</div>
+            <div class="stat-value">{{ delivery_rate|default(0) }}%</div>
+            <div class="stat-sub">{{ read_rate|default(0) }}% read rate</div>
+        </div>
+    </div>
+
+    <div class="quick-actions">
+        <a href="/whatsapp/campaigns/new" class="quick-btn quick-btn-primary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="16"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+            New Campaign
+        </a>
+        <a href="/whatsapp/contacts" class="quick-btn quick-btn-outline">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            View Contacts
+        </a>
+        <form action="/whatsapp/contacts/sync" method="POST" style="display:inline;">
+            <button type="submit" class="quick-btn quick-btn-outline">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Sync Contacts
+            </button>
+        </form>
+        <form action="/whatsapp/templates/sync" method="POST" style="display:inline;">
+            <button type="submit" class="quick-btn quick-btn-outline">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10"/></svg>
+                Sync Templates
+            </button>
+        </form>
+    </div>
+
+    {% if recent_campaigns %}
+    <div class="wa-section">
+        <h2>Recent Campaigns</h2>
+        <table class="wa-table">
+            <thead>
+                <tr>
+                    <th>Campaign</th>
+                    <th>Type</th>
+                    <th>Recipients</th>
+                    <th>Sent</th>
+                    <th>Delivered</th>
+                    <th>Read</th>
+                    <th>Failed</th>
+                    <th>Status</th>
+                    <th>Created</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in recent_campaigns %}
+                <tr>
+                    <td style="font-weight:600;">{{ c.name }}</td>
+                    <td>{{ c.message_type or 'freeform' }}</td>
+                    <td>{{ c.total_recipients or 0 }}</td>
+                    <td>{{ c.sent_count or 0 }}</td>
+                    <td>{{ c.delivered_count or 0 }}</td>
+                    <td>{{ c.read_count or 0 }}</td>
+                    <td>{{ c.failed_count or 0 }}</td>
+                    <td><span class="badge badge-{{ c.status or 'draft' }}">{{ c.status or 'Draft' }}</span></td>
+                    <td>{{ c.created_at|format_date if c.created_at else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+
+    {% if recent_messages %}
+    <div class="wa-section">
+        <h2>Recent Messages</h2>
+        <table class="wa-table">
+            <thead>
+                <tr>
+                    <th>Contact</th>
+                    <th>Phone</th>
+                    <th>Direction</th>
+                    <th>Content</th>
+                    <th>Status</th>
+                    <th>Time</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for m in recent_messages %}
+                <tr>
+                    <td style="font-weight:600;">{{ m.contact_name or '—' }}</td>
+                    <td>{{ m.contact_phone or '—' }}</td>
+                    <td>
+                        {% if m.direction == 'inbound' %}
+                        <span style="color:#059669;">↓ In</span>
+                        {% else %}
+                        <span style="color:#2563EB;">↑ Out</span>
+                        {% endif %}
+                    </td>
+                    <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">{{ (m.content or m.template_name or '—')[:60] }}</td>
+                    <td><span class="badge badge-{{ m.status or 'pending' }}">{{ m.status or 'pending' }}</span></td>
+                    <td>{{ m.created_at|format_date if m.created_at else '—' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -11035,6 +11035,81 @@ def ensure_ops_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── WhatsApp Messaging System ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_contacts (
+            id SERIAL PRIMARY KEY,
+            phone VARCHAR(20) NOT NULL,
+            name VARCHAR(160),
+            email VARCHAR(160),
+            source VARCHAR(40),
+            source_id INTEGER,
+            tags TEXT,
+            opted_in INTEGER DEFAULT 1,
+            last_message_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        try:
+            conn.execute("SELECT 1 FROM wa_contacts LIMIT 0")
+        except Exception:
+            pass
+        # Unique index on phone
+        try:
+            conn.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_wa_contacts_phone ON wa_contacts(phone)")
+        except Exception:
+            pass
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_templates (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(120) NOT NULL,
+            language VARCHAR(10) DEFAULT 'en',
+            category VARCHAR(40),
+            status VARCHAR(20) DEFAULT 'PENDING',
+            header_text TEXT,
+            body_text TEXT NOT NULL,
+            footer_text TEXT,
+            buttons TEXT,
+            infobip_template_id VARCHAR(120),
+            synced_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_campaigns (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            message_type VARCHAR(20) DEFAULT 'template',
+            template_id INTEGER REFERENCES wa_templates(id),
+            freeform_text TEXT,
+            audience_filter TEXT,
+            total_recipients INTEGER DEFAULT 0,
+            sent_count INTEGER DEFAULT 0,
+            delivered_count INTEGER DEFAULT 0,
+            read_count INTEGER DEFAULT 0,
+            failed_count INTEGER DEFAULT 0,
+            status VARCHAR(20) DEFAULT 'draft',
+            scheduled_at TIMESTAMP,
+            started_at TIMESTAMP,
+            completed_at TIMESTAMP,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_messages (
+            id SERIAL PRIMARY KEY,
+            contact_id INTEGER REFERENCES wa_contacts(id),
+            campaign_id INTEGER REFERENCES wa_campaigns(id),
+            direction VARCHAR(10) DEFAULT 'outbound',
+            message_type VARCHAR(20) DEFAULT 'text',
+            content TEXT,
+            template_name VARCHAR(120),
+            status VARCHAR(20) DEFAULT 'pending',
+            infobip_message_id VARCHAR(120),
+            error_text TEXT,
+            sent_at TIMESTAMP,
+            delivered_at TIMESTAMP,
+            read_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # Migration: add vendor_provider column to ops_coaching
         try:
             conn.execute("SELECT vendor_provider FROM ops_coaching LIMIT 1")
@@ -25096,6 +25171,571 @@ if os.environ.get('WERKZEUG_RUN_MAIN') != 'true' or os.environ.get('DATABASE_URL
 def psychometric_test():
     """Public psychometric test — Career Discovery Kiosk by 12thPlus.com."""
     return send_from_directory('static', 'psychometric_test.html')
+
+
+# ══════════════════════════════════════════════════════════════
+#  WhatsApp Messaging System
+# ══════════════════════════════════════════════════════════════
+
+@app.route('/whatsapp')
+@admin_required
+def wa_dashboard():
+    conn = get_db()
+    # Campaign stats
+    total_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns").fetchone()[0]
+    active_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns WHERE status='sending'").fetchone()[0]
+    total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
+    total_messages = conn.execute("SELECT COUNT(*) FROM wa_messages").fetchone()[0]
+    delivered = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='delivered' OR status='read'").fetchone()[0]
+    read_count = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='read'").fetchone()[0]
+    failed = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='failed'").fetchone()[0]
+    delivery_rate = round((delivered / total_messages * 100), 1) if total_messages > 0 else 0
+    read_rate = round((read_count / total_messages * 100), 1) if total_messages > 0 else 0
+
+    # Recent campaigns
+    recent_campaigns = conn.execute("""
+        SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name
+        FROM wa_campaigns c
+        LEFT JOIN employees e ON c.created_by = e.id
+        ORDER BY c.created_at DESC LIMIT 10
+    """).fetchall()
+
+    # Recent messages
+    recent_messages = conn.execute("""
+        SELECT m.*, wc.name as contact_name, wc.phone as contact_phone
+        FROM wa_messages m
+        LEFT JOIN wa_contacts wc ON m.contact_id = wc.id
+        ORDER BY m.created_at DESC LIMIT 20
+    """).fetchall()
+
+    return render_template('wa_dashboard.html',
+        active_section='whatsapp',
+        total_campaigns=total_campaigns,
+        active_campaigns=active_campaigns,
+        total_contacts=total_contacts,
+        total_messages=total_messages,
+        delivered=delivered,
+        read_count=read_count,
+        failed=failed,
+        delivery_rate=delivery_rate,
+        read_rate=read_rate,
+        recent_campaigns=recent_campaigns,
+        recent_messages=recent_messages
+    )
+
+
+@app.route('/whatsapp/contacts')
+@admin_required
+def wa_contacts_list():
+    conn = get_db()
+    search = request.args.get('search', '').strip()
+    source_filter = request.args.get('source', '')
+    page = int(request.args.get('page', 1))
+    per_page = 50
+
+    sql = "SELECT * FROM wa_contacts WHERE 1=1"
+    count_sql = "SELECT COUNT(*) FROM wa_contacts WHERE 1=1"
+    params = []
+
+    if search:
+        sql += " AND (phone LIKE ? OR name LIKE ? OR email LIKE ?)"
+        count_sql += " AND (phone LIKE ? OR name LIKE ? OR email LIKE ?)"
+        s = f"%{search}%"
+        params.extend([s, s, s])
+    if source_filter:
+        sql += " AND source = ?"
+        count_sql += " AND source = ?"
+        params.append(source_filter)
+
+    total = conn.execute(count_sql, params).fetchone()[0]
+    total_pages = max(1, -(-total // per_page))
+    sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
+    contacts = conn.execute(sql, params + [per_page, (page - 1) * per_page]).fetchall()
+
+    # Source options
+    sources = conn.execute("SELECT DISTINCT source FROM wa_contacts WHERE source IS NOT NULL ORDER BY source").fetchall()
+
+    return render_template('wa_contacts.html',
+        active_section='whatsapp',
+        contacts=contacts,
+        total=total,
+        page=page,
+        total_pages=total_pages,
+        search=search,
+        source_filter=source_filter,
+        sources=[s['source'] for s in sources]
+    )
+
+
+@app.route('/whatsapp/contacts/sync', methods=['POST'])
+@admin_required
+def wa_contacts_sync():
+    """Sync contacts from NEET PG leads and PLAB clients into wa_contacts."""
+    conn = get_db()
+    synced = 0
+
+    # Sync from NEET PG leads
+    try:
+        leads = conn.execute("SELECT phone, name, email FROM neetpg_leads WHERE phone IS NOT NULL AND phone != ''").fetchall()
+        for lead in leads:
+            phone = lead['phone'].strip().replace(' ', '').replace('-', '')
+            if not phone.startswith('+') and not phone.startswith('91'):
+                phone = '91' + phone
+            existing = conn.execute("SELECT id FROM wa_contacts WHERE phone = ?", (phone,)).fetchone()
+            if not existing:
+                conn.execute("""INSERT INTO wa_contacts (phone, name, email, source, opted_in)
+                    VALUES (?, ?, ?, 'neetpg_lead', 1)""",
+                    (phone, lead['name'], lead['email']))
+                synced += 1
+    except Exception as e:
+        logging.error(f"wa_contacts_sync neetpg: {e}")
+
+    # Sync from PLAB clients
+    try:
+        clients = conn.execute("""SELECT phone_number, first_name, last_name, email, id
+            FROM plab_clients WHERE phone_number IS NOT NULL AND phone_number != ''""").fetchall()
+        for c in clients:
+            phone = c['phone_number'].strip().replace(' ', '').replace('-', '')
+            if not phone.startswith('+') and not phone.startswith('91'):
+                phone = '91' + phone
+            name = f"{c['first_name'] or ''} {c['last_name'] or ''}".strip()
+            existing = conn.execute("SELECT id FROM wa_contacts WHERE phone = ?", (phone,)).fetchone()
+            if not existing:
+                conn.execute("""INSERT INTO wa_contacts (phone, name, email, source, source_id, opted_in)
+                    VALUES (?, ?, ?, 'plab_client', ?, 1)""",
+                    (phone, name, c['email'], c['id']))
+                synced += 1
+    except Exception as e:
+        logging.error(f"wa_contacts_sync plab: {e}")
+
+    conn.commit()
+    flash(f'Synced {synced} new contacts', 'success')
+    return redirect('/whatsapp/contacts')
+
+
+@app.route('/whatsapp/campaigns')
+@admin_required
+def wa_campaigns_list():
+    conn = get_db()
+    page = int(request.args.get('page', 1))
+    per_page = 20
+    status_filter = request.args.get('status', '')
+
+    sql = "SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name FROM wa_campaigns c LEFT JOIN employees e ON c.created_by = e.id WHERE 1=1"
+    count_sql = "SELECT COUNT(*) FROM wa_campaigns WHERE 1=1"
+    params = []
+    count_params = []
+
+    if status_filter:
+        sql += " AND c.status = ?"
+        count_sql += " AND status = ?"
+        params.append(status_filter)
+        count_params.append(status_filter)
+
+    total = conn.execute(count_sql, count_params).fetchone()[0]
+    total_pages = max(1, -(-total // per_page))
+    sql += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
+    campaigns = conn.execute(sql, params + [per_page, (page - 1) * per_page]).fetchall()
+
+    return render_template('wa_campaigns.html',
+        active_section='whatsapp',
+        campaigns=campaigns,
+        total=total,
+        page=page,
+        total_pages=total_pages,
+        status_filter=status_filter
+    )
+
+
+@app.route('/whatsapp/campaigns/new', methods=['GET', 'POST'])
+@admin_required
+def wa_campaign_create():
+    conn = get_db()
+
+    if request.method == 'POST':
+        name = request.form.get('name', '').strip()
+        message_type = request.form.get('message_type', 'freeform')
+        template_id = request.form.get('template_id') or None
+        freeform_text = request.form.get('freeform_text', '').strip() or None
+        audience_filter = request.form.get('audience_filter', '{}')
+        scheduled_at = request.form.get('scheduled_at') or None
+
+        if not name:
+            flash('Campaign name is required', 'error')
+            return redirect('/whatsapp/campaigns/new')
+
+        conn.execute("""INSERT INTO wa_campaigns
+            (name, message_type, template_id, freeform_text, audience_filter, status, scheduled_at, created_by)
+            VALUES (?, ?, ?, ?, ?, 'draft', ?, ?)""",
+            (name, message_type, template_id, freeform_text, audience_filter, scheduled_at,
+             session.get('user_id')))
+        conn.commit()
+        flash('Campaign created', 'success')
+        return redirect('/whatsapp/campaigns')
+
+    templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
+    # Audience counts
+    total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
+    source_counts = conn.execute("SELECT source, COUNT(*) as cnt FROM wa_contacts WHERE opted_in=1 GROUP BY source ORDER BY source").fetchall()
+
+    return render_template('wa_campaign_create.html',
+        active_section='whatsapp',
+        templates=templates,
+        total_contacts=total_contacts,
+        source_counts=source_counts
+    )
+
+
+@app.route('/whatsapp/campaigns/<int:campaign_id>/send', methods=['POST'])
+@admin_required
+def wa_campaign_send(campaign_id):
+    conn = get_db()
+    campaign = conn.execute("SELECT * FROM wa_campaigns WHERE id = ?", (campaign_id,)).fetchone()
+    if not campaign:
+        flash('Campaign not found', 'error')
+        return redirect('/whatsapp/campaigns')
+
+    if campaign['status'] not in ('draft', 'failed'):
+        flash('Campaign already sent or in progress', 'error')
+        return redirect('/whatsapp/campaigns')
+
+    import json as json_lib
+    audience_filter = json_lib.loads(campaign['audience_filter'] or '{}')
+
+    # Build contact query
+    contact_sql = "SELECT * FROM wa_contacts WHERE opted_in=1"
+    contact_params = []
+    if audience_filter.get('source'):
+        contact_sql += " AND source = ?"
+        contact_params.append(audience_filter['source'])
+    if audience_filter.get('tags'):
+        contact_sql += " AND tags LIKE ?"
+        contact_params.append(f"%{audience_filter['tags']}%")
+
+    contacts = conn.execute(contact_sql, contact_params).fetchall()
+    total = len(contacts)
+
+    conn.execute("UPDATE wa_campaigns SET status='sending', total_recipients=?, started_at=CURRENT_TIMESTAMP WHERE id=?",
+        (total, campaign_id))
+    conn.commit()
+
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = "15558246314"
+    sent = 0
+    failed = 0
+
+    for contact in contacts:
+        phone = contact['phone']
+        if not phone.startswith('+'):
+            phone = '+' + phone
+
+        try:
+            if campaign['message_type'] == 'template' and campaign['template_id']:
+                tpl = conn.execute("SELECT * FROM wa_templates WHERE id=?", (campaign['template_id'],)).fetchone()
+                if tpl:
+                    payload = {
+                        "messages": [{
+                            "from": sender,
+                            "to": phone,
+                            "content": {
+                                "templateName": tpl['name'],
+                                "templateData": {"body": {"placeholders": []}},
+                                "language": tpl['language'] or 'en'
+                            }
+                        }]
+                    }
+                    resp = requests.post(
+                        f"{INFOBIP_BASE}/whatsapp/1/message/template",
+                        json=payload,
+                        headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+                        timeout=15
+                    )
+                else:
+                    raise Exception("Template not found")
+            else:
+                payload = {
+                    "from": sender,
+                    "to": phone,
+                    "content": {"text": campaign['freeform_text'] or ''}
+                }
+                resp = requests.post(
+                    f"{INFOBIP_BASE}/whatsapp/1/message/text",
+                    json=payload,
+                    headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+                    timeout=15
+                )
+
+            resp_data = resp.json()
+            msg_id = None
+            msg_status = 'sent'
+            if resp.status_code < 300:
+                if 'messages' in resp_data and resp_data['messages']:
+                    msg_id = resp_data['messages'][0].get('messageId')
+                sent += 1
+            else:
+                msg_status = 'failed'
+                failed += 1
+
+            conn.execute("""INSERT INTO wa_messages
+                (contact_id, campaign_id, direction, message_type, content, template_name,
+                 status, infobip_message_id, error_text, sent_at)
+                VALUES (?, ?, 'outbound', ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                (contact['id'], campaign_id,
+                 campaign['message_type'],
+                 campaign['freeform_text'] if campaign['message_type'] == 'freeform' else None,
+                 tpl['name'] if campaign['message_type'] == 'template' and campaign.get('template_id') else None,
+                 msg_status, msg_id,
+                 str(resp_data) if msg_status == 'failed' else None))
+
+            # Update last_message_at on contact
+            conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (contact['id'],))
+
+        except Exception as e:
+            failed += 1
+            conn.execute("""INSERT INTO wa_messages
+                (contact_id, campaign_id, direction, message_type, status, error_text, sent_at)
+                VALUES (?, ?, 'outbound', ?, 'failed', ?, CURRENT_TIMESTAMP)""",
+                (contact['id'], campaign_id, campaign['message_type'], str(e)))
+            logging.error(f"wa_campaign_send contact {contact['id']}: {e}")
+
+    # Update campaign stats
+    conn.execute("""UPDATE wa_campaigns SET
+        status='completed', sent_count=?, failed_count=?, completed_at=CURRENT_TIMESTAMP
+        WHERE id=?""", (sent, failed, campaign_id))
+    conn.commit()
+
+    flash(f'Campaign sent: {sent} delivered, {failed} failed out of {total}', 'success')
+    return redirect('/whatsapp/campaigns')
+
+
+@app.route('/whatsapp/templates')
+@admin_required
+def wa_templates_list():
+    conn = get_db()
+    templates = conn.execute("SELECT * FROM wa_templates ORDER BY created_at DESC").fetchall()
+    return render_template('wa_templates.html',
+        active_section='whatsapp',
+        templates=templates
+    )
+
+
+@app.route('/whatsapp/templates/sync', methods=['POST'])
+@admin_required
+def wa_templates_sync():
+    """Sync templates from Infobip."""
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = "15558246314"
+
+    try:
+        resp = requests.get(
+            f"{INFOBIP_BASE}/whatsapp/2/senders/{sender}/templates",
+            headers={"Authorization": f"App {INFOBIP_KEY}"},
+            timeout=15
+        )
+        if resp.status_code != 200:
+            flash(f'Sync failed: {resp.status_code}', 'error')
+            return redirect('/whatsapp/templates')
+
+        data = resp.json()
+        templates = data.get('templates', [])
+        conn = get_db()
+        synced = 0
+
+        for tpl in templates:
+            name = tpl.get('name', '')
+            lang = tpl.get('language', 'en')
+            status = tpl.get('status', 'PENDING')
+            category = tpl.get('category', '')
+            body = ''
+            header = ''
+            footer = ''
+            buttons = ''
+
+            structure = tpl.get('structure', {})
+            if structure.get('body'):
+                body = structure['body'].get('text', '')
+            if structure.get('header'):
+                header = structure['header'].get('text', '') or ''
+            if structure.get('footer'):
+                footer = structure['footer'].get('text', '') or ''
+
+            existing = conn.execute("SELECT id FROM wa_templates WHERE name=? AND language=?", (name, lang)).fetchone()
+            if existing:
+                conn.execute("""UPDATE wa_templates SET
+                    status=?, category=?, header_text=?, body_text=?, footer_text=?,
+                    synced_at=CURRENT_TIMESTAMP WHERE id=?""",
+                    (status, category, header, body, footer, existing['id']))
+            else:
+                conn.execute("""INSERT INTO wa_templates
+                    (name, language, category, status, header_text, body_text, footer_text, synced_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (name, lang, category, status, header, body, footer))
+            synced += 1
+
+        conn.commit()
+        flash(f'Synced {synced} templates from Infobip', 'success')
+    except Exception as e:
+        logging.error(f"wa_templates_sync: {e}")
+        flash(f'Sync error: {str(e)}', 'error')
+
+    return redirect('/whatsapp/templates')
+
+
+@app.route('/whatsapp/chat')
+@admin_required
+def wa_chat_list():
+    conn = get_db()
+    search = request.args.get('search', '').strip()
+
+    sql = """SELECT wc.*,
+        (SELECT COUNT(*) FROM wa_messages wm WHERE wm.contact_id = wc.id) as message_count,
+        (SELECT content FROM wa_messages wm2 WHERE wm2.contact_id = wc.id ORDER BY wm2.created_at DESC LIMIT 1) as last_message
+        FROM wa_contacts wc WHERE wc.opted_in=1"""
+    params = []
+    if search:
+        sql += " AND (wc.phone LIKE ? OR wc.name LIKE ?)"
+        s = f"%{search}%"
+        params.extend([s, s])
+    sql += " ORDER BY wc.last_message_at DESC NULLS LAST LIMIT 100"
+    contacts = conn.execute(sql, params).fetchall()
+
+    return render_template('wa_chat.html',
+        active_section='whatsapp',
+        contacts=contacts,
+        search=search
+    )
+
+
+@app.route('/whatsapp/chat/<int:contact_id>')
+@admin_required
+def wa_chat_detail(contact_id):
+    conn = get_db()
+    contact = conn.execute("SELECT * FROM wa_contacts WHERE id=?", (contact_id,)).fetchone()
+    if not contact:
+        flash('Contact not found', 'error')
+        return redirect('/whatsapp/chat')
+
+    messages = conn.execute("""SELECT * FROM wa_messages
+        WHERE contact_id=? ORDER BY created_at ASC""", (contact_id,)).fetchall()
+
+    return render_template('wa_chat_detail.html',
+        active_section='whatsapp',
+        contact=contact,
+        messages=messages
+    )
+
+
+@app.route('/whatsapp/chat/<int:contact_id>/send', methods=['POST'])
+@admin_required
+def wa_chat_send(contact_id):
+    conn = get_db()
+    contact = conn.execute("SELECT * FROM wa_contacts WHERE id=?", (contact_id,)).fetchone()
+    if not contact:
+        return jsonify(success=False, error='Contact not found'), 404
+
+    text = request.form.get('message', '').strip()
+    if not text:
+        return jsonify(success=False, error='Message is empty'), 400
+
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = "15558246314"
+    phone = contact['phone']
+    if not phone.startswith('+'):
+        phone = '+' + phone
+
+    try:
+        payload = {
+            "from": sender,
+            "to": phone,
+            "content": {"text": text}
+        }
+        resp = requests.post(
+            f"{INFOBIP_BASE}/whatsapp/1/message/text",
+            json=payload,
+            headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+            timeout=15
+        )
+        resp_data = resp.json()
+        msg_id = None
+        msg_status = 'sent'
+        if resp.status_code < 300:
+            if 'messages' in resp_data and resp_data['messages']:
+                msg_id = resp_data['messages'][0].get('messageId')
+        else:
+            msg_status = 'failed'
+
+        conn.execute("""INSERT INTO wa_messages
+            (contact_id, direction, message_type, content, status, infobip_message_id,
+             error_text, sent_at)
+            VALUES (?, 'outbound', 'text', ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+            (contact_id, text, msg_status, msg_id,
+             str(resp_data) if msg_status == 'failed' else None))
+        conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (contact_id,))
+        conn.commit()
+
+        return jsonify(success=True, status=msg_status)
+    except Exception as e:
+        logging.error(f"wa_chat_send: {e}")
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/whatsapp/webhook', methods=['POST'])
+def wa_webhook():
+    """Infobip delivery report and incoming message webhook."""
+    data = request.get_json(silent=True) or {}
+    results = data.get('results', [])
+    conn = get_db()
+
+    for r in results:
+        msg_id = r.get('messageId')
+        if not msg_id:
+            continue
+
+        # Delivery report
+        status_obj = r.get('status', {})
+        group_name = status_obj.get('groupName', '').upper()
+
+        if group_name == 'DELIVERED':
+            conn.execute("""UPDATE wa_messages SET status='delivered', delivered_at=CURRENT_TIMESTAMP
+                WHERE infobip_message_id=?""", (msg_id,))
+            # Update campaign delivered count
+            msg = conn.execute("SELECT campaign_id FROM wa_messages WHERE infobip_message_id=?", (msg_id,)).fetchone()
+            if msg and msg['campaign_id']:
+                conn.execute("UPDATE wa_campaigns SET delivered_count = delivered_count + 1 WHERE id=?", (msg['campaign_id'],))
+        elif group_name == 'SEEN':
+            conn.execute("""UPDATE wa_messages SET status='read', read_at=CURRENT_TIMESTAMP
+                WHERE infobip_message_id=?""", (msg_id,))
+            msg = conn.execute("SELECT campaign_id FROM wa_messages WHERE infobip_message_id=?", (msg_id,)).fetchone()
+            if msg and msg['campaign_id']:
+                conn.execute("UPDATE wa_campaigns SET read_count = read_count + 1 WHERE id=?", (msg['campaign_id'],))
+
+        # Incoming message
+        if r.get('direction') == 'INBOUND' or r.get('from'):
+            from_phone = r.get('from', '')
+            text = ''
+            if r.get('message', {}).get('text'):
+                text = r['message']['text']
+            elif r.get('content', {}).get('text'):
+                text = r['content']['text']
+
+            if from_phone:
+                contact = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (from_phone,)).fetchone()
+                if not contact:
+                    conn.execute("INSERT INTO wa_contacts (phone, source, opted_in) VALUES (?, 'inbound', 1)", (from_phone,))
+                    conn.commit()
+                    contact = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (from_phone,)).fetchone()
+                if contact:
+                    conn.execute("""INSERT INTO wa_messages
+                        (contact_id, direction, message_type, content, status, infobip_message_id, sent_at)
+                        VALUES (?, 'inbound', 'text', ?, 'received', ?, CURRENT_TIMESTAMP)""",
+                        (contact['id'], text, msg_id))
+                    conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (contact['id'],))
+
+    conn.commit()
+    return jsonify(ok=True), 200
 
 
 @app.route('/landing-pages')

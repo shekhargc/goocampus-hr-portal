@@ -1,0 +1,84 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Chat - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-chat-list { max-width: 800px; }
+    .wa-chat-list h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 1rem; }
+    .search-bar { margin-bottom: 1.25rem; }
+    .search-bar input {
+        width: 100%; max-width: 400px; padding: 10px 14px; border: 1px solid #D1D5DB;
+        border-radius: 8px; font-size: 0.88rem;
+    }
+    .chat-contact {
+        display: flex; align-items: center; gap: 1rem; padding: 1rem;
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.65rem;
+        margin-bottom: 0.5rem; text-decoration: none; transition: all 0.15s;
+    }
+    .chat-contact:hover { box-shadow: 0 2px 8px rgba(0,0,0,0.08); transform: translateY(-1px); }
+    .chat-avatar {
+        width: 44px; height: 44px; border-radius: 50%; background: var(--navy);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .chat-avatar svg { color: white; }
+    .chat-info { flex: 1; min-width: 0; }
+    .chat-name { font-size: 0.92rem; font-weight: 700; color: var(--navy); }
+    .chat-phone { font-size: 0.78rem; color: var(--gray-400); }
+    .chat-preview { font-size: 0.8rem; color: var(--gray-500); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 400px; margin-top: 2px; }
+    .chat-meta { text-align: right; flex-shrink: 0; }
+    .chat-count { background: var(--orange); color: white; font-size: 0.7rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+    .chat-time { font-size: 0.72rem; color: var(--gray-400); margin-top: 4px; }
+    .empty-state { text-align: center; padding: 3rem; color: var(--gray-400); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-chat-list">
+    <h1>Chat</h1>
+
+    <div class="search-bar">
+        <input type="text" id="chatSearch" placeholder="Search by name or phone..." value="{{ search }}" onkeyup="debounceSearch(this.value)">
+    </div>
+
+    {% if contacts %}
+    {% for c in contacts %}
+    <a href="/whatsapp/chat/{{ c.id }}" class="chat-contact">
+        <div class="chat-avatar">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 00-4-4H8a4 4 0 00-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </div>
+        <div class="chat-info">
+            <div class="chat-name">{{ c.name or c.phone }}</div>
+            <div class="chat-phone">{{ c.phone }}</div>
+            {% if c.last_message %}
+            <div class="chat-preview">{{ c.last_message[:80] }}</div>
+            {% endif %}
+        </div>
+        <div class="chat-meta">
+            {% if c.message_count %}
+            <span class="chat-count">{{ c.message_count }}</span>
+            {% endif %}
+            {% if c.last_message_at %}
+            <div class="chat-time">{{ c.last_message_at|format_date }}</div>
+            {% endif %}
+        </div>
+    </a>
+    {% endfor %}
+    {% else %}
+    <div class="empty-state">
+        <p>No contacts with messages. Sync contacts and start a conversation!</p>
+    </div>
+    {% endif %}
+</div>
+
+<script>
+var searchTimer;
+function debounceSearch(val) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function() {
+        if (val.length >= 2 || val.length === 0) {
+            window.location.href = '/whatsapp/chat?search=' + encodeURIComponent(val);
+        }
+    }, 400);
+}
+</script>
+{% endblock %}

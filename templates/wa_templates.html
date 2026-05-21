@@ -1,0 +1,80 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}WhatsApp Templates - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .wa-tpl { max-width: 1200px; }
+    .wa-tpl h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
+    .wa-tpl .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
+    .top-bar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.25rem; }
+    .sync-btn {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: var(--orange); color: white; border: none; padding: 8px 16px;
+        border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
+    }
+    .sync-btn:hover { background: var(--orange-dark); }
+    .tpl-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(340px, 1fr)); gap: 1rem; }
+    .tpl-card {
+        background: var(--white); border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        padding: 1.25rem; box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .tpl-card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.75rem; }
+    .tpl-name { font-size: 0.95rem; font-weight: 700; color: var(--navy); }
+    .tpl-status { display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; }
+    .tpl-APPROVED { background: #D1FAE5; color: #065F46; }
+    .tpl-PENDING { background: #FEF3C7; color: #92400E; }
+    .tpl-REJECTED { background: #FEE2E2; color: #991B1B; }
+    .tpl-meta { font-size: 0.75rem; color: var(--gray-400); margin-bottom: 0.75rem; }
+    .tpl-body {
+        background: #F9FAFB; border-radius: 6px; padding: 0.75rem;
+        font-size: 0.82rem; color: var(--gray-600); line-height: 1.5;
+        max-height: 120px; overflow-y: auto;
+    }
+    .empty-state { text-align: center; padding: 3rem; color: var(--gray-400); }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="wa-tpl">
+    <h1>Templates</h1>
+    <p class="subtitle">WhatsApp Business message templates synced from Infobip</p>
+
+    <div class="top-bar">
+        <span style="font-size:0.82rem;color:var(--gray-400);">{{ templates|length }} template{{ 's' if templates|length != 1 }}</span>
+        <form action="/whatsapp/templates/sync" method="POST" style="display:inline;">
+            <button type="submit" class="sync-btn">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0114.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0020.49 15"/></svg>
+                Sync from Infobip
+            </button>
+        </form>
+    </div>
+
+    {% if templates %}
+    <div class="tpl-grid">
+        {% for t in templates %}
+        <div class="tpl-card">
+            <div class="tpl-card-header">
+                <span class="tpl-name">{{ t.name }}</span>
+                <span class="tpl-status tpl-{{ t.status or 'PENDING' }}">{{ t.status or 'PENDING' }}</span>
+            </div>
+            <div class="tpl-meta">
+                {{ t.language or 'en' }} &middot; {{ t.category or '—' }}
+                {% if t.synced_at %} &middot; Synced: {{ t.synced_at|format_date }}{% endif %}
+            </div>
+            {% if t.header_text %}
+            <div style="font-size:0.78rem;font-weight:600;color:var(--navy);margin-bottom:0.35rem;">{{ t.header_text }}</div>
+            {% endif %}
+            <div class="tpl-body">{{ t.body_text or '(empty)' }}</div>
+            {% if t.footer_text %}
+            <div style="font-size:0.72rem;color:var(--gray-400);margin-top:0.35rem;">{{ t.footer_text }}</div>
+            {% endif %}
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <p>No templates synced yet. Click "Sync from Infobip" to pull your WhatsApp Business templates.</p>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
