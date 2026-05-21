@@ -1,0 +1,102 @@
+{% extends "wa_sidebar_base.html" %}
+{% block title %}Quick Send - WhatsApp - GooCampus{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .quick-send { max-width: 600px; }
+    .quick-send h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
+    .quick-send .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
+    .qs-form { background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 24px; }
+    .qs-field { margin-bottom: 16px; }
+    .qs-field label { display: block; font-size: 0.78rem; font-weight: 600; color: #374151; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
+    .qs-field input, .qs-field select, .qs-field textarea { width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.88rem; font-family: inherit; box-sizing: border-box; }
+    .qs-field input:focus, .qs-field select:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
+    .qs-field .hint { font-size: 0.72rem; color: #9CA3AF; margin-top: 4px; }
+    .send-btn {
+        display: inline-flex; align-items: center; gap: 0.4rem;
+        background: #25D366; color: white; border: none; padding: 10px 24px;
+        border-radius: 6px; font-size: 0.88rem; font-weight: 700; cursor: pointer;
+    }
+    .send-btn:hover { background: #1DA851; }
+    .tpl-preview { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 14px; margin-top: 12px; font-size: 0.82rem; color: #166534; display: none; }
+    .tpl-preview .tpl-name { font-weight: 700; margin-bottom: 4px; }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="quick-send">
+    <h1>Quick Send</h1>
+    <p class="subtitle">Send a WhatsApp template message to a single number</p>
+
+    <form class="qs-form" method="POST" action="/whatsapp/quick-send">
+        <div class="qs-field">
+            <label>Phone Number</label>
+            <input type="text" name="phone" placeholder="e.g. 919876543210 or 9876543210" required>
+            <div class="hint">Indian numbers: enter 10-digit mobile or with 91 prefix. International: include country code.</div>
+        </div>
+
+        <div class="qs-field">
+            <label>Template</label>
+            <select name="template_id" id="tplSelect" onchange="showPreview()" required>
+                <option value="">Select approved template...</option>
+                {% for t in templates %}
+                <option value="{{ t.id }}" data-name="{{ t.name }}" data-body="{{ t.body_text or '' }}" data-lang="{{ t.language }}">{{ t.name }} ({{ t.language }})</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div id="tplPreview" class="tpl-preview">
+            <div class="tpl-name" id="previewName"></div>
+            <div id="previewBody"></div>
+        </div>
+
+        <div class="qs-field" id="ph1Field" style="display:none;">
+            <label>Placeholder 1 (Name)</label>
+            <input type="text" name="placeholder_1" placeholder="e.g. Dr. Ramesh">
+            <div class="hint">Usually the recipient's name. Defaults to "Doctor" if left blank.</div>
+        </div>
+
+        <div class="qs-field" id="ph2Field" style="display:none;">
+            <label>Placeholder 2</label>
+            <input type="text" name="placeholder_2" placeholder="Placeholder value">
+        </div>
+
+        <div class="qs-field" id="ph3Field" style="display:none;">
+            <label>Placeholder 3</label>
+            <input type="text" name="placeholder_3" placeholder="Placeholder value">
+        </div>
+
+        <button type="submit" class="send-btn">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M.04 22l23.72-10L.04 2 .02 9.5l17 2.5-17 2.5z"/></svg>
+            Send Message
+        </button>
+    </form>
+</div>
+
+<script>
+function showPreview() {
+    var sel = document.getElementById('tplSelect');
+    var opt = sel.options[sel.selectedIndex];
+    var prev = document.getElementById('tplPreview');
+    if (!opt.value) { prev.style.display='none'; hidePlaceholders(); return; }
+
+    var name = opt.getAttribute('data-name');
+    var body = opt.getAttribute('data-body');
+    var lang = opt.getAttribute('data-lang');
+    document.getElementById('previewName').textContent = name + ' (' + lang + ')';
+    document.getElementById('previewBody').textContent = body;
+    prev.style.display = 'block';
+
+    // Count placeholders
+    var matches = body.match(/\{\{\d+\}\}/g) || [];
+    document.getElementById('ph1Field').style.display = matches.length >= 1 ? 'block' : 'none';
+    document.getElementById('ph2Field').style.display = matches.length >= 2 ? 'block' : 'none';
+    document.getElementById('ph3Field').style.display = matches.length >= 3 ? 'block' : 'none';
+}
+function hidePlaceholders() {
+    document.getElementById('ph1Field').style.display = 'none';
+    document.getElementById('ph2Field').style.display = 'none';
+    document.getElementById('ph3Field').style.display = 'none';
+}
+</script>
+{% endblock %}

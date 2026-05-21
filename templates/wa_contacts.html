@@ -9,12 +9,28 @@
     .filters { display: flex; gap: 10px; margin-bottom: 1.25rem; align-items: center; flex-wrap: wrap; }
     .filters input, .filters select { padding: 8px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.82rem; }
     .filters input { width: 260px; }
-    .sync-btn {
+    .sync-btn, .import-btn {
         display: inline-flex; align-items: center; gap: 0.4rem;
         background: var(--orange); color: white; border: none; padding: 8px 16px;
         border-radius: 6px; font-size: 0.82rem; font-weight: 600; cursor: pointer;
     }
-    .sync-btn:hover { background: var(--orange-dark); }
+    .sync-btn:hover, .import-btn:hover { background: var(--orange-dark); }
+    .import-btn { background: #2563EB; }
+    .import-btn:hover { background: #1D4ED8; }
+    .import-modal-overlay { display:none; position:fixed; top:0;left:0;right:0;bottom:0; background:rgba(0,0,0,0.5); z-index:1000; align-items:center; justify-content:center; }
+    .import-modal-overlay.active { display:flex; }
+    .import-modal { background:white; border-radius:12px; padding:28px; width:480px; max-width:95%; box-shadow:0 8px 30px rgba(0,0,0,0.15); }
+    .import-modal h3 { font-size:1.1rem; font-weight:700; color:var(--navy); margin-bottom:0.5rem; }
+    .import-modal p { font-size:0.82rem; color:#6B7280; margin-bottom:1rem; }
+    .drop-zone { border:2px dashed #D1D5DB; border-radius:8px; padding:24px; text-align:center; cursor:pointer; transition:0.2s; margin-bottom:12px; }
+    .drop-zone:hover, .drop-zone.drag-over { border-color:var(--orange); background:#FFF7ED; }
+    .drop-zone input { display:none; }
+    .drop-zone .icon { font-size:1.8rem; margin-bottom:4px; }
+    .drop-zone .label { font-size:0.85rem; font-weight:600; color:#374151; }
+    .drop-zone .hint { font-size:0.72rem; color:#9CA3AF; margin-top:4px; }
+    .import-actions { display:flex; justify-content:space-between; align-items:center; margin-top:16px; }
+    .import-actions .dl-link { font-size:0.78rem; color:#2563EB; text-decoration:none; font-weight:600; }
+    .import-actions .dl-link:hover { text-decoration:underline; }
     .data-table { width: 100%; border-collapse: collapse; font-size: 0.82rem; }
     .data-table th { background: var(--navy); color: white; padding: 10px 12px; text-align: left; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; }
     .data-table td { padding: 10px 12px; border-bottom: 1px solid #F3F4F6; }
@@ -50,6 +66,10 @@
                 Sync Contacts
             </button>
         </form>
+        <button type="button" class="import-btn" onclick="document.getElementById('importModal').classList.add('active')">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            Import CSV/Excel
+        </button>
         <span style="font-size:0.82rem;color:var(--gray-400);">{{ total }} total</span>
     </div>
 
@@ -101,7 +121,53 @@
     {% endif %}
 </div>
 
+<!-- Import Modal -->
+<div id="importModal" class="import-modal-overlay" onclick="if(event.target===this)this.classList.remove('active')">
+    <div class="import-modal">
+        <h3>Import Contacts</h3>
+        <p>Upload a CSV or Excel file with phone numbers. Columns: <strong>phone</strong> (required), name, email, tags.</p>
+        <form action="/whatsapp/contacts/import" method="POST" enctype="multipart/form-data" id="importForm">
+            <div class="drop-zone" id="dropZone" onclick="document.getElementById('importFile').click()">
+                <input type="file" name="file" id="importFile" accept=".csv,.xlsx,.xls">
+                <div class="icon">📁</div>
+                <div class="label" id="fileLabel">Drop CSV/Excel here or click to browse</div>
+                <div class="hint">Supports .csv, .xlsx, .xls</div>
+            </div>
+            <div class="import-actions">
+                <a href="/whatsapp/contacts/download-template" class="dl-link">⬇ Download sample template</a>
+                <div style="display:flex;gap:8px;">
+                    <button type="button" style="padding:8px 16px;border:1px solid #D1D5DB;border-radius:6px;background:white;font-size:0.82rem;cursor:pointer;" onclick="document.getElementById('importModal').classList.remove('active')">Cancel</button>
+                    <button type="submit" class="import-btn" id="importSubmitBtn" disabled>Import</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
 <script>
+// Import file handling
+var dropZone = document.getElementById('dropZone');
+var importFile = document.getElementById('importFile');
+var fileLabel = document.getElementById('fileLabel');
+var importBtn = document.getElementById('importSubmitBtn');
+
+importFile.addEventListener('change', function() {
+    if (this.files.length) {
+        fileLabel.textContent = this.files[0].name;
+        importBtn.disabled = false;
+    }
+});
+dropZone.addEventListener('dragover', function(e) { e.preventDefault(); this.classList.add('drag-over'); });
+dropZone.addEventListener('dragleave', function() { this.classList.remove('drag-over'); });
+dropZone.addEventListener('drop', function(e) {
+    e.preventDefault(); this.classList.remove('drag-over');
+    if (e.dataTransfer.files.length) {
+        importFile.files = e.dataTransfer.files;
+        fileLabel.textContent = e.dataTransfer.files[0].name;
+        importBtn.disabled = false;
+    }
+});
+
 var searchTimer;
 function debounceSearch(val) {
     clearTimeout(searchTimer);

@@ -11074,6 +11074,20 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # Seed approved templates if not already present
+        for tpl_seed in [
+            {'name': 'communitylink2', 'language': 'en', 'category': 'MARKETING', 'status': 'APPROVED',
+             'body_text': 'Hello {{1}}, Join the GooCampus NEET PG WhatsApp community for daily cut-off updates and counselling strategy.'},
+            {'name': 'joincommunity', 'language': 'en_IN', 'category': 'MARKETING', 'status': 'APPROVED',
+             'body_text': 'Hello {{1}}, {{2}} cut-off data is now available. Access here: {{3}}'}
+        ]:
+            existing_tpl = conn.execute("SELECT id FROM wa_templates WHERE name=? AND language=?",
+                (tpl_seed['name'], tpl_seed['language'])).fetchone()
+            if not existing_tpl:
+                conn.execute("""INSERT INTO wa_templates (name, language, category, status, body_text, synced_at)
+                    VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)""",
+                    (tpl_seed['name'], tpl_seed['language'], tpl_seed['category'], tpl_seed['status'], tpl_seed['body_text']))
+
         conn.execute('''CREATE TABLE IF NOT EXISTS wa_campaigns (
             id SERIAL PRIMARY KEY,
             name VARCHAR(200) NOT NULL,
@@ -25430,6 +25444,119 @@ def wa_contacts_sync():
     return redirect('/whatsapp/contacts')
 
 
+@app.route('/whatsapp/contacts/import', methods=['POST'])
+@admin_required
+def wa_contacts_import():
+    """Import contacts from CSV/Excel file. Expects columns: phone (required), name, email, tags."""
+    import io
+    file = request.files.get('file')
+    if not file or not file.filename:
+        flash('Please select a file to upload', 'error')
+        return redirect('/whatsapp/contacts')
+
+    filename = file.filename.lower()
+    try:
+        if filename.endswith('.csv'):
+            import csv
+            stream = io.StringIO(file.read().decode('utf-8-sig'))
+            reader = csv.DictReader(stream)
+            rows = list(reader)
+        elif filename.endswith(('.xlsx', '.xls')):
+            import openpyxl
+            wb = openpyxl.load_workbook(io.BytesIO(file.read()), read_only=True, data_only=True)
+            ws = wb.active
+            headers_row = [str(c.value or '').strip().lower() for c in next(ws.iter_rows(min_row=1, max_row=1))]
+            rows = []
+            for row in ws.iter_rows(min_row=2, values_only=True):
+                row_dict = {}
+                for i, val in enumerate(row):
+                    if i < len(headers_row):
+                        row_dict[headers_row[i]] = str(val).strip() if val else ''
+                rows.append(row_dict)
+            wb.close()
+        else:
+            flash('Unsupported file format. Use CSV or XLSX.', 'error')
+            return redirect('/whatsapp/contacts')
+    except Exception as e:
+        logging.error(f"wa_contacts_import parse: {e}")
+        flash(f'Error reading file: {str(e)}', 'error')
+        return redirect('/whatsapp/contacts')
+
+    # Normalise header names
+    def find_col(row, candidates):
+        for c in candidates:
+            if c in row:
+                return row[c]
+        return ''
+
+    conn = get_db()
+    imported = 0
+    skipped = 0
+    for row in rows:
+        norm = {k.strip().lower().replace(' ', '_'): v for k, v in row.items()}
+        phone_raw = find_col(norm, ['phone', 'phone_number', 'mobile', 'whatsapp', 'number', 'contact'])
+        if not phone_raw:
+            skipped += 1
+            continue
+        phone = phone_raw.strip().replace(' ', '').replace('-', '').replace('+', '')
+        if phone.startswith('0'):
+            phone = '91' + phone[1:]
+        if not phone.startswith('91') and len(phone) == 10:
+            phone = '91' + phone
+        if len(phone) < 10:
+            skipped += 1
+            continue
+
+        name = find_col(norm, ['name', 'full_name', 'contact_name', 'doctor_name']) or None
+        email = find_col(norm, ['email', 'email_address']) or None
+        tags = find_col(norm, ['tags', 'tag', 'label']) or None
+
+        existing = conn.execute("SELECT id FROM wa_contacts WHERE phone = ?", (phone,)).fetchone()
+        if existing:
+            if name or email:
+                updates = []
+                params = []
+                if name:
+                    updates.append("name = COALESCE(NULLIF(name,''), ?)")
+                    params.append(name)
+                if email:
+                    updates.append("email = COALESCE(NULLIF(email,''), ?)")
+                    params.append(email)
+                if tags:
+                    updates.append("tags = COALESCE(tags || ',' || ?, ?)")
+                    params.extend([tags, tags])
+                params.append(existing['id'])
+                conn.execute(f"UPDATE wa_contacts SET {', '.join(updates)} WHERE id = ?", params)
+            skipped += 1
+            continue
+
+        conn.execute("""INSERT INTO wa_contacts (phone, name, email, source, tags, opted_in)
+            VALUES (?, ?, ?, 'csv_import', ?, 1)""",
+            (phone, name, email, tags))
+        imported += 1
+
+    conn.commit()
+    flash(f'Imported {imported} new contacts, {skipped} skipped (duplicate/invalid)', 'success')
+    return redirect('/whatsapp/contacts')
+
+
+@app.route('/whatsapp/contacts/download-template')
+@admin_required
+def wa_contacts_download_template():
+    """Download a sample CSV template for contact import."""
+    import io
+    output = io.StringIO()
+    output.write('phone,name,email,tags\n')
+    output.write('919876543210,Dr. Ramesh,ramesh@example.com,neetpg\n')
+    output.write('918765432109,Dr. Priya,priya@example.com,neetpg\n')
+    resp = app.response_class(
+        output.getvalue(),
+        mimetype='text/csv',
+        headers={'Content-Disposition': 'attachment; filename=wa_contacts_template.csv'}
+    )
+    return resp
+
+
 @app.route('/whatsapp/campaigns')
 @admin_required
 def wa_campaigns_list():
@@ -25551,13 +25678,23 @@ def wa_campaign_send(campaign_id):
             if campaign['message_type'] == 'template' and campaign['template_id']:
                 tpl = conn.execute("SELECT * FROM wa_templates WHERE id=?", (campaign['template_id'],)).fetchone()
                 if tpl:
+                    # Build placeholders from template body_text placeholder count
+                    placeholders = []
+                    body_text = tpl.get('body_text') or ''
+                    import re as re_mod
+                    ph_count = len(re_mod.findall(r'\{\{\d+\}\}', body_text))
+                    if ph_count > 0:
+                        contact_name = contact.get('name') or 'Doctor'
+                        placeholders = [contact_name]
+                        for i in range(1, ph_count):
+                            placeholders.append('')
                     payload = {
                         "messages": [{
                             "from": sender,
                             "to": phone,
                             "content": {
                                 "templateName": tpl['name'],
-                                "templateData": {"body": {"placeholders": []}},
+                                "templateData": {"body": {"placeholders": placeholders}},
                                 "language": tpl['language'] or 'en'
                             }
                         }]
@@ -25908,6 +26045,101 @@ def wa_test_send():
         return jsonify(success=resp.status_code < 300, status_code=resp.status_code, response=resp.json())
     except Exception as e:
         return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/whatsapp/quick-send', methods=['GET', 'POST'])
+@admin_required
+def wa_quick_send():
+    """Send a WhatsApp template message to a single phone number typed in manually."""
+    conn = get_db()
+
+    if request.method == 'POST':
+        phone_raw = request.form.get('phone', '').strip()
+        template_id = request.form.get('template_id')
+        placeholder_1 = request.form.get('placeholder_1', '').strip()
+
+        if not phone_raw:
+            flash('Phone number is required', 'error')
+            return redirect('/whatsapp/quick-send')
+
+        phone = phone_raw.replace(' ', '').replace('-', '').replace('+', '')
+        if phone.startswith('0'):
+            phone = '91' + phone[1:]
+        if not phone.startswith('91') and len(phone) == 10:
+            phone = '91' + phone
+        phone_with_plus = '+' + phone
+
+        INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+        INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+        sender = "15558246314"
+
+        tpl = conn.execute("SELECT * FROM wa_templates WHERE id=?", (template_id,)).fetchone()
+        if not tpl:
+            flash('Template not found', 'error')
+            return redirect('/whatsapp/quick-send')
+
+        import re as re_mod
+        body_text = tpl.get('body_text') or ''
+        ph_count = len(re_mod.findall(r'\{\{\d+\}\}', body_text))
+        placeholders = [placeholder_1 or 'Doctor'] if ph_count > 0 else []
+        for i in range(1, ph_count):
+            extra = request.form.get(f'placeholder_{i+1}', '').strip()
+            placeholders.append(extra)
+
+        payload = {
+            "messages": [{
+                "from": sender,
+                "to": phone_with_plus,
+                "content": {
+                    "templateName": tpl['name'],
+                    "templateData": {"body": {"placeholders": placeholders}},
+                    "language": tpl['language'] or 'en'
+                }
+            }]
+        }
+
+        try:
+            resp = requests.post(
+                f"https://{INFOBIP_BASE}/whatsapp/1/message/template",
+                json=payload,
+                headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+                timeout=15
+            )
+            resp_data = resp.json()
+            msg_id = None
+            if resp.status_code < 300:
+                if 'messages' in resp_data and resp_data['messages']:
+                    msg_id = resp_data['messages'][0].get('messageId')
+
+                # Upsert contact
+                existing = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (phone,)).fetchone()
+                if not existing:
+                    conn.execute("INSERT INTO wa_contacts (phone, name, source, opted_in) VALUES (?, ?, 'quick_send', 1)",
+                        (phone, placeholder_1 or None))
+                    conn.commit()
+                    existing = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (phone,)).fetchone()
+
+                conn.execute("""INSERT INTO wa_messages
+                    (contact_id, direction, message_type, template_name, status, infobip_message_id, sent_at)
+                    VALUES (?, 'outbound', 'template', ?, 'sent', ?, CURRENT_TIMESTAMP)""",
+                    (existing['id'], tpl['name'], msg_id))
+                conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (existing['id'],))
+                conn.commit()
+
+                flash(f'Message sent to {phone_with_plus} via template "{tpl["name"]}"', 'success')
+            else:
+                flash(f'Send failed: {resp_data}', 'error')
+        except Exception as e:
+            logging.error(f"wa_quick_send: {e}")
+            flash(f'Error: {str(e)}', 'error')
+
+        return redirect('/whatsapp/quick-send')
+
+    templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
+    return render_template('wa_quick_send.html',
+        active_section='whatsapp',
+        templates=templates
+    )
 
 
 @app.route('/whatsapp/debug')
