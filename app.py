@@ -12,6 +12,7 @@ from io import BytesIO
 from openpyxl import Workbook
 from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
 import calendar
+import requests
 from db import get_db
 
 # Check xlrd availability at startup
