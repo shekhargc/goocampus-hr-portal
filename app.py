@@ -25693,6 +25693,49 @@ def wa_chat_send(contact_id):
         return jsonify(success=False, error=str(e)), 500
 
 
+@app.route('/whatsapp/test-send', methods=['POST'])
+def wa_test_send():
+    """Test endpoint to send a WhatsApp message directly via Infobip."""
+    data = request.get_json(silent=True) or {}
+    phone = data.get('phone', '')
+    text = data.get('text', '')
+    if not phone or not text:
+        return jsonify(success=False, error='phone and text required'), 400
+
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = "15558246314"
+    if not phone.startswith('+'):
+        phone = '+' + phone
+
+    try:
+        payload = {"from": sender, "to": phone, "content": {"text": text}}
+        resp = requests.post(
+            f"{INFOBIP_BASE}/whatsapp/1/message/text",
+            json=payload,
+            headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+            timeout=15
+        )
+        return jsonify(success=resp.status_code < 300, status_code=resp.status_code, response=resp.json())
+    except Exception as e:
+        return jsonify(success=False, error=str(e)), 500
+
+
+@app.route('/whatsapp/debug')
+def wa_debug():
+    """Debug endpoint to check WA table status."""
+    conn = get_db()
+    results = {}
+    for table in ['wa_contacts', 'wa_templates', 'wa_campaigns', 'wa_messages']:
+        try:
+            row = conn.execute(f"SELECT COUNT(*) AS cnt FROM {table}").fetchone()
+            results[table] = row['cnt']
+        except Exception as e:
+            results[table] = f"ERROR: {str(e)}"
+    conn.close()
+    return jsonify(results)
+
+
 @app.route('/whatsapp/webhook', methods=['POST'])
 def wa_webhook():
     """Infobip delivery report and incoming message webhook."""
