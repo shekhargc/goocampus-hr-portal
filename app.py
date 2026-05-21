@@ -25183,13 +25183,13 @@ def wa_dashboard():
     conn = get_db()
     try:
         # Campaign stats
-        total_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns").fetchone()[0]
-        active_campaigns = conn.execute("SELECT COUNT(*) FROM wa_campaigns WHERE status='sending'").fetchone()[0]
-        total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
-        total_messages = conn.execute("SELECT COUNT(*) FROM wa_messages").fetchone()[0]
-        delivered = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='delivered' OR status='read'").fetchone()[0]
-        read_count = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='read'").fetchone()[0]
-        failed = conn.execute("SELECT COUNT(*) FROM wa_messages WHERE status='failed'").fetchone()[0]
+        total_campaigns = conn.execute("SELECT COUNT(*) AS cnt FROM wa_campaigns").fetchone()['cnt']
+        active_campaigns = conn.execute("SELECT COUNT(*) AS cnt FROM wa_campaigns WHERE status='sending'").fetchone()['cnt']
+        total_contacts = conn.execute("SELECT COUNT(*) AS cnt FROM wa_contacts WHERE opted_in=1").fetchone()['cnt']
+        total_messages = conn.execute("SELECT COUNT(*) AS cnt FROM wa_messages").fetchone()['cnt']
+        delivered = conn.execute("SELECT COUNT(*) AS cnt FROM wa_messages WHERE status='delivered' OR status='read'").fetchone()['cnt']
+        read_count = conn.execute("SELECT COUNT(*) AS cnt FROM wa_messages WHERE status='read'").fetchone()['cnt']
+        failed = conn.execute("SELECT COUNT(*) AS cnt FROM wa_messages WHERE status='failed'").fetchone()['cnt']
         delivery_rate = round((delivered / total_messages * 100), 1) if total_messages > 0 else 0
         read_rate = round((read_count / total_messages * 100), 1) if total_messages > 0 else 0
 
@@ -25245,7 +25245,7 @@ def wa_contacts_list():
     per_page = 50
 
     sql = "SELECT * FROM wa_contacts WHERE 1=1"
-    count_sql = "SELECT COUNT(*) FROM wa_contacts WHERE 1=1"
+    count_sql = "SELECT COUNT(*) AS cnt FROM wa_contacts WHERE 1=1"
     params = []
 
     if search:
@@ -25258,7 +25258,7 @@ def wa_contacts_list():
         count_sql += " AND source = ?"
         params.append(source_filter)
 
-    total = conn.execute(count_sql, params).fetchone()[0]
+    total = conn.execute(count_sql, params).fetchone()['cnt']
     total_pages = max(1, -(-total // per_page))
     sql += " ORDER BY created_at DESC LIMIT ? OFFSET ?"
     contacts = conn.execute(sql, params + [per_page, (page - 1) * per_page]).fetchall()
@@ -25333,7 +25333,7 @@ def wa_campaigns_list():
     status_filter = request.args.get('status', '')
 
     sql = "SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name FROM wa_campaigns c LEFT JOIN employees e ON c.created_by = e.id WHERE 1=1"
-    count_sql = "SELECT COUNT(*) FROM wa_campaigns WHERE 1=1"
+    count_sql = "SELECT COUNT(*) AS cnt FROM wa_campaigns WHERE 1=1"
     params = []
     count_params = []
 
@@ -25343,7 +25343,7 @@ def wa_campaigns_list():
         params.append(status_filter)
         count_params.append(status_filter)
 
-    total = conn.execute(count_sql, count_params).fetchone()[0]
+    total = conn.execute(count_sql, count_params).fetchone()['cnt']
     total_pages = max(1, -(-total // per_page))
     sql += " ORDER BY c.created_at DESC LIMIT ? OFFSET ?"
     campaigns = conn.execute(sql, params + [per_page, (page - 1) * per_page]).fetchall()
@@ -25386,7 +25386,7 @@ def wa_campaign_create():
 
     templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
     # Audience counts
-    total_contacts = conn.execute("SELECT COUNT(*) FROM wa_contacts WHERE opted_in=1").fetchone()[0]
+    total_contacts = conn.execute("SELECT COUNT(*) AS cnt FROM wa_contacts WHERE opted_in=1").fetchone()['cnt']
     source_counts = conn.execute("SELECT source, COUNT(*) as cnt FROM wa_contacts WHERE opted_in=1 GROUP BY source ORDER BY source").fetchall()
 
     return render_template('wa_campaign_create.html',
