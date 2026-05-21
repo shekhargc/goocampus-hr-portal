@@ -24679,13 +24679,13 @@ def neetpg_complete_request(req_id):
                                 "from": "15558246314",
                                 "to": to_number,
                                 "content": {
-                                    "templateName": "goocampus_doc_notification",
+                                    "templateName": "joincommunity",
                                     "templateData": {
                                         "body": {
-                                            "placeholders": [req['name'], pdf_line]
+                                            "placeholders": [req['name'], pdf_line, "https://goocampus.org/neet-pg-2025"]
                                         }
                                     },
-                                    "language": "en"
+                                    "language": "en_IN"
                                 }
                             }]
                         }
@@ -24935,6 +24935,87 @@ def neetpg_toggle(pdf_id):
     return jsonify({'success': True})
 
 
+# ── WhatsApp notification helper for PDF publish ──
+def neetpg_wa_notify_leads(pdf_title, pdf_state):
+    """Send WhatsApp template notification to all NEET PG leads when a PDF is published.
+    Uses the 'joincommunity' template (ID: 757749590683369) with 3 placeholders:
+    {{1}} = doctor name, {{2}} = PDF title/state, {{3}} = access link.
+    Runs in background thread to avoid blocking the publish response."""
+    import threading
+
+    def _send():
+        try:
+            import requests as http_requests
+            infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+            infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+            if not infobip_key or not infobip_base:
+                logging.warning("neetpg_wa_notify: Infobip credentials not configured, skipping")
+                return
+
+            wa_headers = {
+                "Authorization": f"App {infobip_key}",
+                "Content-Type": "application/json"
+            }
+            tmpl_url = f"https://{infobip_base}/whatsapp/1/message/template"
+
+            conn = get_db()
+            leads = conn.execute(
+                "SELECT DISTINCT name, whatsapp FROM neetpg_leads WHERE whatsapp IS NOT NULL AND whatsapp != ''"
+            ).fetchall()
+            conn.close()
+
+            if not leads:
+                logging.info("neetpg_wa_notify: No leads with WhatsApp numbers, skipping")
+                return
+
+            pdf_label = f"{pdf_title}" if pdf_title else pdf_state
+            access_link = "https://goocampus.org/neet-pg-2025"
+            sent_count = 0
+            fail_count = 0
+
+            for lead in leads:
+                phone = lead['whatsapp'].strip()
+                if len(phone) < 10:
+                    continue
+                phone_clean = phone[-10:]
+                to_number = f"91{phone_clean}"
+                doctor_name = lead['name'] or 'Doctor'
+
+                payload = {
+                    "messages": [{
+                        "from": "15558246314",
+                        "to": to_number,
+                        "content": {
+                            "templateName": "joincommunity",
+                            "templateData": {
+                                "body": {
+                                    "placeholders": [doctor_name, pdf_label, access_link]
+                                }
+                            },
+                            "language": "en_IN"
+                        }
+                    }]
+                }
+
+                try:
+                    resp = http_requests.post(tmpl_url, json=payload, headers=wa_headers, timeout=15)
+                    if resp.status_code < 400:
+                        sent_count += 1
+                    else:
+                        fail_count += 1
+                        logging.warning(f"neetpg_wa_notify: Failed to send to {phone_clean}: {resp.status_code} {resp.text[:200]}")
+                except Exception as e:
+                    fail_count += 1
+                    logging.error(f"neetpg_wa_notify: Error sending to {phone_clean}: {e}")
+
+            logging.info(f"neetpg_wa_notify: PDF '{pdf_label}' — sent={sent_count}, failed={fail_count}, total_leads={len(leads)}")
+        except Exception as e:
+            logging.error(f"neetpg_wa_notify error: {e}")
+
+    thread = threading.Thread(target=_send, daemon=True)
+    thread.start()
+
+
 @app.route('/admin/neetpg-pdfs/<int:pdf_id>/publish', methods=['POST'])
 @login_required
 def neetpg_publish(pdf_id):
@@ -24942,7 +25023,7 @@ def neetpg_publish(pdf_id):
     if not user.get('is_admin'):
         return jsonify({'error': 'Admin required'}), 403
     conn = get_db()
-    pdf = conn.execute("SELECT is_published FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    pdf = conn.execute("SELECT is_published, title, state FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
     if pdf:
         if pdf['is_published']:
             # Unpublish
@@ -24950,6 +25031,8 @@ def neetpg_publish(pdf_id):
         else:
             # Publish now
             conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP, is_active = 1 WHERE id = ?", (pdf_id,))
+            # Send WhatsApp notification to all leads
+            neetpg_wa_notify_leads(pdf['title'], pdf.get('state', ''))
         conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -24969,6 +25052,24 @@ def neetpg_toggle_schedule(pdf_id):
         conn.commit()
     conn.close()
     return jsonify({'success': True})
+
+
+@app.route('/admin/neetpg-pdfs/<int:pdf_id>/wa-blast', methods=['POST'])
+@login_required
+def neetpg_wa_blast(pdf_id):
+    """Manually trigger WhatsApp notification for a specific published PDF."""
+    user = get_user()
+    if not user.get('is_admin'):
+        return jsonify({'error': 'Admin required'}), 403
+    conn = get_db()
+    pdf = conn.execute("SELECT title, state, is_published FROM neetpg_pdfs WHERE id = ?", (pdf_id,)).fetchone()
+    conn.close()
+    if not pdf:
+        return jsonify({'error': 'PDF not found'}), 404
+    if not pdf['is_published']:
+        return jsonify({'error': 'PDF must be published before sending notifications'}), 400
+    neetpg_wa_notify_leads(pdf['title'], pdf.get('state', ''))
+    return jsonify({'success': True, 'message': 'WhatsApp notifications are being sent in background'})
 
 
 @app.route('/admin/neetpg-pdfs/<int:pdf_id>', methods=['DELETE'])
@@ -25061,7 +25162,7 @@ def neetpg_auto_publish():
     try:
         conn = get_db()
         draft = conn.execute(
-            "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT 1"
+            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT 1"
         ).fetchone()
         if draft:
             conn.execute(
@@ -25070,6 +25171,8 @@ def neetpg_auto_publish():
             )
             conn.commit()
             logging.info(f"Auto-published NEET PG PDF id={draft['id']} title={draft['title']}")
+            # Send WhatsApp notification to all leads
+            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
@@ -25119,7 +25222,7 @@ def neetpg_catchup_publish():
         # Cap at 3 per day max
         need = min(need, 3)
         drafts = conn.execute(
-            "SELECT id, title FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
+            "SELECT id, title, state FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC LIMIT ?",
             (need,)
         ).fetchall()
         for draft in drafts:
@@ -25128,6 +25231,8 @@ def neetpg_catchup_publish():
                 (draft['id'],)
             )
             logging.info(f"Catchup-published NEET PG PDF id={draft['id']} title={draft['title']}")
+            # Send WhatsApp notification to all leads
+            neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
         if drafts:
             conn.commit()
         logging.info(f"Catchup: {slots_passed} slot(s) passed, {published_today} published today, catchup-published {len(drafts)}")
