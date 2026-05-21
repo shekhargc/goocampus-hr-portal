@@ -25595,6 +25595,89 @@ def wa_templates_sync():
     return redirect('/whatsapp/templates')
 
 
+@app.route('/whatsapp/templates/create-defaults', methods=['POST'])
+@admin_required
+def wa_create_default_templates():
+    """Create and submit GooCampus default WhatsApp templates to Infobip for approval."""
+    INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+    INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+    sender = "15558246314"
+    headers = {"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"}
+    url = f"https://{INFOBIP_BASE}/whatsapp/2/senders/{sender}/templates"
+
+    templates_to_create = [
+        {
+            "name": "neetpg_pdf_personal_alert",
+            "language": "en",
+            "category": "MARKETING",
+            "allowCategoryChange": True,
+            "structure": {
+                "header": {"format": "TEXT", "text": "New NEET PG Cut-Off Data Available"},
+                "body": {
+                    "text": "Hello {{1}},\n\nThe NEET PG 2025 cut-off data for *{{2}}* has been published on GooCampus.\n\nAccess it here:\n{{3}}\n\nStay ahead in your NEET PG counselling preparation.\n\n— GooCampus Team",
+                    "examples": ["Dr. Ramesh", "Karnataka", "https://goocampus.org/neet-pg-2025"]
+                },
+                "footer": {"text": "GooCampus Edu Solutions Pvt Ltd"},
+                "buttons": [
+                    {"type": "URL", "text": "View Cut-Off Data", "url": "https://goocampus.org/neet-pg-2025?ref={{1}}", "example": "https://goocampus.org/neet-pg-2025?ref=wa"}
+                ]
+            }
+        },
+        {
+            "name": "neetpg_pdf_general_alert",
+            "language": "en",
+            "category": "MARKETING",
+            "allowCategoryChange": True,
+            "structure": {
+                "header": {"format": "TEXT", "text": "NEET PG 2025 Cut-Off Update"},
+                "body": {
+                    "text": "Hello {{1}},\n\nNew NEET PG 2025 cut-off data has been published on GooCampus. State-wise closing ranks, category-wise analysis, and round comparisons are now available.\n\nBrowse all cut-off PDFs:\n{{2}}\n\n— GooCampus Team",
+                    "examples": ["Doctor", "https://goocampus.org/neet-pg-2025"]
+                },
+                "footer": {"text": "GooCampus Edu Solutions Pvt Ltd"},
+                "buttons": [
+                    {"type": "URL", "text": "Browse All PDFs", "url": "https://goocampus.org/neet-pg-2025?ref={{1}}", "example": "https://goocampus.org/neet-pg-2025?ref=wa"}
+                ]
+            }
+        },
+        {
+            "name": "goocampus_community_invite",
+            "language": "en",
+            "category": "MARKETING",
+            "allowCategoryChange": True,
+            "structure": {
+                "header": {"format": "TEXT", "text": "Join the GooCampus NEET PG Community"},
+                "body": {
+                    "text": "Hello {{1}},\n\nJoin fellow doctors preparing for NEET PG 2025 in the official GooCampus WhatsApp community. Get daily cut-off updates, counselling strategy discussions, and direct access to expert mentors.\n\nJoin here:\nhttps://chat.whatsapp.com/GuSjZdiSOMN5A6zAYSuzch\n\n— GooCampus Team",
+                    "examples": ["Doctor"]
+                },
+                "footer": {"text": "GooCampus Edu Solutions Pvt Ltd"},
+                "buttons": [
+                    {"type": "URL", "text": "Join Community", "url": "https://chat.whatsapp.com/GuSjZdiSOMN5A6zAYSuzch"}
+                ]
+            }
+        }
+    ]
+
+    results = []
+    for tpl in templates_to_create:
+        try:
+            resp = requests.post(url, json=tpl, headers=headers, timeout=15)
+            resp_data = resp.json()
+            results.append({
+                "name": tpl["name"],
+                "status_code": resp.status_code,
+                "response": resp_data
+            })
+            logging.info(f"Template create '{tpl['name']}': {resp.status_code} -> {resp_data}")
+        except Exception as e:
+            results.append({"name": tpl["name"], "error": str(e)})
+            logging.error(f"Template create '{tpl['name']}' error: {e}")
+
+    # After creating, sync templates to pull their approval status
+    return jsonify({"results": results})
+
+
 @app.route('/whatsapp/chat')
 @admin_required
 def wa_chat_list():
