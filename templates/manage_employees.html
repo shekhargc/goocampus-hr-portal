@@ -78,6 +78,44 @@
     .stat-pill:hover { border-color: var(--orange); background: var(--orange-light); }
     .stat-pill strong { color: var(--navy); font-weight: 700; }
     .inactive-card { opacity: 0.5; }
+    .emp-card { cursor: pointer; }
+
+    /* Drawer styles */
+    .drawer-backdrop { position: fixed; inset: 0; background: rgba(15,27,51,0.35); opacity: 0; visibility: hidden; transition: opacity .25s, visibility .25s; z-index: 900; }
+    .drawer-backdrop.open { opacity: 1; visibility: visible; }
+    .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 480px; max-width: 100%; background: white; box-shadow: -8px 0 30px rgba(15,27,51,0.15); transform: translateX(100%); transition: transform .3s ease; z-index: 950; display: flex; flex-direction: column; overflow: hidden; }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head { display: flex; align-items: center; justify-content: space-between; padding: 18px 24px; border-bottom: 1px solid var(--gray-200); background: var(--gray-50); }
+    .drawer-head h3 { margin: 0; font-size: 1.1rem; font-weight: 700; color: var(--navy); }
+    .drawer-close { background: none; border: none; font-size: 28px; color: var(--gray-500); cursor: pointer; padding: 0; line-height: 1; }
+    .drawer-close:hover { color: var(--navy); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 24px; }
+    .drawer-profile { display: flex; align-items: center; gap: 16px; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--gray-200); }
+    .drawer-avatar { width: 64px; height: 64px; border-radius: 50%; object-fit: cover; border: 3px solid var(--gray-100); }
+    .drawer-avatar-init { width: 64px; height: 64px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1.4rem; color: white; background: var(--navy); }
+    .drawer-name { font-size: 1.15rem; font-weight: 700; color: var(--navy); }
+    .drawer-desg { font-size: 0.85rem; color: var(--gray-500); margin-top: 2px; }
+    .drawer-section { margin-bottom: 20px; }
+    .drawer-section h4 { font-size: 0.78rem; font-weight: 700; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; padding-bottom: 6px; border-bottom: 1px solid var(--gray-100); }
+    .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px 20px; }
+    .drawer-field .label { font-size: 0.72rem; font-weight: 600; color: var(--gray-500); margin-bottom: 3px; text-transform: uppercase; letter-spacing: 0.3px; }
+    .drawer-field .value { font-size: 0.88rem; color: var(--navy); font-weight: 600; padding: 6px 8px; background: var(--gray-50); border-radius: 6px; border: 1px solid var(--gray-100); min-height: 20px; }
+    .drawer-field.full { grid-column: 1 / -1; }
+    .leave-pills { display: flex; gap: 10px; }
+    .leave-pill { flex: 1; text-align: center; padding: 10px 8px; border-radius: 8px; background: var(--gray-50); border: 1px solid var(--gray-100); }
+    .leave-pill .num { font-size: 1.3rem; font-weight: 800; color: var(--navy); }
+    .leave-pill .lbl { font-size: 0.7rem; color: var(--gray-500); text-transform: uppercase; margin-top: 2px; }
+    .leave-pill.avail { background: #F0FDF4; border-color: #BBF7D0; }
+    .leave-pill.avail .num { color: #16A34A; }
+    .leave-pill.taken { background: #FEF2F2; border-color: #FECACA; }
+    .leave-pill.taken .num { color: #DC2626; }
+    .drawer-actions { display: flex; gap: 8px; padding: 16px 24px; border-top: 1px solid var(--gray-200); background: var(--gray-50); }
+    .drawer-actions a { flex: 1; text-align: center; padding: 9px 12px; border-radius: 6px; font-size: 0.82rem; font-weight: 600; text-decoration: none; transition: 0.15s; }
+    .drawer-actions .btn-edit { background: var(--orange); color: white; }
+    .drawer-actions .btn-edit:hover { background: var(--orange-dark); }
+    .drawer-actions .btn-detail { background: white; color: var(--navy); border: 1px solid var(--gray-200); }
+    .drawer-actions .btn-detail:hover { background: var(--gray-100); }
+    .drawer-loading { display: flex; align-items: center; justify-content: center; height: 200px; color: var(--gray-400); font-size: 0.9rem; }
 
     @media (max-width: 1024px) {
         .emp-grid { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); }
@@ -124,8 +162,8 @@
     </div>
     <div class="emp-grid">
         {% for emp in dept_employees[dept] %}
-        <div class="emp-card {% if not emp.is_active %}inactive-card{% endif %}" data-name="{{ emp.name | lower }}">
-            <div class="emp-actions">
+        <div class="emp-card {% if not emp.is_active %}inactive-card{% endif %}" data-name="{{ emp.name | lower }}" onclick="openDrawer({{ emp.id }})">
+            <div class="emp-actions" onclick="event.stopPropagation();">
                 <a href="/admin/employee/{{ emp.id }}/edit" class="icon-btn" title="Edit">
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
                 </a>
@@ -142,7 +180,7 @@
                 <div class="emp-avatar-init" style="background: {{ color }};">{{ emp.name[0] }}</div>
                 {% endif %}
                 <div>
-                    <a href="/admin/employee/{{ emp.id }}" class="emp-name">{{ emp.name }}</a>
+                    <span class="emp-name">{{ emp.name }}</span>
                     <div class="emp-meta">{{ emp.designation or emp.emp_code }}</div>
                 </div>
             </div>
@@ -192,6 +230,22 @@
     </div>
 </div>
 
+<!-- Employee Profile Drawer -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="empDrawer">
+    <div class="drawer-head">
+        <h3 id="drawerTitle">Employee Profile</h3>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+    </div>
+    <div class="drawer-body" id="drawerBody">
+        <div class="drawer-loading">Loading...</div>
+    </div>
+    <div class="drawer-actions" id="drawerActions" style="display:none;">
+        <a href="#" class="btn-detail" id="drawerDetailLink">Full Details</a>
+        <a href="#" class="btn-edit" id="drawerEditLink">Edit Profile</a>
+    </div>
+</div>
+
 <script>
 function filterEmployees() {
     const query = document.getElementById('searchInput').value.toLowerCase();
@@ -203,9 +257,105 @@ function filterEmployees() {
         section.style.display = visible.length > 0 ? '' : 'none';
     });
 }
+
+function openDrawer(empId) {
+    var backdrop = document.getElementById('drawerBackdrop');
+    var drawer = document.getElementById('empDrawer');
+    var body = document.getElementById('drawerBody');
+    var actions = document.getElementById('drawerActions');
+
+    body.innerHTML = '<div class="drawer-loading">Loading...</div>';
+    actions.style.display = 'none';
+    backdrop.classList.add('open');
+    drawer.classList.add('open');
+
+    fetch('/api/employee-profile/' + empId)
+        .then(function(r) { return r.json(); })
+        .then(function(d) {
+            if (d.error) { body.innerHTML = '<p style="color:red;">'+d.error+'</p>'; return; }
+
+            var photoHtml;
+            if (d.photo_url) {
+                var src = d.photo_url.startsWith('http') ? d.photo_url : '/static/photos/' + d.photo_url;
+                photoHtml = '<img src="'+src+'" class="drawer-avatar" alt="'+d.name+'">';
+            } else {
+                photoHtml = '<div class="drawer-avatar-init">'+d.name.charAt(0)+'</div>';
+            }
+
+            var html = '<div class="drawer-profile">' + photoHtml + '<div>'
+                + '<div class="drawer-name">'+d.name+'</div>'
+                + '<div class="drawer-desg">'+(d.designation || d.emp_code)+(d.department ? ' &middot; '+d.department : '')+'</div>'
+                + '</div></div>';
+
+            // Leave summary
+            html += '<div class="drawer-section"><h4>Leave Balance</h4><div class="leave-pills">'
+                + '<div class="leave-pill"><div class="num">'+d.leave_total+'</div><div class="lbl">Total</div></div>'
+                + '<div class="leave-pill taken"><div class="num">'+d.leave_taken+'</div><div class="lbl">Taken</div></div>'
+                + '<div class="leave-pill avail"><div class="num">'+d.leave_available+'</div><div class="lbl">Available</div></div>'
+                + '</div></div>';
+
+            // Personal info
+            html += '<div class="drawer-section"><h4>Personal Information</h4><div class="drawer-grid">';
+            html += field('Employee Code', d.emp_code);
+            html += field('Department', d.department);
+            html += field('Designation', d.designation);
+            html += field('Reports To', d.reporting_to);
+            html += field('Email', d.email);
+            html += field('Phone', d.phone);
+            html += field('Date of Birth', formatDate(d.dob));
+            html += field('Joining Date', formatDate(d.joining_date));
+            if (d.address) html += '<div class="drawer-field full"><div class="label">Address</div><div class="value">'+d.address+'</div></div>';
+            html += '</div></div>';
+
+            // Emergency contact
+            if (d.emergency_contact_name || d.emergency_contact_phone) {
+                html += '<div class="drawer-section"><h4>Emergency Contact</h4><div class="drawer-grid">';
+                html += field('Name', d.emergency_contact_name);
+                html += field('Phone', d.emergency_contact_phone);
+                html += field('Relation', d.emergency_contact_relation);
+                html += '</div></div>';
+            }
+
+            body.innerHTML = html;
+
+            document.getElementById('drawerDetailLink').href = '/admin/employee/' + d.id;
+            document.getElementById('drawerEditLink').href = '/admin/employee/' + d.id + '/edit';
+            actions.style.display = 'flex';
+        })
+        .catch(function(err) {
+            body.innerHTML = '<p style="color:red;">Failed to load profile</p>';
+        });
+}
+
+function field(label, value) {
+    return '<div class="drawer-field"><div class="label">'+label+'</div><div class="value">'+(value || '—')+'</div></div>';
+}
+
+function formatDate(d) {
+    if (!d) return '';
+    try {
+        var parts = d.split('-');
+        if (parts.length === 3) {
+            var months = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+            return parts[2] + ' ' + months[parseInt(parts[1])-1] + ' ' + parts[0];
+        }
+    } catch(e) {}
+    return d;
+}
+
+function closeDrawer() {
+    document.getElementById('drawerBackdrop').classList.remove('open');
+    document.getElementById('empDrawer').classList.remove('open');
+}
+
 // Close modal on overlay click
 document.getElementById('addModal').addEventListener('click', function(e) {
     if (e.target === this) this.classList.remove('active');
+});
+
+// Close drawer on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') closeDrawer();
 });
 </script>
 {% endblock %}

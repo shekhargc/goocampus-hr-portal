@@ -3838,6 +3838,59 @@ def api_employee_name():
 
     return jsonify({'name': emp['name']})
 
+
+@app.route('/api/employee-profile/<int:emp_id>')
+@admin_required
+def api_employee_profile(emp_id):
+    """Return employee profile data as JSON for the drawer view."""
+    conn = get_db()
+    emp = conn.execute('SELECT * FROM employees WHERE id = ?', (emp_id,)).fetchone()
+    if not emp:
+        conn.close()
+        return jsonify({'error': 'Not found'}), 404
+
+    # Reporting manager name
+    manager_name = None
+    if emp['reporting_to']:
+        mgr = conn.execute('SELECT name FROM employees WHERE id = ?', (emp['reporting_to'],)).fetchone()
+        if mgr:
+            manager_name = mgr['name']
+
+    # Leave summary
+    approved_leaves = conn.execute(
+        "SELECT SUM(days) as total_days FROM leave_records WHERE employee_id = ? AND status = 'approved'",
+        (emp_id,)).fetchone()
+    days_taken = approved_leaves['total_days'] if approved_leaves and approved_leaves['total_days'] else 0
+    carry_forward = emp['carry_forward'] if emp.get('carry_forward') else 0
+    total_allocation = 25 + carry_forward
+    available = max(0, total_allocation - days_taken)
+
+    conn.close()
+
+    data = {
+        'id': emp['id'],
+        'name': emp['name'],
+        'emp_code': emp['emp_code'],
+        'email': emp.get('email') or '',
+        'phone': emp.get('phone') or '',
+        'department': emp.get('department') or '',
+        'designation': emp.get('designation') or '',
+        'dob': emp.get('dob') or '',
+        'address': emp.get('address') or '',
+        'joining_date': emp.get('joining_date') or '',
+        'reporting_to': manager_name or '',
+        'emergency_contact_name': emp.get('emergency_contact_name') or '',
+        'emergency_contact_phone': emp.get('emergency_contact_phone') or '',
+        'emergency_contact_relation': emp.get('emergency_contact_relation') or '',
+        'photo_url': emp.get('photo_url') or '',
+        'is_active': emp['is_active'],
+        'leave_total': total_allocation,
+        'leave_taken': days_taken,
+        'leave_available': available,
+    }
+    return jsonify(data)
+
+
 # ===== NOTIFICATION HELPERS =====
 
 def get_unread_count(user_id, is_admin=False):
