@@ -26221,7 +26221,7 @@ def wa_quick_send():
         return redirect('/whatsapp/quick-send')
 
     templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
-    team_members = conn.execute("SELECT id, name, phone, department FROM employees WHERE is_active=1 AND phone IS NOT NULL AND phone != '' AND emp_code != 'admin' ORDER BY name").fetchall()
+    team_members = conn.execute("SELECT id, name, phone, department FROM employees WHERE is_active=1 AND phone IS NOT NULL AND phone != '' ORDER BY name").fetchall()
     contact_lists = conn.execute("""SELECT cl.*, COUNT(clm.id) as member_count
         FROM wa_contact_lists cl LEFT JOIN wa_contact_list_members clm ON cl.id = clm.list_id
         GROUP BY cl.id ORDER BY cl.created_at DESC""").fetchall()
