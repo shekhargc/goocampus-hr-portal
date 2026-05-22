@@ -109,17 +109,17 @@
                 </div>
                 <div class="team-grid">
                     {% for m in team_members %}
-                    <label class="team-item">
-                        <input type="checkbox" name="team_members" value="{{ m.id }}" onchange="updateTeamCount()">
+                    <label class="team-item" {% if not m.phone %}style="opacity:0.45;cursor:not-allowed;"{% endif %}>
+                        <input type="checkbox" name="team_members" value="{{ m.id }}" onchange="updateTeamCount()" {% if not m.phone %}disabled title="No phone number on file"{% endif %}>
                         <div>
                             <div>{{ m.name }}</div>
-                            <div class="dept">{{ m.department or '' }} &middot; {{ m.phone }}</div>
+                            <div class="dept">{{ m.department or '' }}{% if m.phone %} &middot; {{ m.phone }}{% else %} &middot; <span style="color:#EF4444;">No phone</span>{% endif %}</div>
                         </div>
                     </label>
                     {% endfor %}
                 </div>
                 {% else %}
-                <div style="text-align:center;color:#9CA3AF;padding:1.5rem;font-size:0.85rem;">No team members with phone numbers found.</div>
+                <div style="text-align:center;color:#9CA3AF;padding:1.5rem;font-size:0.85rem;">No active team members found.</div>
                 {% endif %}
             </div>
 
@@ -176,7 +176,7 @@ function switchAudience(type) {
 }
 function toggleAllTeam() {
     var checked = document.getElementById('selectAllTeam').checked;
-    document.querySelectorAll('input[name="team_members"]').forEach(function(cb){ cb.checked = checked; });
+    document.querySelectorAll('input[name="team_members"]:not(:disabled)').forEach(function(cb){ cb.checked = checked; });
     updateTeamCount();
 }
 function updateTeamCount() {

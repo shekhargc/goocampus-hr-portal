@@ -25601,7 +25601,7 @@ def wa_campaigns_list():
     per_page = 20
     status_filter = request.args.get('status', '')
 
-    sql = "SELECT c.*, e.first_name || ' ' || COALESCE(e.last_name,'') as created_by_name FROM wa_campaigns c LEFT JOIN employees e ON c.created_by = e.id WHERE 1=1"
+    sql = "SELECT c.*, e.name as created_by_name FROM wa_campaigns c LEFT JOIN employees e ON c.created_by = e.id WHERE 1=1"
     count_sql = "SELECT COUNT(*) AS cnt FROM wa_campaigns WHERE 1=1"
     params = []
     count_params = []
@@ -26221,10 +26221,11 @@ def wa_quick_send():
         return redirect('/whatsapp/quick-send')
 
     templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
-    team_members = conn.execute("SELECT id, name, phone, department FROM employees WHERE is_active=1 AND phone IS NOT NULL AND phone != '' ORDER BY name").fetchall()
-    contact_lists = conn.execute("""SELECT cl.*, COUNT(clm.id) as member_count
+    team_members = conn.execute("SELECT id, name, phone, department FROM employees WHERE is_active=1 ORDER BY name").fetchall()
+    contact_lists = conn.execute("""SELECT cl.id, cl.name, cl.description, cl.created_at,
+        COUNT(clm.id) as member_count
         FROM wa_contact_lists cl LEFT JOIN wa_contact_list_members clm ON cl.id = clm.list_id
-        GROUP BY cl.id ORDER BY cl.created_at DESC""").fetchall()
+        GROUP BY cl.id, cl.name, cl.description, cl.created_at ORDER BY cl.created_at DESC""").fetchall()
     return render_template('wa_quick_send.html',
         active_section='whatsapp',
         templates=templates,
