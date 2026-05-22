@@ -11125,6 +11125,21 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_contact_lists (
+            id SERIAL PRIMARY KEY,
+            name VARCHAR(200) NOT NULL,
+            description TEXT,
+            created_by INTEGER REFERENCES employees(id),
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        conn.execute('''CREATE TABLE IF NOT EXISTS wa_contact_list_members (
+            id SERIAL PRIMARY KEY,
+            list_id INTEGER REFERENCES wa_contact_lists(id) ON DELETE CASCADE,
+            contact_id INTEGER REFERENCES wa_contacts(id) ON DELETE CASCADE,
+            added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # Migration: add vendor_provider column to ops_coaching
         try:
             conn.execute("SELECT vendor_provider FROM ops_coaching LIMIT 1")
@@ -25536,7 +25551,28 @@ def wa_contacts_import():
         imported += 1
 
     conn.commit()
-    flash(f'Imported {imported} new contacts, {skipped} skipped (duplicate/invalid)', 'success')
+
+    # Create named contact list if list_name provided
+    list_name = request.form.get('list_name', '').strip()
+    if list_name and imported > 0:
+        conn.execute("INSERT INTO wa_contact_lists (name, description, created_by) VALUES (?, ?, ?)",
+            (list_name, f'Imported {imported} contacts from {file.filename}', session.get('user_id')))
+        conn.commit()
+        # Get list id
+        new_list = conn.execute("SELECT id FROM wa_contact_lists WHERE name=? ORDER BY created_at DESC LIMIT 1",
+            (list_name,)).fetchone()
+        if new_list:
+            # Link all contacts from this import (by source=csv_import, most recent)
+            recent_contacts = conn.execute(
+                "SELECT id FROM wa_contacts WHERE source='csv_import' ORDER BY created_at DESC LIMIT ?",
+                (imported,)).fetchall()
+            for rc in recent_contacts:
+                conn.execute("INSERT INTO wa_contact_list_members (list_id, contact_id) VALUES (?, ?)",
+                    (new_list['id'], rc['id']))
+            conn.commit()
+        flash(f'Imported {imported} contacts into list "{list_name}", {skipped} skipped', 'success')
+    else:
+        flash(f'Imported {imported} new contacts, {skipped} skipped (duplicate/invalid)', 'success')
     return redirect('/whatsapp/contacts')
 
 
@@ -25731,6 +25767,13 @@ def wa_campaign_send(campaign_id):
                 msg_status = 'failed'
                 failed += 1
 
+            tpl_name_for_log = None
+            if campaign['message_type'] == 'template' and campaign['template_id']:
+                try:
+                    tpl_name_for_log = tpl['name']
+                except Exception:
+                    pass
+
             conn.execute("""INSERT INTO wa_messages
                 (contact_id, campaign_id, direction, message_type, content, template_name,
                  status, infobip_message_id, error_text, sent_at)
@@ -25738,7 +25781,7 @@ def wa_campaign_send(campaign_id):
                 (contact['id'], campaign_id,
                  campaign['message_type'],
                  campaign['freeform_text'] if campaign['message_type'] == 'freeform' else None,
-                 tpl['name'] if campaign['message_type'] == 'template' and campaign.get('template_id') else None,
+                 tpl_name_for_log,
                  msg_status, msg_id,
                  str(resp_data) if msg_status == 'failed' else None))
 
@@ -26050,95 +26093,143 @@ def wa_test_send():
 @app.route('/whatsapp/quick-send', methods=['GET', 'POST'])
 @admin_required
 def wa_quick_send():
-    """Send a WhatsApp template message to a single phone number typed in manually."""
+    """Send WhatsApp template message to multiple numbers, GC team, or a contact list."""
     conn = get_db()
 
     if request.method == 'POST':
-        phone_raw = request.form.get('phone', '').strip()
+        audience_type = request.form.get('audience_type', 'manual')
         template_id = request.form.get('template_id')
         placeholder_1 = request.form.get('placeholder_1', '').strip()
-
-        if not phone_raw:
-            flash('Phone number is required', 'error')
-            return redirect('/whatsapp/quick-send')
-
-        phone = phone_raw.replace(' ', '').replace('-', '').replace('+', '')
-        if phone.startswith('0'):
-            phone = '91' + phone[1:]
-        if not phone.startswith('91') and len(phone) == 10:
-            phone = '91' + phone
-        phone_with_plus = '+' + phone
-
-        INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
-        INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
-        sender = "15558246314"
 
         tpl = conn.execute("SELECT * FROM wa_templates WHERE id=?", (template_id,)).fetchone()
         if not tpl:
             flash('Template not found', 'error')
             return redirect('/whatsapp/quick-send')
 
+        # Collect phone numbers based on audience type
+        phone_list = []  # list of (phone, name)
+
+        if audience_type == 'manual':
+            phone_raw = request.form.get('phone', '').strip()
+            if not phone_raw:
+                flash('Enter at least one phone number', 'error')
+                return redirect('/whatsapp/quick-send')
+            for p in phone_raw.replace('\n', ',').split(','):
+                p = p.strip().replace(' ', '').replace('-', '').replace('+', '')
+                if not p:
+                    continue
+                if p.startswith('0'):
+                    p = '91' + p[1:]
+                if not p.startswith('91') and len(p) == 10:
+                    p = '91' + p
+                if len(p) >= 10:
+                    phone_list.append((p, None))
+
+        elif audience_type == 'gc_team':
+            team_ids = request.form.getlist('team_members')
+            if team_ids:
+                for tid in team_ids:
+                    emp = conn.execute("SELECT name, phone FROM employees WHERE id=? AND is_active=1", (tid,)).fetchone()
+                    if emp and emp['phone']:
+                        phone = emp['phone'].strip().replace(' ', '').replace('-', '').replace('+', '')
+                        if phone.startswith('0'):
+                            phone = '91' + phone[1:]
+                        if not phone.startswith('91') and len(phone) == 10:
+                            phone = '91' + phone
+                        if len(phone) >= 10:
+                            phone_list.append((phone, emp['name']))
+
+        elif audience_type == 'contact_list':
+            list_id = request.form.get('contact_list_id')
+            if list_id:
+                members = conn.execute("""SELECT wc.phone, wc.name FROM wa_contact_list_members wlm
+                    JOIN wa_contacts wc ON wlm.contact_id = wc.id
+                    WHERE wlm.list_id = ?""", (list_id,)).fetchall()
+                for m in members:
+                    if m['phone']:
+                        phone_list.append((m['phone'], m['name']))
+
+        if not phone_list:
+            flash('No valid phone numbers found', 'error')
+            return redirect('/whatsapp/quick-send')
+
         import re as re_mod
         body_text = tpl.get('body_text') or ''
         ph_count = len(re_mod.findall(r'\{\{\d+\}\}', body_text))
-        placeholders = [placeholder_1 or 'Doctor'] if ph_count > 0 else []
-        for i in range(1, ph_count):
-            extra = request.form.get(f'placeholder_{i+1}', '').strip()
-            placeholders.append(extra)
 
-        payload = {
-            "messages": [{
-                "from": sender,
-                "to": phone_with_plus,
-                "content": {
-                    "templateName": tpl['name'],
-                    "templateData": {"body": {"placeholders": placeholders}},
-                    "language": tpl['language'] or 'en'
-                }
-            }]
-        }
+        INFOBIP_KEY = os.environ.get('INFOBIP_API_KEY', '')
+        INFOBIP_BASE = os.environ.get('INFOBIP_BASE_URL', '')
+        sender = "15558246314"
+        sent = 0
+        failed = 0
 
-        try:
-            resp = requests.post(
-                f"https://{INFOBIP_BASE}/whatsapp/1/message/template",
-                json=payload,
-                headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
-                timeout=15
-            )
-            resp_data = resp.json()
-            msg_id = None
-            if resp.status_code < 300:
-                if 'messages' in resp_data and resp_data['messages']:
-                    msg_id = resp_data['messages'][0].get('messageId')
+        for phone, contact_name in phone_list:
+            phone_with_plus = '+' + phone
+            placeholders = []
+            if ph_count > 0:
+                placeholders = [placeholder_1 or contact_name or 'Doctor']
+                for i in range(1, ph_count):
+                    extra = request.form.get(f'placeholder_{i+1}', '').strip()
+                    placeholders.append(extra)
 
-                # Upsert contact
-                existing = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (phone,)).fetchone()
-                if not existing:
-                    conn.execute("INSERT INTO wa_contacts (phone, name, source, opted_in) VALUES (?, ?, 'quick_send', 1)",
-                        (phone, placeholder_1 or None))
-                    conn.commit()
+            payload = {
+                "messages": [{
+                    "from": sender,
+                    "to": phone_with_plus,
+                    "content": {
+                        "templateName": tpl['name'],
+                        "templateData": {"body": {"placeholders": placeholders}},
+                        "language": tpl['language'] or 'en'
+                    }
+                }]
+            }
+
+            try:
+                resp = requests.post(
+                    f"https://{INFOBIP_BASE}/whatsapp/1/message/template",
+                    json=payload,
+                    headers={"Authorization": f"App {INFOBIP_KEY}", "Content-Type": "application/json"},
+                    timeout=15
+                )
+                resp_data = resp.json()
+                msg_id = None
+                if resp.status_code < 300:
+                    if 'messages' in resp_data and resp_data['messages']:
+                        msg_id = resp_data['messages'][0].get('messageId')
+
                     existing = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (phone,)).fetchone()
+                    if not existing:
+                        conn.execute("INSERT INTO wa_contacts (phone, name, source, opted_in) VALUES (?, ?, 'quick_send', 1)",
+                            (phone, contact_name or placeholder_1 or None))
+                        conn.commit()
+                        existing = conn.execute("SELECT id FROM wa_contacts WHERE phone=?", (phone,)).fetchone()
 
-                conn.execute("""INSERT INTO wa_messages
-                    (contact_id, direction, message_type, template_name, status, infobip_message_id, sent_at)
-                    VALUES (?, 'outbound', 'template', ?, 'sent', ?, CURRENT_TIMESTAMP)""",
-                    (existing['id'], tpl['name'], msg_id))
-                conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (existing['id'],))
-                conn.commit()
+                    conn.execute("""INSERT INTO wa_messages
+                        (contact_id, direction, message_type, template_name, status, infobip_message_id, sent_at)
+                        VALUES (?, 'outbound', 'template', ?, 'sent', ?, CURRENT_TIMESTAMP)""",
+                        (existing['id'], tpl['name'], msg_id))
+                    conn.execute("UPDATE wa_contacts SET last_message_at=CURRENT_TIMESTAMP WHERE id=?", (existing['id'],))
+                    sent += 1
+                else:
+                    failed += 1
+            except Exception as e:
+                logging.error(f"wa_quick_send to {phone}: {e}")
+                failed += 1
 
-                flash(f'Message sent to {phone_with_plus} via template "{tpl["name"]}"', 'success')
-            else:
-                flash(f'Send failed: {resp_data}', 'error')
-        except Exception as e:
-            logging.error(f"wa_quick_send: {e}")
-            flash(f'Error: {str(e)}', 'error')
-
+        conn.commit()
+        flash(f'Sent to {sent} number{"s" if sent != 1 else ""}, {failed} failed (template: {tpl["name"]})', 'success')
         return redirect('/whatsapp/quick-send')
 
     templates = conn.execute("SELECT * FROM wa_templates WHERE status='APPROVED' ORDER BY name").fetchall()
+    team_members = conn.execute("SELECT id, name, phone, department FROM employees WHERE is_active=1 AND phone IS NOT NULL AND phone != '' AND emp_code != 'admin' ORDER BY name").fetchall()
+    contact_lists = conn.execute("""SELECT cl.*, COUNT(clm.id) as member_count
+        FROM wa_contact_lists cl LEFT JOIN wa_contact_list_members clm ON cl.id = clm.list_id
+        GROUP BY cl.id ORDER BY cl.created_at DESC""").fetchall()
     return render_template('wa_quick_send.html',
         active_section='whatsapp',
-        templates=templates
+        templates=templates,
+        team_members=team_members,
+        contact_lists=contact_lists
     )
 
 

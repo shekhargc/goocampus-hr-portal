@@ -3,14 +3,17 @@
 
 {% block section_extra_css %}
 <style>
-    .quick-send { max-width: 600px; }
+    .quick-send { max-width: 680px; }
     .quick-send h1 { font-size: 1.5rem; font-weight: 800; color: var(--navy); margin-bottom: 0.35rem; }
     .quick-send .subtitle { font-size: 0.88rem; color: var(--gray-500); margin-bottom: 1.5rem; }
     .qs-form { background: white; border: 1px solid #E5E7EB; border-radius: 10px; padding: 24px; }
-    .qs-field { margin-bottom: 16px; }
+    .qs-section { margin-bottom: 20px; }
+    .qs-section h3 { font-size: 0.88rem; font-weight: 700; color: var(--navy); margin-bottom: 10px; }
+    .qs-field { margin-bottom: 14px; }
     .qs-field label { display: block; font-size: 0.78rem; font-weight: 600; color: #374151; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.4px; }
     .qs-field input, .qs-field select, .qs-field textarea { width: 100%; padding: 10px 12px; border: 1px solid #D1D5DB; border-radius: 6px; font-size: 0.88rem; font-family: inherit; box-sizing: border-box; }
-    .qs-field input:focus, .qs-field select:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
+    .qs-field textarea { min-height: 70px; resize: vertical; }
+    .qs-field input:focus, .qs-field select:focus, .qs-field textarea:focus { outline: none; border-color: var(--orange); box-shadow: 0 0 0 3px rgba(249,115,22,0.1); }
     .qs-field .hint { font-size: 0.72rem; color: #9CA3AF; margin-top: 4px; }
     .send-btn {
         display: inline-flex; align-items: center; gap: 0.4rem;
@@ -18,57 +21,131 @@
         border-radius: 6px; font-size: 0.88rem; font-weight: 700; cursor: pointer;
     }
     .send-btn:hover { background: #1DA851; }
-    .tpl-preview { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 14px; margin-top: 12px; font-size: 0.82rem; color: #166534; display: none; }
+    .tpl-preview { background: #F0FDF4; border: 1px solid #BBF7D0; border-radius: 8px; padding: 14px; margin-top: 10px; font-size: 0.82rem; color: #166534; display: none; }
     .tpl-preview .tpl-name { font-weight: 700; margin-bottom: 4px; }
+    .audience-tabs { display: flex; gap: 0; margin-bottom: 14px; }
+    .audience-tab {
+        flex: 1; padding: 10px; text-align: center; font-size: 0.82rem; font-weight: 600;
+        cursor: pointer; border: 1px solid #D1D5DB; background: #F9FAFB; color: #6B7280;
+        transition: 0.15s;
+    }
+    .audience-tab:first-child { border-radius: 6px 0 0 6px; }
+    .audience-tab:last-child { border-radius: 0 6px 6px 0; }
+    .audience-tab.active { background: var(--orange); color: white; border-color: var(--orange); }
+    .audience-panel { display: none; }
+    .audience-panel.active { display: block; }
+    .team-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; max-height: 240px; overflow-y: auto; border: 1px solid #E5E7EB; border-radius: 6px; padding: 8px; }
+    .team-item { display: flex; align-items: center; gap: 6px; padding: 5px 8px; border-radius: 4px; font-size: 0.82rem; cursor: pointer; }
+    .team-item:hover { background: #FFF7ED; }
+    .team-item input[type=checkbox] { margin: 0; }
+    .team-item .dept { font-size: 0.68rem; color: #9CA3AF; }
+    .select-all-row { display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px; }
+    .select-all-row label { font-size: 0.78rem; font-weight: 600; color: var(--orange); cursor: pointer; }
+    .select-all-row span { font-size: 0.72rem; color: #9CA3AF; }
 </style>
 {% endblock %}
 
 {% block section_content %}
 <div class="quick-send">
     <h1>Quick Send</h1>
-    <p class="subtitle">Send a WhatsApp template message to a single number</p>
+    <p class="subtitle">Send a WhatsApp template message to one or more recipients</p>
 
     <form class="qs-form" method="POST" action="/whatsapp/quick-send">
-        <div class="qs-field">
-            <label>Phone Number</label>
-            <input type="text" name="phone" placeholder="e.g. 919876543210 or 9876543210" required>
-            <div class="hint">Indian numbers: enter 10-digit mobile or with 91 prefix. International: include country code.</div>
+        <input type="hidden" name="audience_type" id="audienceType" value="manual">
+
+        <!-- Template Selection -->
+        <div class="qs-section">
+            <h3>1. Select Template</h3>
+            <div class="qs-field">
+                <select name="template_id" id="tplSelect" onchange="showPreview()" required>
+                    <option value="">Select approved template...</option>
+                    {% for t in templates %}
+                    <option value="{{ t.id }}" data-name="{{ t.name }}" data-body="{{ t.body_text or '' }}" data-lang="{{ t.language }}">{{ t.name }} ({{ t.language }})</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div id="tplPreview" class="tpl-preview">
+                <div class="tpl-name" id="previewName"></div>
+                <div id="previewBody"></div>
+            </div>
+            <div class="qs-field" id="ph1Field" style="display:none;">
+                <label>Placeholder 1 (Name)</label>
+                <input type="text" name="placeholder_1" placeholder="e.g. Dr. Ramesh — defaults to contact name or 'Doctor'">
+            </div>
+            <div class="qs-field" id="ph2Field" style="display:none;">
+                <label>Placeholder 2</label>
+                <input type="text" name="placeholder_2" placeholder="Placeholder value">
+            </div>
+            <div class="qs-field" id="ph3Field" style="display:none;">
+                <label>Placeholder 3</label>
+                <input type="text" name="placeholder_3" placeholder="Placeholder value">
+            </div>
         </div>
 
-        <div class="qs-field">
-            <label>Template</label>
-            <select name="template_id" id="tplSelect" onchange="showPreview()" required>
-                <option value="">Select approved template...</option>
-                {% for t in templates %}
-                <option value="{{ t.id }}" data-name="{{ t.name }}" data-body="{{ t.body_text or '' }}" data-lang="{{ t.language }}">{{ t.name }} ({{ t.language }})</option>
-                {% endfor %}
-            </select>
-        </div>
+        <!-- Audience Selection -->
+        <div class="qs-section">
+            <h3>2. Choose Recipients</h3>
+            <div class="audience-tabs">
+                <div class="audience-tab active" onclick="switchAudience('manual')">Type Numbers</div>
+                <div class="audience-tab" onclick="switchAudience('gc_team')">GC Team</div>
+                <div class="audience-tab" onclick="switchAudience('contact_list')">Contact List</div>
+            </div>
 
-        <div id="tplPreview" class="tpl-preview">
-            <div class="tpl-name" id="previewName"></div>
-            <div id="previewBody"></div>
-        </div>
+            <!-- Manual Numbers -->
+            <div class="audience-panel active" id="panel_manual">
+                <div class="qs-field">
+                    <label>Phone Numbers</label>
+                    <textarea name="phone" placeholder="Enter numbers separated by commas or new lines&#10;e.g. 919876543210, 918765432109, 917654321098"></textarea>
+                    <div class="hint">Indian 10-digit or with 91 prefix. Separate multiple numbers with commas or new lines.</div>
+                </div>
+            </div>
 
-        <div class="qs-field" id="ph1Field" style="display:none;">
-            <label>Placeholder 1 (Name)</label>
-            <input type="text" name="placeholder_1" placeholder="e.g. Dr. Ramesh">
-            <div class="hint">Usually the recipient's name. Defaults to "Doctor" if left blank.</div>
-        </div>
+            <!-- GC Team -->
+            <div class="audience-panel" id="panel_gc_team">
+                {% if team_members %}
+                <div class="select-all-row">
+                    <label><input type="checkbox" id="selectAllTeam" onchange="toggleAllTeam()"> Select All</label>
+                    <span id="teamCount">0 selected</span>
+                </div>
+                <div class="team-grid">
+                    {% for m in team_members %}
+                    <label class="team-item">
+                        <input type="checkbox" name="team_members" value="{{ m.id }}" onchange="updateTeamCount()">
+                        <div>
+                            <div>{{ m.name }}</div>
+                            <div class="dept">{{ m.department or '' }} &middot; {{ m.phone }}</div>
+                        </div>
+                    </label>
+                    {% endfor %}
+                </div>
+                {% else %}
+                <div style="text-align:center;color:#9CA3AF;padding:1.5rem;font-size:0.85rem;">No team members with phone numbers found.</div>
+                {% endif %}
+            </div>
 
-        <div class="qs-field" id="ph2Field" style="display:none;">
-            <label>Placeholder 2</label>
-            <input type="text" name="placeholder_2" placeholder="Placeholder value">
-        </div>
-
-        <div class="qs-field" id="ph3Field" style="display:none;">
-            <label>Placeholder 3</label>
-            <input type="text" name="placeholder_3" placeholder="Placeholder value">
+            <!-- Contact Lists -->
+            <div class="audience-panel" id="panel_contact_list">
+                {% if contact_lists %}
+                <div class="qs-field">
+                    <label>Select List</label>
+                    <select name="contact_list_id">
+                        <option value="">Choose a contact list...</option>
+                        {% for cl in contact_lists %}
+                        <option value="{{ cl.id }}">{{ cl.name }} ({{ cl.member_count }} contacts)</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                {% else %}
+                <div style="text-align:center;color:#9CA3AF;padding:1.5rem;font-size:0.85rem;">
+                    No contact lists yet. Import contacts with a list name from the <a href="/whatsapp/contacts" style="color:var(--orange);font-weight:600;">Contacts</a> page.
+                </div>
+                {% endif %}
+            </div>
         </div>
 
         <button type="submit" class="send-btn">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M.04 22l23.72-10L.04 2 .02 9.5l17 2.5-17 2.5z"/></svg>
-            Send Message
+            Send Messages
         </button>
     </form>
 </div>
@@ -79,24 +156,32 @@ function showPreview() {
     var opt = sel.options[sel.selectedIndex];
     var prev = document.getElementById('tplPreview');
     if (!opt.value) { prev.style.display='none'; hidePlaceholders(); return; }
-
-    var name = opt.getAttribute('data-name');
-    var body = opt.getAttribute('data-body');
-    var lang = opt.getAttribute('data-lang');
-    document.getElementById('previewName').textContent = name + ' (' + lang + ')';
-    document.getElementById('previewBody').textContent = body;
+    document.getElementById('previewName').textContent = opt.getAttribute('data-name') + ' (' + opt.getAttribute('data-lang') + ')';
+    document.getElementById('previewBody').textContent = opt.getAttribute('data-body');
     prev.style.display = 'block';
-
-    // Count placeholders
-    var matches = body.match(/\{\{\d+\}\}/g) || [];
+    var matches = (opt.getAttribute('data-body') || '').match(/\{\{\d+\}\}/g) || [];
     document.getElementById('ph1Field').style.display = matches.length >= 1 ? 'block' : 'none';
     document.getElementById('ph2Field').style.display = matches.length >= 2 ? 'block' : 'none';
     document.getElementById('ph3Field').style.display = matches.length >= 3 ? 'block' : 'none';
 }
 function hidePlaceholders() {
-    document.getElementById('ph1Field').style.display = 'none';
-    document.getElementById('ph2Field').style.display = 'none';
-    document.getElementById('ph3Field').style.display = 'none';
+    ['ph1Field','ph2Field','ph3Field'].forEach(function(id){ document.getElementById(id).style.display='none'; });
+}
+function switchAudience(type) {
+    document.getElementById('audienceType').value = type;
+    document.querySelectorAll('.audience-tab').forEach(function(t){ t.classList.remove('active'); });
+    document.querySelectorAll('.audience-panel').forEach(function(p){ p.classList.remove('active'); });
+    event.target.classList.add('active');
+    document.getElementById('panel_' + type).classList.add('active');
+}
+function toggleAllTeam() {
+    var checked = document.getElementById('selectAllTeam').checked;
+    document.querySelectorAll('input[name="team_members"]').forEach(function(cb){ cb.checked = checked; });
+    updateTeamCount();
+}
+function updateTeamCount() {
+    var count = document.querySelectorAll('input[name="team_members"]:checked').length;
+    document.getElementById('teamCount').textContent = count + ' selected';
 }
 </script>
 {% endblock %}

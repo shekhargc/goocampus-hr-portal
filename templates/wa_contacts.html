@@ -127,6 +127,11 @@
         <h3>Import Contacts</h3>
         <p>Upload a CSV or Excel file with phone numbers. Columns: <strong>phone</strong> (required), name, email, tags.</p>
         <form action="/whatsapp/contacts/import" method="POST" enctype="multipart/form-data" id="importForm">
+            <div style="margin-bottom:12px;">
+                <label style="font-size:0.78rem;font-weight:600;color:#374151;display:block;margin-bottom:4px;">List Name (optional)</label>
+                <input type="text" name="list_name" placeholder="e.g. NEET PG Doctors May 2026" style="width:100%;padding:8px 12px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.82rem;box-sizing:border-box;">
+                <div style="font-size:0.72rem;color:#9CA3AF;margin-top:3px;">Give a name to save these contacts as a reusable list for Quick Send</div>
+            </div>
             <div class="drop-zone" id="dropZone" onclick="document.getElementById('importFile').click()">
                 <input type="file" name="file" id="importFile" accept=".csv,.xlsx,.xls">
                 <div class="icon">📁</div>
