@@ -451,45 +451,71 @@
             <h2 class="card-title">Academic Information</h2>
             <div class="info-grid">
                 <div class="info-item">
-                    <div class="info-label">Degree / Course</div>
-                    <div class="info-value">{{ academics.degree or '-' }}</div>
+                    <div class="info-label">IMG / FMG</div>
+                    <div class="info-value">{{ academics.img_fmg or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">College</div>
-                    <div class="info-value">{{ academics.college or '-' }}</div>
+                    <div class="info-label">Medical College</div>
+                    <div class="info-value">{{ academics.img_medical_college or academics.fmg_medical_college or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">University</div>
-                    <div class="info-value">{{ academics.university or '-' }}</div>
+                    <div class="info-label">Country</div>
+                    <div class="info-value">{{ academics.country or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Year of Passing</div>
-                    <div class="info-value">{{ academics.year_of_passing or '-' }}</div>
+                    <div class="info-label">MBBS Status</div>
+                    <div class="info-value">{{ academics.mbbs_status or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Percentage / CGPA</div>
-                    <div class="info-value">{{ academics.percentage or academics.cgpa or '-' }}</div>
+                    <div class="info-label">MBBS Start</div>
+                    <div class="info-value">{{ academics.mbbs_start_date or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Attempt Number</div>
-                    <div class="info-value">{{ academics.attempt_number or '-' }}</div>
+                    <div class="info-label">MBBS End</div>
+                    <div class="info-value">{{ academics.mbbs_end_date or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">NEET Score</div>
-                    <div class="info-value">{{ academics.neet_score or '-' }}</div>
+                    <div class="info-label">Speciality Interest 1</div>
+                    <div class="info-value">{{ academics.speciality_interest_1 or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">NEET Rank</div>
-                    <div class="info-value">{{ academics.neet_rank or '-' }}</div>
+                    <div class="info-label">Speciality Interest 2</div>
+                    <div class="info-value">{{ academics.speciality_interest_2 or '-' }}</div>
                 </div>
                 <div class="info-item">
                     <div class="info-label">Internship Status</div>
                     <div class="info-value">{{ academics.internship_status or '-' }}</div>
                 </div>
                 <div class="info-item">
-                    <div class="info-label">Additional Details</div>
-                    <div class="info-value">{{ academics.additional_details or '-' }}</div>
+                    <div class="info-label">Internship Hospital</div>
+                    <div class="info-value">{{ academics.internship_hospital or '-' }}</div>
                 </div>
+                <div class="info-item">
+                    <div class="info-label">Internship Location</div>
+                    <div class="info-value">{{ academics.internship_location or '-' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Internship Dates</div>
+                    <div class="info-value">{{ academics.internship_start_date or '' }} — {{ academics.internship_end_date or '' }}{{ '-' if not academics.internship_start_date and not academics.internship_end_date else '' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Internship Gap</div>
+                    <div class="info-value">{{ academics.internship_gap or '-' }}{% if academics.gap_in_months %} ({{ academics.gap_in_months }} months){% endif %}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Working Status</div>
+                    <div class="info-value">{{ academics.working_status or '-' }}</div>
+                </div>
+                <div class="info-item">
+                    <div class="info-label">Working Hospital</div>
+                    <div class="info-value">{{ academics.working_hospital_name or '-' }}</div>
+                </div>
+                {% if academics.additional_info %}
+                <div class="info-item" style="grid-column: 1 / -1;">
+                    <div class="info-label">Additional Info</div>
+                    <div class="info-value">{{ academics.additional_info }}</div>
+                </div>
+                {% endif %}
             </div>
         </div>
         {% else %}

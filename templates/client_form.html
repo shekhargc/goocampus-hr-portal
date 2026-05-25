@@ -639,63 +639,117 @@
 
             <div class="form-grid">
                 <div class="form-group">
-                    <label>Degree <span class="req">*</span></label>
-                    <select name="degree" {% if readonly %}disabled{% endif %} required>
-                        <option value="">Select Degree</option>
-                        {% for d in ['MBBS', 'BDS', 'BAMS', 'BHMS', 'MD', 'MS'] %}
-                        <option value="{{ d }}" {% if academics and academics.degree == d %}selected{% endif %}>{{ d }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label>College Name <span class="req">*</span></label>
-                    <input type="text" name="college_name" value="{{ academics.college_name if academics else '' }}" {% if readonly %}disabled{% endif %} required>
-                </div>
-                <div class="form-group">
-                    <label>University <span class="req">*</span></label>
-                    <input type="text" name="university" value="{{ academics.university if academics else '' }}" {% if readonly %}disabled{% endif %} required>
-                </div>
-                <div class="form-group">
-                    <label>Year of Passing <span class="req">*</span></label>
-                    <input type="number" name="year_of_passing" value="{{ academics.year_of_passing if academics else '' }}" min="1990" max="2030" {% if readonly %}disabled{% endif %} required>
-                </div>
-                <div class="form-group">
-                    <label>Percentage / CGPA</label>
-                    <input type="text" name="percentage_cgpa" value="{{ academics.percentage_cgpa if academics else '' }}" {% if readonly %}disabled{% endif %}>
-                </div>
-                <div class="form-group">
-                    <label>NEET Score</label>
-                    <input type="number" name="neet_score" value="{{ academics.neet_score if academics else '' }}" {% if readonly %}disabled{% endif %}>
-                </div>
-                <div class="form-group">
-                    <label>NEET Year</label>
-                    <input type="number" name="neet_year" value="{{ academics.neet_year if academics else '' }}" min="2015" max="2030" {% if readonly %}disabled{% endif %}>
-                </div>
-                <div class="form-group">
-                    <label>Internship Status <span class="req">*</span></label>
-                    <select name="internship_status" {% if readonly %}disabled{% endif %} required>
+                    <label>IMG / FMG <span class="req">*</span></label>
+                    <select name="img_fmg" {% if readonly %}disabled{% endif %} required onchange="toggleImgFmg(this.value)">
                         <option value="">Select</option>
-                        {% for s in ['Completed', 'In Progress', 'Not Started'] %}
-                        <option value="{{ s }}" {% if academics and academics.internship_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% for opt in (lookup_options.get('img_fmg', ['IMG', 'FMG'])) %}
+                        <option value="{{ opt }}" {% if academics and academics.img_fmg == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>Internship Completion Date</label>
-                    <input type="date" name="internship_completion" value="{{ academics.internship_completion if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                <div class="form-group" id="img_college_group">
+                    <label>IMG Medical College</label>
+                    <input type="text" name="img_medical_college" value="{{ academics.img_medical_college if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="College name (for IMG)">
+                </div>
+                <div class="form-group" id="fmg_college_group" style="display:none;">
+                    <label>FMG Medical College</label>
+                    <input type="text" name="fmg_medical_college" value="{{ academics.fmg_medical_college if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="College name (for FMG)">
+                </div>
+                <div class="form-group" id="fmg_country_group" style="display:none;">
+                    <label>Country</label>
+                    <input type="text" name="country" value="{{ academics.country if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="Country of medical college">
                 </div>
                 <div class="form-group">
-                    <label>MCI/NMC Registration Status</label>
-                    <select name="mci_nmc_status" {% if readonly %}disabled{% endif %}>
+                    <label>MBBS Status <span class="req">*</span></label>
+                    <select name="mbbs_status" {% if readonly %}disabled{% endif %} required>
                         <option value="">Select</option>
-                        {% for s in ['Registered', 'Pending', 'Not Applicable'] %}
-                        <option value="{{ s }}" {% if academics and academics.mci_nmc_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% for opt in (lookup_options.get('mbbs_status', ['Completed', 'Pursuing', 'Dropped'])) %}
+                        <option value="{{ opt }}" {% if academics and academics.mbbs_status == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}
                     </select>
+                </div>
+                <div class="form-group">
+                    <label>MBBS Start Date</label>
+                    <input type="date" name="mbbs_start_date" value="{{ academics.mbbs_start_date if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>MBBS End Date</label>
+                    <input type="date" name="mbbs_end_date" value="{{ academics.mbbs_end_date if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Speciality Interest 1</label>
+                    <input type="text" name="speciality_interest_1" value="{{ academics.speciality_interest_1 if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="Primary speciality">
+                </div>
+                <div class="form-group">
+                    <label>Speciality Interest 2</label>
+                    <input type="text" name="speciality_interest_2" value="{{ academics.speciality_interest_2 if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="Secondary speciality">
+                </div>
+                <div class="form-group">
+                    <label>Internship Status</label>
+                    <select name="internship_status" {% if readonly %}disabled{% endif %}>
+                        <option value="">Select</option>
+                        {% for opt in (lookup_options.get('internship_status', ['Completed', 'In Progress', 'Not Started'])) %}
+                        <option value="{{ opt }}" {% if academics and academics.internship_status == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Internship Hospital</label>
+                    <input type="text" name="internship_hospital" value="{{ academics.internship_hospital if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship Location</label>
+                    <input type="text" name="internship_location" value="{{ academics.internship_location if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship Hospital 2</label>
+                    <input type="text" name="internship_hospital_2" value="{{ academics.internship_hospital_2 if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="If rotated">
+                </div>
+                <div class="form-group">
+                    <label>Internship Location 2</label>
+                    <input type="text" name="internship_location_2" value="{{ academics.internship_location_2 if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship Start Date</label>
+                    <input type="date" name="internship_start_date" value="{{ academics.internship_start_date if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship End Date</label>
+                    <input type="date" name="internship_end_date" value="{{ academics.internship_end_date if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship Gap</label>
+                    <select name="internship_gap" {% if readonly %}disabled{% endif %}>
+                        <option value="">Select</option>
+                        {% for opt in (lookup_options.get('internship_gap', ['Yes', 'No'])) %}
+                        <option value="{{ opt }}" {% if academics and academics.internship_gap == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Gap in Months</label>
+                    <input type="text" name="gap_in_months" value="{{ academics.gap_in_months if academics else '' }}" {% if readonly %}disabled{% endif %} placeholder="Number of months">
                 </div>
                 <div class="form-group full-width">
-                    <label>Additional Qualifications</label>
-                    <textarea name="additional_qualifications" {% if readonly %}disabled{% endif %} placeholder="Any additional certifications, courses, or qualifications...">{{ academics.additional_qualifications if academics else '' }}</textarea>
+                    <label>Gap Reason</label>
+                    <textarea name="gap_reason" {% if readonly %}disabled{% endif %} placeholder="Reason for gap...">{{ academics.gap_reason if academics else '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>Working Status</label>
+                    <select name="working_status" {% if readonly %}disabled{% endif %}>
+                        <option value="">Select</option>
+                        {% for opt in (lookup_options.get('working_status', ['Currently Working', 'Not Working'])) %}
+                        <option value="{{ opt }}" {% if academics and academics.working_status == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Working Hospital Name</label>
+                    <input type="text" name="working_hospital_name" value="{{ academics.working_hospital_name if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group full-width">
+                    <label>Additional Info</label>
+                    <textarea name="additional_info" {% if readonly %}disabled{% endif %} placeholder="Any additional information...">{{ academics.additional_info if academics else '' }}</textarea>
                 </div>
             </div>
 
@@ -869,41 +923,45 @@
             {% if academics %}
             <div class="review-grid">
                 <div class="review-item">
-                    <div class="review-label">Degree</div>
-                    <div class="review-value">{{ academics.degree or '—' }}</div>
+                    <div class="review-label">IMG / FMG</div>
+                    <div class="review-value">{{ academics.img_fmg or '—' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">College</div>
-                    <div class="review-value">{{ academics.college_name or '—' }}</div>
+                    <div class="review-label">Medical College</div>
+                    <div class="review-value">{{ academics.img_medical_college or academics.fmg_medical_college or '—' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">University</div>
-                    <div class="review-value">{{ academics.university or '—' }}</div>
+                    <div class="review-label">Country</div>
+                    <div class="review-value">{{ academics.country or '—' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">Year of Passing</div>
-                    <div class="review-value">{{ academics.year_of_passing or '—' }}</div>
+                    <div class="review-label">MBBS Status</div>
+                    <div class="review-value">{{ academics.mbbs_status or '—' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">Percentage / CGPA</div>
-                    <div class="review-value">{{ academics.percentage_cgpa or '—' }}</div>
+                    <div class="review-label">MBBS Period</div>
+                    <div class="review-value">{{ academics.mbbs_start_date or '' }} — {{ academics.mbbs_end_date or '' }}{{ '—' if not academics.mbbs_start_date and not academics.mbbs_end_date else '' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">NEET Score</div>
-                    <div class="review-value">{{ academics.neet_score or '—' }}{% if academics.neet_year %} ({{ academics.neet_year }}){% endif %}</div>
+                    <div class="review-label">Speciality Interest</div>
+                    <div class="review-value">{{ academics.speciality_interest_1 or '—' }}{% if academics.speciality_interest_2 %}, {{ academics.speciality_interest_2 }}{% endif %}</div>
                 </div>
                 <div class="review-item">
                     <div class="review-label">Internship Status</div>
                     <div class="review-value">{{ academics.internship_status or '—' }}</div>
                 </div>
                 <div class="review-item">
-                    <div class="review-label">MCI/NMC Status</div>
-                    <div class="review-value">{{ academics.mci_nmc_status or '—' }}</div>
+                    <div class="review-label">Internship Hospital</div>
+                    <div class="review-value">{{ academics.internship_hospital or '—' }}</div>
                 </div>
-                {% if academics.additional_qualifications %}
+                <div class="review-item">
+                    <div class="review-label">Working Status</div>
+                    <div class="review-value">{{ academics.working_status or '—' }}</div>
+                </div>
+                {% if academics.additional_info %}
                 <div class="review-item" style="grid-column:1/-1;">
-                    <div class="review-label">Additional Qualifications</div>
-                    <div class="review-value">{{ academics.additional_qualifications }}</div>
+                    <div class="review-label">Additional Info</div>
+                    <div class="review-value">{{ academics.additional_info }}</div>
                 </div>
                 {% endif %}
             </div>
@@ -1138,6 +1196,27 @@
             setTimeout(function() { el.remove(); }, 300);
         }, 6000);
     });
+})();
+
+// IMG/FMG toggle for academic form
+function toggleImgFmg(val) {
+    var imgG = document.getElementById('img_college_group');
+    var fmgG = document.getElementById('fmg_college_group');
+    var fmgC = document.getElementById('fmg_country_group');
+    if (val === 'FMG') {
+        if(imgG) imgG.style.display = 'none';
+        if(fmgG) fmgG.style.display = '';
+        if(fmgC) fmgC.style.display = '';
+    } else {
+        if(imgG) imgG.style.display = '';
+        if(fmgG) fmgG.style.display = 'none';
+        if(fmgC) fmgC.style.display = 'none';
+    }
+}
+// Initialize on load
+(function(){
+    var sel = document.querySelector('select[name="img_fmg"]');
+    if(sel && sel.value) toggleImgFmg(sel.value);
 })();
 </script>
 

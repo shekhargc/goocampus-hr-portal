@@ -1133,7 +1133,7 @@ def client_form(reg_id):
         if step == 1:
             # Personal info
             conn.execute('''UPDATE client_registrations SET
-                prefix = ?, first_name = ?, last_name = ?, dob = ?, mobile = ?, whatsapp = ?,
+                prefix = ?, first_name = ?, last_name = ?, dob = ?, mobile = ?, whatsapp = ?, whatsapp2 = ?,
                 email = ?, address = ?, city = ?, state = ?, country = ?,
                 father_name = ?, father_phone = ?, mother_name = ?, mother_phone = ?, parents_email = ?,
                 instagram = ?, facebook = ?, linkedin = ?,
@@ -1141,6 +1141,7 @@ def client_form(reg_id):
                 WHERE id = ?''',
                 (request.form.get('prefix','Dr.'), request.form.get('first_name',''), request.form.get('last_name',''),
                  request.form.get('dob',''), request.form.get('mobile',''), request.form.get('whatsapp',''),
+                 request.form.get('whatsapp2',''),
                  request.form.get('email',''), request.form.get('address',''), request.form.get('city',''),
                  request.form.get('state',''), request.form.get('country','India'),
                  request.form.get('father_name',''), request.form.get('father_phone',''),
@@ -1149,32 +1150,40 @@ def client_form(reg_id):
                  reg_id))
 
         elif step == 2:
-            # Academics
+            # Academic details (mirrors ops_academic_details)
+            acad_fields = {
+                'img_fmg': request.form.get('img_fmg',''),
+                'img_medical_college': request.form.get('img_medical_college',''),
+                'fmg_medical_college': request.form.get('fmg_medical_college',''),
+                'country': request.form.get('country',''),
+                'mbbs_status': request.form.get('mbbs_status',''),
+                'mbbs_start_date': request.form.get('mbbs_start_date',''),
+                'mbbs_end_date': request.form.get('mbbs_end_date',''),
+                'speciality_interest_1': request.form.get('speciality_interest_1',''),
+                'speciality_interest_2': request.form.get('speciality_interest_2',''),
+                'internship_status': request.form.get('internship_status',''),
+                'internship_hospital': request.form.get('internship_hospital',''),
+                'internship_location': request.form.get('internship_location',''),
+                'internship_hospital_2': request.form.get('internship_hospital_2',''),
+                'internship_location_2': request.form.get('internship_location_2',''),
+                'internship_start_date': request.form.get('internship_start_date',''),
+                'internship_end_date': request.form.get('internship_end_date',''),
+                'internship_gap': request.form.get('internship_gap',''),
+                'gap_in_months': request.form.get('gap_in_months',''),
+                'gap_reason': request.form.get('gap_reason',''),
+                'working_status': request.form.get('working_status',''),
+                'working_hospital_name': request.form.get('working_hospital_name',''),
+                'additional_info': request.form.get('additional_info',''),
+            }
             if academics:
-                conn.execute('''UPDATE client_academics SET
-                    degree = ?, college_name = ?, university = ?, year_of_passing = ?,
-                    percentage_cgpa = ?, neet_score = ?, neet_year = ?,
-                    internship_status = ?, internship_completion = ?, mci_nmc_status = ?,
-                    additional_qualifications = ?
-                    WHERE registration_id = ?''',
-                    (request.form.get('degree',''), request.form.get('college_name',''),
-                     request.form.get('university',''), request.form.get('year_of_passing',''),
-                     request.form.get('percentage_cgpa',''), request.form.get('neet_score',''),
-                     request.form.get('neet_year',''), request.form.get('internship_status',''),
-                     request.form.get('internship_completion',''), request.form.get('mci_nmc_status',''),
-                     request.form.get('additional_qualifications',''), reg_id))
+                set_clause = ', '.join(f"{k} = ?" for k in acad_fields)
+                conn.execute(f"UPDATE client_academics SET {set_clause} WHERE registration_id = ?",
+                    list(acad_fields.values()) + [reg_id])
             else:
-                conn.execute('''INSERT INTO client_academics
-                    (registration_id, degree, college_name, university, year_of_passing,
-                     percentage_cgpa, neet_score, neet_year, internship_status, internship_completion,
-                     mci_nmc_status, additional_qualifications)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                    (reg_id, request.form.get('degree',''), request.form.get('college_name',''),
-                     request.form.get('university',''), request.form.get('year_of_passing',''),
-                     request.form.get('percentage_cgpa',''), request.form.get('neet_score',''),
-                     request.form.get('neet_year',''), request.form.get('internship_status',''),
-                     request.form.get('internship_completion',''), request.form.get('mci_nmc_status',''),
-                     request.form.get('additional_qualifications','')))
+                cols = ', '.join(acad_fields.keys())
+                placeholders = ', '.join(['?'] * (len(acad_fields) + 1))
+                conn.execute(f"INSERT INTO client_academics (registration_id, {cols}) VALUES ({placeholders})",
+                    [reg_id] + list(acad_fields.values()))
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         elif step == 3:
@@ -1196,10 +1205,19 @@ def client_form(reg_id):
         flash('Progress saved!', 'success')
         return redirect(url_for('client_form', reg_id=reg_id))
 
+    # Load lookup options for academic dropdowns
+    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = 1 ORDER BY category, sort_order, value").fetchall()
+    lookup_options = {}
+    for row in lookup_rows:
+        cat = row['category']
+        if cat not in lookup_options:
+            lookup_options[cat] = []
+        lookup_options[cat].append(row['value'])
     conn.close()
     return render_template('client_form.html',
         reg=reg, academics=academics, documents=documents,
-        form_config=form_config, doc_requests=doc_requests, states=states)
+        form_config=form_config, doc_requests=doc_requests, states=states,
+        lookup_options=lookup_options)
 
 
 @app.route('/client/upload-doc/<int:reg_id>', methods=['POST'])
@@ -1716,6 +1734,12 @@ def _notify_onboarding_confirmed(reg_id):
             <p><strong>Registration #:</strong> {reg['registration_number']}</p>"""
             send_email(team_recipients, team_subject, team_body)
 
+        # 4. Auto-sync to plab_clients and ops_academic_details
+        try:
+            _sync_to_plab_and_academics(conn, reg, reg_id)
+        except Exception as sync_e:
+            logging.error(f"Auto-sync to plab/academics: {sync_e}")
+
         # Log notifications
         conn.execute("INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
             (reg_id, 'onboarding_confirmed', 'email', reg['email'] or '', 'Welcome email sent'))
@@ -1727,6 +1751,116 @@ def _notify_onboarding_confirmed(reg_id):
         conn.close()
     except Exception as e:
         logging.error(f"_notify_onboarding_confirmed: {e}")
+
+
+def _sync_to_plab_and_academics(conn, reg, reg_id):
+    """Sync confirmed client registration data into plab_clients and ops_academic_details."""
+    reg_num = reg.get('registration_number', '')
+    if not reg_num:
+        return
+
+    # Check if already synced
+    existing = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+    if existing:
+        logging.info(f"plab_clients already has {reg_num}, skipping sync")
+        return
+
+    # Load academics from client_academics
+    academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+
+    # Get counsellor details
+    counsellor_name = reg.get('counsellor_name', '')
+    counsellor_email = ''
+    counsellor_number = ''
+    if reg.get('counsellor_id'):
+        emp = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
+        if emp:
+            counsellor_name = emp['name'] or ''
+            counsellor_email = emp['email'] or ''
+            counsellor_number = emp['phone'] or ''
+
+    # Get created_by (the ops user who confirmed)
+    created_by = reg.get('ops_verified_by') or reg.get('counsellor_id')
+
+    # INSERT into plab_clients
+    conn.execute('''INSERT INTO plab_clients (
+        registration_number, registration_date, prefix, first_name, last_name,
+        mobile, whatsapp1, whatsapp2, email, dob, city, state,
+        instagram, facebook, linkedin, photo_path,
+        father_name, father_phone, mother_name, mother_phone, parents_email,
+        joined_stage, plan_type, english_training, account_status, current_stage,
+        counsellor, counsellor_email, counsellor_number,
+        lead_source, operations_referral, portfolio_referral, australia_referral,
+        package_amount, discount_allowed, additional_package_notes, final_package,
+        inst1_amount, inst1_date, inst1_note,
+        inst2_amount, inst2_date, inst2_note,
+        inst3_amount, inst3_date, inst3_note,
+        inst4_amount, inst4_date, inst4_note,
+        additional_notes, created_by
+    ) VALUES (
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?, ?,
+        ?, ?
+    )''', (
+        reg_num, reg.get('created_at', ''), reg.get('prefix', 'Dr.'),
+        reg.get('first_name', ''), reg.get('last_name', ''),
+        reg.get('mobile', ''), reg.get('whatsapp', ''), reg.get('whatsapp2', ''),
+        reg.get('email', ''), reg.get('dob', ''), reg.get('city', ''), reg.get('state', ''),
+        reg.get('instagram', ''), reg.get('facebook', ''), reg.get('linkedin', ''), reg.get('photo_path', ''),
+        reg.get('father_name', ''), reg.get('father_phone', ''),
+        reg.get('mother_name', ''), reg.get('mother_phone', ''), reg.get('parents_email', ''),
+        '', reg.get('plan_type', ''), '',
+        'In Process', '',
+        counsellor_name, counsellor_email, counsellor_number,
+        reg.get('lead_source', ''), '', '', '',
+        reg.get('package_amount', 0), reg.get('discount_allowed', 0), '',
+        reg.get('final_package', 0),
+        reg.get('inst1_amount', 0), reg.get('inst1_date', ''), reg.get('inst1_note', ''),
+        reg.get('inst2_amount', 0), reg.get('inst2_date', ''), reg.get('inst2_note', ''),
+        reg.get('inst3_amount', 0), reg.get('inst3_date', ''), reg.get('inst3_note', ''),
+        reg.get('inst4_amount', 0), reg.get('inst4_date', ''), reg.get('inst4_note', ''),
+        reg.get('additional_notes', ''), created_by
+    ))
+
+    # INSERT into ops_academic_details (only if academics data exists)
+    if academics:
+        conn.execute('''INSERT INTO ops_academic_details (
+            registration_number, img_fmg, img_medical_college, fmg_medical_college,
+            country, mbbs_status, mbbs_start_date, mbbs_end_date,
+            speciality_interest_1, speciality_interest_2,
+            internship_status, internship_hospital, internship_location,
+            internship_hospital_2, internship_location_2,
+            internship_start_date, internship_end_date,
+            internship_gap, gap_in_months, gap_reason,
+            working_status, working_hospital_name, additional_info, created_by
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''', (
+            reg_num,
+            academics.get('img_fmg', ''), academics.get('img_medical_college', ''),
+            academics.get('fmg_medical_college', ''),
+            academics.get('country', ''), academics.get('mbbs_status', ''),
+            academics.get('mbbs_start_date', ''), academics.get('mbbs_end_date', ''),
+            academics.get('speciality_interest_1', ''), academics.get('speciality_interest_2', ''),
+            academics.get('internship_status', ''), academics.get('internship_hospital', ''),
+            academics.get('internship_location', ''),
+            academics.get('internship_hospital_2', ''), academics.get('internship_location_2', ''),
+            academics.get('internship_start_date', ''), academics.get('internship_end_date', ''),
+            academics.get('internship_gap', ''), academics.get('gap_in_months', ''),
+            academics.get('gap_reason', ''),
+            academics.get('working_status', ''), academics.get('working_hospital_name', ''),
+            academics.get('additional_info', ''), created_by
+        ))
+
+    logging.info(f"Auto-synced client {reg_num} to plab_clients + ops_academic_details")
 
 
 def _notify_doc_request(reg_id, doc_type, message):
@@ -12138,21 +12272,32 @@ def ensure_ops_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
-        # ── Client Academics ──
+        # ── Client Academics (mirrors ops_academic_details fields) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_academics (
             id SERIAL PRIMARY KEY,
             registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
-            degree TEXT,
-            college_name TEXT,
-            university TEXT,
-            year_of_passing TEXT,
-            percentage_cgpa TEXT,
-            neet_score TEXT,
-            neet_year TEXT,
+            img_fmg TEXT,
+            img_medical_college TEXT,
+            fmg_medical_college TEXT,
+            country TEXT,
+            mbbs_status TEXT,
+            mbbs_start_date TEXT,
+            mbbs_end_date TEXT,
+            speciality_interest_1 TEXT,
+            speciality_interest_2 TEXT,
             internship_status TEXT,
-            internship_completion TEXT,
-            mci_nmc_status TEXT,
-            additional_qualifications TEXT,
+            internship_hospital TEXT,
+            internship_location TEXT,
+            internship_hospital_2 TEXT,
+            internship_location_2 TEXT,
+            internship_start_date TEXT,
+            internship_end_date TEXT,
+            internship_gap TEXT,
+            gap_in_months TEXT,
+            gap_reason TEXT,
+            working_status TEXT,
+            working_hospital_name TEXT,
+            additional_info TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
@@ -24442,25 +24587,166 @@ def ensure_section_permissions_table():
 ensure_section_permissions_table()
 
 
+def migrate_client_academics_v2():
+    """Migrate client_academics to match ops_academic_details fields."""
+    try:
+        conn = get_db()
+        new_cols = [
+            "img_fmg TEXT", "img_medical_college TEXT", "fmg_medical_college TEXT",
+            "country TEXT", "mbbs_status TEXT", "mbbs_start_date TEXT", "mbbs_end_date TEXT",
+            "speciality_interest_1 TEXT", "speciality_interest_2 TEXT",
+            "internship_hospital TEXT", "internship_location TEXT",
+            "internship_hospital_2 TEXT", "internship_location_2 TEXT",
+            "internship_start_date TEXT", "internship_end_date TEXT",
+            "internship_gap TEXT", "gap_in_months TEXT", "gap_reason TEXT",
+            "working_status TEXT", "working_hospital_name TEXT", "additional_info TEXT",
+        ]
+        for col_def in new_cols:
+            try:
+                conn.execute(f"ALTER TABLE client_academics ADD COLUMN {col_def}")
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        # Also add whatsapp2 to client_registrations if missing
+        try:
+            conn.execute("ALTER TABLE client_registrations ADD COLUMN whatsapp2 TEXT")
+            conn.commit()
+        except Exception:
+            conn.rollback()
+        conn.close()
+    except Exception as e:
+        logging.error(f"migrate_client_academics_v2: {e}")
+
+migrate_client_academics_v2()
+
+
 def seed_client_form_configs():
-    """Seed default form configs for UK/PLAB pathway if empty."""
+    """Seed default form configs for UK/PLAB pathway with all PLAB + Academic fields."""
     try:
         conn = get_db()
         count = conn.execute("SELECT COUNT(*) as c FROM client_form_configs").fetchone()['c']
         if count > 0:
             conn.close()
             return
-        # Find the UK/PLAB product
         product = conn.execute("SELECT id FROM products_services WHERE LOWER(name) LIKE '%plab%' OR LOWER(name) LIKE '%uk%' LIMIT 1").fetchone()
         if not product:
-            # Create a default product
             conn.execute("INSERT INTO products_services (name, type, status) VALUES ('UK / PLAB Pathway', 'product', 'active')")
             conn.commit()
             product = conn.execute("SELECT id FROM products_services WHERE name = 'UK / PLAB Pathway'").fetchone()
         pid = product['id']
-        # No configs needed in DB for MVP — the form uses hardcoded steps.
-        # This table is for future per-product customization.
+
+        # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
+        configs = [
+            # ── Step 1: Personal Details (client fills) ──
+            (1, 'Personal Details', 'prefix', 'Prefix', 'select', 'Dr.,Mr.,Mrs.,Ms.', 'client', 1, 10, '', ''),
+            (1, 'Personal Details', 'first_name', 'First Name', 'text', '', 'client', 1, 20, 'Enter first name', ''),
+            (1, 'Personal Details', 'last_name', 'Last Name', 'text', '', 'client', 0, 30, 'Enter last name', ''),
+            (1, 'Personal Details', 'mobile', 'Mobile', 'tel', '', 'client', 1, 40, 'Mobile number', ''),
+            (1, 'Personal Details', 'whatsapp', 'WhatsApp 1', 'tel', '', 'client', 0, 50, 'WhatsApp number', ''),
+            (1, 'Personal Details', 'whatsapp2', 'WhatsApp 2', 'tel', '', 'client', 0, 60, 'Alternate WhatsApp', ''),
+            (1, 'Personal Details', 'email', 'Email', 'email', '', 'client', 1, 70, 'Email address', ''),
+            (1, 'Personal Details', 'dob', 'Date of Birth', 'date', '', 'client', 0, 80, '', ''),
+            (1, 'Personal Details', 'state', 'State', 'select', 'db:states', 'client', 0, 90, 'Select state', ''),
+            (1, 'Personal Details', 'city', 'City', 'select', 'db:cities', 'client', 0, 100, 'Select city', ''),
+            (1, 'Personal Details', 'instagram', 'Instagram', 'text', '', 'client', 0, 110, '@handle', ''),
+            (1, 'Personal Details', 'facebook', 'Facebook', 'text', '', 'client', 0, 120, 'Profile URL', ''),
+            (1, 'Personal Details', 'linkedin', 'LinkedIn', 'text', '', 'client', 0, 130, 'Profile URL', ''),
+
+            # ── Step 1: Parents Info (client fills) ──
+            (1, 'Personal Details', 'father_name', 'Father Name', 'text', '', 'client', 0, 140, '', ''),
+            (1, 'Personal Details', 'father_phone', 'Father Phone', 'tel', '', 'client', 0, 150, '', ''),
+            (1, 'Personal Details', 'mother_name', 'Mother Name', 'text', '', 'client', 0, 160, '', ''),
+            (1, 'Personal Details', 'mother_phone', 'Mother Phone', 'tel', '', 'client', 0, 170, '', ''),
+            (1, 'Personal Details', 'parents_email', 'Parents Email', 'email', '', 'client', 0, 180, '', ''),
+
+            # ── Step 2: Academic Details (client fills) ──
+            (2, 'Academic Details', 'img_fmg', 'IMG / FMG', 'select', 'db:img_fmg', 'client', 1, 10, '', 'Select IMG or FMG'),
+            (2, 'Academic Details', 'img_medical_college', 'IMG Medical College', 'text', '', 'client', 0, 20, 'College name (for IMG)', 'Visible if IMG selected'),
+            (2, 'Academic Details', 'fmg_medical_college', 'FMG Medical College', 'text', '', 'client', 0, 30, 'College name (for FMG)', 'Visible if FMG selected'),
+            (2, 'Academic Details', 'country', 'Country', 'text', '', 'client', 0, 40, 'Country of medical college', 'For FMG only'),
+            (2, 'Academic Details', 'mbbs_status', 'MBBS Status', 'select', 'db:mbbs_status', 'client', 1, 50, '', ''),
+            (2, 'Academic Details', 'mbbs_start_date', 'MBBS Start Date', 'date', '', 'client', 0, 60, '', ''),
+            (2, 'Academic Details', 'mbbs_end_date', 'MBBS End Date', 'date', '', 'client', 0, 70, '', ''),
+            (2, 'Academic Details', 'speciality_interest_1', 'Speciality Interest 1', 'text', '', 'client', 0, 80, 'Primary speciality', ''),
+            (2, 'Academic Details', 'speciality_interest_2', 'Speciality Interest 2', 'text', '', 'client', 0, 90, 'Secondary speciality', ''),
+            (2, 'Academic Details', 'internship_status', 'Internship Status', 'select', 'db:internship_status', 'client', 0, 100, '', ''),
+            (2, 'Academic Details', 'internship_hospital', 'Internship Hospital', 'text', '', 'client', 0, 110, '', ''),
+            (2, 'Academic Details', 'internship_location', 'Internship Location', 'text', '', 'client', 0, 120, '', ''),
+            (2, 'Academic Details', 'internship_hospital_2', 'Internship Hospital 2', 'text', '', 'client', 0, 130, '', 'If rotated to another hospital'),
+            (2, 'Academic Details', 'internship_location_2', 'Internship Location 2', 'text', '', 'client', 0, 140, '', ''),
+            (2, 'Academic Details', 'internship_start_date', 'Internship Start Date', 'date', '', 'client', 0, 150, '', ''),
+            (2, 'Academic Details', 'internship_end_date', 'Internship End Date', 'date', '', 'client', 0, 160, '', ''),
+            (2, 'Academic Details', 'internship_gap', 'Internship Gap', 'select', 'db:internship_gap', 'client', 0, 170, '', ''),
+            (2, 'Academic Details', 'gap_in_months', 'Gap in Months', 'text', '', 'client', 0, 180, '', 'If gap, specify months'),
+            (2, 'Academic Details', 'gap_reason', 'Gap Reason', 'textarea', '', 'client', 0, 190, '', ''),
+            (2, 'Academic Details', 'working_status', 'Working Status', 'select', 'db:working_status', 'client', 0, 200, '', ''),
+            (2, 'Academic Details', 'working_hospital_name', 'Working Hospital Name', 'text', '', 'client', 0, 210, '', 'If currently working'),
+            (2, 'Academic Details', 'additional_info', 'Additional Info', 'textarea', '', 'client', 0, 220, '', ''),
+
+            # ── Step 3: Sales Section (sales fills) ──
+            (3, 'Sales Details', 'joined_stage', 'Joined Stage', 'select', 'db:joined_stage', 'sales', 0, 10, '', ''),
+            (3, 'Sales Details', 'plan_type', 'Plan Type', 'select', 'db:plan_type', 'sales', 1, 20, '', ''),
+            (3, 'Sales Details', 'english_training', 'English Training', 'select', 'Yes,No', 'sales', 0, 30, '', ''),
+            (3, 'Sales Details', 'counsellor', 'Counsellor', 'select', 'db:counsellor', 'sales', 1, 40, '', ''),
+            (3, 'Sales Details', 'counsellor_email', 'Counsellor Email', 'email', '', 'sales', 0, 50, '', 'Auto-filled from counsellor'),
+            (3, 'Sales Details', 'counsellor_number', 'Counsellor Number', 'tel', '', 'sales', 0, 60, '', 'Auto-filled from counsellor'),
+            (3, 'Sales Details', 'lead_source', 'Lead Source', 'select', 'db:lead_source', 'sales', 0, 70, '', ''),
+            (3, 'Sales Details', 'referral_type', 'Referral Type', 'text', '', 'sales', 0, 80, '', 'If lead source is Referral'),
+            (3, 'Sales Details', 'portfolio_referral', 'Portfolio Referral', 'text', '', 'sales', 0, 90, '', ''),
+            (3, 'Sales Details', 'australia_referral', 'Australia Referral', 'text', '', 'sales', 0, 100, '', ''),
+            (3, 'Sales Details', 'operations_referral', 'Operations Referral', 'select', 'db:operations_referral', 'sales', 0, 110, '', ''),
+
+            # ── Step 3: Package & Installments (sales fills) ──
+            (3, 'Sales Details', 'package_amount', 'Package Amount', 'number', '', 'sales', 0, 120, '0.00', ''),
+            (3, 'Sales Details', 'discount_allowed', 'Discount Allowed', 'number', '', 'sales', 0, 130, '0.00', ''),
+            (3, 'Sales Details', 'additional_package_notes', 'Additional Package Notes', 'textarea', '', 'sales', 0, 140, '', ''),
+            (3, 'Sales Details', 'final_package', 'Final Package', 'number', '', 'sales', 0, 150, '0.00', 'Package - Discount'),
+            (3, 'Sales Details', 'inst1_amount', 'Installment 1 Amount', 'number', '', 'sales', 0, 160, '0.00', ''),
+            (3, 'Sales Details', 'inst1_date', 'Installment 1 Date', 'date', '', 'sales', 0, 170, '', ''),
+            (3, 'Sales Details', 'inst1_note', 'Installment 1 Note', 'text', '', 'sales', 0, 180, '', ''),
+            (3, 'Sales Details', 'inst2_amount', 'Installment 2 Amount', 'number', '', 'sales', 0, 190, '0.00', ''),
+            (3, 'Sales Details', 'inst2_date', 'Installment 2 Date', 'date', '', 'sales', 0, 200, '', ''),
+            (3, 'Sales Details', 'inst2_note', 'Installment 2 Note', 'text', '', 'sales', 0, 210, '', ''),
+            (3, 'Sales Details', 'inst3_amount', 'Installment 3 Amount', 'number', '', 'sales', 0, 220, '0.00', ''),
+            (3, 'Sales Details', 'inst3_date', 'Installment 3 Date', 'date', '', 'sales', 0, 230, '', ''),
+            (3, 'Sales Details', 'inst3_note', 'Installment 3 Note', 'text', '', 'sales', 0, 240, '', ''),
+            (3, 'Sales Details', 'inst4_amount', 'Installment 4 Amount', 'number', '', 'sales', 0, 250, '0.00', ''),
+            (3, 'Sales Details', 'inst4_date', 'Installment 4 Date', 'date', '', 'sales', 0, 260, '', ''),
+            (3, 'Sales Details', 'inst4_note', 'Installment 4 Note', 'text', '', 'sales', 0, 270, '', ''),
+
+            # ── Step 4: Operations Section (ops fills) ──
+            (4, 'Operations', 'account_status', 'Account Status', 'select', 'db:account_status', 'ops', 1, 10, '', ''),
+            (4, 'Operations', 'current_stage', 'Current Stage', 'select', 'db:plab_stage', 'ops', 0, 20, '', ''),
+            (4, 'Operations', 'dropped_date', 'Dropped Date', 'date', '', 'ops', 0, 30, '', 'If account status is Dropped'),
+            (4, 'Operations', 'switched_program', 'Switched Program', 'select', 'db:switched_program', 'ops', 0, 40, '', 'If account status is Switched'),
+            (4, 'Operations', 'upgraded_to', 'Upgraded To', 'text', '', 'ops', 0, 50, '', 'If client upgraded'),
+            (4, 'Operations', 'welcome_mail', 'Welcome Mail', 'select', 'Sent,Not Sent', 'ops', 0, 60, '', ''),
+            (4, 'Operations', 'welcome_call_by', 'Welcome Call By', 'text', '', 'ops', 0, 70, '', ''),
+            (4, 'Operations', 'welcome_call_date', 'Welcome Call Date', 'date', '', 'ops', 0, 80, '', ''),
+            (4, 'Operations', 'english_book', 'English Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 90, '', ''),
+            (4, 'Operations', 'english_book_date', 'English Book Date', 'date', '', 'ops', 0, 100, '', ''),
+            (4, 'Operations', 'oxford_book', 'Oxford Book', 'select', 'Sent,Not Sent,N/A', 'ops', 0, 110, '', ''),
+            (4, 'Operations', 'oxford_book_date', 'Oxford Book Date', 'date', '', 'ops', 0, 120, '', ''),
+            (4, 'Operations', 'plab_brochure', 'PLAB Brochure', 'checkbox', '', 'ops', 0, 130, '', ''),
+            (4, 'Operations', 'ceo_letter', 'CEO Letter', 'checkbox', '', 'ops', 0, 140, '', ''),
+            (4, 'Operations', 'refund_policy', 'Refund Policy', 'checkbox', '', 'ops', 0, 150, '', ''),
+            (4, 'Operations', 'service_agreement', 'Service Agreement', 'checkbox', '', 'ops', 0, 160, '', ''),
+            (4, 'Operations', 'goodie_pen', 'Goodie - Pen', 'checkbox', '', 'ops', 0, 170, '', ''),
+            (4, 'Operations', 'goodie_diary', 'Goodie - Diary', 'checkbox', '', 'ops', 0, 180, '', ''),
+            (4, 'Operations', 'goodie_laptop_bag', 'Goodie - Laptop Bag', 'checkbox', '', 'ops', 0, 190, '', ''),
+            (4, 'Operations', 'goodie_stickers', 'Goodie - Stickers', 'checkbox', '', 'ops', 0, 200, '', ''),
+            (4, 'Operations', 'additional_notes', 'Additional Notes', 'textarea', '', 'ops', 0, 210, '', ''),
+        ]
+
+        for c in configs:
+            conn.execute('''INSERT INTO client_form_configs
+                (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (pid, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10]))
+
+        conn.commit()
         conn.close()
+        logging.info(f"Seeded {len(configs)} client form configs for product {pid}")
     except Exception as e:
         logging.error(f"seed_client_form_configs: {e}")
 
