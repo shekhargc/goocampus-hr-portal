@@ -24627,8 +24627,8 @@ def seed_client_form_configs():
 
         # Define products to seed — each gets the same 85 fields
         product_definitions = [
-            {'name': 'UK / PLAB Pathway', 'match': "LOWER(name) LIKE '%plab%'"},
-            {'name': 'UK PGCP', 'match': "LOWER(name) = 'uk pgcp'"},
+            {'name': 'UK / PLAB Pathway', 'search': '%plab%', 'use_like': True},
+            {'name': 'UK PGCP', 'search': 'uk pgcp', 'use_like': False},
         ]
 
         # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
@@ -24736,7 +24736,10 @@ def seed_client_form_configs():
 
         for pdef in product_definitions:
             # Find existing product
-            product = conn.execute("SELECT id FROM products_services WHERE " + pdef['match'] + " LIMIT 1").fetchone()
+            if pdef.get('use_like'):
+                product = conn.execute("SELECT id FROM products_services WHERE LOWER(name) LIKE ? LIMIT 1", (pdef['search'],)).fetchone()
+            else:
+                product = conn.execute("SELECT id FROM products_services WHERE LOWER(name) = ? LIMIT 1", (pdef['search'],)).fetchone()
             if not product:
                 conn.execute("INSERT INTO products_services (name, type, status) VALUES (?, 'product', 'active')", (pdef['name'],))
                 conn.commit()
