@@ -1,0 +1,245 @@
+{% extends "base.html" %}
+
+{% block title %}Client Management{% endblock %}
+
+{% block content %}
+<div style="padding: 24px;">
+
+  <!-- Header -->
+  <div style="margin-bottom: 24px;">
+    <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--navy, #1e3a5f); margin: 0;">
+      Client Management
+      <span style="font-size: 0.875rem; font-weight: 400; color: var(--gray-500, #6b7280); margin-left: 8px;">{{ clients|length }} client{{ 's' if clients|length != 1 else '' }}</span>
+    </h1>
+  </div>
+
+  <!-- Stat Cards -->
+  <div style="display: grid; grid-template-columns: repeat(5, 1fr); gap: 16px; margin-bottom: 24px;">
+    {% set total = clients|length %}
+    {% set submitted = clients|selectattr('form_status','equalto','submitted')|list|length %}
+    {% set sales_pending = clients|rejectattr('sales_completed')|list|length %}
+    {% set ops_verified = clients|selectattr('ops_status','equalto','verified')|list|length %}
+    {% set onboarded = clients|selectattr('onboarding_status','equalto','completed')|list|length %}
+
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Total Clients</div>
+      <div style="font-size: 1.75rem; font-weight: 700; color: var(--navy, #1e3a5f);">{{ total }}</div>
+    </div>
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Submitted</div>
+      <div style="font-size: 1.75rem; font-weight: 700; color: #2563eb;">{{ submitted }}</div>
+    </div>
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Sales Pending</div>
+      <div style="font-size: 1.75rem; font-weight: 700; color: var(--orange, #f97316);">{{ sales_pending }}</div>
+    </div>
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Ops Verified</div>
+      <div style="font-size: 1.75rem; font-weight: 700; color: #059669;">{{ ops_verified }}</div>
+    </div>
+    <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+      <div style="font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; color: var(--gray-500, #6b7280); margin-bottom: 8px;">Onboarded</div>
+      <div style="font-size: 1.75rem; font-weight: 700; color: #7c3aed;">{{ onboarded }}</div>
+    </div>
+  </div>
+
+  <!-- Filters -->
+  <div style="display: flex; gap: 12px; margin-bottom: 24px; align-items: center; flex-wrap: wrap;">
+    <select id="filterProduct" onchange="applyFilters()"
+      style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; min-width: 180px;">
+      <option value="">All Products</option>
+      {% for p in products %}
+      <option value="{{ p.name }}">{{ p.name }}</option>
+      {% endfor %}
+    </select>
+    <select id="filterStatus" onchange="applyFilters()"
+      style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; min-width: 160px;">
+      <option value="">All Statuses</option>
+      <option value="draft">Draft</option>
+      <option value="submitted">Submitted</option>
+      <option value="verified">Verified</option>
+      <option value="confirmed">Confirmed</option>
+    </select>
+    <input type="text" id="searchInput" placeholder="Search name, mobile, email..."
+      style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; min-width: 260px;">
+  </div>
+
+  <!-- Client Cards Grid -->
+  {% if clients %}
+  <div id="clientsGrid" style="display: grid; grid-template-columns: repeat(auto-fill, minmax(360px, 1fr)); gap: 16px;">
+    {% for c in clients %}
+    <div class="client-card"
+      data-name="{{ (c.first_name ~ ' ' ~ c.last_name)|lower }}"
+      data-mobile="{{ c.mobile or '' }}"
+      data-email="{{ (c.email or '')|lower }}"
+      data-product="{{ c.product_name or '' }}"
+      data-form-status="{{ c.form_status or 'draft' }}"
+      style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); transition: box-shadow 0.15s, transform 0.15s;"
+      onmouseover="this.style.boxShadow='0 4px 12px rgba(0,0,0,0.1)'; this.style.transform='translateY(-1px)'"
+      onmouseout="this.style.boxShadow='0 1px 3px rgba(0,0,0,0.06)'; this.style.transform='none'">
+
+      <!-- Top row: name + reg number -->
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+        <div>
+          <div style="font-weight: 600; font-size: 1rem; color: #111827;">
+            {{ c.prefix ~ ' ' if c.prefix else '' }}{{ c.first_name }} {{ c.last_name }}
+          </div>
+          {% if c.registration_number %}
+          <div style="font-size: 0.75rem; color: var(--gray-500, #6b7280); margin-top: 2px;">{{ c.registration_number }}</div>
+          {% endif %}
+        </div>
+        <a href="/admin/client/{{ c.id }}" style="font-size: 0.8rem; color: var(--orange, #f97316); text-decoration: none; font-weight: 600; white-space: nowrap;">View Details &rarr;</a>
+      </div>
+
+      <!-- Badges row -->
+      <div style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px;">
+        {% if c.product_name %}
+        <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 600; background: #dbeafe; color: #1e40af;">{{ c.product_name }}</span>
+        {% endif %}
+
+        {% set form_colors = {'draft': ('bg:#fef3c7; color:#92400e', 'Draft'), 'submitted': ('bg:#dbeafe; color:#1e40af', 'Submitted'), 'verified': ('bg:#d1fae5; color:#065f46', 'Verified'), 'confirmed': ('bg:#ede9fe; color:#5b21b6', 'Confirmed')} %}
+        {% if c.form_status %}
+        <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+          {% if c.form_status == 'draft' %}background: #fef3c7; color: #92400e;
+          {% elif c.form_status == 'submitted' %}background: #dbeafe; color: #1e40af;
+          {% elif c.form_status == 'verified' %}background: #d1fae5; color: #065f46;
+          {% elif c.form_status == 'confirmed' %}background: #ede9fe; color: #5b21b6;
+          {% else %}background: #f3f4f6; color: #374151;{% endif %}">Form: {{ c.form_status|capitalize }}</span>
+        {% endif %}
+
+        {% if c.ops_status %}
+        <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+          {% if c.ops_status == 'verified' %}background: #d1fae5; color: #065f46;
+          {% elif c.ops_status == 'pending' %}background: #fef3c7; color: #92400e;
+          {% else %}background: #f3f4f6; color: #374151;{% endif %}">Ops: {{ c.ops_status|capitalize }}</span>
+        {% endif %}
+
+        {% if c.onboarding_status %}
+        <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+          {% if c.onboarding_status == 'completed' %}background: #d1fae5; color: #065f46;
+          {% elif c.onboarding_status == 'in_progress' %}background: #dbeafe; color: #1e40af;
+          {% elif c.onboarding_status == 'pending' %}background: #fef3c7; color: #92400e;
+          {% else %}background: #f3f4f6; color: #374151;{% endif %}">Onboarding: {{ c.onboarding_status|replace('_',' ')|capitalize }}</span>
+        {% endif %}
+      </div>
+
+      <!-- Details grid -->
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px 16px; font-size: 0.8rem;">
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Mobile:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.mobile or '-' }}</span>
+        </div>
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Email:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.email or '-' }}</span>
+        </div>
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Counsellor:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.counsellor_name or '-' }}</span>
+        </div>
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Plan:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.plan_type or '-' }}</span>
+        </div>
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Package:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.final_package or '-' }}</span>
+        </div>
+        <div>
+          <span style="color: var(--gray-500, #6b7280);">Docs:</span>
+          <span style="color: #111827; margin-left: 4px;">{{ c.doc_count or 0 }}</span>
+        </div>
+      </div>
+
+      <!-- Footer -->
+      <div style="margin-top: 14px; padding-top: 12px; border-top: 1px solid #f3f4f6; font-size: 0.75rem; color: var(--gray-500, #6b7280);">
+        Created {{ c.created_at.strftime('%d %b %Y') if c.created_at else '-' }}
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <!-- Empty state -->
+  <div style="text-align: center; padding: 64px 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;">
+    <div style="font-size: 2rem; margin-bottom: 8px;">&#128203;</div>
+    <p style="font-size: 1rem; color: #374151; margin: 0 0 4px 0; font-weight: 500;">No clients found</p>
+    <p style="font-size: 0.875rem; color: var(--gray-500, #6b7280); margin: 0;">Client registrations will appear here once invitations are accepted.</p>
+  </div>
+  {% endif %}
+
+  <!-- Empty search state (hidden by default) -->
+  <div id="emptySearch" style="display: none; text-align: center; padding: 48px 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; margin-top: 16px;">
+    <p style="font-size: 1rem; color: #374151; margin: 0 0 4px 0; font-weight: 500;">No matching clients</p>
+    <p style="font-size: 0.875rem; color: var(--gray-500, #6b7280); margin: 0;">Try adjusting your search or filters.</p>
+  </div>
+
+</div>
+
+<script>
+(function() {
+  let timer = null;
+  const searchInput = document.getElementById('searchInput');
+  const filterProduct = document.getElementById('filterProduct');
+  const filterStatus = document.getElementById('filterStatus');
+
+  if (searchInput) {
+    searchInput.addEventListener('input', function() {
+      clearTimeout(timer);
+      timer = setTimeout(applyFilters, 300);
+    });
+  }
+
+  window.applyFilters = function() {
+    const q = (searchInput ? searchInput.value.trim().toLowerCase() : '');
+    const product = filterProduct ? filterProduct.value : '';
+    const status = filterStatus ? filterStatus.value : '';
+    const cards = document.querySelectorAll('.client-card');
+    let visible = 0;
+
+    cards.forEach(function(card) {
+      let show = true;
+
+      // Text search (min 2 chars)
+      if (q.length >= 2) {
+        const name = card.getAttribute('data-name') || '';
+        const mobile = card.getAttribute('data-mobile') || '';
+        const email = card.getAttribute('data-email') || '';
+        if (!name.includes(q) && !mobile.includes(q) && !email.includes(q)) {
+          show = false;
+        }
+      }
+
+      // Product filter
+      if (show && product) {
+        if (card.getAttribute('data-product') !== product) {
+          show = false;
+        }
+      }
+
+      // Status filter
+      if (show && status) {
+        if (card.getAttribute('data-form-status') !== status) {
+          show = false;
+        }
+      }
+
+      card.style.display = show ? '' : 'none';
+      if (show) visible++;
+    });
+
+    // Show/hide empty search state
+    const emptyEl = document.getElementById('emptySearch');
+    const gridEl = document.getElementById('clientsGrid');
+    if (emptyEl && gridEl) {
+      if (visible === 0 && cards.length > 0) {
+        emptyEl.style.display = 'block';
+        gridEl.style.display = 'none';
+      } else {
+        emptyEl.style.display = 'none';
+        gridEl.style.display = '';
+      }
+    }
+  };
+})();
+</script>
+{% endblock %}

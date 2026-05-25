@@ -1,0 +1,179 @@
+{% extends "base.html" %}
+
+{% block title %}Client Invitations{% endblock %}
+
+{% block content %}
+<div style="padding: 24px;">
+
+  <!-- Header -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div>
+      <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--navy, #1e3a5f); margin: 0;">Client Invitations</h1>
+      <p style="color: var(--gray-500, #6b7280); font-size: 0.875rem; margin: 4px 0 0 0;">Send and manage client registration invitations</p>
+    </div>
+    <button onclick="toggleCreateForm()" id="createBtn"
+      style="background: var(--orange, #f97316); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+      <span id="createBtnIcon">+</span> Create Invitation
+    </button>
+  </div>
+
+  <!-- Create Invitation Form (hidden by default) -->
+  <div id="createForm" style="display: none; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+    <h3 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; color: var(--navy, #1e3a5f);">New Invitation</h3>
+    <form method="POST" action="/admin/client-invitations/create">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 16px;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Client Name *</label>
+          <input type="text" name="client_name" required
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Mobile *</label>
+          <input type="text" name="client_mobile" required
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Email *</label>
+          <input type="email" name="client_email" required
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Product *</label>
+          <select name="product_id" required
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="">Select product...</option>
+            {% for p in products %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end;">
+        <button type="button" onclick="toggleCreateForm()"
+          style="padding: 8px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: var(--gray-500, #6b7280); font-size: 0.875rem; cursor: pointer;">
+          Cancel
+        </button>
+        <button type="submit"
+          style="padding: 8px 20px; border: none; border-radius: 6px; background: var(--orange, #f97316); color: #fff; font-weight: 600; font-size: 0.875rem; cursor: pointer;">
+          Send Invitation
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Search -->
+  <div style="margin-bottom: 16px;">
+    <input type="text" id="searchInput" placeholder="Search by name, email or mobile..."
+      style="width: 320px; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem;">
+  </div>
+
+  <!-- Invitations Table -->
+  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.875rem;">
+      <thead>
+        <tr style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Client Name</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Mobile</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Email</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Product</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Invited By</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Status</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Created</th>
+          <th style="text-align: left; padding: 12px 16px; font-weight: 600; color: var(--navy, #1e3a5f); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
+        </tr>
+      </thead>
+      <tbody id="invitationsBody">
+        {% for inv in invitations %}
+        <tr class="inv-row" data-search="{{ inv.client_name|lower }} {{ inv.client_email|lower }} {{ inv.client_mobile }}"
+          style="border-bottom: 1px solid #f3f4f6; transition: background 0.15s;"
+          onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
+          <td style="padding: 12px 16px; font-weight: 500; color: #111827;">{{ inv.client_name }}</td>
+          <td style="padding: 12px 16px; color: #374151;">{{ inv.client_mobile }}</td>
+          <td style="padding: 12px 16px; color: #374151;">{{ inv.client_email }}</td>
+          <td style="padding: 12px 16px; color: #374151;">{{ inv.product_name }}</td>
+          <td style="padding: 12px 16px; color: #374151;">{{ inv.invited_by_name }}</td>
+          <td style="padding: 12px 16px;">
+            {% if inv.status == 'registered' %}
+            <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: #d1fae5; color: #065f46;">Registered</span>
+            {% else %}
+            <span style="display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 0.75rem; font-weight: 600; background: #fef3c7; color: #92400e;">Pending</span>
+            {% endif %}
+          </td>
+          <td style="padding: 12px 16px; color: #6b7280; font-size: 0.8rem;">{{ inv.created_at.strftime('%d %b %Y') if inv.created_at else '' }}</td>
+          <td style="padding: 12px 16px;">
+            {% if inv.status == 'registered' %}
+            <span style="font-size: 0.8rem; color: #6b7280;">Registered {{ inv.registered_at.strftime('%d %b %Y') if inv.registered_at else '' }}</span>
+            {% else %}
+            <div style="display: flex; align-items: center; gap: 6px;">
+              <input type="text" readonly value="https://goocampus.org/client/register/{{ inv.token }}" id="url-{{ inv.id }}"
+                style="width: 180px; padding: 4px 8px; border: 1px solid #d1d5db; border-radius: 4px; font-size: 0.75rem; color: #374151; background: #f9fafb;">
+              <button onclick="copyUrl('{{ inv.id }}')" title="Copy invite URL"
+                style="background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 8px; cursor: pointer; font-size: 0.75rem; color: var(--navy, #1e3a5f); white-space: nowrap;">
+                Copy
+              </button>
+            </div>
+            {% endif %}
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    {% if not invitations %}
+    <div style="text-align: center; padding: 48px 24px; color: var(--gray-500, #6b7280);">
+      <p style="font-size: 1rem; margin: 0 0 4px 0;">No invitations yet</p>
+      <p style="font-size: 0.875rem; margin: 0;">Click "Create Invitation" to send the first one.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<script>
+function toggleCreateForm() {
+  const form = document.getElementById('createForm');
+  const btn = document.getElementById('createBtn');
+  const icon = document.getElementById('createBtnIcon');
+  if (form.style.display === 'none') {
+    form.style.display = 'block';
+    icon.textContent = '×';
+  } else {
+    form.style.display = 'none';
+    icon.textContent = '+';
+  }
+}
+
+function copyUrl(id) {
+  const input = document.getElementById('url-' + id);
+  input.select();
+  document.execCommand('copy');
+  const btn = input.nextElementSibling;
+  const orig = btn.textContent;
+  btn.textContent = 'Copied!';
+  btn.style.color = '#059669';
+  setTimeout(() => { btn.textContent = orig; btn.style.color = ''; }, 1500);
+}
+
+// Search filter
+(function() {
+  let timer = null;
+  const input = document.getElementById('searchInput');
+  if (!input) return;
+  input.addEventListener('input', function() {
+    clearTimeout(timer);
+    timer = setTimeout(function() {
+      const q = input.value.trim().toLowerCase();
+      const rows = document.querySelectorAll('.inv-row');
+      rows.forEach(function(row) {
+        if (q.length < 2) {
+          row.style.display = '';
+          return;
+        }
+        const data = row.getAttribute('data-search') || '';
+        row.style.display = data.includes(q) ? '' : 'none';
+      });
+    }, 300);
+  });
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Client Portal &mdash; GooCampus</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --navy: #1e3a5f;
+            --navy-dark: #142a47;
+            --navy-light: #2a5080;
+            --orange: #f97316;
+            --orange-dark: #ea580c;
+            --orange-light: #fff7ed;
+            --white: #FFFFFF;
+            --gray-50: #F8FAFC;
+            --gray-100: #F1F5F9;
+            --gray-200: #E2E8F0;
+            --gray-300: #CBD5E1;
+            --gray-400: #94A3B8;
+            --gray-500: #64748B;
+            --gray-600: #475569;
+            --gray-700: #334155;
+            --gray-800: #1E293B;
+            --success: #10B981;
+            --danger: #EF4444;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            background: linear-gradient(135deg, var(--navy) 0%, var(--navy-light) 50%, var(--navy-dark) 100%);
+            position: relative;
+            overflow-x: hidden;
+        }
+
+        /* Background decorative elements */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -20%;
+            right: -10%;
+            width: 600px;
+            height: 600px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(249,115,22,0.12) 0%, transparent 70%);
+            pointer-events: none;
+        }
+        body::after {
+            content: '';
+            position: fixed;
+            bottom: -15%;
+            left: -8%;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: radial-gradient(circle, rgba(249,115,22,0.08) 0%, transparent 70%);
+            pointer-events: none;
+        }
+
+        /* ===== MAIN CONTAINER ===== */
+        .login-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 2rem 1.25rem;
+            position: relative;
+            z-index: 1;
+        }
+
+        /* ===== LOGO ===== */
+        .logo-wrapper {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .logo-wrapper img {
+            height: 56px;
+            object-fit: contain;
+        }
+        .portal-label {
+            margin-top: 0.75rem;
+            font-size: 0.82rem;
+            font-weight: 500;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255,255,255,0.55);
+        }
+
+        /* ===== LOGIN CARD ===== */
+        .login-card {
+            background: var(--white);
+            border-radius: 1rem;
+            box-shadow: 0 25px 80px rgba(0,0,0,0.3);
+            padding: 2.5rem;
+            width: 100%;
+            max-width: 420px;
+        }
+        .login-card-header {
+            margin-bottom: 2rem;
+            text-align: center;
+        }
+        .login-card-title {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 0.35rem;
+        }
+        .login-card-subtitle {
+            font-size: 0.92rem;
+            color: var(--gray-500);
+        }
+
+        /* ===== FLASH / ALERT ===== */
+        .alert {
+            padding: 0.85rem 1.1rem;
+            margin-bottom: 1.5rem;
+            border-radius: 0.6rem;
+            border-left: 4px solid;
+            font-size: 0.9rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+        .alert-error, .alert-danger {
+            background: #FEF2F2;
+            border-color: var(--danger);
+            color: #991B1B;
+        }
+        .alert-success {
+            background: #ECFDF5;
+            border-color: var(--success);
+            color: #065F46;
+        }
+        .alert-info {
+            background: #EFF6FF;
+            border-color: #3B82F6;
+            color: #1E40AF;
+        }
+        .alert-warning {
+            background: #FFFBEB;
+            border-color: #F59E0B;
+            color: #92400E;
+        }
+
+        /* ===== FORM ===== */
+        .form-group {
+            margin-bottom: 1.5rem;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 0.5rem;
+            font-weight: 600;
+            font-size: 0.85rem;
+            color: var(--gray-700);
+            text-transform: uppercase;
+            letter-spacing: 0.4px;
+        }
+        .form-input {
+            width: 100%;
+            padding: 0.85rem 1.1rem;
+            border: 2px solid var(--gray-200);
+            border-radius: 0.6rem;
+            font-family: inherit;
+            font-size: 0.95rem;
+            transition: border-color 0.2s, box-shadow 0.2s;
+            background: var(--gray-50);
+            color: var(--gray-800);
+        }
+        .form-input::placeholder { color: var(--gray-400); }
+        .form-input:focus {
+            outline: none;
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(249,115,22,0.15);
+            background: var(--white);
+        }
+
+        /* ===== BUTTON ===== */
+        .login-btn {
+            width: 100%;
+            padding: 1rem;
+            background: linear-gradient(135deg, var(--orange), var(--orange-dark));
+            color: var(--white);
+            border: none;
+            border-radius: 0.6rem;
+            cursor: pointer;
+            font-size: 0.95rem;
+            font-weight: 600;
+            font-family: inherit;
+            transition: transform 0.2s, box-shadow 0.2s;
+            box-shadow: 0 6px 20px rgba(249,115,22,0.3);
+            letter-spacing: 0.3px;
+            text-transform: uppercase;
+        }
+        .login-btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 10px 28px rgba(249,115,22,0.4);
+        }
+        .login-btn:active { transform: translateY(0); }
+
+        /* ===== FORGOT LINK ===== */
+        .forgot-link {
+            display: block;
+            text-align: center;
+            margin-top: 1rem;
+            color: var(--gray-500);
+            font-size: 0.85rem;
+            text-decoration: none;
+            transition: color 0.2s;
+        }
+        .forgot-link:hover { color: var(--orange); }
+
+        /* ===== FOOTER ===== */
+        .site-footer {
+            text-align: center;
+            padding: 1.5rem 1rem;
+            font-size: 0.78rem;
+            color: rgba(255,255,255,0.35);
+            position: relative;
+            z-index: 1;
+        }
+        .site-footer span { color: var(--orange); }
+
+        /* ===== RESPONSIVE ===== */
+        @media (max-width: 480px) {
+            .login-card {
+                padding: 2rem 1.5rem;
+            }
+            .logo-wrapper img {
+                height: 44px;
+            }
+            .login-card-title {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="login-container">
+        <!-- Logo -->
+        <div class="logo-wrapper">
+            <img src="https://goocampus.org/static/logo-white.png" alt="GooCampus">
+            <div class="portal-label">Client Portal</div>
+        </div>
+
+        <!-- Login Card -->
+        <div class="login-card">
+            <div class="login-card-header">
+                <h2 class="login-card-title">Client Sign In</h2>
+                <p class="login-card-subtitle">Access your GooCampus client portal</p>
+            </div>
+
+            {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                <div class="alert alert-{{ category }}">
+                    <span>{{ message }}</span>
+                </div>
+                {% endfor %}
+            {% endif %}
+            {% endwith %}
+
+            <form method="POST" action="/client/login">
+                <div class="form-group">
+                    <label for="mobile">Mobile Number</label>
+                    <input type="tel" id="mobile" name="mobile" class="form-input"
+                           placeholder="Enter your mobile number"
+                           pattern="[0-9]{10}" maxlength="10" required>
+                </div>
+                <div class="form-group">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" class="form-input"
+                           placeholder="Enter your password" required>
+                </div>
+                <button type="submit" class="login-btn">Sign In</button>
+            </form>
+            <a href="/forgot-password" class="forgot-link">Forgot Password?</a>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer class="site-footer">
+        &copy; 2026 <span>GooCampus</span> Edu Solutions Pvt Ltd
+    </footer>
+
+</body>
+</html>

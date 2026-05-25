@@ -1,0 +1,1145 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Registration Form — GooCampus</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        :root {
+            --navy: #1e3a5f;
+            --navy-light: #2a4d7a;
+            --orange: #f97316;
+            --orange-hover: #ea6a0e;
+            --green: #22c55e;
+            --green-bg: #f0fdf4;
+            --grey: #9ca3af;
+            --grey-light: #e5e7eb;
+            --grey-bg: #f9fafb;
+            --red: #ef4444;
+            --red-bg: #fef2f2;
+            --white: #ffffff;
+            --text: #1f2937;
+            --text-muted: #6b7280;
+            --shadow: 0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06);
+            --shadow-md: 0 4px 6px rgba(0,0,0,0.07), 0 2px 4px rgba(0,0,0,0.06);
+            --radius: 8px;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: var(--grey-bg);
+            color: var(--text);
+            line-height: 1.6;
+            min-height: 100vh;
+        }
+
+        /* ── Top Nav ── */
+        .top-nav {
+            background: var(--navy);
+            color: var(--white);
+            padding: 0 24px;
+            height: 60px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: var(--shadow-md);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .top-nav .logo {
+            font-size: 20px;
+            font-weight: 700;
+            letter-spacing: -0.5px;
+        }
+        .top-nav .logo span { color: var(--orange); }
+        .top-nav .reg-id {
+            font-size: 13px;
+            background: rgba(255,255,255,0.12);
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-family: 'SF Mono', 'Fira Code', monospace;
+        }
+        .top-nav .back-link {
+            color: var(--white);
+            text-decoration: none;
+            font-size: 14px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            opacity: 0.85;
+            transition: opacity 0.15s;
+        }
+        .top-nav .back-link:hover { opacity: 1; }
+
+        /* ── Flash Messages ── */
+        .flash-container { max-width: 900px; margin: 16px auto 0; padding: 0 16px; }
+        .flash {
+            padding: 12px 16px;
+            border-radius: var(--radius);
+            font-size: 14px;
+            margin-bottom: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            animation: flashIn 0.3s ease;
+        }
+        .flash-success { background: var(--green-bg); color: #166534; border: 1px solid #bbf7d0; }
+        .flash-error { background: var(--red-bg); color: #991b1b; border: 1px solid #fecaca; }
+        .flash-info { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+        .flash .close-btn {
+            margin-left: auto;
+            background: none;
+            border: none;
+            cursor: pointer;
+            font-size: 18px;
+            color: inherit;
+            opacity: 0.6;
+        }
+        .flash .close-btn:hover { opacity: 1; }
+        @keyframes flashIn { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* ── Submitted Badge ── */
+        .submitted-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            background: var(--green);
+            color: var(--white);
+            padding: 6px 16px;
+            border-radius: 20px;
+            font-size: 13px;
+            font-weight: 600;
+            margin: 16px auto 0;
+        }
+
+        /* ── Step Indicator ── */
+        .step-bar-wrapper {
+            max-width: 900px;
+            margin: 24px auto 0;
+            padding: 0 16px;
+        }
+        .step-bar {
+            display: flex;
+            align-items: center;
+            background: var(--white);
+            border-radius: var(--radius);
+            padding: 16px 24px;
+            box-shadow: var(--shadow);
+        }
+        .step-item {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 6px;
+            position: relative;
+            cursor: default;
+        }
+        .step-item.clickable { cursor: pointer; }
+        .step-item.clickable:hover .step-circle { transform: scale(1.1); }
+        .step-circle {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            transition: all 0.2s;
+            border: 3px solid var(--grey-light);
+            color: var(--grey);
+            background: var(--white);
+        }
+        .step-item.completed .step-circle {
+            background: var(--green);
+            border-color: var(--green);
+            color: var(--white);
+        }
+        .step-item.current .step-circle {
+            background: var(--orange);
+            border-color: var(--orange);
+            color: var(--white);
+        }
+        .step-label {
+            font-size: 12px;
+            font-weight: 500;
+            color: var(--grey);
+            text-align: center;
+        }
+        .step-item.completed .step-label { color: var(--green); }
+        .step-item.current .step-label { color: var(--orange); font-weight: 600; }
+        .step-connector {
+            flex: 0.6;
+            height: 3px;
+            background: var(--grey-light);
+            margin: 0 -8px;
+            align-self: flex-start;
+            margin-top: 18px;
+            border-radius: 2px;
+        }
+        .step-connector.done { background: var(--green); }
+
+        /* ── Main Content ── */
+        .main-content {
+            max-width: 900px;
+            margin: 20px auto;
+            padding: 0 16px 40px;
+        }
+
+        /* ── Panel ── */
+        .step-panel {
+            display: none;
+            background: var(--white);
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            padding: 32px;
+            animation: panelIn 0.25s ease;
+        }
+        .step-panel.active { display: block; }
+        @keyframes panelIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        .panel-title {
+            font-size: 20px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 24px;
+            padding-bottom: 12px;
+            border-bottom: 2px solid var(--grey-light);
+        }
+
+        /* ── Form Grid ── */
+        .form-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px 24px;
+        }
+        .form-grid .full-width { grid-column: 1 / -1; }
+
+        .form-group { display: flex; flex-direction: column; gap: 4px; }
+        .form-group label {
+            font-size: 13px;
+            font-weight: 600;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+        }
+        .form-group label .req { color: var(--red); }
+        .form-group input,
+        .form-group select,
+        .form-group textarea {
+            padding: 10px 12px;
+            border: 1.5px solid var(--grey-light);
+            border-radius: 6px;
+            font-size: 14px;
+            font-family: inherit;
+            color: var(--text);
+            background: var(--white);
+            transition: border-color 0.15s, box-shadow 0.15s;
+        }
+        .form-group input:focus,
+        .form-group select:focus,
+        .form-group textarea:focus {
+            outline: none;
+            border-color: var(--orange);
+            box-shadow: 0 0 0 3px rgba(249,115,22,0.12);
+        }
+        .form-group input:disabled,
+        .form-group select:disabled,
+        .form-group textarea:disabled {
+            background: var(--grey-bg);
+            color: var(--text-muted);
+            cursor: not-allowed;
+        }
+        .form-group textarea { resize: vertical; min-height: 80px; }
+
+        /* ── Section Headings inside panels ── */
+        .section-heading {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--navy);
+            margin: 24px 0 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--grey-light);
+        }
+        .section-heading:first-of-type { margin-top: 0; }
+
+        /* ── Navigation Buttons ── */
+        .form-actions {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-top: 28px;
+            padding-top: 20px;
+            border-top: 1px solid var(--grey-light);
+            gap: 12px;
+            flex-wrap: wrap;
+        }
+        .btn {
+            padding: 10px 24px;
+            border-radius: 6px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            border: none;
+            transition: all 0.15s;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
+            text-decoration: none;
+        }
+        .btn-primary { background: var(--orange); color: var(--white); }
+        .btn-primary:hover { background: var(--orange-hover); }
+        .btn-secondary { background: var(--grey-light); color: var(--text); }
+        .btn-secondary:hover { background: #d1d5db; }
+        .btn-navy { background: var(--navy); color: var(--white); }
+        .btn-navy:hover { background: var(--navy-light); }
+        .btn-danger { background: var(--red); color: var(--white); }
+        .btn-danger:hover { background: #dc2626; }
+        .btn-outline {
+            background: transparent;
+            border: 1.5px solid var(--orange);
+            color: var(--orange);
+        }
+        .btn-outline:hover { background: rgba(249,115,22,0.06); }
+        .btn:disabled { opacity: 0.5; cursor: not-allowed; }
+        .btn-sm { padding: 6px 14px; font-size: 13px; }
+
+        .actions-left { display: flex; gap: 8px; }
+        .actions-right { display: flex; gap: 8px; }
+
+        /* ── Documents ── */
+        .upload-zone {
+            border: 2px dashed var(--grey-light);
+            border-radius: var(--radius);
+            padding: 20px;
+            display: flex;
+            gap: 12px;
+            align-items: flex-end;
+            flex-wrap: wrap;
+        }
+        .upload-zone .form-group { flex: 1; min-width: 160px; }
+
+        .doc-table { width: 100%; border-collapse: collapse; margin-top: 16px; }
+        .doc-table th {
+            text-align: left;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: var(--text-muted);
+            padding: 10px 12px;
+            border-bottom: 2px solid var(--grey-light);
+        }
+        .doc-table td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--grey-light);
+            font-size: 14px;
+            vertical-align: middle;
+        }
+        .doc-table tr:hover td { background: var(--grey-bg); }
+        .doc-empty {
+            text-align: center;
+            padding: 32px;
+            color: var(--text-muted);
+            font-size: 14px;
+        }
+
+        /* ── Doc Requests ── */
+        .doc-requests {
+            background: #fff7ed;
+            border: 1px solid #fed7aa;
+            border-radius: var(--radius);
+            padding: 16px;
+            margin-bottom: 20px;
+        }
+        .doc-requests h4 {
+            color: #9a3412;
+            font-size: 14px;
+            margin-bottom: 10px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+        .doc-req-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 12px;
+            background: var(--white);
+            border-radius: 6px;
+            margin-bottom: 6px;
+            border: 1px solid #fed7aa;
+        }
+        .doc-req-item:last-child { margin-bottom: 0; }
+        .doc-req-info { flex: 1; }
+        .doc-req-type { font-weight: 600; font-size: 14px; }
+        .doc-req-msg { font-size: 13px; color: var(--text-muted); }
+        .urgency-high { color: var(--red); font-weight: 600; }
+        .urgency-medium { color: var(--orange); font-weight: 600; }
+        .urgency-low { color: var(--green); }
+
+        /* ── Review Section ── */
+        .review-section {
+            margin-bottom: 24px;
+        }
+        .review-section h3 {
+            font-size: 16px;
+            font-weight: 700;
+            color: var(--navy);
+            margin-bottom: 12px;
+            padding-bottom: 6px;
+            border-bottom: 1px solid var(--grey-light);
+        }
+        .review-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px 24px;
+        }
+        .review-item { padding: 6px 0; }
+        .review-label { font-size: 12px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.3px; }
+        .review-value { font-size: 14px; font-weight: 500; }
+
+        .submit-warning {
+            background: #fffbeb;
+            border: 1px solid #fde68a;
+            border-radius: var(--radius);
+            padding: 14px 16px;
+            font-size: 13px;
+            color: #92400e;
+            margin-top: 20px;
+            display: flex;
+            align-items: flex-start;
+            gap: 8px;
+        }
+
+        /* ── Upload Progress ── */
+        .upload-progress {
+            display: none;
+            margin-top: 12px;
+        }
+        .progress-bar-outer {
+            height: 6px;
+            background: var(--grey-light);
+            border-radius: 3px;
+            overflow: hidden;
+        }
+        .progress-bar-inner {
+            height: 100%;
+            background: var(--orange);
+            border-radius: 3px;
+            width: 0%;
+            transition: width 0.3s;
+        }
+        .upload-status { font-size: 13px; color: var(--text-muted); margin-top: 4px; }
+
+        /* ── Mobile ── */
+        @media (max-width: 640px) {
+            .top-nav { padding: 0 12px; }
+            .top-nav .reg-id { display: none; }
+            .step-bar { padding: 12px; }
+            .step-label { font-size: 10px; }
+            .step-circle { width: 30px; height: 30px; font-size: 12px; }
+            .step-panel { padding: 20px 16px; }
+            .form-grid { grid-template-columns: 1fr; }
+            .review-grid { grid-template-columns: 1fr; }
+            .form-actions { flex-direction: column; }
+            .actions-left, .actions-right { width: 100%; }
+            .actions-left .btn, .actions-right .btn { flex: 1; justify-content: center; }
+        }
+    </style>
+</head>
+<body>
+
+<!-- ── Top Nav ── -->
+<nav class="top-nav">
+    <div style="display:flex;align-items:center;gap:16px;">
+        <div class="logo">Goo<span>Campus</span></div>
+        <span class="reg-id">{{ reg.registration_number }}</span>
+    </div>
+    {% if reg.form_status == 'submitted' %}
+    <span class="submitted-badge">&#10003; Submitted</span>
+    {% endif %}
+    <a href="/client/dashboard" class="back-link">&#8592; Dashboard</a>
+</nav>
+
+<!-- ── Flash Messages ── -->
+{% with messages = get_flashed_messages(with_categories=true) %}
+{% if messages %}
+<div class="flash-container">
+    {% for category, message in messages %}
+    <div class="flash flash-{{ category }}">
+        <span>{{ message }}</span>
+        <button class="close-btn" onclick="this.parentElement.remove()">&times;</button>
+    </div>
+    {% endfor %}
+</div>
+{% endif %}
+{% endwith %}
+
+<!-- ── Step Indicator ── -->
+<div class="step-bar-wrapper">
+    <div class="step-bar">
+        <div class="step-item{% if reg.current_step > 1 %} completed clickable{% elif reg.current_step == 1 %} current{% endif %}" onclick="goToStep(1, this)" data-step="1">
+            <div class="step-circle">{% if reg.current_step > 1 %}&#10003;{% else %}1{% endif %}</div>
+            <div class="step-label">Personal Info</div>
+        </div>
+        <div class="step-connector{% if reg.current_step > 1 %} done{% endif %}"></div>
+        <div class="step-item{% if reg.current_step > 2 %} completed clickable{% elif reg.current_step == 2 %} current{% endif %}" onclick="goToStep(2, this)" data-step="2">
+            <div class="step-circle">{% if reg.current_step > 2 %}&#10003;{% else %}2{% endif %}</div>
+            <div class="step-label">Academic Details</div>
+        </div>
+        <div class="step-connector{% if reg.current_step > 2 %} done{% endif %}"></div>
+        <div class="step-item{% if reg.current_step > 3 %} completed clickable{% elif reg.current_step == 3 %} current{% endif %}" onclick="goToStep(3, this)" data-step="3">
+            <div class="step-circle">{% if reg.current_step > 3 %}&#10003;{% else %}3{% endif %}</div>
+            <div class="step-label">Documents</div>
+        </div>
+        <div class="step-connector{% if reg.current_step > 3 %} done{% endif %}"></div>
+        <div class="step-item{% if reg.current_step == 4 %} current{% endif %}" data-step="4">
+            <div class="step-circle">4</div>
+            <div class="step-label">Review &amp; Submit</div>
+        </div>
+    </div>
+</div>
+
+<!-- ── Main Content ── -->
+<div class="main-content">
+
+    {% set readonly = reg.form_status == 'submitted' %}
+
+    <!-- ═══════════════════════════════════════════ STEP 1 ═══════════════════════════════════════════ -->
+    <div class="step-panel{% if reg.current_step == 1 %} active{% endif %}" id="step-1">
+        <h2 class="panel-title">Personal Information</h2>
+        <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-1">
+            <input type="hidden" name="step" value="1">
+
+            <div class="section-heading">Basic Details</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Prefix <span class="req">*</span></label>
+                    <select name="prefix" {% if readonly %}disabled{% endif %} required>
+                        <option value="">Select</option>
+                        {% for p in ['Dr.', 'Mr.', 'Mrs.', 'Ms.'] %}
+                        <option value="{{ p }}" {% if reg.prefix == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>First Name <span class="req">*</span></label>
+                    <input type="text" name="first_name" value="{{ reg.first_name or '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>Last Name <span class="req">*</span></label>
+                    <input type="text" name="last_name" value="{{ reg.last_name or '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>Date of Birth <span class="req">*</span></label>
+                    <input type="date" name="dob" value="{{ reg.dob or '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+            </div>
+
+            <div class="section-heading">Contact Details</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Mobile Number <span class="req">*</span></label>
+                    <input type="tel" name="mobile" value="{{ reg.mobile or '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>WhatsApp Number</label>
+                    <input type="tel" name="whatsapp" value="{{ reg.whatsapp or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group full-width">
+                    <label>Email Address <span class="req">*</span></label>
+                    <input type="email" name="email" value="{{ reg.email or '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group full-width">
+                    <label>Address</label>
+                    <textarea name="address" {% if readonly %}disabled{% endif %}>{{ reg.address or '' }}</textarea>
+                </div>
+                <div class="form-group">
+                    <label>City</label>
+                    <input type="text" name="city" value="{{ reg.city or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>State <span class="req">*</span></label>
+                    <select name="state" {% if readonly %}disabled{% endif %} required>
+                        <option value="">Select State</option>
+                        {% for s in states %}
+                        <option value="{{ s.state_name }}" {% if reg.state == s.state_name %}selected{% endif %}>{{ s.state_name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Country</label>
+                    <input type="text" name="country" value="{{ reg.country or 'India' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+            </div>
+
+            <div class="section-heading">Parent / Guardian Details</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Father's Name</label>
+                    <input type="text" name="father_name" value="{{ reg.father_name or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Father's Phone</label>
+                    <input type="tel" name="father_phone" value="{{ reg.father_phone or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Mother's Name</label>
+                    <input type="text" name="mother_name" value="{{ reg.mother_name or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Mother's Phone</label>
+                    <input type="tel" name="mother_phone" value="{{ reg.mother_phone or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group full-width">
+                    <label>Parent's Email</label>
+                    <input type="email" name="parents_email" value="{{ reg.parents_email or '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+            </div>
+
+            <div class="section-heading">Social Profiles</div>
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Instagram</label>
+                    <input type="text" name="instagram" value="{{ reg.instagram or '' }}" placeholder="@username" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Facebook</label>
+                    <input type="url" name="facebook" value="{{ reg.facebook or '' }}" placeholder="https://facebook.com/..." {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group full-width">
+                    <label>LinkedIn</label>
+                    <input type="url" name="linkedin" value="{{ reg.linkedin or '' }}" placeholder="https://linkedin.com/in/..." {% if readonly %}disabled{% endif %}>
+                </div>
+            </div>
+
+            {% if not readonly %}
+            <div class="form-actions">
+                <div class="actions-left">
+                    <button type="submit" name="action" value="save" class="btn btn-outline">Save Progress</button>
+                </div>
+                <div class="actions-right">
+                    <button type="submit" name="action" value="continue" class="btn btn-primary">Save &amp; Continue &#8594;</button>
+                </div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ STEP 2 ═══════════════════════════════════════════ -->
+    <div class="step-panel{% if reg.current_step == 2 %} active{% endif %}" id="step-2">
+        <h2 class="panel-title">Academic Details</h2>
+        <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-2">
+            <input type="hidden" name="step" value="2">
+
+            <div class="form-grid">
+                <div class="form-group">
+                    <label>Degree <span class="req">*</span></label>
+                    <select name="degree" {% if readonly %}disabled{% endif %} required>
+                        <option value="">Select Degree</option>
+                        {% for d in ['MBBS', 'BDS', 'BAMS', 'BHMS', 'MD', 'MS'] %}
+                        <option value="{{ d }}" {% if academics and academics.degree == d %}selected{% endif %}>{{ d }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>College Name <span class="req">*</span></label>
+                    <input type="text" name="college_name" value="{{ academics.college_name if academics else '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>University <span class="req">*</span></label>
+                    <input type="text" name="university" value="{{ academics.university if academics else '' }}" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>Year of Passing <span class="req">*</span></label>
+                    <input type="number" name="year_of_passing" value="{{ academics.year_of_passing if academics else '' }}" min="1990" max="2030" {% if readonly %}disabled{% endif %} required>
+                </div>
+                <div class="form-group">
+                    <label>Percentage / CGPA</label>
+                    <input type="text" name="percentage_cgpa" value="{{ academics.percentage_cgpa if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>NEET Score</label>
+                    <input type="number" name="neet_score" value="{{ academics.neet_score if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>NEET Year</label>
+                    <input type="number" name="neet_year" value="{{ academics.neet_year if academics else '' }}" min="2015" max="2030" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>Internship Status <span class="req">*</span></label>
+                    <select name="internship_status" {% if readonly %}disabled{% endif %} required>
+                        <option value="">Select</option>
+                        {% for s in ['Completed', 'In Progress', 'Not Started'] %}
+                        <option value="{{ s }}" {% if academics and academics.internship_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Internship Completion Date</label>
+                    <input type="date" name="internship_completion" value="{{ academics.internship_completion if academics else '' }}" {% if readonly %}disabled{% endif %}>
+                </div>
+                <div class="form-group">
+                    <label>MCI/NMC Registration Status</label>
+                    <select name="mci_nmc_status" {% if readonly %}disabled{% endif %}>
+                        <option value="">Select</option>
+                        {% for s in ['Registered', 'Pending', 'Not Applicable'] %}
+                        <option value="{{ s }}" {% if academics and academics.mci_nmc_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div class="form-group full-width">
+                    <label>Additional Qualifications</label>
+                    <textarea name="additional_qualifications" {% if readonly %}disabled{% endif %} placeholder="Any additional certifications, courses, or qualifications...">{{ academics.additional_qualifications if academics else '' }}</textarea>
+                </div>
+            </div>
+
+            {% if not readonly %}
+            <div class="form-actions">
+                <div class="actions-left">
+                    <button type="button" class="btn btn-secondary" onclick="goToStep(1)">&#8592; Previous</button>
+                    <button type="submit" name="action" value="save" class="btn btn-outline">Save Progress</button>
+                </div>
+                <div class="actions-right">
+                    <button type="submit" name="action" value="continue" class="btn btn-primary">Save &amp; Continue &#8594;</button>
+                </div>
+            </div>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- ═══════════════════════════════════════════ STEP 3 ═══════════════════════════════════════════ -->
+    <div class="step-panel{% if reg.current_step == 3 %} active{% endif %}" id="step-3">
+        <h2 class="panel-title">Documents</h2>
+
+        <!-- Pending Document Requests -->
+        {% if doc_requests %}
+        <div class="doc-requests">
+            <h4>&#9888; Requested Documents</h4>
+            {% for req in doc_requests %}
+            <div class="doc-req-item">
+                <div class="doc-req-info">
+                    <div class="doc-req-type">{{ req.doc_type }}</div>
+                    {% if req.message %}<div class="doc-req-msg">{{ req.message }}</div>{% endif %}
+                </div>
+                <span class="urgency-{{ req.urgency or 'medium' }}" style="margin-right:12px;font-size:12px;">{{ (req.urgency or 'medium')|upper }}</span>
+                {% if not readonly %}
+                <button type="button" class="btn btn-primary btn-sm" onclick="prefillDocType('{{ req.doc_type }}')">Upload</button>
+                {% endif %}
+            </div>
+            {% endfor %}
+        </div>
+        {% endif %}
+
+        <!-- Upload Zone -->
+        {% if not readonly %}
+        <div class="upload-zone" id="upload-zone">
+            <div class="form-group" style="min-width:200px;">
+                <label>Document Type <span class="req">*</span></label>
+                <select id="upload-doc-type" required>
+                    <option value="">Select type</option>
+                    {% for dt in ['Passport', 'MBBS Degree Certificate', 'NEET Scorecard', 'Internship Completion Certificate', 'MCI/NMC Registration', 'IELTS/OET Score', 'Marksheets', 'Photo', 'Other'] %}
+                    <option value="{{ dt }}">{{ dt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="form-group" style="min-width:200px;">
+                <label>File</label>
+                <input type="file" id="upload-file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx">
+            </div>
+            <button type="button" class="btn btn-primary btn-sm" onclick="uploadDocument()" style="margin-bottom:2px;">Upload</button>
+        </div>
+        <div class="upload-progress" id="upload-progress">
+            <div class="progress-bar-outer"><div class="progress-bar-inner" id="progress-bar"></div></div>
+            <div class="upload-status" id="upload-status">Uploading...</div>
+        </div>
+        {% endif %}
+
+        <!-- Uploaded Documents Table -->
+        <table class="doc-table" id="doc-table">
+            <thead>
+                <tr>
+                    <th>Document</th>
+                    <th>Type</th>
+                    <th>Size</th>
+                    <th>Uploaded</th>
+                    <th>Status</th>
+                    {% if not readonly %}<th></th>{% endif %}
+                </tr>
+            </thead>
+            <tbody id="doc-tbody">
+                {% if documents %}
+                {% for doc in documents %}
+                <tr id="doc-row-{{ doc.id }}">
+                    <td>{{ doc.file_name }}</td>
+                    <td>{{ doc.doc_type }}</td>
+                    <td>{{ doc.file_size }}</td>
+                    <td>{{ doc.uploaded_at }}</td>
+                    <td><span style="color:var(--green);font-weight:600;font-size:13px;">{{ doc.status or 'Uploaded' }}</span></td>
+                    {% if not readonly %}
+                    <td><button type="button" class="btn btn-danger btn-sm" onclick="deleteDocument({{ doc.id }})">Delete</button></td>
+                    {% endif %}
+                </tr>
+                {% endfor %}
+                {% else %}
+                <tr id="doc-empty-row"><td colspan="{% if readonly %}5{% else %}6{% endif %}" class="doc-empty">No documents uploaded yet.</td></tr>
+                {% endif %}
+            </tbody>
+        </table>
+
+        {% if not readonly %}
+        <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-3" style="margin:0;">
+            <input type="hidden" name="step" value="3">
+            <div class="form-actions">
+                <div class="actions-left">
+                    <button type="button" class="btn btn-secondary" onclick="goToStep(2)">&#8592; Previous</button>
+                    <button type="submit" name="action" value="save" class="btn btn-outline">Save Progress</button>
+                </div>
+                <div class="actions-right">
+                    <button type="submit" name="action" value="continue" class="btn btn-primary">Save &amp; Continue &#8594;</button>
+                </div>
+            </div>
+        </form>
+        {% endif %}
+    </div>
+
+    <!-- ═══════════════════════════════════════════ STEP 4 ═══════════════════════════════════════════ -->
+    <div class="step-panel{% if reg.current_step == 4 %} active{% endif %}" id="step-4">
+        <h2 class="panel-title">Review &amp; Submit</h2>
+
+        <!-- Personal Info Review -->
+        <div class="review-section">
+            <h3>Personal Information</h3>
+            <div class="review-grid">
+                <div class="review-item">
+                    <div class="review-label">Name</div>
+                    <div class="review-value">{{ reg.prefix or '' }} {{ reg.first_name or '' }} {{ reg.last_name or '' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Date of Birth</div>
+                    <div class="review-value">{{ reg.dob or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Mobile</div>
+                    <div class="review-value">{{ reg.mobile or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">WhatsApp</div>
+                    <div class="review-value">{{ reg.whatsapp or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Email</div>
+                    <div class="review-value">{{ reg.email or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">City / State</div>
+                    <div class="review-value">{{ reg.city or '' }}{% if reg.city and reg.state %}, {% endif %}{{ reg.state or '—' }}</div>
+                </div>
+                <div class="review-item full-width" style="grid-column:1/-1;">
+                    <div class="review-label">Address</div>
+                    <div class="review-value">{{ reg.address or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Country</div>
+                    <div class="review-value">{{ reg.country or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Father</div>
+                    <div class="review-value">{{ reg.father_name or '—' }}{% if reg.father_phone %} ({{ reg.father_phone }}){% endif %}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Mother</div>
+                    <div class="review-value">{{ reg.mother_name or '—' }}{% if reg.mother_phone %} ({{ reg.mother_phone }}){% endif %}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Parent's Email</div>
+                    <div class="review-value">{{ reg.parents_email or '—' }}</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Academic Review -->
+        <div class="review-section">
+            <h3>Academic Details</h3>
+            {% if academics %}
+            <div class="review-grid">
+                <div class="review-item">
+                    <div class="review-label">Degree</div>
+                    <div class="review-value">{{ academics.degree or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">College</div>
+                    <div class="review-value">{{ academics.college_name or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">University</div>
+                    <div class="review-value">{{ academics.university or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Year of Passing</div>
+                    <div class="review-value">{{ academics.year_of_passing or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Percentage / CGPA</div>
+                    <div class="review-value">{{ academics.percentage_cgpa or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">NEET Score</div>
+                    <div class="review-value">{{ academics.neet_score or '—' }}{% if academics.neet_year %} ({{ academics.neet_year }}){% endif %}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">Internship Status</div>
+                    <div class="review-value">{{ academics.internship_status or '—' }}</div>
+                </div>
+                <div class="review-item">
+                    <div class="review-label">MCI/NMC Status</div>
+                    <div class="review-value">{{ academics.mci_nmc_status or '—' }}</div>
+                </div>
+                {% if academics.additional_qualifications %}
+                <div class="review-item" style="grid-column:1/-1;">
+                    <div class="review-label">Additional Qualifications</div>
+                    <div class="review-value">{{ academics.additional_qualifications }}</div>
+                </div>
+                {% endif %}
+            </div>
+            {% else %}
+            <p style="color:var(--text-muted);font-size:14px;">No academic details entered yet.</p>
+            {% endif %}
+        </div>
+
+        <!-- Documents Review -->
+        <div class="review-section">
+            <h3>Documents ({{ documents|length if documents else 0 }})</h3>
+            {% if documents %}
+            <table class="doc-table">
+                <thead>
+                    <tr><th>Document</th><th>Type</th><th>Status</th></tr>
+                </thead>
+                <tbody>
+                    {% for doc in documents %}
+                    <tr>
+                        <td>{{ doc.file_name }}</td>
+                        <td>{{ doc.doc_type }}</td>
+                        <td><span style="color:var(--green);font-weight:600;font-size:13px;">{{ doc.status or 'Uploaded' }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <p style="color:var(--text-muted);font-size:14px;">No documents uploaded.</p>
+            {% endif %}
+        </div>
+
+        <!-- Submit -->
+        {% if not readonly %}
+        <div class="submit-warning">
+            <span style="font-size:18px;">&#9888;</span>
+            <div>
+                <strong>Please review all information carefully.</strong><br>
+                Once submitted, you will not be able to edit your registration. Contact GooCampus support if changes are needed after submission.
+            </div>
+        </div>
+
+        <form method="POST" action="/client/form/{{ reg.id }}" id="form-step-4">
+            <input type="hidden" name="step" value="4">
+            <div class="form-actions">
+                <div class="actions-left">
+                    <button type="button" class="btn btn-secondary" onclick="goToStep(3)">&#8592; Previous</button>
+                </div>
+                <div class="actions-right">
+                    <button type="submit" name="action" value="submit" class="btn btn-navy" onclick="return confirm('Are you sure you want to submit? This cannot be undone.')">Submit Registration &#10003;</button>
+                </div>
+            </div>
+        </form>
+        {% else %}
+        <div class="form-actions" style="border:none;margin-top:12px;padding-top:0;">
+            <div></div>
+            <a href="/client/dashboard" class="btn btn-navy">&#8592; Back to Dashboard</a>
+        </div>
+        {% endif %}
+    </div>
+
+</div>
+
+<script>
+(function() {
+    const IS_READONLY = {{ 'true' if reg.form_status == 'submitted' else 'false' }};
+    const SERVER_STEP = {{ reg.current_step or 1 }};
+    let displayStep = SERVER_STEP;
+
+    /* ── Step navigation ── */
+    window.goToStep = function(step, el) {
+        // Can only go to completed steps or current step
+        if (step > SERVER_STEP) return;
+        showStep(step);
+    };
+
+    function showStep(step) {
+        displayStep = step;
+        document.querySelectorAll('.step-panel').forEach(p => p.classList.remove('active'));
+        const panel = document.getElementById('step-' + step);
+        if (panel) panel.classList.add('active');
+        updateStepBar(step);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+
+    function updateStepBar(activeDisplay) {
+        document.querySelectorAll('.step-item').forEach(item => {
+            const s = parseInt(item.dataset.step);
+            item.classList.remove('completed', 'current', 'clickable');
+            if (s < SERVER_STEP) {
+                item.classList.add('completed', 'clickable');
+            }
+            if (s === activeDisplay) {
+                if (s < SERVER_STEP) {
+                    // viewing a completed step
+                    item.classList.remove('completed');
+                    item.classList.add('current', 'clickable');
+                } else if (s === SERVER_STEP) {
+                    item.classList.add('current');
+                }
+            }
+        });
+    }
+
+    /* ── File Upload (AJAX) ── */
+    window.uploadDocument = function() {
+        const docType = document.getElementById('upload-doc-type');
+        const fileInput = document.getElementById('upload-file');
+
+        if (!docType.value) { alert('Please select a document type.'); return; }
+        if (!fileInput.files.length) { alert('Please select a file.'); return; }
+
+        const formData = new FormData();
+        formData.append('doc_type', docType.value);
+        formData.append('file', fileInput.files[0]);
+
+        const progressDiv = document.getElementById('upload-progress');
+        const progressBar = document.getElementById('progress-bar');
+        const statusText = document.getElementById('upload-status');
+        progressDiv.style.display = 'block';
+        progressBar.style.width = '0%';
+        statusText.textContent = 'Uploading...';
+
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', '/client/upload-doc/{{ reg.id }}');
+
+        xhr.upload.addEventListener('progress', function(e) {
+            if (e.lengthComputable) {
+                const pct = Math.round((e.loaded / e.total) * 100);
+                progressBar.style.width = pct + '%';
+                statusText.textContent = 'Uploading... ' + pct + '%';
+            }
+        });
+
+        xhr.addEventListener('load', function() {
+            if (xhr.status === 200) {
+                try {
+                    const resp = JSON.parse(xhr.responseText);
+                    if (resp.success) {
+                        progressBar.style.width = '100%';
+                        statusText.textContent = 'Upload complete!';
+                        // Add row to table
+                        const emptyRow = document.getElementById('doc-empty-row');
+                        if (emptyRow) emptyRow.remove();
+
+                        const tbody = document.getElementById('doc-tbody');
+                        const tr = document.createElement('tr');
+                        tr.id = 'doc-row-' + resp.doc.id;
+                        tr.innerHTML =
+                            '<td>' + escHtml(resp.doc.file_name) + '</td>' +
+                            '<td>' + escHtml(resp.doc.doc_type) + '</td>' +
+                            '<td>' + escHtml(resp.doc.file_size || '') + '</td>' +
+                            '<td>' + escHtml(resp.doc.uploaded_at || 'Just now') + '</td>' +
+                            '<td><span style="color:var(--green);font-weight:600;font-size:13px;">Uploaded</span></td>' +
+                            '<td><button type="button" class="btn btn-danger btn-sm" onclick="deleteDocument(' + resp.doc.id + ')">Delete</button></td>';
+                        tbody.appendChild(tr);
+
+                        // Reset inputs
+                        docType.value = '';
+                        fileInput.value = '';
+                        setTimeout(function() { progressDiv.style.display = 'none'; }, 2000);
+                    } else {
+                        statusText.textContent = 'Error: ' + (resp.error || 'Upload failed');
+                    }
+                } catch(e) {
+                    statusText.textContent = 'Error: Invalid server response';
+                }
+            } else {
+                statusText.textContent = 'Error: Upload failed (HTTP ' + xhr.status + ')';
+            }
+        });
+
+        xhr.addEventListener('error', function() {
+            statusText.textContent = 'Error: Network error during upload';
+        });
+
+        xhr.send(formData);
+    };
+
+    /* ── Delete Document (AJAX) ── */
+    window.deleteDocument = function(docId) {
+        if (!confirm('Delete this document?')) return;
+
+        fetch('/client/delete-doc/' + docId, { method: 'POST' })
+            .then(function(res) { return res.json(); })
+            .then(function(data) {
+                if (data.success) {
+                    const row = document.getElementById('doc-row-' + docId);
+                    if (row) row.remove();
+                    // Check if table is now empty
+                    const tbody = document.getElementById('doc-tbody');
+                    if (tbody && tbody.children.length === 0) {
+                        const tr = document.createElement('tr');
+                        tr.id = 'doc-empty-row';
+                        tr.innerHTML = '<td colspan="6" class="doc-empty">No documents uploaded yet.</td>';
+                        tbody.appendChild(tr);
+                    }
+                } else {
+                    alert('Failed to delete: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(function() { alert('Network error while deleting document.'); });
+    };
+
+    /* ── Prefill doc type from request ── */
+    window.prefillDocType = function(type) {
+        const select = document.getElementById('upload-doc-type');
+        if (select) {
+            for (let i = 0; i < select.options.length; i++) {
+                if (select.options[i].value === type) {
+                    select.selectedIndex = i;
+                    break;
+                }
+            }
+        }
+        document.getElementById('upload-file').focus();
+        document.getElementById('upload-zone').scrollIntoView({ behavior: 'smooth' });
+    };
+
+    /* ── Utility ── */
+    function escHtml(str) {
+        const div = document.createElement('div');
+        div.appendChild(document.createTextNode(str));
+        return div.innerHTML;
+    }
+
+    /* ── Flash auto-dismiss ── */
+    document.querySelectorAll('.flash').forEach(function(el) {
+        setTimeout(function() {
+            el.style.opacity = '0';
+            el.style.transform = 'translateY(-8px)';
+            el.style.transition = 'all 0.3s';
+            setTimeout(function() { el.remove(); }, 300);
+        }, 6000);
+    });
+})();
+</script>
+
+</body>
+</html>

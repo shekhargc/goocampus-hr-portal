@@ -108,6 +108,15 @@ def admin_required(f):
         return f(*args, **kwargs)
     return decorated_function
 
+def client_required(f):
+    @wraps(f)
+    def decorated_function(*args, **kwargs):
+        if not session.get('is_client'):
+            flash('Please log in to continue', 'error')
+            return redirect(url_for('client_login_page'))
+        return f(*args, **kwargs)
+    return decorated_function
+
 # Management codes that can post announcements (along with admin)
 MANAGEMENT_CODES = ['GC001', 'GC002', 'GC003']
 
@@ -924,6 +933,743 @@ def partner_medical_predictor():
         is_partner=True,
         visible_sections=get_partner_visible_sections(partner_id),
                     active_section='colleges')
+
+
+# ═══════════════════════════════════════════════════════════════
+# ── CLIENT MANAGEMENT SYSTEM ──
+# ═══════════════════════════════════════════════════════════════
+
+@app.route('/client/login', methods=['GET', 'POST'])
+def client_login_page():
+    if session.get('is_client'):
+        return redirect(url_for('client_dashboard'))
+    if request.method == 'POST':
+        mobile = request.form.get('mobile', '').strip()
+        password = request.form.get('password', '').strip()
+        if not mobile or not password:
+            flash('Mobile and password are required', 'error')
+            return render_template('client_login.html')
+        # Normalize mobile: strip +91 or leading 91 for 10-digit
+        clean = mobile.lstrip('+').lstrip('0')
+        if clean.startswith('91') and len(clean) == 12:
+            clean = clean[2:]
+        conn = get_db()
+        acct = conn.execute("SELECT * FROM client_accounts WHERE mobile = ? AND is_active = 1", (clean,)).fetchone()
+        conn.close()
+        if acct and acct['password_hash'] == hash_password(password):
+            session['user_id'] = acct['id']
+            session['is_client'] = True
+            session['client_name'] = (acct['first_name'] or '') + ' ' + (acct['last_name'] or '')
+            session['client_mobile'] = acct['mobile']
+            # Update last_login
+            conn2 = get_db()
+            conn2.execute("UPDATE client_accounts SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (acct['id'],))
+            conn2.commit()
+            conn2.close()
+            return redirect(url_for('client_dashboard'))
+        else:
+            flash('Invalid mobile number or password', 'error')
+            return render_template('client_login.html')
+    return render_template('client_login.html')
+
+
+@app.route('/client/register/<token>', methods=['GET', 'POST'])
+def client_register(token):
+    conn = get_db()
+    inv = conn.execute("SELECT * FROM client_invitations WHERE token = ? AND status = 'pending'", (token,)).fetchone()
+    if not inv:
+        conn.close()
+        flash('This invitation link is invalid or has already been used.', 'error')
+        return render_template('client_login.html')
+
+    product = conn.execute("SELECT id, name FROM products_services WHERE id = ?", (inv['product_id'],)).fetchone()
+
+    if request.method == 'POST':
+        mobile = request.form.get('mobile', '').strip()
+        password = request.form.get('password', '').strip()
+        confirm = request.form.get('confirm_password', '').strip()
+        first_name = request.form.get('first_name', '').strip()
+        last_name = request.form.get('last_name', '').strip()
+
+        # Normalize mobile
+        clean = mobile.lstrip('+').lstrip('0')
+        if clean.startswith('91') and len(clean) == 12:
+            clean = clean[2:]
+
+        if not clean or len(clean) != 10:
+            flash('Please enter a valid 10-digit mobile number', 'error')
+            conn.close()
+            return render_template('client_register.html', invitation=inv, product=product)
+
+        if not password or len(password) < 4:
+            flash('Password must be at least 4 characters', 'error')
+            conn.close()
+            return render_template('client_register.html', invitation=inv, product=product)
+
+        if password != confirm:
+            flash('Passwords do not match', 'error')
+            conn.close()
+            return render_template('client_register.html', invitation=inv, product=product)
+
+        # Check if mobile already exists
+        existing = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()
+        if existing:
+            # Link existing account to this invitation
+            acct_id = existing['id']
+        else:
+            conn.execute(
+                "INSERT INTO client_accounts (mobile, email, password_hash, first_name, last_name) VALUES (?, ?, ?, ?, ?)",
+                (clean, inv['client_email'] or '', hash_password(password), first_name, last_name)
+            )
+            conn.commit()
+            acct_id = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()['id']
+
+        # Generate registration number: GC-{PRODUCT_CODE}-{YYYYMM}-{SEQ}
+        prod_code = (product['name'][:3] if product else 'GEN').upper()
+        from datetime import datetime
+        ym = datetime.now().strftime('%Y%m')
+        seq_row = conn.execute(
+            "SELECT COUNT(*) as c FROM client_registrations WHERE registration_number LIKE ?",
+            (f'GC-{prod_code}-{ym}-%',)
+        ).fetchone()
+        seq = (seq_row['c'] if seq_row else 0) + 1
+        reg_num = f"GC-{prod_code}-{ym}-{seq:04d}"
+
+        conn.execute('''INSERT INTO client_registrations
+            (account_id, invitation_id, product_id, registration_number, first_name, last_name, mobile, email, form_status, current_step)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)''',
+            (acct_id, inv['id'], inv['product_id'], reg_num, first_name, last_name, clean, inv['client_email'] or ''))
+        conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
+        conn.commit()
+        conn.close()
+
+        # Auto-login the client
+        session['user_id'] = acct_id
+        session['is_client'] = True
+        session['client_name'] = f"{first_name} {last_name}"
+        session['client_mobile'] = clean
+        flash('Account created successfully! Please complete your registration form.', 'success')
+        return redirect(url_for('client_dashboard'))
+
+    conn.close()
+    return render_template('client_register.html', invitation=inv, product=product)
+
+
+@app.route('/client/logout')
+def client_logout():
+    session.clear()
+    flash('You have been logged out.', 'success')
+    return redirect(url_for('client_login_page'))
+
+
+@app.route('/client/dashboard')
+@client_required
+def client_dashboard():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    registrations = conn.execute('''
+        SELECT cr.*, ps.name as product_name
+        FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.account_id = ?
+        ORDER BY cr.created_at DESC
+    ''', (acct_id,)).fetchall()
+
+    # Get doc requests for all registrations
+    reg_ids = [r['id'] for r in registrations]
+    doc_requests = []
+    if reg_ids:
+        placeholders = ','.join(['?' for _ in reg_ids])
+        doc_requests = conn.execute(f"""
+            SELECT * FROM client_doc_requests
+            WHERE registration_id IN ({placeholders}) AND status = 'pending'
+            ORDER BY requested_at DESC
+        """, reg_ids).fetchall()
+
+    conn.close()
+    return render_template('client_dashboard.html',
+        account=account, registrations=registrations, doc_requests=doc_requests)
+
+
+@app.route('/client/form/<int:reg_id>', methods=['GET', 'POST'])
+@client_required
+def client_form(reg_id):
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute('''
+        SELECT cr.*, ps.name as product_name
+        FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.id = ? AND cr.account_id = ?
+    ''', (reg_id, acct_id)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Registration not found', 'error')
+        return redirect(url_for('client_dashboard'))
+
+    # Load academics
+    academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+    # Load documents
+    documents = conn.execute("SELECT * FROM client_documents WHERE registration_id = ? ORDER BY uploaded_at", (reg_id,)).fetchall()
+    # Load form config for this product
+    form_config = conn.execute('''
+        SELECT * FROM client_form_configs
+        WHERE product_id = ? AND role = 'client' AND is_visible = 1
+        ORDER BY step_number, display_order
+    ''', (reg['product_id'],)).fetchall()
+    # Get doc requests
+    doc_requests = conn.execute(
+        "SELECT * FROM client_doc_requests WHERE registration_id = ? AND status = 'pending' ORDER BY requested_at DESC",
+        (reg_id,)
+    ).fetchall()
+    # States for dropdown
+    states = conn.execute("SELECT DISTINCT state_name FROM states ORDER BY state_name").fetchall()
+
+    if request.method == 'POST':
+        step = int(request.form.get('step', 1))
+        action = request.form.get('action', 'save')  # save or submit
+
+        if step == 1:
+            # Personal info
+            conn.execute('''UPDATE client_registrations SET
+                prefix = ?, first_name = ?, last_name = ?, dob = ?, mobile = ?, whatsapp = ?,
+                email = ?, address = ?, city = ?, state = ?, country = ?,
+                father_name = ?, father_phone = ?, mother_name = ?, mother_phone = ?, parents_email = ?,
+                instagram = ?, facebook = ?, linkedin = ?,
+                current_step = GREATEST(current_step, 2), updated_at = CURRENT_TIMESTAMP
+                WHERE id = ?''',
+                (request.form.get('prefix','Dr.'), request.form.get('first_name',''), request.form.get('last_name',''),
+                 request.form.get('dob',''), request.form.get('mobile',''), request.form.get('whatsapp',''),
+                 request.form.get('email',''), request.form.get('address',''), request.form.get('city',''),
+                 request.form.get('state',''), request.form.get('country','India'),
+                 request.form.get('father_name',''), request.form.get('father_phone',''),
+                 request.form.get('mother_name',''), request.form.get('mother_phone',''), request.form.get('parents_email',''),
+                 request.form.get('instagram',''), request.form.get('facebook',''), request.form.get('linkedin',''),
+                 reg_id))
+
+        elif step == 2:
+            # Academics
+            if academics:
+                conn.execute('''UPDATE client_academics SET
+                    degree = ?, college_name = ?, university = ?, year_of_passing = ?,
+                    percentage_cgpa = ?, neet_score = ?, neet_year = ?,
+                    internship_status = ?, internship_completion = ?, mci_nmc_status = ?,
+                    additional_qualifications = ?
+                    WHERE registration_id = ?''',
+                    (request.form.get('degree',''), request.form.get('college_name',''),
+                     request.form.get('university',''), request.form.get('year_of_passing',''),
+                     request.form.get('percentage_cgpa',''), request.form.get('neet_score',''),
+                     request.form.get('neet_year',''), request.form.get('internship_status',''),
+                     request.form.get('internship_completion',''), request.form.get('mci_nmc_status',''),
+                     request.form.get('additional_qualifications',''), reg_id))
+            else:
+                conn.execute('''INSERT INTO client_academics
+                    (registration_id, degree, college_name, university, year_of_passing,
+                     percentage_cgpa, neet_score, neet_year, internship_status, internship_completion,
+                     mci_nmc_status, additional_qualifications)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (reg_id, request.form.get('degree',''), request.form.get('college_name',''),
+                     request.form.get('university',''), request.form.get('year_of_passing',''),
+                     request.form.get('percentage_cgpa',''), request.form.get('neet_score',''),
+                     request.form.get('neet_year',''), request.form.get('internship_status',''),
+                     request.form.get('internship_completion',''), request.form.get('mci_nmc_status',''),
+                     request.form.get('additional_qualifications','')))
+            conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+
+        elif step == 3:
+            # Document uploads handled via AJAX, just advance step
+            conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 4), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
+
+        if action == 'submit':
+            conn.execute("""UPDATE client_registrations SET form_status = 'submitted',
+                client_submitted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP WHERE id = ?""", (reg_id,))
+            conn.commit()
+            conn.close()
+            # Send notification to sales + ops
+            _notify_client_submitted(reg_id)
+            flash('Your registration has been submitted successfully!', 'success')
+            return redirect(url_for('client_dashboard'))
+
+        conn.commit()
+        conn.close()
+        flash('Progress saved!', 'success')
+        return redirect(url_for('client_form', reg_id=reg_id))
+
+    conn.close()
+    return render_template('client_form.html',
+        reg=reg, academics=academics, documents=documents,
+        form_config=form_config, doc_requests=doc_requests, states=states)
+
+
+@app.route('/client/upload-doc/<int:reg_id>', methods=['POST'])
+@client_required
+def client_upload_doc(reg_id):
+    acct_id = session.get('user_id')
+    conn = get_db()
+    reg = conn.execute("SELECT id FROM client_registrations WHERE id = ? AND account_id = ?", (reg_id, acct_id)).fetchone()
+    if not reg:
+        conn.close()
+        return jsonify({'error': 'Not found'}), 404
+    doc_type = request.form.get('doc_type', 'Other')
+    file = request.files.get('file')
+    if not file or not file.filename:
+        conn.close()
+        return jsonify({'error': 'No file selected'}), 400
+    import os, uuid
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    fname = f"client_{reg_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'client_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+    fpath = os.path.join(upload_dir, fname)
+    file.save(fpath)
+    file_size = os.path.getsize(fpath)
+    conn.execute(
+        "INSERT INTO client_documents (registration_id, doc_type, file_name, file_path, file_size) VALUES (?, ?, ?, ?, ?)",
+        (reg_id, doc_type, file.filename, f'/static/uploads/client_docs/{fname}', file_size)
+    )
+    # If this doc fulfills a doc request, mark it
+    doc_req_id = request.form.get('doc_request_id')
+    if doc_req_id:
+        conn.execute("UPDATE client_doc_requests SET status = 'fulfilled', fulfilled_at = CURRENT_TIMESTAMP WHERE id = ?", (doc_req_id,))
+    conn.commit()
+    doc_id = conn.execute("SELECT id FROM client_documents WHERE file_path = ?", (f'/static/uploads/client_docs/{fname}',)).fetchone()['id']
+    conn.close()
+    return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+
+
+@app.route('/client/delete-doc/<int:doc_id>', methods=['POST'])
+@client_required
+def client_delete_doc(doc_id):
+    acct_id = session.get('user_id')
+    conn = get_db()
+    doc = conn.execute('''SELECT d.* FROM client_documents d
+        JOIN client_registrations r ON r.id = d.registration_id
+        WHERE d.id = ? AND r.account_id = ?''', (doc_id, acct_id)).fetchone()
+    if not doc:
+        conn.close()
+        return jsonify({'error': 'Not found'}), 404
+    # Delete file
+    import os
+    fpath = os.path.join(app.root_path, doc['file_path'].lstrip('/'))
+    if os.path.exists(fpath):
+        os.remove(fpath)
+    conn.execute("DELETE FROM client_documents WHERE id = ?", (doc_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+def _notify_client_submitted(reg_id):
+    """Send WhatsApp + email to counsellor and ops team when client submits form."""
+    try:
+        conn = get_db()
+        reg = conn.execute('''SELECT cr.*, ps.name as product_name
+            FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id
+            WHERE cr.id = ?''', (reg_id,)).fetchone()
+        if not reg:
+            conn.close()
+            return
+        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+
+        # Get counsellor info
+        counsellor = None
+        if reg['counsellor_id']:
+            counsellor = conn.execute("SELECT name, email, phone FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
+
+        # Get ops team (admin users)
+        ops_team = conn.execute("SELECT name, email FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
+
+        # Email notifications
+        from email_utils import send_email
+        subject = f"New Client Registration Submitted — {client_name} ({reg['product_name'] or 'N/A'})"
+        body = f"""<h2>Client Registration Submitted</h2>
+        <p><strong>{client_name}</strong> has completed their registration form for <strong>{reg['product_name'] or 'N/A'}</strong>.</p>
+        <p><strong>Registration #:</strong> {reg['registration_number']}<br>
+        <strong>Mobile:</strong> {reg['mobile']}<br>
+        <strong>Email:</strong> {reg['email'] or 'N/A'}</p>
+        <p>Please log in to the portal to review and complete the sales section.</p>"""
+
+        recipients = [e['email'] for e in ops_team if e['email']]
+        if counsellor and counsellor['email']:
+            recipients.append(counsellor['email'])
+        if recipients:
+            send_email(recipients, subject, body)
+
+        # Log notification
+        conn.execute(
+            "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject, message) VALUES (?, ?, ?, ?, ?, ?)",
+            (reg_id, 'client_submitted', 'email', ','.join(recipients), subject, 'Email sent to sales + ops'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"_notify_client_submitted: {e}")
+
+
+# ── ADMIN: Client Invitations ──
+
+@app.route('/admin/client-invitations', methods=['GET'])
+@login_required
+def client_invitations_list():
+    user = get_user()
+    conn = get_db()
+    invitations = conn.execute('''
+        SELECT ci.*, ps.name as product_name, e.name as invited_by_name
+        FROM client_invitations ci
+        LEFT JOIN products_services ps ON ps.id = ci.product_id
+        LEFT JOIN employees e ON e.id = ci.invited_by
+        ORDER BY ci.created_at DESC
+    ''').fetchall()
+    products = conn.execute("SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('client_invitations.html', invitations=invitations, products=products,
+                         user=user, active_section='clients')
+
+
+@app.route('/admin/client-invitations/create', methods=['POST'])
+@login_required
+def client_invitation_create():
+    import uuid
+    user = get_user()
+    client_name = request.form.get('client_name', '').strip()
+    client_mobile = request.form.get('client_mobile', '').strip()
+    client_email = request.form.get('client_email', '').strip()
+    product_id = request.form.get('product_id')
+
+    if not client_name or not client_mobile or not product_id:
+        flash('Client name, mobile and product are required', 'error')
+        return redirect(url_for('client_invitations_list'))
+
+    # Normalize mobile
+    clean = client_mobile.lstrip('+').lstrip('0')
+    if clean.startswith('91') and len(clean) == 12:
+        clean = clean[2:]
+
+    token = uuid.uuid4().hex
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO client_invitations (token, product_id, client_name, client_mobile, client_email, invited_by) VALUES (?, ?, ?, ?, ?, ?)",
+            (token, product_id, client_name, clean, client_email, user['id']))
+        conn.commit()
+        invite_url = f"https://goocampus.org/client/register/{token}"
+        flash(f'Invitation created! Link: {invite_url}', 'success')
+
+        # Try to send WhatsApp
+        try:
+            _send_client_invite_wa(clean, client_name, invite_url)
+        except Exception as wa_err:
+            logging.error(f"WA invite send failed: {wa_err}")
+
+    except Exception as e:
+        logging.error(f"client_invitation_create: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        flash('Error creating invitation', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_invitations_list'))
+
+
+def _send_client_invite_wa(mobile, name, link):
+    """Send WhatsApp template message with invitation link."""
+    import os, requests as http_requests
+    infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+    infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+    if not infobip_key or not infobip_base:
+        return
+    phone = mobile if mobile.startswith('91') else f'91{mobile}'
+    url = f"https://{infobip_base}/whatsapp/1/message/template"
+    headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+    payload = {
+        "messages": [{
+            "from": os.environ.get('INFOBIP_SENDER', '15558246314'),
+            "to": phone,
+            "content": {
+                "templateName": "client_registration_invite",
+                "templateData": {"body": {"placeholders": [name, link]}},
+                "language": "en"
+            }
+        }]
+    }
+    try:
+        http_requests.post(url, json=payload, headers=headers, timeout=10)
+    except Exception as e:
+        logging.error(f"_send_client_invite_wa: {e}")
+
+
+# ── ADMIN: Client Management List ──
+
+@app.route('/admin/clients')
+@login_required
+def admin_clients_list():
+    user = get_user()
+    conn = get_db()
+    clients = conn.execute('''
+        SELECT cr.*, ps.name as product_name, ca.degree, ca.college_name,
+            (SELECT COUNT(*) FROM client_documents WHERE registration_id = cr.id) as doc_count
+        FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        LEFT JOIN client_academics ca ON ca.registration_id = cr.id
+        ORDER BY cr.created_at DESC
+    ''').fetchall()
+    products = conn.execute("SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('admin_clients_list.html', clients=clients, products=products,
+                         user=user, active_section='clients')
+
+
+@app.route('/admin/client/<int:reg_id>')
+@login_required
+def admin_client_detail(reg_id):
+    user = get_user()
+    conn = get_db()
+    reg = conn.execute('''SELECT cr.*, ps.name as product_name
+        FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.id = ?''', (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found', 'error')
+        return redirect(url_for('admin_clients_list'))
+    academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+    documents = conn.execute("SELECT * FROM client_documents WHERE registration_id = ? ORDER BY uploaded_at", (reg_id,)).fetchall()
+    doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
+    notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
+    counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    conn.close()
+    return render_template('admin_client_detail.html', reg=reg, academics=academics,
+        documents=documents, doc_requests=doc_requests, notifications=notifications,
+        counsellors=counsellors, user=user, active_section='clients')
+
+
+# ── ADMIN: Sales completes their section ──
+
+@app.route('/admin/client/<int:reg_id>/sales-complete', methods=['POST'])
+@login_required
+def admin_client_sales_complete(reg_id):
+    user = get_user()
+    conn = get_db()
+    reg = conn.execute("SELECT id, form_status FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        flash('Client not found', 'error')
+        return redirect(url_for('admin_clients_list'))
+
+    conn.execute('''UPDATE client_registrations SET
+        counsellor_id = ?, counsellor_name = (SELECT name FROM employees WHERE id = ?),
+        plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
+        inst1_amount = ?, inst1_date = ?, inst1_note = ?,
+        inst2_amount = ?, inst2_date = ?, inst2_note = ?,
+        inst3_amount = ?, inst3_date = ?, inst3_note = ?,
+        inst4_amount = ?, inst4_date = ?, inst4_note = ?,
+        lead_source = ?, additional_notes = ?,
+        sales_completed = 1, sales_completed_at = CURRENT_TIMESTAMP, sales_completed_by = ?,
+        updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?''',
+        (request.form.get('counsellor_id'), request.form.get('counsellor_id'),
+         request.form.get('plan_type',''), float(request.form.get('package_amount',0) or 0),
+         float(request.form.get('discount_allowed',0) or 0), float(request.form.get('final_package',0) or 0),
+         float(request.form.get('inst1_amount',0) or 0), request.form.get('inst1_date',''), request.form.get('inst1_note',''),
+         float(request.form.get('inst2_amount',0) or 0), request.form.get('inst2_date',''), request.form.get('inst2_note',''),
+         float(request.form.get('inst3_amount',0) or 0), request.form.get('inst3_date',''), request.form.get('inst3_note',''),
+         float(request.form.get('inst4_amount',0) or 0), request.form.get('inst4_date',''), request.form.get('inst4_note',''),
+         request.form.get('lead_source',''), request.form.get('additional_notes',''),
+         user['id'], reg_id))
+    conn.commit()
+    conn.close()
+
+    # Notify ops team
+    _notify_sales_completed(reg_id)
+    flash('Sales section completed! Operations team has been notified.', 'success')
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+def _notify_sales_completed(reg_id):
+    """Email ops team that sales section is complete."""
+    try:
+        conn = get_db()
+        reg = conn.execute('''SELECT cr.*, ps.name as product_name
+            FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id
+            WHERE cr.id = ?''', (reg_id,)).fetchone()
+        if not reg:
+            conn.close()
+            return
+        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+        ops_team = conn.execute("SELECT email FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
+        recipients = [e['email'] for e in ops_team if e['email']]
+        if recipients:
+            from email_utils import send_email
+            subject = f"Sales Section Complete — {client_name} ({reg['product_name'] or 'N/A'})"
+            body = f"""<h2>Sales Section Completed</h2>
+            <p>The sales team has completed their section for <strong>{client_name}</strong> ({reg['product_name'] or 'N/A'}).</p>
+            <p><strong>Registration #:</strong> {reg['registration_number']}<br>
+            <strong>Plan:</strong> {reg['plan_type'] or 'N/A'}<br>
+            <strong>Package:</strong> {reg['final_package'] or 0}</p>
+            <p>Please log in to verify documents and confirm onboarding.</p>"""
+            send_email(recipients, subject, body)
+        conn.execute(
+            "INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
+            (reg_id, 'sales_completed', 'email', ','.join(recipients), 'Sales section complete'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"_notify_sales_completed: {e}")
+
+
+# ── ADMIN: Ops verification ──
+
+@app.route('/admin/client/<int:reg_id>/ops-verify', methods=['POST'])
+@login_required
+def admin_client_ops_verify(reg_id):
+    user = get_user()
+    action = request.form.get('action')  # confirm or request_docs
+    conn = get_db()
+
+    if action == 'confirm':
+        conn.execute('''UPDATE client_registrations SET
+            ops_status = 'verified', ops_verified_by = ?, ops_verified_at = CURRENT_TIMESTAMP,
+            ops_notes = ?, onboarding_status = 'confirmed', updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?''', (user['id'], request.form.get('ops_notes',''), reg_id))
+        conn.commit()
+        conn.close()
+        _notify_onboarding_confirmed(reg_id)
+        flash('Client onboarding confirmed! Notifications sent.', 'success')
+
+    elif action == 'request_docs':
+        doc_type = request.form.get('doc_type', '')
+        message = request.form.get('message', '')
+        urgency = request.form.get('urgency', 'normal')
+        conn.execute(
+            "INSERT INTO client_doc_requests (registration_id, doc_type, message, urgency, requested_by) VALUES (?, ?, ?, ?, ?)",
+            (reg_id, doc_type, message, urgency, user['id']))
+        conn.commit()
+        conn.close()
+        # Notify client about doc request
+        _notify_doc_request(reg_id, doc_type, message)
+        flash('Document request sent to client.', 'success')
+
+    else:
+        conn.close()
+
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+def _notify_onboarding_confirmed(reg_id):
+    """Send welcome WA + email to client, and alert email to all team."""
+    try:
+        conn = get_db()
+        reg = conn.execute('''SELECT cr.*, ps.name as product_name
+            FROM client_registrations cr
+            LEFT JOIN products_services ps ON ps.id = cr.product_id
+            WHERE cr.id = ?''', (reg_id,)).fetchone()
+        if not reg:
+            conn.close()
+            return
+        client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
+
+        # 1. Welcome email to client
+        if reg['email']:
+            from email_utils import send_email
+            client_subject = f"Welcome to GooCampus — {reg['product_name'] or 'Your Program'}!"
+            client_body = f"""<h2>Welcome to GooCampus, {client_name}!</h2>
+            <p>Your onboarding for <strong>{reg['product_name'] or 'your program'}</strong> has been confirmed.</p>
+            <p><strong>Registration #:</strong> {reg['registration_number']}</p>
+            <p>You can log in to your client portal anytime to track your progress, upload documents, and stay updated.</p>
+            <p><a href="https://goocampus.org/client/login">Log in to your portal</a></p>
+            <p>Thank you for choosing GooCampus!</p>"""
+            send_email([reg['email']], client_subject, client_body)
+
+        # 2. Welcome WhatsApp to client
+        if reg['mobile']:
+            try:
+                phone = reg['mobile'] if reg['mobile'].startswith('91') else f"91{reg['mobile']}"
+                import os, requests as http_requests
+                infobip_key = os.environ.get('INFOBIP_API_KEY', '')
+                infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
+                if infobip_key and infobip_base:
+                    url = f"https://{infobip_base}/whatsapp/1/message/template"
+                    headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
+                    payload = {"messages": [{"from": os.environ.get('INFOBIP_SENDER', '15558246314'), "to": phone,
+                        "content": {"templateName": "client_welcome", "templateData": {"body": {"placeholders": [client_name]}}, "language": "en"}}]}
+                    http_requests.post(url, json=payload, headers=headers, timeout=10)
+            except Exception as wa_e:
+                logging.error(f"Welcome WA: {wa_e}")
+
+        # 3. Alert all team members
+        from email_utils import send_email
+        all_team = conn.execute("SELECT email FROM employees WHERE is_active = 1 AND email IS NOT NULL AND email != ''").fetchall()
+        team_recipients = [e['email'] for e in all_team if e['email']]
+        if team_recipients:
+            team_subject = f"New Client Onboarded — {client_name} ({reg['product_name'] or 'N/A'})"
+            team_body = f"""<h2>New Client Added</h2>
+            <p><strong>{client_name}</strong> has been onboarded for <strong>{reg['product_name'] or 'N/A'}</strong>.</p>
+            <p><strong>Registration #:</strong> {reg['registration_number']}</p>"""
+            send_email(team_recipients, team_subject, team_body)
+
+        # Log notifications
+        conn.execute("INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
+            (reg_id, 'onboarding_confirmed', 'email', reg['email'] or '', 'Welcome email sent'))
+        conn.execute("INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
+            (reg_id, 'onboarding_confirmed', 'whatsapp', reg['mobile'] or '', 'Welcome WA sent'))
+        conn.execute("INSERT INTO client_notifications (registration_id, notification_type, channel, recipient, subject) VALUES (?, ?, ?, ?, ?)",
+            (reg_id, 'new_client_alert', 'email', 'all_team', 'Team alert sent'))
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"_notify_onboarding_confirmed: {e}")
+
+
+def _notify_doc_request(reg_id, doc_type, message):
+    """Notify client about document request via email."""
+    try:
+        conn = get_db()
+        reg = conn.execute("SELECT email, first_name, mobile FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        if reg and reg['email']:
+            from email_utils import send_email
+            subject = "Document Required — GooCampus"
+            body = f"""<h2>Document Required</h2>
+            <p>Hi {reg['first_name'] or 'there'},</p>
+            <p>We need you to upload the following document: <strong>{doc_type}</strong></p>
+            <p>{message}</p>
+            <p>Please log in to your portal and upload the document: <a href="https://goocampus.org/client/login">Client Portal</a></p>"""
+            send_email([reg['email']], subject, body)
+        conn.close()
+    except Exception as e:
+        logging.error(f"_notify_doc_request: {e}")
+
+
+# ── Client Profile API (for admin drawer) ──
+
+@app.route('/api/client-profile/<int:reg_id>')
+@login_required
+def api_client_profile(reg_id):
+    conn = get_db()
+    reg = conn.execute('''SELECT cr.*, ps.name as product_name
+        FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+        WHERE cr.id = ?''', (reg_id,)).fetchone()
+    if not reg:
+        conn.close()
+        return jsonify({'error': 'Not found'}), 404
+    academics = conn.execute("SELECT * FROM client_academics WHERE registration_id = ?", (reg_id,)).fetchone()
+    doc_count = conn.execute("SELECT COUNT(*) as c FROM client_documents WHERE registration_id = ?", (reg_id,)).fetchone()['c']
+    conn.close()
+    return jsonify({
+        'id': reg['id'], 'registration_number': reg['registration_number'],
+        'name': f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip(),
+        'mobile': reg['mobile'], 'email': reg['email'], 'product': reg['product_name'],
+        'form_status': reg['form_status'], 'ops_status': reg['ops_status'],
+        'onboarding_status': reg['onboarding_status'], 'plan_type': reg['plan_type'],
+        'package': float(reg['final_package'] or 0), 'counsellor': reg['counsellor_name'],
+        'doc_count': doc_count, 'sales_completed': reg['sales_completed'],
+        'degree': academics['degree'] if academics else '', 'college': academics['college_name'] if academics else '',
+        'created_at': str(reg['created_at'] or '')
+    })
 
 
 @app.route('/dashboard')
@@ -11191,6 +11937,178 @@ def ensure_ops_tables():
             list_id INTEGER REFERENCES wa_contact_lists(id) ON DELETE CASCADE,
             contact_id INTEGER REFERENCES wa_contacts(id) ON DELETE CASCADE,
             added_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ══════════════════════════════════════════════════
+        # ── CLIENT MANAGEMENT SYSTEM ──
+        # ══════════════════════════════════════════════════
+
+        # ── Client Accounts (auth + basic profile) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_accounts (
+            id SERIAL PRIMARY KEY,
+            mobile TEXT NOT NULL UNIQUE,
+            email TEXT,
+            password_hash TEXT NOT NULL,
+            first_name TEXT,
+            last_name TEXT,
+            is_active INTEGER DEFAULT 1,
+            last_login TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Client Invitations (sales generates, sends via WA) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_invitations (
+            id SERIAL PRIMARY KEY,
+            token TEXT NOT NULL UNIQUE,
+            product_id INTEGER REFERENCES products_services(id),
+            client_name TEXT,
+            client_mobile TEXT,
+            client_email TEXT,
+            invited_by INTEGER REFERENCES employees(id),
+            status TEXT DEFAULT 'pending',
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            registered_at TIMESTAMP
+        )''')
+
+        # ── Client Registrations (main client data per product) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
+            id SERIAL PRIMARY KEY,
+            account_id INTEGER REFERENCES client_accounts(id),
+            invitation_id INTEGER REFERENCES client_invitations(id),
+            product_id INTEGER REFERENCES products_services(id),
+            registration_number TEXT UNIQUE,
+            form_status TEXT DEFAULT 'draft',
+            current_step INTEGER DEFAULT 1,
+            prefix TEXT DEFAULT 'Dr.',
+            first_name TEXT,
+            last_name TEXT,
+            dob TEXT,
+            mobile TEXT,
+            whatsapp TEXT,
+            email TEXT,
+            address TEXT,
+            city TEXT,
+            state TEXT,
+            country TEXT DEFAULT 'India',
+            father_name TEXT,
+            father_phone TEXT,
+            mother_name TEXT,
+            mother_phone TEXT,
+            parents_email TEXT,
+            instagram TEXT,
+            facebook TEXT,
+            linkedin TEXT,
+            photo_path TEXT,
+            counsellor_id INTEGER REFERENCES employees(id),
+            counsellor_name TEXT,
+            plan_type TEXT,
+            package_amount NUMERIC(14,2) DEFAULT 0,
+            discount_allowed NUMERIC(14,2) DEFAULT 0,
+            final_package NUMERIC(14,2) DEFAULT 0,
+            inst1_amount NUMERIC(14,2) DEFAULT 0,
+            inst1_date TEXT,
+            inst1_note TEXT,
+            inst2_amount NUMERIC(14,2) DEFAULT 0,
+            inst2_date TEXT,
+            inst2_note TEXT,
+            inst3_amount NUMERIC(14,2) DEFAULT 0,
+            inst3_date TEXT,
+            inst3_note TEXT,
+            inst4_amount NUMERIC(14,2) DEFAULT 0,
+            inst4_date TEXT,
+            inst4_note TEXT,
+            total_paid NUMERIC(14,2) DEFAULT 0,
+            sales_completed INTEGER DEFAULT 0,
+            sales_completed_at TIMESTAMP,
+            sales_completed_by INTEGER REFERENCES employees(id),
+            ops_status TEXT DEFAULT 'pending',
+            ops_verified_by INTEGER REFERENCES employees(id),
+            ops_verified_at TIMESTAMP,
+            ops_notes TEXT,
+            onboarding_status TEXT DEFAULT 'pending',
+            lead_source TEXT,
+            additional_notes TEXT,
+            client_submitted_at TIMESTAMP,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Client Academics ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_academics (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
+            degree TEXT,
+            college_name TEXT,
+            university TEXT,
+            year_of_passing TEXT,
+            percentage_cgpa TEXT,
+            neet_score TEXT,
+            neet_year TEXT,
+            internship_status TEXT,
+            internship_completion TEXT,
+            mci_nmc_status TEXT,
+            additional_qualifications TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Client Documents ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_documents (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
+            doc_type TEXT NOT NULL,
+            file_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'uploaded',
+            verified_by INTEGER REFERENCES employees(id),
+            verified_at TIMESTAMP,
+            notes TEXT,
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Centralized Form Config (per product, per role, per step) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_form_configs (
+            id SERIAL PRIMARY KEY,
+            product_id INTEGER REFERENCES products_services(id),
+            step_number INTEGER NOT NULL,
+            step_name TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            field_label TEXT NOT NULL,
+            field_type TEXT DEFAULT 'text',
+            field_options TEXT,
+            role TEXT DEFAULT 'client',
+            is_required INTEGER DEFAULT 0,
+            is_visible INTEGER DEFAULT 1,
+            display_order INTEGER DEFAULT 0,
+            placeholder TEXT,
+            hint_text TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
+        # ── Client Document Requests (ops asks client for more docs) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_doc_requests (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
+            doc_type TEXT NOT NULL,
+            message TEXT,
+            urgency TEXT DEFAULT 'normal',
+            status TEXT DEFAULT 'pending',
+            requested_by INTEGER REFERENCES employees(id),
+            requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            fulfilled_at TIMESTAMP
+        )''')
+
+        # ── Client Notification Log ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_notifications (
+            id SERIAL PRIMARY KEY,
+            registration_id INTEGER,
+            notification_type TEXT NOT NULL,
+            channel TEXT NOT NULL,
+            recipient TEXT NOT NULL,
+            subject TEXT,
+            message TEXT,
+            status TEXT DEFAULT 'sent',
+            sent_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
         # Migration: add vendor_provider column to ops_coaching
@@ -23417,6 +24335,31 @@ def ensure_section_permissions_table():
 
 # Run on startup
 ensure_section_permissions_table()
+
+
+def seed_client_form_configs():
+    """Seed default form configs for UK/PLAB pathway if empty."""
+    try:
+        conn = get_db()
+        count = conn.execute("SELECT COUNT(*) as c FROM client_form_configs").fetchone()['c']
+        if count > 0:
+            conn.close()
+            return
+        # Find the UK/PLAB product
+        product = conn.execute("SELECT id FROM products_services WHERE LOWER(name) LIKE '%plab%' OR LOWER(name) LIKE '%uk%' LIMIT 1").fetchone()
+        if not product:
+            # Create a default product
+            conn.execute("INSERT INTO products_services (name, type, status) VALUES ('UK / PLAB Pathway', 'product', 'active')")
+            conn.commit()
+            product = conn.execute("SELECT id FROM products_services WHERE name = 'UK / PLAB Pathway'").fetchone()
+        pid = product['id']
+        # No configs needed in DB for MVP — the form uses hardcoded steps.
+        # This table is for future per-product customization.
+        conn.close()
+    except Exception as e:
+        logging.error(f"seed_client_form_configs: {e}")
+
+seed_client_form_configs()
 
 
 @app.route('/admin/section-visibility')

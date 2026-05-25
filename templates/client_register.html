@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Create Account &mdash; GooCampus</title>
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: #f0f2f5;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* ── Header ── */
+        .header {
+            background: #1e3a5f;
+            padding: 16px 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .header img {
+            height: 36px;
+        }
+
+        /* ── Main ── */
+        .main {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 32px 16px;
+        }
+
+        /* ── Card ── */
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 4px 24px rgba(0,0,0,.08);
+            width: 100%;
+            max-width: 460px;
+            padding: 40px 32px 32px;
+        }
+
+        .card-welcome {
+            text-align: center;
+            margin-bottom: 28px;
+        }
+        .card-welcome .product-badge {
+            display: inline-block;
+            background: #fff3e0;
+            color: #f97316;
+            font-weight: 600;
+            font-size: 13px;
+            padding: 4px 14px;
+            border-radius: 20px;
+            margin-bottom: 12px;
+        }
+        .card-welcome h1 {
+            font-size: 22px;
+            color: #1e3a5f;
+            margin-bottom: 6px;
+        }
+        .card-welcome p {
+            color: #64748b;
+            font-size: 14px;
+        }
+        .card-welcome .client-name {
+            font-weight: 600;
+            color: #334155;
+        }
+
+        /* ── Flash messages ── */
+        .flash {
+            padding: 10px 14px;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 18px;
+        }
+        .flash.success { background: #ecfdf5; color: #065f46; border: 1px solid #a7f3d0; }
+        .flash.error,
+        .flash.danger  { background: #fef2f2; color: #991b1b; border: 1px solid #fecaca; }
+        .flash.warning { background: #fffbeb; color: #92400e; border: 1px solid #fde68a; }
+        .flash.info    { background: #eff6ff; color: #1e40af; border: 1px solid #bfdbfe; }
+
+        /* ── Form ── */
+        .form-row {
+            display: flex;
+            gap: 12px;
+        }
+        .form-group {
+            margin-bottom: 18px;
+            flex: 1;
+        }
+        .form-group label {
+            display: block;
+            font-size: 13px;
+            font-weight: 600;
+            color: #334155;
+            margin-bottom: 5px;
+        }
+        .form-group label .req {
+            color: #ef4444;
+        }
+        .form-group input {
+            width: 100%;
+            padding: 10px 12px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 15px;
+            color: #1e293b;
+            transition: border-color .15s;
+        }
+        .form-group input:focus {
+            outline: none;
+            border-color: #f97316;
+            box-shadow: 0 0 0 3px rgba(249,115,22,.15);
+        }
+
+        /* Password wrapper */
+        .pw-wrap {
+            position: relative;
+        }
+        .pw-wrap input {
+            padding-right: 44px;
+        }
+        .pw-toggle {
+            position: absolute;
+            right: 10px;
+            top: 50%;
+            transform: translateY(-50%);
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: #94a3b8;
+            font-size: 13px;
+            font-weight: 600;
+        }
+        .pw-toggle:hover { color: #1e3a5f; }
+
+        /* Error text */
+        .field-error {
+            color: #ef4444;
+            font-size: 12px;
+            margin-top: 4px;
+            display: none;
+        }
+
+        /* ── Submit ── */
+        .btn-submit {
+            width: 100%;
+            padding: 12px;
+            background: #f97316;
+            color: #fff;
+            font-size: 16px;
+            font-weight: 600;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background .15s;
+            margin-top: 4px;
+        }
+        .btn-submit:hover { background: #ea580c; }
+        .btn-submit:active { background: #c2410c; }
+
+        /* ── Footer ── */
+        .footer {
+            text-align: center;
+            padding: 16px;
+            font-size: 12px;
+            color: #94a3b8;
+        }
+
+        @media (max-width: 520px) {
+            .card { padding: 28px 18px 24px; }
+            .form-row { flex-direction: column; gap: 0; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <img src="https://goocampus.org/static/logo-white.png" alt="GooCampus">
+</div>
+
+<div class="main">
+    <div class="card">
+        <div class="card-welcome">
+            <div class="product-badge">{{ product.name }}</div>
+            <h1>Create Your Account</h1>
+            {% if invitation.client_name %}
+            <p>Welcome, <span class="client-name">{{ invitation.client_name }}</span>! Set up your account to get started.</p>
+            {% else %}
+            <p>Set up your account to get started.</p>
+            {% endif %}
+        </div>
+
+        {# ── Flash messages ── #}
+        {% with messages = get_flashed_messages(with_categories=true) %}
+            {% if messages %}
+                {% for category, message in messages %}
+                    <div class="flash {{ category }}">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form id="registerForm" method="POST" novalidate>
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="first_name">First Name <span class="req">*</span></label>
+                    <input type="text" id="first_name" name="first_name" required
+                           value="{{ invitation.client_name.split(' ')[0] if invitation.client_name else '' }}">
+                </div>
+                <div class="form-group">
+                    <label for="last_name">Last Name</label>
+                    <input type="text" id="last_name" name="last_name"
+                           value="{{ invitation.client_name.split(' ')[1:] | join(' ') if invitation.client_name and ' ' in invitation.client_name else '' }}">
+                </div>
+            </div>
+
+            <div class="form-group">
+                <label for="mobile">Mobile <span class="req">*</span></label>
+                <input type="tel" id="mobile" name="mobile" required
+                       value="{{ invitation.client_mobile or '' }}">
+            </div>
+
+            <div class="form-group">
+                <label for="password">Password <span class="req">*</span></label>
+                <div class="pw-wrap">
+                    <input type="password" id="password" name="password" required minlength="4"
+                           placeholder="Min 4 characters">
+                    <button type="button" class="pw-toggle" onclick="togglePw('password', this)">Show</button>
+                </div>
+                <div class="field-error" id="pw-error"></div>
+            </div>
+
+            <div class="form-group">
+                <label for="confirm_password">Confirm Password <span class="req">*</span></label>
+                <div class="pw-wrap">
+                    <input type="password" id="confirm_password" name="confirm_password" required minlength="4">
+                    <button type="button" class="pw-toggle" onclick="togglePw('confirm_password', this)">Show</button>
+                </div>
+                <div class="field-error" id="cpw-error"></div>
+            </div>
+
+            <button type="submit" class="btn-submit">Create Account</button>
+        </form>
+    </div>
+</div>
+
+<div class="footer">&copy; {{ now().year if now is defined else '2026' }} GooCampus. All rights reserved.</div>
+
+<script>
+    function togglePw(id, btn) {
+        var input = document.getElementById(id);
+        if (input.type === 'password') {
+            input.type = 'text';
+            btn.textContent = 'Hide';
+        } else {
+            input.type = 'password';
+            btn.textContent = 'Show';
+        }
+    }
+
+    document.getElementById('registerForm').addEventListener('submit', function(e) {
+        var pw = document.getElementById('password');
+        var cpw = document.getElementById('confirm_password');
+        var pwErr = document.getElementById('pw-error');
+        var cpwErr = document.getElementById('cpw-error');
+        var valid = true;
+
+        pwErr.style.display = 'none';
+        cpwErr.style.display = 'none';
+
+        if (pw.value.length < 4) {
+            pwErr.textContent = 'Password must be at least 4 characters.';
+            pwErr.style.display = 'block';
+            valid = false;
+        }
+
+        if (pw.value !== cpw.value) {
+            cpwErr.textContent = 'Passwords do not match.';
+            cpwErr.style.display = 'block';
+            valid = false;
+        }
+
+        if (!valid) {
+            e.preventDefault();
+        }
+    });
+</script>
+
+</body>
+</html>
