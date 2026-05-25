@@ -24621,19 +24621,15 @@ migrate_client_academics_v2()
 
 
 def seed_client_form_configs():
-    """Seed default form configs for UK/PLAB pathway with all PLAB + Academic fields."""
+    """Seed default form configs for UK/PLAB pathway AND UK PGCP with all fields."""
     try:
         conn = get_db()
-        count = conn.execute("SELECT COUNT(*) as c FROM client_form_configs").fetchone()['c']
-        if count > 0:
-            conn.close()
-            return
-        product = conn.execute("SELECT id FROM products_services WHERE LOWER(name) LIKE '%plab%' OR LOWER(name) LIKE '%uk%' LIMIT 1").fetchone()
-        if not product:
-            conn.execute("INSERT INTO products_services (name, type, status) VALUES ('UK / PLAB Pathway', 'product', 'active')")
-            conn.commit()
-            product = conn.execute("SELECT id FROM products_services WHERE name = 'UK / PLAB Pathway'").fetchone()
-        pid = product['id']
+
+        # Define products to seed — each gets the same 85 fields
+        product_definitions = [
+            {'name': 'UK / PLAB Pathway', 'match': "LOWER(name) LIKE '%plab%'"},
+            {'name': 'UK PGCP', 'match': "LOWER(name) = 'uk pgcp'"},
+        ]
 
         # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
         configs = [
@@ -24738,15 +24734,31 @@ def seed_client_form_configs():
             (4, 'Operations', 'additional_notes', 'Additional Notes', 'textarea', '', 'ops', 0, 210, '', ''),
         ]
 
-        for c in configs:
-            conn.execute('''INSERT INTO client_form_configs
-                (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                (pid, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10]))
+        for pdef in product_definitions:
+            # Find existing product
+            product = conn.execute("SELECT id FROM products_services WHERE " + pdef['match'] + " LIMIT 1").fetchone()
+            if not product:
+                conn.execute("INSERT INTO products_services (name, type, status) VALUES (?, 'product', 'active')", (pdef['name'],))
+                conn.commit()
+                product = conn.execute("SELECT id FROM products_services WHERE name = ?", (pdef['name'],)).fetchone()
+            pid = product['id']
 
-        conn.commit()
+            # Per-product guard: skip if configs already exist for this product
+            existing = conn.execute("SELECT COUNT(*) as c FROM client_form_configs WHERE product_id = ?", (pid,)).fetchone()['c']
+            if existing > 0:
+                logging.info(f"Configs already exist for product {pid} ({pdef['name']}), skipping")
+                continue
+
+            for c in configs:
+                conn.execute('''INSERT INTO client_form_configs
+                    (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                    (pid, c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7], c[8], c[9], c[10]))
+
+            conn.commit()
+            logging.info(f"Seeded {len(configs)} client form configs for product {pid} ({pdef['name']})")
+
         conn.close()
-        logging.info(f"Seeded {len(configs)} client form configs for product {pid}")
     except Exception as e:
         logging.error(f"seed_client_form_configs: {e}")
 
