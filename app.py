@@ -1374,6 +1374,111 @@ def client_invitation_create():
     return redirect(url_for('client_invitations_list'))
 
 
+# ── ADMIN: Client Form Config ──
+
+@app.route('/admin/client-form-config', methods=['GET'])
+@login_required
+def client_form_config_page():
+    user = get_user()
+    conn = get_db()
+    products = conn.execute("SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()
+    selected_product = request.args.get('product_id', '')
+    configs = []
+    if selected_product:
+        configs = conn.execute('''
+            SELECT cfc.*, ps.name as product_name
+            FROM client_form_configs cfc
+            LEFT JOIN products_services ps ON ps.id = cfc.product_id
+            WHERE cfc.product_id = ?
+            ORDER BY cfc.step_number, cfc.display_order
+        ''', (selected_product,)).fetchall()
+    else:
+        configs = conn.execute('''
+            SELECT cfc.*, ps.name as product_name
+            FROM client_form_configs cfc
+            LEFT JOIN products_services ps ON ps.id = cfc.product_id
+            ORDER BY cfc.product_id, cfc.step_number, cfc.display_order
+        ''').fetchall()
+    conn.close()
+    return render_template('client_form_config.html', configs=configs, products=products,
+                         selected_product=selected_product, user=user, active_section='clients')
+
+
+@app.route('/admin/client-form-config/add', methods=['POST'])
+@login_required
+def client_form_config_add():
+    conn = get_db()
+    try:
+        conn.execute('''INSERT INTO client_form_configs
+            (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, is_visible, display_order, placeholder, hint_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (request.form.get('product_id'), int(request.form.get('step_number', 1)),
+             request.form.get('step_name', ''), request.form.get('field_name', ''),
+             request.form.get('field_label', ''), request.form.get('field_type', 'text'),
+             request.form.get('field_options', ''), request.form.get('role', 'client'),
+             1 if request.form.get('is_required') else 0,
+             1 if request.form.get('is_visible', 'on') else 0,
+             int(request.form.get('display_order', 0)),
+             request.form.get('placeholder', ''), request.form.get('hint_text', '')))
+        conn.commit()
+        flash('Field config added successfully', 'success')
+    except Exception as e:
+        logging.error(f"client_form_config_add: {e}")
+        flash('Error adding field config', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('client_form_config_page', product_id=request.form.get('product_id', '')))
+
+
+@app.route('/admin/client-form-config/edit/<int:config_id>', methods=['POST'])
+@login_required
+def client_form_config_edit(config_id):
+    conn = get_db()
+    try:
+        conn.execute('''UPDATE client_form_configs SET
+            step_number = ?, step_name = ?, field_name = ?, field_label = ?, field_type = ?,
+            field_options = ?, role = ?, is_required = ?, is_visible = ?, display_order = ?,
+            placeholder = ?, hint_text = ?
+            WHERE id = ?''',
+            (int(request.form.get('step_number', 1)), request.form.get('step_name', ''),
+             request.form.get('field_name', ''), request.form.get('field_label', ''),
+             request.form.get('field_type', 'text'), request.form.get('field_options', ''),
+             request.form.get('role', 'client'),
+             1 if request.form.get('is_required') else 0,
+             1 if request.form.get('is_visible') else 0,
+             int(request.form.get('display_order', 0)),
+             request.form.get('placeholder', ''), request.form.get('hint_text', ''),
+             config_id))
+        conn.commit()
+        flash('Field config updated', 'success')
+    except Exception as e:
+        logging.error(f"client_form_config_edit: {e}")
+        flash('Error updating field config', 'error')
+    finally:
+        conn.close()
+    pid = request.form.get('product_id', '')
+    return redirect(url_for('client_form_config_page', product_id=pid))
+
+
+@app.route('/admin/client-form-config/delete/<int:config_id>', methods=['POST'])
+@login_required
+def client_form_config_delete(config_id):
+    conn = get_db()
+    try:
+        row = conn.execute("SELECT product_id FROM client_form_configs WHERE id = ?", (config_id,)).fetchone()
+        pid = row['product_id'] if row else ''
+        conn.execute("DELETE FROM client_form_configs WHERE id = ?", (config_id,))
+        conn.commit()
+        flash('Field config deleted', 'success')
+    except Exception as e:
+        logging.error(f"client_form_config_delete: {e}")
+        flash('Error deleting field config', 'error')
+        pid = ''
+    finally:
+        conn.close()
+    return redirect(url_for('client_form_config_page', product_id=pid))
+
+
 def _send_client_invite_wa(mobile, name, link):
     """Send WhatsApp template message with invitation link."""
     import os, requests as http_requests

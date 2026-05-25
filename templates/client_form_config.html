@@ -1,0 +1,317 @@
+{% extends "clients_sidebar_base.html" %}
+
+{% block title %}Client Form Config{% endblock %}
+
+{% block section_content %}
+<div style="padding: 24px;">
+
+  <!-- Header -->
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 24px;">
+    <div>
+      <h1 style="font-size: 1.5rem; font-weight: 700; color: var(--navy, #1e3a5f); margin: 0;">Form Configuration</h1>
+      <p style="color: var(--gray-500, #6b7280); font-size: 0.875rem; margin: 4px 0 0 0;">Configure which fields appear on client registration forms per product</p>
+    </div>
+    <button onclick="toggleAddForm()" id="addBtn"
+      style="background: var(--orange, #f97316); color: #fff; border: none; padding: 10px 20px; border-radius: 8px; font-weight: 600; font-size: 0.875rem; cursor: pointer; display: flex; align-items: center; gap: 6px;">
+      <span id="addBtnIcon">+</span> Add Field
+    </button>
+  </div>
+
+  <!-- Product Filter -->
+  <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
+    <label style="font-size: 0.85rem; font-weight: 600; color: var(--navy, #1e3a5f);">Filter by Product:</label>
+    <select id="productFilter" onchange="filterByProduct()"
+      style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; min-width: 220px;">
+      <option value="">All Products</option>
+      {% for p in products %}
+      <option value="{{ p.id }}" {{ 'selected' if selected_product|string == p.id|string else '' }}>{{ p.name }}</option>
+      {% endfor %}
+    </select>
+  </div>
+
+  <!-- Add Field Form (hidden by default) -->
+  <div id="addForm" style="display: none; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; padding: 24px; margin-bottom: 24px; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+    <h3 style="margin: 0 0 16px 0; font-size: 1rem; font-weight: 600; color: var(--navy, #1e3a5f);">Add New Field Configuration</h3>
+    <form method="POST" action="/admin/client-form-config/add">
+      <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Product *</label>
+          <select name="product_id" required style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="">Select product...</option>
+            {% for p in products %}
+            <option value="{{ p.id }}">{{ p.name }}</option>
+            {% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Step Number *</label>
+          <select name="step_number" required style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="1">1 - Personal Info</option>
+            <option value="2">2 - Academics</option>
+            <option value="3">3 - Documents</option>
+            <option value="4">4 - Review</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Step Name *</label>
+          <input type="text" name="step_name" required placeholder="e.g. Personal Info"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Field Name *</label>
+          <input type="text" name="field_name" required placeholder="e.g. passport_number"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Field Label *</label>
+          <input type="text" name="field_label" required placeholder="e.g. Passport Number"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Field Type</label>
+          <select name="field_type" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="text">Text</option>
+            <option value="textarea">Textarea</option>
+            <option value="select">Dropdown</option>
+            <option value="date">Date</option>
+            <option value="email">Email</option>
+            <option value="tel">Phone</option>
+            <option value="number">Number</option>
+            <option value="file">File Upload</option>
+            <option value="checkbox">Checkbox</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Options <span style="color:#9ca3af;">(comma-separated for dropdowns)</span></label>
+          <input type="text" name="field_options" placeholder="e.g. Option A, Option B, Option C"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Role</label>
+          <select name="role" style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="client">Client</option>
+            <option value="sales">Sales</option>
+            <option value="ops">Operations</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Display Order</label>
+          <input type="number" name="display_order" value="0"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Placeholder</label>
+          <input type="text" name="placeholder" placeholder="e.g. Enter your passport number"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Hint Text</label>
+          <input type="text" name="hint_text" placeholder="e.g. As shown on your passport"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
+        </div>
+        <div style="display: flex; align-items: flex-end; gap: 20px; padding-bottom: 4px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="is_required" style="width: 16px; height: 16px;"> Required
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="is_visible" checked style="width: 16px; height: 16px;"> Visible
+          </label>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 20px; justify-content: flex-end;">
+        <button type="button" onclick="toggleAddForm()"
+          style="padding: 8px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: var(--gray-500, #6b7280); font-size: 0.875rem; cursor: pointer;">
+          Cancel
+        </button>
+        <button type="submit"
+          style="padding: 8px 20px; border: none; border-radius: 6px; background: var(--orange, #f97316); color: #fff; font-weight: 600; font-size: 0.875rem; cursor: pointer;">
+          Add Field
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <!-- Config Table -->
+  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
+    <div style="overflow-x: auto;">
+    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
+      <thead>
+        <tr style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
+          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Product</th>
+          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Step</th>
+          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Field Name</th>
+          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Label</th>
+          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Type</th>
+          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Role</th>
+          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Req</th>
+          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Visible</th>
+          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Order</th>
+          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in configs %}
+        <tr style="border-bottom: 1px solid #f3f4f6;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
+          <td style="padding: 10px 14px; font-weight: 500; color: #111827;">{{ c.product_name }}</td>
+          <td style="padding: 10px 14px; color: #374151;">
+            <span style="display: inline-block; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">{{ c.step_number }}</span>
+            {{ c.step_name }}
+          </td>
+          <td style="padding: 10px 14px; color: #6b7280; font-family: monospace; font-size: 0.8rem;">{{ c.field_name }}</td>
+          <td style="padding: 10px 14px; color: #374151;">{{ c.field_label }}</td>
+          <td style="padding: 10px 14px;">
+            <span style="display: inline-block; background: #f3f4f6; color: #374151; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">{{ c.field_type }}</span>
+          </td>
+          <td style="padding: 10px 14px; text-align: center;">
+            <span style="display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+              {% if c.role == 'client' %}background: #dbeafe; color: #1e40af;
+              {% elif c.role == 'sales' %}background: #fef3c7; color: #92400e;
+              {% else %}background: #d1fae5; color: #065f46;{% endif %}">{{ c.role }}</span>
+          </td>
+          <td style="padding: 10px 14px; text-align: center;">
+            {% if c.is_required %}<span style="color: #ef4444; font-weight: 700;">*</span>{% else %}<span style="color: #d1d5db;">-</span>{% endif %}
+          </td>
+          <td style="padding: 10px 14px; text-align: center;">
+            {% if c.is_visible %}<span style="color: #22c55e;">Yes</span>{% else %}<span style="color: #ef4444;">No</span>{% endif %}
+          </td>
+          <td style="padding: 10px 14px; text-align: center; color: #6b7280;">{{ c.display_order }}</td>
+          <td style="padding: 10px 14px; text-align: center;">
+            <div style="display: flex; gap: 6px; justify-content: center;">
+              <button onclick="editConfig({{ c.id }}, {{ c.product_id }}, {{ c.step_number }}, '{{ c.step_name }}', '{{ c.field_name }}', '{{ c.field_label }}', '{{ c.field_type }}', '{{ c.field_options or '' }}', '{{ c.role }}', {{ c.is_required }}, {{ c.is_visible }}, {{ c.display_order }}, '{{ c.placeholder or '' }}', '{{ c.hint_text or '' }}')"
+                style="background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: var(--navy);">Edit</button>
+              <form method="POST" action="/admin/client-form-config/delete/{{ c.id }}" style="display: inline;" onsubmit="return confirm('Delete this field config?')">
+                <button type="submit" style="background: none; border: 1px solid #fca5a5; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: #ef4444;">Del</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    </div>
+
+    {% if not configs %}
+    <div style="text-align: center; padding: 48px 24px; color: var(--gray-500, #6b7280);">
+      <p style="font-size: 1rem; margin: 0 0 4px 0;">No form configurations yet</p>
+      <p style="font-size: 0.875rem; margin: 0;">Click "Add Field" to define custom fields per product.</p>
+    </div>
+    {% endif %}
+  </div>
+
+</div>
+
+<!-- Edit Modal -->
+<div id="editModal" style="display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); z-index: 1000; align-items: center; justify-content: center;">
+  <div style="background: #fff; border-radius: 12px; padding: 28px; max-width: 620px; width: 90%; max-height: 85vh; overflow-y: auto; box-shadow: 0 20px 60px rgba(0,0,0,0.2);">
+    <h3 style="margin: 0 0 20px 0; font-size: 1.1rem; font-weight: 600; color: var(--navy, #1e3a5f);">Edit Field Configuration</h3>
+    <form id="editForm" method="POST">
+      <input type="hidden" name="product_id" id="edit_product_id">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Step Number</label>
+          <select name="step_number" id="edit_step_number" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; background:#fff; box-sizing:border-box;">
+            <option value="1">1 - Personal Info</option><option value="2">2 - Academics</option><option value="3">3 - Documents</option><option value="4">4 - Review</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Step Name</label>
+          <input type="text" name="step_name" id="edit_step_name" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Field Name</label>
+          <input type="text" name="field_name" id="edit_field_name" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Field Label</label>
+          <input type="text" name="field_label" id="edit_field_label" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Field Type</label>
+          <select name="field_type" id="edit_field_type" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; background:#fff; box-sizing:border-box;">
+            <option value="text">Text</option><option value="textarea">Textarea</option><option value="select">Dropdown</option><option value="date">Date</option>
+            <option value="email">Email</option><option value="tel">Phone</option><option value="number">Number</option><option value="file">File Upload</option><option value="checkbox">Checkbox</option>
+          </select>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Role</label>
+          <select name="role" id="edit_role" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; background:#fff; box-sizing:border-box;">
+            <option value="client">Client</option><option value="sales">Sales</option><option value="ops">Operations</option>
+          </select>
+        </div>
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Options (comma-separated)</label>
+          <input type="text" name="field_options" id="edit_field_options" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Display Order</label>
+          <input type="number" name="display_order" id="edit_display_order" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Placeholder</label>
+          <input type="text" name="placeholder" id="edit_placeholder" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Hint Text</label>
+          <input type="text" name="hint_text" id="edit_hint_text" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
+        </div>
+        <div style="display: flex; align-items: center; gap: 20px;">
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="is_required" id="edit_is_required" style="width: 16px; height: 16px;"> Required
+          </label>
+          <label style="display: flex; align-items: center; gap: 6px; font-size: 0.85rem; cursor: pointer;">
+            <input type="checkbox" name="is_visible" id="edit_is_visible" style="width: 16px; height: 16px;"> Visible
+          </label>
+        </div>
+      </div>
+      <div style="display: flex; gap: 12px; margin-top: 24px; justify-content: flex-end;">
+        <button type="button" onclick="closeEditModal()"
+          style="padding: 8px 20px; border: 1px solid #d1d5db; border-radius: 6px; background: #fff; color: #6b7280; font-size: 0.875rem; cursor: pointer;">Cancel</button>
+        <button type="submit"
+          style="padding: 8px 20px; border: none; border-radius: 6px; background: var(--orange, #f97316); color: #fff; font-weight: 600; font-size: 0.875rem; cursor: pointer;">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+function toggleAddForm() {
+  var form = document.getElementById('addForm');
+  var icon = document.getElementById('addBtnIcon');
+  if (form.style.display === 'none') { form.style.display = 'block'; icon.textContent = '×'; }
+  else { form.style.display = 'none'; icon.textContent = '+'; }
+}
+
+function filterByProduct() {
+  var pid = document.getElementById('productFilter').value;
+  var url = '/admin/client-form-config';
+  if (pid) url += '?product_id=' + pid;
+  window.location.href = url;
+}
+
+function editConfig(id, pid, step, stepName, fname, flabel, ftype, foptions, role, req, vis, order, placeholder, hint) {
+  document.getElementById('editForm').action = '/admin/client-form-config/edit/' + id;
+  document.getElementById('edit_product_id').value = pid;
+  document.getElementById('edit_step_number').value = step;
+  document.getElementById('edit_step_name').value = stepName;
+  document.getElementById('edit_field_name').value = fname;
+  document.getElementById('edit_field_label').value = flabel;
+  document.getElementById('edit_field_type').value = ftype;
+  document.getElementById('edit_field_options').value = foptions;
+  document.getElementById('edit_role').value = role;
+  document.getElementById('edit_is_required').checked = !!req;
+  document.getElementById('edit_is_visible').checked = !!vis;
+  document.getElementById('edit_display_order').value = order;
+  document.getElementById('edit_placeholder').value = placeholder;
+  document.getElementById('edit_hint_text').value = hint;
+  document.getElementById('editModal').style.display = 'flex';
+}
+
+function closeEditModal() {
+  document.getElementById('editModal').style.display = 'none';
+}
+
+document.getElementById('editModal').addEventListener('click', function(e) {
+  if (e.target === this) closeEditModal();
+});
+</script>
+{% endblock %}
