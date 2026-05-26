@@ -384,10 +384,16 @@ function toggleOpsSidebar() {
             document.getElementById('opsSidebar').classList.add('collapsed');
         }
     } catch(e) {}
-    // Scroll active sidebar item into view
+    // Scroll active sidebar item into view within the sidebar nav only
     var activeItem = document.querySelector('.ops-nav-item.active');
     if (activeItem) {
-        setTimeout(function() { activeItem.scrollIntoView({ block: 'center', behavior: 'instant' }); }, 50);
+        setTimeout(function() {
+            var nav = document.querySelector('.ops-sidebar-nav');
+            if (nav) {
+                var itemTop = activeItem.offsetTop - nav.offsetTop;
+                nav.scrollTop = itemTop - nav.clientHeight / 2 + activeItem.clientHeight / 2;
+            }
+        }, 50);
     }
 })();
 </script>

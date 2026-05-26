@@ -167,10 +167,16 @@ function toggleSectionSidebar() {
         var href = el.getAttribute('href');
         if (href && path === href) el.classList.add('active');
     });
-    // Scroll active sidebar item into view
+    // Scroll active sidebar item into view within the sidebar nav only
     var activeItem = document.querySelector('.sec-nav-item.active');
     if (activeItem) {
-        setTimeout(function() { activeItem.scrollIntoView({ block: 'center', behavior: 'instant' }); }, 50);
+        setTimeout(function() {
+            var nav = document.querySelector('.section-sidebar-nav');
+            if (nav) {
+                var itemTop = activeItem.offsetTop - nav.offsetTop;
+                nav.scrollTop = itemTop - nav.clientHeight / 2 + activeItem.clientHeight / 2;
+            }
+        }, 50);
     }
 })();
 </script>
