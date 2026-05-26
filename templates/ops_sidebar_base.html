@@ -384,6 +384,11 @@ function toggleOpsSidebar() {
             document.getElementById('opsSidebar').classList.add('collapsed');
         }
     } catch(e) {}
+    // Scroll active sidebar item into view
+    var activeItem = document.querySelector('.ops-nav-item.active');
+    if (activeItem) {
+        setTimeout(function() { activeItem.scrollIntoView({ block: 'center', behavior: 'instant' }); }, 50);
+    }
 })();
 </script>
 {% block ops_extra_js %}{% endblock %}

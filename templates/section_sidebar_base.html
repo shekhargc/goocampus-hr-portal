@@ -167,6 +167,11 @@ function toggleSectionSidebar() {
         var href = el.getAttribute('href');
         if (href && path === href) el.classList.add('active');
     });
+    // Scroll active sidebar item into view
+    var activeItem = document.querySelector('.sec-nav-item.active');
+    if (activeItem) {
+        setTimeout(function() { activeItem.scrollIntoView({ block: 'center', behavior: 'instant' }); }, 50);
+    }
 })();
 </script>
 {% block section_extra_js %}{% endblock %}
