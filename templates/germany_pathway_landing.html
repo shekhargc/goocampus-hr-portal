@@ -861,11 +861,15 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     <p class="ss">Fill in your details below. Our counsellor will contact you within 24 hours for a free one-to-one session.</p>
 
     <div class="reg-card" id="regCard">
-      <!-- STEP 1: Phone -->
+      <!-- STEP 1: Name + Phone -->
       <div class="otp-step active" id="otpStep1">
-        <p class="otp-info">Verify your WhatsApp number to proceed with registration. We'll send a 6-digit OTP to your WhatsApp.</p>
+        <p class="otp-info">Verify your details to proceed with registration. We'll send a 6-digit OTP to your WhatsApp.</p>
         <div class="reg-fg" style="margin-bottom:14px">
-          <label>WhatsApp Number</label>
+          <label>Full Name *</label>
+          <input type="text" id="otpName" placeholder="Dr. Full Name">
+        </div>
+        <div class="reg-fg" style="margin-bottom:14px">
+          <label>WhatsApp Number *</label>
           <div class="phone-wrap">
             <span>+91</span>
             <input type="tel" id="otpPhone" placeholder="Enter 10-digit mobile number" maxlength="10" pattern="[0-9]{10}">
@@ -944,9 +948,13 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     <button class="dl-x" onclick="closeBrochModal()">&times;</button>
     <div id="brochStep1">
       <div class="dl-h">&#128218; Download Germany PG Brochure</div>
-      <p class="dl-p">Verify your WhatsApp number to download the complete brochure.</p>
+      <p class="dl-p">Enter your details to download the complete brochure.</p>
       <div class="reg-fg" style="margin-bottom:12px">
-        <label>WhatsApp Number</label>
+        <label>Full Name *</label>
+        <input type="text" id="brochName" placeholder="Dr. Full Name">
+      </div>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>WhatsApp Number *</label>
         <div class="phone-wrap">
           <span>+91</span>
           <input type="tel" id="brochPhone" placeholder="10-digit number" maxlength="10">
@@ -1028,11 +1036,13 @@ function showErr(id,msg){var e=document.getElementById(id);e.textContent=msg;e.s
 function hideErr(id){document.getElementById(id).style.display='none'}
 
 function sendOtp(){
+  var name=document.getElementById('otpName').value.trim();
   var phone=document.getElementById('otpPhone').value.replace(/\D/g,'');
+  if(!name||name.length<2){showErr('otpErr1','Please enter your full name');return}
   if(phone.length!==10){showErr('otpErr1','Please enter a valid 10-digit number');return}
   hideErr('otpErr1');
   var btn=document.getElementById('sendOtpBtn');btn.disabled=true;btn.textContent='Sending...';
-  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})})
+  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,phone:phone})})
   .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
   .then(function(res){
     btn.disabled=false;btn.textContent='Send OTP via WhatsApp';
@@ -1086,10 +1096,12 @@ function closeBrochModal(){document.getElementById('brochModal').classList.remov
 document.getElementById('brochModal').addEventListener('click',function(e){if(e.target===this)closeBrochModal()});
 
 function brochSendOtp(){
+  var name=document.getElementById('brochName').value.trim();
   var phone=document.getElementById('brochPhone').value.replace(/\D/g,'');
+  if(!name||name.length<2){showErr('brochErr1','Please enter your full name');return}
   if(phone.length!==10){showErr('brochErr1','Enter a valid 10-digit number');return}
   hideErr('brochErr1');
-  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({phone:phone})})
+  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,phone:phone})})
   .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
   .then(function(res){
     if(!res.ok){showErr('brochErr1',res.data.error||'Failed');return}

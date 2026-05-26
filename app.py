@@ -25613,7 +25613,11 @@ def germany_pathway_landing():
 @app.route('/germanypathway/send-otp', methods=['POST'])
 def germany_pathway_send_otp():
     data = request.get_json() or {}
+    name = data.get('name', '').strip()
     phone = data.get('phone', '').strip()
+
+    if not name or len(name) < 2:
+        return jsonify({'error': 'Please enter your full name'}), 400
 
     phone_clean = ''.join(c for c in phone if c.isdigit())
     if phone_clean.startswith('91') and len(phone_clean) > 10:
@@ -25633,6 +25637,7 @@ def germany_pathway_send_otp():
     otp_code = str(random.randint(100000, 999999))
     session['gp_otp'] = otp_code
     session['gp_otp_phone'] = phone_clean
+    session['gp_otp_name'] = name
     session['gp_otp_time'] = datetime.now().isoformat()
 
     infobip_key = os.environ.get('INFOBIP_API_KEY', '')
@@ -25688,6 +25693,7 @@ def germany_pathway_verify_otp():
     session.pop('gp_otp', None)
     session['gp_phone_verified'] = stored_phone
     session['gp_otp_verified'] = True
+    session['gp_verified_name'] = session.get('gp_otp_name', '')
     return jsonify({'success': True, 'message': 'Phone number verified successfully'})
 
 
