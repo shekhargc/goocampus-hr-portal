@@ -25687,6 +25687,7 @@ def germany_pathway_verify_otp():
 
     session.pop('gp_otp', None)
     session['gp_phone_verified'] = stored_phone
+    session['gp_otp_verified'] = True
     return jsonify({'success': True, 'message': 'Phone number verified successfully'})
 
 
@@ -25729,6 +25730,17 @@ def germany_pathway_register():
 @app.route('/germanypathway/services')
 def germany_pathway_services():
     return render_template('germany_pathway_services.html')
+
+@app.route('/germanypathway/package')
+def germany_pathway_package():
+    verified = session.get('gp_otp_verified', False)
+    return render_template('germany_pathway_package.html', verified=verified)
+
+@app.route('/germanypathway/package/download')
+def germany_pathway_package_download():
+    if not session.get('gp_otp_verified'):
+        return redirect('/germanypathway/package')
+    return send_from_directory('static/docs', 'germany-pathway-package.pdf', as_attachment=True)
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
