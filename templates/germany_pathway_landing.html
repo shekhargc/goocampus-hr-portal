@@ -13,10 +13,10 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://goocampus.org/germanypathway">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-:root{--navy:#0B1F3A;--navy-mid:#122a4e;--gold:#C4922A;--gold-light:#f0c96c;--gold-pale:#fef5e3;--cream:#FAF8F4;--white:#fff;--red:#C41230;--green:#1a6b3a;--text:#1C1C1C;--muted:#5A5A5A;--border:#E0DBD4;--de-red:#DD0000;--de-gold:#FFCC00;--fh:'Playfair Display',Georgia,serif;--fb:'DM Sans',system-ui,sans-serif}
+:root{--navy:#0B1F3A;--navy-mid:#122a4e;--gold:#C4922A;--gold-light:#f0c96c;--gold-pale:#fef5e3;--cream:#FAF8F4;--white:#fff;--red:#C41230;--green:#1a6b3a;--text:#1C1C1C;--muted:#5A5A5A;--border:#E0DBD4;--de-red:#DD0000;--de-gold:#FFCC00;--fh:'Inter',system-ui,-apple-system,sans-serif;--fb:'Inter',system-ui,-apple-system,sans-serif}
 html{scroll-behavior:smooth}body{font-family:var(--fb);background:var(--cream);color:var(--text);line-height:1.65}a{color:inherit;text-decoration:none}
 
 /* GERMANY FLAG TOP BAR */
@@ -36,33 +36,44 @@ nav{position:sticky;top:0;z-index:200;background:var(--navy);border-bottom:2px s
 .nav-ham{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
 
 /* HERO */
-.hero{background:linear-gradient(135deg,#0B1F3A 0%,#14324f 50%,#0d2844 100%);position:relative;overflow:hidden;padding:54px 24px 48px}
-.hero::before{content:'';position:absolute;top:0;right:0;width:55%;height:100%;background:url('https://images.unsplash.com/photo-1551076805-e1869033e561?w=800&q=80') center/cover no-repeat;opacity:.08;pointer-events:none}
+.hero{background:var(--white);position:relative;overflow:hidden;padding:0}
 .hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#000 33%,#DD0000 33%,#DD0000 66%,#FFCC00 66%);z-index:2}
-.hero-in{max-width:1180px;margin:0 auto;position:relative;display:grid;grid-template-columns:1.1fr 0.9fr;gap:60px;align-items:flex-start}
-.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(196,146,42,.14);border:1px solid rgba(196,146,42,.38);color:var(--gold-light);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:5px 13px;border-radius:3px;margin-bottom:16px}
+.hero-in{max-width:1280px;margin:0 auto;position:relative;display:grid;grid-template-columns:1fr 1fr;min-height:520px}
+.hero-left{padding:56px 48px 56px 40px;display:flex;flex-direction:column;justify-content:center}
+.hero-right{position:relative;overflow:hidden}
+.hero-right img{width:100%;height:100%;object-fit:cover;display:block}
+.hero-right::after{content:'';position:absolute;inset:0;background:linear-gradient(90deg,var(--white) 0%,transparent 12%)}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:var(--gold-pale);border:1px solid rgba(196,146,42,.25);color:var(--gold);font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;padding:6px 14px;border-radius:20px;margin-bottom:18px;width:fit-content}
 .hero-flag{font-size:16px}
-.hero h1{font-family:var(--fh);font-size:clamp(1.8rem,4vw,2.7rem);font-weight:700;color:#fff;line-height:1.2;margin-bottom:14px}
-.hero-sub{font-size:.95rem;font-weight:300;color:rgba(255,255,255,.66);max-width:620px;margin-bottom:26px;line-height:1.72}
-.hero-sub strong{color:var(--gold-light);font-weight:600}
-.hero-btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:32px}
-.btn-p{background:var(--gold);color:var(--navy);font-family:var(--fb);font-size:14.5px;font-weight:700;padding:12px 26px;border:none;border-radius:4px;cursor:pointer;transition:all .2s}.btn-p:hover{background:var(--gold-light);transform:translateY(-1px)}
-.btn-o{background:transparent;color:#fff;font-family:var(--fb);font-size:14.5px;font-weight:500;padding:12px 26px;border:1.5px solid rgba(255,255,255,.28);border-radius:4px;cursor:pointer;transition:all .2s}.btn-o:hover{border-color:var(--gold-light);color:var(--gold-light)}
-.proof{display:flex;gap:28px;flex-wrap:wrap;padding-top:22px;border-top:1px solid rgba(255,255,255,.1)}
+.hero h1{font-family:var(--fh);font-size:clamp(2rem,4.2vw,3rem);font-weight:900;color:var(--navy);line-height:1.12;margin-bottom:16px;letter-spacing:-0.02em}
+.hero h1 .accent{color:var(--gold)}
+.hero-sub{font-size:1rem;font-weight:400;color:var(--muted);max-width:520px;margin-bottom:28px;line-height:1.75}
+.hero-sub strong{color:var(--navy);font-weight:600}
+.hero-btns{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:28px}
+.btn-p{background:var(--gold);color:var(--white);font-family:var(--fb);font-size:15px;font-weight:700;padding:14px 30px;border:none;border-radius:8px;cursor:pointer;transition:all .2s;box-shadow:0 4px 14px rgba(196,146,42,.3)}.btn-p:hover{background:#d4a030;transform:translateY(-1px);box-shadow:0 6px 20px rgba(196,146,42,.4)}
+.btn-o{background:transparent;color:var(--navy);font-family:var(--fb);font-size:15px;font-weight:600;padding:14px 30px;border:2px solid var(--border);border-radius:8px;cursor:pointer;transition:all .2s}.btn-o:hover{border-color:var(--gold);color:var(--gold)}
+.hero-social{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.hero-review{display:flex;align-items:center;gap:8px;padding:8px 16px;background:var(--cream);border-radius:8px;border:1px solid var(--border)}
+.hero-stars{display:flex;gap:1px;color:#FBBC04;font-size:16px}
+.hero-review-text{font-size:12px;color:var(--muted);line-height:1.3}
+.hero-review-text strong{color:var(--text);display:block;font-size:13px}
+.hero-stat{display:flex;align-items:center;gap:6px;font-size:13px;color:var(--muted)}
+.hero-stat strong{font-size:1.3rem;font-weight:800;color:var(--navy)}
+.proof{display:flex;gap:28px;flex-wrap:wrap;padding-top:22px;border-top:1px solid var(--border);margin-top:24px}
 .p-item{display:flex;flex-direction:column}
-.p-num{font-family:var(--fh);font-size:1.55rem;font-weight:700;color:var(--gold-light);line-height:1}
-.p-label{font-size:10.5px;color:rgba(255,255,255,.42);margin-top:3px}
+.p-num{font-family:var(--fh);font-size:1.4rem;font-weight:800;color:var(--navy);line-height:1}
+.p-label{font-size:10.5px;color:var(--muted);margin-top:3px;font-weight:500}
 
 /* BROCHURE CARD */
-.broch-card{background:linear-gradient(180deg,rgba(196,146,42,0.10) 0%,rgba(196,146,42,0.02) 100%);border:1.5px solid rgba(196,146,42,0.4);border-radius:16px;padding:28px 26px;box-shadow:0 20px 50px rgba(0,0,0,0.4);margin-top:20px}
-.broch-badge{display:inline-block;background:rgba(221,0,0,.15);color:#ff6b6b;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:4px 10px;border-radius:3px;border:1px solid rgba(221,0,0,.3);margin-bottom:14px}
-.broch-title{font-family:var(--fh);font-size:1.2rem;font-weight:700;color:#fff;line-height:1.3;margin-bottom:6px}
-.broch-sub{font-size:.88rem;color:rgba(255,255,255,0.6);margin-bottom:16px;line-height:1.5}
-.broch-list{list-style:none;padding:0;margin:0 0 18px}
-.broch-list li{position:relative;padding-left:22px;font-size:.84rem;color:rgba(255,255,255,0.8);line-height:1.5;margin-bottom:8px}
-.broch-list li::before{content:'✓';position:absolute;left:0;color:var(--gold-light);font-weight:800;font-size:.9rem}
-.broch-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-weight:700;font-size:14px;padding:13px 18px;border-radius:8px;font-family:var(--fb);transition:transform 0.2s,box-shadow 0.2s;box-shadow:0 6px 18px rgba(196,146,42,0.3);border:none;cursor:pointer}
-.broch-cta:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(196,146,42,0.42)}
+.broch-card{background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:24px 22px;box-shadow:0 8px 30px rgba(0,0,0,0.08);position:absolute;bottom:32px;right:32px;width:300px;z-index:3;backdrop-filter:blur(10px);background:rgba(255,255,255,.92)}
+.broch-badge{display:inline-block;background:rgba(221,0,0,.08);color:#DD0000;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:4px 10px;border-radius:3px;margin-bottom:10px}
+.broch-title{font-family:var(--fh);font-size:1rem;font-weight:700;color:var(--navy);line-height:1.3;margin-bottom:4px}
+.broch-sub{font-size:.82rem;color:var(--muted);margin-bottom:14px;line-height:1.5}
+.broch-list{list-style:none;padding:0;margin:0 0 14px}
+.broch-list li{position:relative;padding-left:20px;font-size:.78rem;color:var(--text);line-height:1.5;margin-bottom:6px}
+.broch-list li::before{content:'✓';position:absolute;left:0;color:var(--gold);font-weight:800;font-size:.85rem}
+.broch-cta{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;background:var(--navy);color:var(--white);font-weight:700;font-size:13px;padding:11px 16px;border-radius:8px;font-family:var(--fb);transition:all 0.2s;border:none;cursor:pointer}
+.broch-cta:hover{background:#14324f;transform:translateY(-1px);box-shadow:0 4px 12px rgba(11,31,58,0.2)}
 
 /* TRUST BAR */
 .tbar{background:var(--gold);padding:13px 24px}
@@ -306,8 +317,11 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 
 /* RESPONSIVE */
 @media(max-width:900px){
-  .hero-in{grid-template-columns:1fr;gap:30px}
-  .broch-card{max-width:480px}
+  .hero-in{grid-template-columns:1fr;min-height:auto}
+  .hero-left{padding:40px 24px 32px}
+  .hero-right{height:320px}
+  .hero-right::after{background:linear-gradient(180deg,var(--white) 0%,transparent 15%)}
+  .broch-card{position:static;width:100%;max-width:480px;margin:20px auto;background:var(--white)}
   .svc-grid,.docs-grid{grid-template-columns:1fr}
   .ft-in{grid-template-columns:1fr;gap:24px}
   .nav-l{display:none}
@@ -324,7 +338,9 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
   .road-path{left:26px;transform:none}
 }
 @media(max-width:600px){
-  .hero{padding:36px 16px 32px}
+  .hero-left{padding:28px 16px 24px}
+  .hero-right{height:240px}
+  .broch-card{margin:16px}
   section{padding:40px 16px}
   .facts-grid{grid-template-columns:1fr 1fr}
   .why-grid{grid-template-columns:1fr}
@@ -363,13 +379,20 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 <!-- HERO -->
 <section class="hero">
   <div class="hero-in">
-    <div>
+    <div class="hero-left">
       <div class="hero-tag"><span class="hero-flag">&#127465;&#127466;</span> GERMANY PG CAREER PATHWAY</div>
-      <h1>Medical PG in Germany — Your Path to Facharzt</h1>
-      <p class="hero-sub">Germany needs <strong>20,000+ doctors every year</strong>. Train in world-class hospitals with <strong>zero tuition fees</strong>, earn up to <strong>€4,500/month</strong> with a temporary license, and build your path to <strong>permanent residency</strong> — all with GooCampus end-to-end support.</p>
+      <h1>Everything you need to start your <span class="accent">Medical PG in Germany</span></h1>
+      <p class="hero-sub">Train in world-class German hospitals with <strong>zero tuition fees</strong>, earn up to <strong>€4,500/month</strong>, and fast-track your permanent residency — with GooCampus end-to-end support from India to Germany.</p>
       <div class="hero-btns">
         <button class="btn-p" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now — It's Free</button>
-        <a href="/germanypathway/package" class="btn-o" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">&#128176; View Package Details</a>
+        <a href="/germanypathway/package" class="btn-o" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">View Package Details &#8594;</a>
+      </div>
+      <div class="hero-social">
+        <div class="hero-review">
+          <div class="hero-stars">&#9733;&#9733;&#9733;&#9733;&#9733;</div>
+          <div class="hero-review-text"><strong>4.9/5 on Google</strong>Based on 200+ reviews</div>
+        </div>
+        <div class="hero-stat"><strong>1000+</strong> Doctors Counselled</div>
       </div>
       <div class="proof">
         <div class="p-item"><span class="p-num">€0</span><span class="p-label">Tuition Fees</span></div>
@@ -378,17 +401,16 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         <div class="p-item"><span class="p-num">21 Mo.</span><span class="p-label">Fast-Track PR</span></div>
       </div>
     </div>
-    <div>
+    <div class="hero-right">
+      <img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=900&q=80" alt="Germany cityscape with traditional architecture" loading="eager">
       <div class="broch-card">
         <div class="broch-badge">Free Download</div>
-        <div class="broch-title">Germany PG Medical — Complete Brochure</div>
-        <p class="broch-sub">Everything you need to know about pursuing Medical PG in Germany</p>
+        <div class="broch-title">Germany PG Medical Brochure</div>
+        <p class="broch-sub">Complete pathway guide — process, exams, timeline &amp; costs</p>
         <ul class="broch-list">
-          <li>Step-by-step process from India to Germany</li>
-          <li>Language training timeline (A1 to C1)</li>
-          <li>FSP exam breakdown and preparation</li>
-          <li>Complete services list — India &amp; Germany</li>
-          <li>Documents checklist for Defizitbescheid &amp; Visa</li>
+          <li>Step-by-step India to Germany process</li>
+          <li>Language training timeline (A1–C1)</li>
+          <li>FSP exam prep &amp; services list</li>
         </ul>
         <button class="broch-cta" onclick="openBrochModal()">&#128218; Download Free Brochure</button>
       </div>
