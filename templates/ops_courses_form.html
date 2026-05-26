@@ -36,7 +36,7 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Name *</label>
-                    <select name="courses_name" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="courses_name" id="courseName" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Course</option>
                         {% for c in course_names %}
                         <option value="{{ c }}" {% if record and record.courses_name == c %}selected{% endif %}>{{ c }}</option>
@@ -84,7 +84,7 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Provider</label>
-                    <select name="course_provider" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="course_provider" id="courseProvider" onchange="filterCoursesByProvider()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Provider</option>
                         {% for cp in course_providers %}
                         <option value="{{ cp }}" {% if record and record.course_provider == cp %}selected{% endif %}>{{ cp }}</option>
@@ -213,6 +213,49 @@
     function updateHighlight() { dropdown.querySelectorAll('[data-idx]').forEach((el, i) => { el.style.background = i === highlightIdx ? '#f9fafb' : 'white'; }); }
     function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
 })();
+
+// ── Course Provider → Course Name cascading ──
+const ALL_COURSE_NAMES = {{ course_names|tojson }};
+const INITIAL_COURSE = {{ (record.courses_name or '')|tojson if record else '""' }};
+
+function filterCoursesByProvider() {
+    const provider = document.getElementById('courseProvider').value;
+    const courseSelect = document.getElementById('courseName');
+    const currentVal = courseSelect.value;
+
+    if (!provider) {
+        // No provider selected — show all courses
+        rebuildCourseOptions(ALL_COURSE_NAMES, currentVal);
+        return;
+    }
+
+    // Fetch deliverables for this provider from API
+    fetch('/api/vendor-deliverables?vendor=' + encodeURIComponent(provider))
+        .then(r => r.json())
+        .then(deliverables => {
+            if (deliverables.length === 0) {
+                // Provider has no specific course links — show all
+                rebuildCourseOptions(ALL_COURSE_NAMES, currentVal);
+            } else {
+                // Always include "Other" if not already there
+                if (!deliverables.includes('Other')) deliverables.push('Other');
+                rebuildCourseOptions(deliverables, currentVal);
+            }
+        })
+        .catch(() => rebuildCourseOptions(ALL_COURSE_NAMES, currentVal));
+}
+
+function rebuildCourseOptions(courses, selectedVal) {
+    const sel = document.getElementById('courseName');
+    sel.innerHTML = '<option value="">Select Course</option>';
+    courses.forEach(c => {
+        const opt = document.createElement('option');
+        opt.value = c;
+        opt.textContent = c;
+        if (c === selectedVal) opt.selected = true;
+        sel.appendChild(opt);
+    });
+}
 </script>
 
 {% endblock %}

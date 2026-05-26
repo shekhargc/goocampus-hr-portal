@@ -12509,6 +12509,39 @@ def ensure_ops_tables():
             conn.commit()
             logging.info("Re-seeded vendor_service_map (was empty)")
 
+        # Migration: seed vendor_service_map for Online Courses vendors (course name deliverables)
+        COURSE_VENDOR_SERVICES = {
+            'RCSI': ['CCrISP', 'ATLS'],
+            'BMA': ['ALS', 'BLS'],
+            'BMJ': ['Clinical Audit and QIP'],
+            'Coursera': ['Interview skills training'],
+            'Udemy': ['Interview skills training'],
+        }
+        try:
+            # Check if any Online Courses vendor already has services mapped
+            oc_svc_check = conn.execute("""
+                SELECT COUNT(*) as c FROM vendor_service_map vsm
+                JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+                WHERE vp.category LIKE '%Online Courses%'
+            """).fetchone()['c']
+            if oc_svc_check == 0:
+                for vname, courses in COURSE_VENDOR_SERVICES.items():
+                    vrow = conn.execute(
+                        "SELECT id FROM vendors_providers WHERE name = ? AND category LIKE '%Online Courses%'",
+                        (vname,)
+                    ).fetchone()
+                    if vrow:
+                        for crs in courses:
+                            conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vrow['id'], crs))
+                conn.commit()
+                logging.info("Seeded vendor_service_map for Online Courses vendors with course name deliverables")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"Online Courses vendor_service_map seed: {e}")
+
         # Backfill vendor_provider in ops_coaching from old separate columns
         try:
             unfilled = conn.execute("""SELECT id, english_training, ielts_vendor, oet_vendor,
@@ -13939,6 +13972,24 @@ def api_vendors_for_service():
     return jsonify(vendors)
 
 
+@app.route('/api/vendor-deliverables')
+@login_required
+def api_vendor_deliverables():
+    """AJAX endpoint: return services/deliverables for a vendor by name."""
+    vendor_name = request.args.get('vendor', '').strip()
+    if not vendor_name:
+        return jsonify([])
+    conn = get_db()
+    rows = conn.execute("""
+        SELECT DISTINCT vsm.service_name FROM vendor_service_map vsm
+        JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+        WHERE vp.name = ? AND vp.is_active = TRUE
+        ORDER BY vsm.service_name
+    """, (vendor_name,)).fetchall()
+    conn.close()
+    return jsonify([r['service_name'] for r in rows])
+
+
 @app.route('/api/vendors-by-category')
 @login_required
 def api_vendors_by_category():
@@ -13983,7 +14034,7 @@ def ops_vendors_providers():
     # Deliverables per category for the multi-select in the modal
     deliverables = {
         'Training Programs': ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1'],
-        'Online Courses': [],
+        'Online Courses': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS', 'Other'],
         'Online Subscriptions': [],
         'Certification Bodies': [],
         'Research & Publications': [],
@@ -18033,10 +18084,12 @@ def ops_courses_add():
     pre_reg = request.args.get('client', '')
     course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
     course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
+    cert_vendors = get_vendors_by_category('Certification Bodies', 'UK Pathway')
+    cert_body_names = [v['name'] for v in cert_vendors] if cert_vendors else get_lookup_options('certification_body')
     return render_template('ops_courses_form.html', record=None,
                            course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
                            course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'),
-                           course_providers=course_provider_names, certification_bodies=get_lookup_options('certification_body'),
+                           course_providers=course_provider_names, certification_bodies=cert_body_names,
                            pre_reg=pre_reg, active_ops_page='online-courses')
 
 
@@ -18066,11 +18119,13 @@ def ops_courses_edit(rid):
     conn.close()
     course_vendors = get_vendors_by_category('Online Courses', 'UK Pathway')
     course_provider_names = [v['name'] for v in course_vendors] if course_vendors else get_lookup_options('course_provider')
+    cert_vendors = get_vendors_by_category('Certification Bodies', 'UK Pathway')
+    cert_body_names = [v['name'] for v in cert_vendors] if cert_vendors else get_lookup_options('certification_body')
     return render_template('ops_courses_form.html', record=record,
                            course_names=get_lookup_options('course_name'), course_types=get_lookup_options('course_type'),
                            course_statuses=get_lookup_options('course_status'), booked_by_options=get_lookup_options('course_booked_by'),
-                           course_providers=course_provider_names, pre_reg='',
-                           active_ops_page='online-courses')
+                           course_providers=course_provider_names, certification_bodies=cert_body_names,
+                           pre_reg='', active_ops_page='online-courses')
 
 
 @app.route('/operations/online-courses/<int:rid>/delete', methods=['POST'])
