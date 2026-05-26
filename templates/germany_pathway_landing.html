@@ -371,7 +371,7 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
       <a href="#package">Package</a>
       <a href="#faq">FAQ</a>
     </div>
-    <button class="nav-cta" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Book Free Counselling</button>
+    <button class="nav-cta" onclick="openRegModal()">Book Free Counselling</button>
     <button class="nav-ham" onclick="document.querySelector('.nav-l').style.display=document.querySelector('.nav-l').style.display==='flex'?'none':'flex'">&#9776;</button>
   </div>
 </nav>
@@ -384,8 +384,8 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
       <h1>Everything you need to start your <span class="accent">Medical PG in Germany</span></h1>
       <p class="hero-sub">Train in world-class German hospitals with <strong>zero tuition fees</strong>, earn up to <strong>€4,500/month</strong>, and fast-track your permanent residency — with GooCampus end-to-end support from India to Germany.</p>
       <div class="hero-btns">
-        <button class="btn-p" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now — It's Free</button>
-        <a href="/germanypathway/package" class="btn-o" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">View Package Details &#8594;</a>
+        <button class="btn-p" onclick="openRegModal()">Register Now — It's Free</button>
+        <button class="btn-o" onclick="openPkgModal()" style="display:inline-flex;align-items:center;gap:6px;cursor:pointer">View Package Details &#8594;</button>
       </div>
       <div class="hero-social">
         <div class="hero-review">
@@ -654,8 +654,8 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         </ul>
 
         <div class="pkg-cta-row">
-          <a href="/germanypathway/package" class="btn-p" style="text-decoration:none">View Full Package Details</a>
-          <button class="btn-o" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now</button>
+          <button class="btn-p" onclick="openPkgModal()" style="cursor:pointer">View Full Package Details</button>
+          <button class="btn-o" onclick="openRegModal()">Register Now</button>
         </div>
       </div>
 
@@ -982,6 +982,107 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
   </div>
 </div>
 
+<!-- REGISTRATION LEAD CAPTURE MODAL -->
+<div class="dl-modal" id="regModal">
+  <div class="dl-card">
+    <button class="dl-x" onclick="closeRegModal()">&times;</button>
+    <div id="rmStep1">
+      <div class="dl-h">&#128218; Book Free Counselling Session</div>
+      <p class="dl-p">Enter your details to register. Our counsellor will contact you within 24 hours on WhatsApp.</p>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>Full Name *</label>
+        <input type="text" id="rmName" placeholder="Dr. Full Name">
+      </div>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>WhatsApp Number *</label>
+        <div class="phone-wrap">
+          <span>+91</span>
+          <input type="tel" id="rmPhone" placeholder="10-digit number" maxlength="10">
+        </div>
+      </div>
+      <button class="reg-submit" onclick="rmSendOtp()">Send OTP via WhatsApp</button>
+      <div id="rmErr1" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
+    </div>
+    <div id="rmStep2" style="display:none">
+      <div class="dl-h">Enter OTP</div>
+      <p class="dl-p">OTP sent to your WhatsApp <strong id="rmPhoneDisp"></strong></p>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>OTP Code</label>
+        <input type="text" id="rmOtp" placeholder="6-digit OTP" maxlength="6">
+      </div>
+      <button class="reg-submit" onclick="rmVerifyOtp()">Verify OTP</button>
+      <button class="gate-resend" id="rmResend" onclick="rmSendOtp()" disabled style="font-size:.82rem;color:var(--gold);cursor:pointer;margin-top:8px;background:none;border:none;font-family:var(--fb)">Resend OTP (<span id="rmTimer">60</span>s)</button>
+      <div id="rmErr2" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
+    </div>
+    <div id="rmStep3" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:42px;margin-bottom:10px">&#9989;</div>
+      <div class="dl-h">Verified! Complete Your Registration</div>
+      <p class="dl-p">Fill in a few more details below to complete your registration.</p>
+      <div class="reg-row" style="text-align:left">
+        <div class="reg-fg"><label>Full Name *</label><input type="text" id="rmRegName" placeholder="Dr. Full Name"></div>
+        <div class="reg-fg"><label>Email *</label><input type="email" id="rmRegEmail" placeholder="your@email.com"></div>
+      </div>
+      <div class="reg-row" style="text-align:left">
+        <div class="reg-fg"><label>City</label><input type="text" id="rmRegCity" placeholder="Your city"></div>
+        <div class="reg-fg">
+          <label>Current Status</label>
+          <select id="rmRegStatus"><option value="">Select...</option><option>MBBS Student</option><option>Intern</option><option>MBBS Graduate</option><option>Practicing Doctor</option></select>
+        </div>
+      </div>
+      <div class="reg-row" style="text-align:left">
+        <div class="reg-fg">
+          <label>German Language Level</label>
+          <select id="rmRegGerman"><option value="">Select...</option><option>No Knowledge</option><option>A1</option><option>A2</option><option>B1</option><option>B2</option><option>C1</option></select>
+        </div>
+        <div class="reg-fg"><label>Preferred Specialization</label><input type="text" id="rmRegSpec" placeholder="e.g. Cardiology, Surgery"></div>
+      </div>
+      <button class="reg-submit" id="rmRegBtn" onclick="rmSubmitReg()">Register for Germany Pathway</button>
+      <div id="rmRegErr" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
+    </div>
+    <div id="rmStep4" style="display:none;text-align:center;padding:16px 0">
+      <div style="font-size:42px;margin-bottom:10px">&#127881;</div>
+      <div class="dl-h">Registration Successful!</div>
+      <p class="dl-p">Thank you for registering. Our counsellor will contact you within 24 hours on WhatsApp for a free one-to-one session.</p>
+      <button class="reg-submit" onclick="closeRegModal()" style="max-width:200px;margin:12px auto 0">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- PACKAGE GATE MODAL -->
+<div class="dl-modal" id="pkgModal">
+  <div class="dl-card">
+    <button class="dl-x" onclick="closePkgModal()">&times;</button>
+    <div id="pkgStep1">
+      <div class="dl-h">&#128274; Verify to View Package Details</div>
+      <p class="dl-p">Enter your details to access the complete package breakdown, service checklist, and downloadable PDF.</p>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>Full Name *</label>
+        <input type="text" id="pkgName" placeholder="Dr. Full Name">
+      </div>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>WhatsApp Number *</label>
+        <div class="phone-wrap">
+          <span>+91</span>
+          <input type="tel" id="pkgPhone" placeholder="10-digit number" maxlength="10">
+        </div>
+      </div>
+      <button class="reg-submit" onclick="pkgSendOtp()">Send OTP via WhatsApp</button>
+      <div id="pkgErr1" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
+    </div>
+    <div id="pkgStep2" style="display:none">
+      <div class="dl-h">Enter OTP</div>
+      <p class="dl-p">OTP sent to your WhatsApp <strong id="pkgPhoneDisp"></strong></p>
+      <div class="reg-fg" style="margin-bottom:12px">
+        <label>OTP Code</label>
+        <input type="text" id="pkgOtp" placeholder="6-digit OTP" maxlength="6">
+      </div>
+      <button class="reg-submit" onclick="pkgVerifyOtp()">Verify &amp; View Details</button>
+      <button class="gate-resend" id="pkgResend" onclick="pkgSendOtp()" disabled style="font-size:.82rem;color:var(--gold);cursor:pointer;margin-top:8px;background:none;border:none;font-family:var(--fb)">Resend OTP (<span id="pkgTimer">60</span>s)</button>
+      <div id="pkgErr2" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
+    </div>
+  </div>
+</div>
+
 <!-- FOOTER -->
 <footer class="ft">
   <div class="ft-in">
@@ -995,9 +1096,9 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
       <a href="#journey">Journey Map</a>
       <a href="#package">Package &amp; Pricing</a>
       <a href="/germanypathway/services">All Services</a>
-      <a href="/germanypathway/package">Package Details</a>
+      <a href="#" onclick="openPkgModal();return false">Package Details</a>
       <a href="#faq">FAQ</a>
-      <a href="#register">Register Now</a>
+      <a href="#" onclick="openRegModal();return false">Register Now</a>
     </div>
     <div class="ft-col">
       <h4>Contact Us</h4>
@@ -1121,6 +1222,115 @@ function brochVerifyOtp(){
     document.getElementById('brochStep2').style.display='none';
     document.getElementById('brochStep3').style.display='block';
   }).catch(function(){showErr('brochErr2','Network error')});
+}
+
+/* REGISTRATION MODAL */
+function openRegModal(){document.getElementById('regModal').classList.add('show')}
+function closeRegModal(){document.getElementById('regModal').classList.remove('show')}
+document.getElementById('regModal').addEventListener('click',function(e){if(e.target===this)closeRegModal()});
+
+var rmResendInt;
+function rmSendOtp(){
+  var name=document.getElementById('rmName').value.trim();
+  var phone=document.getElementById('rmPhone').value.replace(/\D/g,'');
+  if(!name||name.length<2){showErr('rmErr1','Please enter your full name');return}
+  if(phone.length!==10){showErr('rmErr1','Enter a valid 10-digit number');return}
+  hideErr('rmErr1');
+  var btn=document.querySelector('#rmStep1 .reg-submit');if(btn){btn.disabled=true;btn.textContent='Sending...';}
+  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,phone:phone})})
+  .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
+  .then(function(res){
+    if(btn){btn.disabled=false;btn.textContent='Send OTP via WhatsApp';}
+    if(!res.ok){showErr('rmErr1',res.data.error||'Failed');return}
+    document.getElementById('rmPhoneDisp').textContent='+91 '+phone;
+    document.getElementById('rmStep1').style.display='none';
+    document.getElementById('rmStep2').style.display='block';
+    var sec=60;var el=document.getElementById('rmTimer');var rb=document.getElementById('rmResend');rb.disabled=true;
+    clearInterval(rmResendInt);
+    rmResendInt=setInterval(function(){sec--;el.textContent=sec;if(sec<=0){clearInterval(rmResendInt);rb.disabled=false;rb.textContent='Resend OTP'}},1000);
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Send OTP via WhatsApp';}showErr('rmErr1','Network error')});
+}
+
+function rmVerifyOtp(){
+  var otp=document.getElementById('rmOtp').value.replace(/\D/g,'');
+  if(otp.length!==6){showErr('rmErr2','Enter the 6-digit OTP');return}
+  hideErr('rmErr2');
+  var btn=document.querySelector('#rmStep2 .reg-submit');btn.disabled=true;btn.textContent='Verifying...';
+  fetch('/germanypathway/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:otp})})
+  .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
+  .then(function(res){
+    btn.disabled=false;btn.textContent='Verify OTP';
+    if(!res.ok){showErr('rmErr2',res.data.error||'Invalid OTP');return}
+    document.getElementById('rmStep2').style.display='none';
+    document.getElementById('rmStep3').style.display='block';
+    /* Pre-fill name from step 1 */
+    document.getElementById('rmRegName').value=document.getElementById('rmName').value.trim();
+  }).catch(function(){btn.disabled=false;btn.textContent='Verify OTP';showErr('rmErr2','Network error')});
+}
+
+function rmSubmitReg(){
+  var name=document.getElementById('rmRegName').value.trim();
+  var email=document.getElementById('rmRegEmail').value.trim();
+  if(!name){showErr('rmRegErr','Please enter your name');return}
+  if(!email||email.indexOf('@')===-1){showErr('rmRegErr','Please enter a valid email');return}
+  hideErr('rmRegErr');
+  var btn=document.getElementById('rmRegBtn');btn.disabled=true;btn.textContent='Submitting...';
+  var data={name:name,email:email,phone:document.getElementById('rmPhone').value.replace(/\D/g,''),city:document.getElementById('rmRegCity').value.trim(),current_status:document.getElementById('rmRegStatus').value,german_level:document.getElementById('rmRegGerman').value,specialization:document.getElementById('rmRegSpec').value.trim()};
+  fetch('/germanypathway/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(data)})
+  .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
+  .then(function(res){
+    btn.disabled=false;btn.textContent='Register for Germany Pathway';
+    if(!res.ok){showErr('rmRegErr',res.data.error||'Registration failed');return}
+    document.getElementById('rmStep3').style.display='none';
+    document.getElementById('rmStep4').style.display='block';
+  }).catch(function(){btn.disabled=false;btn.textContent='Register for Germany Pathway';showErr('rmRegErr','Network error')});
+}
+
+/* PACKAGE GATE MODAL */
+function openPkgModal(){document.getElementById('pkgModal').classList.add('show')}
+function closePkgModal(){document.getElementById('pkgModal').classList.remove('show')}
+document.getElementById('pkgModal').addEventListener('click',function(e){if(e.target===this)closePkgModal()});
+
+var pkgResendInt;
+function pkgSendOtp(){
+  var name=document.getElementById('pkgName').value.trim();
+  var phone=document.getElementById('pkgPhone').value.replace(/\D/g,'');
+  if(!name||name.length<2){showErr('pkgErr1','Please enter your full name');return}
+  if(phone.length!==10){showErr('pkgErr1','Enter a valid 10-digit number');return}
+  hideErr('pkgErr1');
+  var btn=document.querySelector('#pkgStep1 .reg-submit');if(btn){btn.disabled=true;btn.textContent='Sending...';}
+  fetch('/germanypathway/send-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name:name,phone:phone})})
+  .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
+  .then(function(res){
+    if(btn){btn.disabled=false;btn.textContent='Send OTP via WhatsApp';}
+    if(!res.ok){showErr('pkgErr1',res.data.error||'Failed');return}
+    document.getElementById('pkgPhoneDisp').textContent='+91 '+phone;
+    document.getElementById('pkgStep1').style.display='none';
+    document.getElementById('pkgStep2').style.display='block';
+    var sec=60;var el=document.getElementById('pkgTimer');var rb=document.getElementById('pkgResend');rb.disabled=true;
+    clearInterval(pkgResendInt);
+    pkgResendInt=setInterval(function(){sec--;el.textContent=sec;if(sec<=0){clearInterval(pkgResendInt);rb.disabled=false;rb.textContent='Resend OTP'}},1000);
+  }).catch(function(){if(btn){btn.disabled=false;btn.textContent='Send OTP via WhatsApp';}showErr('pkgErr1','Network error')});
+}
+
+function pkgVerifyOtp(){
+  var otp=document.getElementById('pkgOtp').value.replace(/\D/g,'');
+  if(otp.length!==6){showErr('pkgErr2','Enter the 6-digit OTP');return}
+  hideErr('pkgErr2');
+  var btn=document.querySelector('#pkgStep2 .reg-submit');btn.disabled=true;btn.textContent='Verifying...';
+  fetch('/germanypathway/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:otp})})
+  .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
+  .then(function(res){
+    btn.disabled=false;btn.textContent='Verify & View Details';
+    if(!res.ok){showErr('pkgErr2',res.data.error||'Invalid OTP');return}
+    window.location.href='/germanypathway/package';
+  }).catch(function(){btn.disabled=false;btn.textContent='Verify & View Details';showErr('pkgErr2','Network error')});
+}
+
+/* Auto-open package modal if redirected from /germanypathway/package */
+if(window.location.search.indexOf('showPackageGate=1')!==-1){
+  openPkgModal();
+  history.replaceState(null,'','/germanypathway');
 }
 
 /* ANIMATED COUNTERS */

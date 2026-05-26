@@ -25740,6 +25740,8 @@ def germany_pathway_services():
 @app.route('/germanypathway/package')
 def germany_pathway_package():
     verified = session.get('gp_otp_verified', False)
+    if not verified:
+        return redirect('/germanypathway?showPackageGate=1')
     return render_template('germany_pathway_package.html', verified=verified)
 
 @app.route('/germanypathway/package/download')
