@@ -19,8 +19,11 @@
 :root{--navy:#0B1F3A;--navy-mid:#122a4e;--gold:#C4922A;--gold-light:#f0c96c;--gold-pale:#fef5e3;--cream:#FAF8F4;--white:#fff;--red:#C41230;--green:#1a6b3a;--text:#1C1C1C;--muted:#5A5A5A;--border:#E0DBD4;--de-red:#DD0000;--de-gold:#FFCC00;--fh:'Playfair Display',Georgia,serif;--fb:'DM Sans',system-ui,sans-serif}
 html{scroll-behavior:smooth}body{font-family:var(--fb);background:var(--cream);color:var(--text);line-height:1.65}a{color:inherit;text-decoration:none}
 
+/* GERMANY FLAG TOP BAR */
+.de-flag-bar{height:4px;background:linear-gradient(90deg,#000 33%,#DD0000 33%,#DD0000 66%,#FFCC00 66%)}
+
 /* ANNOUNCEMENT BAR */
-.ann{background:var(--de-red);padding:9px 24px;text-align:center}
+.ann{background:linear-gradient(90deg,#DD0000 0%,#B30000 100%);padding:10px 24px;text-align:center}
 .ann p{font-size:13px;font-weight:600;color:#fff}
 .ann span{background:rgba(255,255,255,.2);padding:2px 8px;border-radius:3px;margin-left:8px;font-size:10.5px;letter-spacing:1px;text-transform:uppercase}
 
@@ -33,8 +36,9 @@ nav{position:sticky;top:0;z-index:200;background:var(--navy);border-bottom:2px s
 .nav-ham{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
 
 /* HERO */
-.hero{background:var(--navy);position:relative;overflow:hidden;padding:54px 24px 48px}
-.hero::before{content:'';position:absolute;top:-80px;right:-60px;width:480px;height:480px;background:radial-gradient(circle,rgba(196,146,42,.07) 0%,transparent 68%);pointer-events:none}
+.hero{background:linear-gradient(135deg,#0B1F3A 0%,#14324f 50%,#0d2844 100%);position:relative;overflow:hidden;padding:54px 24px 48px}
+.hero::before{content:'';position:absolute;top:0;right:0;width:55%;height:100%;background:url('https://images.unsplash.com/photo-1551076805-e1869033e561?w=800&q=80') center/cover no-repeat;opacity:.08;pointer-events:none}
+.hero::after{content:'';position:absolute;bottom:0;left:0;right:0;height:4px;background:linear-gradient(90deg,#000 33%,#DD0000 33%,#DD0000 66%,#FFCC00 66%);z-index:2}
 .hero-in{max-width:1180px;margin:0 auto;position:relative;display:grid;grid-template-columns:1.1fr 0.9fr;gap:60px;align-items:flex-start}
 .hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(196,146,42,.14);border:1px solid rgba(196,146,42,.38);color:var(--gold-light);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:5px 13px;border-radius:3px;margin-bottom:16px}
 .hero-flag{font-size:16px}
@@ -71,29 +75,125 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 .st{font-family:var(--fh);font-size:clamp(1.5rem,3vw,2rem);font-weight:600;color:var(--navy);line-height:1.25;margin-bottom:12px}
 .ss{font-size:.93rem;color:var(--muted);max-width:600px;line-height:1.72;margin-bottom:30px}
 
+/* KEY FACTS STRIP */
+.facts-strip{background:var(--white);padding:48px 24px}
+.facts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:20px;max-width:1120px;margin:0 auto}
+.fact-card{text-align:center;padding:28px 16px;border-radius:12px;border:1px solid var(--border);background:var(--cream);position:relative;overflow:hidden}
+.fact-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--de-red),var(--de-gold))}
+.fact-ico{font-size:32px;margin-bottom:10px}
+.fact-val{font-family:var(--fh);font-size:1.5rem;font-weight:700;color:var(--navy);line-height:1.1}
+.fact-label{font-size:.78rem;font-weight:500;color:var(--muted);margin-top:4px}
+.fact-sub{font-size:.72rem;color:var(--gold);font-weight:600;margin-top:4px}
+
 /* WHY GERMANY */
-.why-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:16px}
-.wc{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:22px 20px;position:relative;overflow:hidden;transition:all .2s}
+.why-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.wc{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:24px 20px;position:relative;overflow:hidden;transition:all .2s}
 .wc:hover{transform:translateY(-4px);box-shadow:0 12px 30px rgba(11,31,58,.09)}
 .wc::before{content:'';position:absolute;top:0;left:0;right:0;height:4px}
 .wc.c1::before{background:#DD0000}.wc.c2::before{background:#FFCC00}.wc.c3::before{background:#1a6b3a}.wc.c4::before{background:#1a4d8b}.wc.c5::before{background:#C4922A}.wc.c6::before{background:#5a1a8b}
-.wc-ico{width:44px;height:44px;border-radius:10px;display:flex;align-items:center;justify-content:center;font-size:20px;margin-bottom:10px}
+.wc-ico{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:22px;margin-bottom:12px}
 .wc.c1 .wc-ico{background:#ffeaea}.wc.c2 .wc-ico{background:#fff9e0}.wc.c3 .wc-ico{background:#edf7f0}.wc.c4 .wc-ico{background:#e8f0fb}.wc.c5 .wc-ico{background:var(--gold-pale)}.wc.c6 .wc-ico{background:#f3eafd}
 .wc h3{font-size:.93rem;font-weight:700;color:var(--navy);margin-bottom:6px}
 .wc p{font-size:.82rem;color:var(--muted);line-height:1.6}
 
-/* TIMELINE */
-.tl-sec{background:var(--navy);color:#fff}
-.tl-sec .sl{color:var(--gold-light)}.tl-sec .st{color:#fff}.tl-sec .ss{color:rgba(255,255,255,.55)}
-.timeline{position:relative;padding:10px 0}
-.timeline::before{content:'';position:absolute;left:28px;top:0;bottom:0;width:3px;background:linear-gradient(to bottom,var(--gold),rgba(196,146,42,.2));border-radius:2px}
-.tl-item{position:relative;padding-left:72px;margin-bottom:36px}
-.tl-item:last-child{margin-bottom:0}
-.tl-dot{position:absolute;left:16px;top:2px;width:28px;height:28px;border-radius:50%;background:var(--gold);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:var(--navy);box-shadow:0 0 0 5px rgba(196,146,42,.2)}
-.tl-dur{display:inline-block;font-size:10px;font-weight:700;letter-spacing:1px;text-transform:uppercase;background:rgba(196,146,42,.15);color:var(--gold-light);padding:3px 10px;border-radius:3px;margin-bottom:6px}
-.tl-item h3{font-family:var(--fh);font-size:1.05rem;font-weight:600;color:#fff;margin-bottom:5px}
-.tl-item p{font-size:.84rem;color:rgba(255,255,255,.6);line-height:1.65}
-.tl-loc{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:rgba(255,255,255,.4);margin-top:4px;text-transform:uppercase;letter-spacing:.8px}
+/* === GRAPHICAL JOURNEY MAP === */
+.journey-sec{background:linear-gradient(180deg,#f7f5f0 0%,var(--cream) 100%);padding:72px 24px 80px;position:relative;overflow:hidden}
+.journey-sec::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background:url("data:image/svg+xml,%3Csvg width='60' height='60' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M0 30h60M30 0v60' stroke='rgba(11,31,58,0.03)' fill='none'/%3E%3C/svg%3E");pointer-events:none}
+
+/* Road path */
+.road-wrap{position:relative;max-width:1000px;margin:0 auto}
+.road-path{position:absolute;left:50%;top:0;bottom:0;width:4px;transform:translateX(-50%);background:linear-gradient(to bottom,var(--navy),var(--gold),var(--green));border-radius:2px}
+.road-path::before,.road-path::after{content:'';position:absolute;left:50%;transform:translateX(-50%);width:16px;height:16px;border-radius:50%}
+.road-path::before{top:-8px;background:var(--gold);box-shadow:0 0 0 4px rgba(196,146,42,.15),0 0 16px rgba(196,146,42,.2)}
+.road-path::after{bottom:-8px;background:var(--green);box-shadow:0 0 0 4px rgba(26,107,58,.15),0 0 16px rgba(26,107,58,.2)}
+
+/* Journey nodes */
+.j-node{position:relative;display:flex;align-items:flex-start;margin-bottom:16px;min-height:120px}
+.j-node:last-child{margin-bottom:0}
+.j-node:nth-child(odd){flex-direction:row;padding-right:calc(50% + 48px)}
+.j-node:nth-child(even){flex-direction:row-reverse;padding-left:calc(50% + 48px)}
+
+/* Center marker */
+.j-marker{position:absolute;left:50%;top:12px;transform:translateX(-50%);width:52px;height:52px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:20px;z-index:3;box-shadow:0 4px 16px rgba(0,0,0,.15)}
+.j-marker.india{background:linear-gradient(135deg,#FF9933,#fff 50%,#138808);color:var(--navy)}
+.j-marker.germany{background:linear-gradient(135deg,#000 33%,#DD0000 33%,#DD0000 66%,#FFCC00 66%)}
+.j-marker .j-step{font-size:14px;font-weight:900;color:var(--navy);text-shadow:0 1px 2px rgba(255,255,255,.4)}
+.j-marker.germany .j-step{color:#fff;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+
+/* PHOTO BANNER */
+.photo-banner{display:grid;grid-template-columns:repeat(3,1fr);height:200px;overflow:hidden}
+.photo-banner img{width:100%;height:100%;object-fit:cover;filter:brightness(.85);transition:filter .3s}
+.photo-banner img:hover{filter:brightness(1)}
+
+/* Card */
+.j-card{background:var(--white);border:1px solid var(--border);border-radius:14px;padding:22px 22px 18px;box-shadow:0 2px 8px rgba(0,0,0,.05);transition:all .25s;width:100%}
+.j-card:hover{border-color:var(--gold);transform:translateY(-2px);box-shadow:0 8px 28px rgba(0,0,0,.1)}
+.j-dur{display:inline-flex;align-items:center;gap:5px;font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;background:var(--gold-pale);color:var(--gold);padding:4px 12px;border-radius:20px;margin-bottom:8px}
+.j-dur svg{width:12px;height:12px;fill:var(--gold)}
+.j-card h3{font-family:var(--fh);font-size:1.02rem;font-weight:600;color:var(--navy);margin-bottom:6px;line-height:1.3}
+.j-card p{font-size:.82rem;color:var(--muted);line-height:1.65}
+.j-loc{display:inline-flex;align-items:center;gap:5px;font-size:10.5px;font-weight:600;color:var(--muted);margin-top:8px;text-transform:uppercase;letter-spacing:.6px;opacity:.6}
+.j-highlight{background:#f0faf3;border:1px solid rgba(26,107,58,.2)}
+.j-highlight .j-dur{background:rgba(26,107,58,.1);color:var(--green)}
+.j-salary{display:inline-flex;align-items:center;gap:5px;background:rgba(26,107,58,.08);color:var(--green);font-size:11px;font-weight:700;padding:4px 10px;border-radius:4px;margin-top:8px}
+
+/* Journey start/end labels */
+.j-start,.j-end{text-align:center;position:relative;z-index:3;padding:8px 0}
+.j-start{margin-bottom:20px}
+.j-end{margin-top:20px}
+.j-start-badge,.j-end-badge{display:inline-flex;align-items:center;gap:8px;padding:8px 20px;border-radius:24px;font-size:13px;font-weight:700}
+.j-start-badge{background:#fff3e0;border:1px solid #ffcc80;color:#e65100}
+.j-end-badge{background:#e8f5e9;border:1px solid #a5d6a7;color:#2e7d32}
+
+/* SALARY DATA */
+.salary-sec{background:var(--white);padding:56px 24px}
+.salary-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:20px;margin-bottom:28px}
+.sal-card{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:24px 20px;text-align:center;transition:all .2s}
+.sal-card:hover{transform:translateY(-3px);box-shadow:0 8px 24px rgba(0,0,0,.06)}
+.sal-stage{font-size:10px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);margin-bottom:8px}
+.sal-amt{font-family:var(--fh);font-size:1.8rem;font-weight:700;color:var(--navy);line-height:1}
+.sal-period{font-size:.78rem;color:var(--muted);margin-top:3px}
+.sal-inr{font-size:.82rem;color:var(--green);font-weight:600;margin-top:6px;padding:4px 12px;background:rgba(26,107,58,.08);border-radius:4px;display:inline-block}
+
+/* TOP HOSPITALS */
+.hosp-sec{background:var(--cream)}
+.hosp-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:14px}
+.hosp-card{display:flex;align-items:center;gap:16px;background:var(--white);border:1px solid var(--border);border-radius:10px;padding:16px 18px;transition:all .2s}
+.hosp-card:hover{border-color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,.05);transform:translateY(-1px)}
+.hosp-rank{width:32px;height:32px;border-radius:50%;background:var(--gold-pale);color:var(--gold);font-size:13px;font-weight:800;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.hosp-info h4{font-size:.88rem;font-weight:700;color:var(--navy);line-height:1.2}
+.hosp-info p{font-size:.78rem;color:var(--muted);margin-top:2px}
+.hosp-sal{margin-left:auto;text-align:right;flex-shrink:0}
+.hosp-sal .amt{font-family:var(--fh);font-size:.95rem;font-weight:700;color:var(--green)}
+.hosp-sal .per{font-size:.68rem;color:var(--muted)}
+
+/* PACKAGE PREVIEW */
+.pkg-sec{background:var(--white);padding:64px 24px;position:relative;overflow:hidden;border-top:3px solid var(--gold)}
+.pkg-sec::before{content:'';position:absolute;top:-100px;right:-100px;width:500px;height:500px;background:radial-gradient(circle,rgba(196,146,42,.04) 0%,transparent 70%);pointer-events:none}
+.pkg-hero{display:grid;grid-template-columns:1fr 1fr;gap:40px;align-items:center}
+.pkg-left h3{font-family:var(--fh);font-size:1.1rem;color:var(--muted);font-weight:400;margin-bottom:4px}
+.pkg-price{font-family:var(--fh);font-size:clamp(2.5rem,5vw,3.5rem);font-weight:700;color:var(--navy);line-height:1}
+.pkg-price-sub{font-size:.88rem;color:var(--muted);margin-top:6px;margin-bottom:24px}
+.pkg-includes{list-style:none;padding:0}
+.pkg-includes li{display:flex;align-items:flex-start;gap:10px;padding:8px 0;font-size:.86rem;color:var(--text);border-bottom:1px solid var(--border)}
+.pkg-includes li:last-child{border-bottom:none}
+.pkg-includes .chk{color:var(--gold);font-weight:800;flex-shrink:0;font-size:14px}
+
+/* Installment cards */
+.inst-cards{display:flex;flex-direction:column;gap:14px}
+.inst-card{background:var(--cream);border:1px solid var(--border);border-radius:12px;padding:20px;transition:all .2s}
+.inst-card:hover{border-color:var(--gold);box-shadow:0 4px 16px rgba(0,0,0,.06)}
+.inst-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.inst-badge{font-size:10px;font-weight:700;letter-spacing:1.2px;text-transform:uppercase;padding:3px 10px;border-radius:3px}
+.inst-badge.i1{background:#fff3e0;color:#e65100}
+.inst-badge.i2{background:#e3f2fd;color:#1565c0}
+.inst-badge.i3{background:#e8f5e9;color:#2e7d32}
+.inst-amt{font-family:var(--fh);font-size:1.1rem;font-weight:700;color:var(--navy)}
+.inst-title{font-size:.88rem;font-weight:600;color:var(--navy);margin-bottom:4px}
+.inst-desc{font-size:.78rem;color:var(--muted);line-height:1.55}
+.inst-when{font-size:.72rem;color:var(--muted);font-style:italic;margin-top:6px;opacity:.7}
+.pkg-cta-row{display:flex;gap:12px;margin-top:28px;flex-wrap:wrap}
+.pkg-cta-row .btn-p{padding:14px 28px;font-size:15px;border-radius:8px;text-decoration:none;display:inline-block}
 
 /* SERVICES */
 .svc-sec{background:var(--white)}
@@ -109,6 +209,19 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 .svc-list li:hover{border-color:var(--gold);background:var(--gold-pale)}
 .svc-list li::before{content:counter(svc);position:absolute;left:12px;top:50%;transform:translateY(-50%);width:22px;height:22px;border-radius:50%;background:var(--gold);color:var(--navy);font-size:11px;font-weight:700;display:flex;align-items:center;justify-content:center}
 
+/* COMPARISON TABLE */
+.cmp-sec{background:var(--cream)}
+.cmp-wrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.cmp-table{width:100%;border-collapse:separate;border-spacing:0;border-radius:12px;overflow:hidden;border:1px solid var(--border);background:var(--white);font-size:.82rem;min-width:700px}
+.cmp-table thead{background:var(--navy)}
+.cmp-table th{padding:14px 16px;color:#fff;font-weight:700;text-align:left;font-size:.78rem;letter-spacing:.5px;text-transform:uppercase}
+.cmp-table th:first-child{border-radius:12px 0 0 0}.cmp-table th:last-child{border-radius:0 12px 0 0}
+.cmp-table td{padding:12px 16px;border-bottom:1px solid var(--border);color:var(--text);vertical-align:top}
+.cmp-table tbody tr:last-child td{border-bottom:none}
+.cmp-table tbody tr:hover{background:var(--gold-pale)}
+.cmp-table .hl{background:rgba(196,146,42,.06)}
+.cmp-table .hl td{font-weight:600}
+
 /* DOCS */
 .docs-grid{display:grid;grid-template-columns:1fr 1fr;gap:24px}
 .doc-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:24px 22px}
@@ -119,13 +232,13 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 .doc-list li::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:8px;height:8px;border-radius:50%;background:var(--gold)}
 
 /* ELIGIBILITY */
-.elig-sec{background:var(--navy)}
-.elig-sec .sl{color:var(--gold-light)}.elig-sec .st{color:#fff}.elig-sec .ss{color:rgba(255,255,255,.55)}
+.elig-sec{background:linear-gradient(180deg,#f7f5f0 0%,var(--cream) 100%)}
 .elig-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:16px}
-.eg{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:10px;padding:22px 20px;text-align:center}
+.eg{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:22px 20px;text-align:center;transition:all .2s}
+.eg:hover{border-color:var(--gold);box-shadow:0 6px 20px rgba(0,0,0,.06);transform:translateY(-2px)}
 .eg-ico{font-size:28px;margin-bottom:10px}
-.eg h4{font-size:.92rem;font-weight:700;color:#fff;margin-bottom:6px}
-.eg p{font-size:.82rem;color:rgba(255,255,255,.55);line-height:1.6}
+.eg h4{font-size:.92rem;font-weight:700;color:var(--navy);margin-bottom:6px}
+.eg p{font-size:.82rem;color:var(--muted);line-height:1.6}
 
 /* FAQ */
 .faq-list{max-width:780px}
@@ -135,13 +248,14 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 .faq-q .arr{font-size:18px;color:var(--gold);transition:transform .25s;flex-shrink:0}
 .faq-item.open .faq-q .arr{transform:rotate(180deg)}
 .faq-a{max-height:0;overflow:hidden;transition:max-height .3s ease}
-.faq-item.open .faq-a{max-height:400px}
+.faq-item.open .faq-a{max-height:500px}
 .faq-a-in{padding:0 0 16px;font-size:.86rem;color:var(--muted);line-height:1.72}
 
 /* REGISTER FORM */
-.reg-sec{background:linear-gradient(135deg,var(--navy) 0%,#0d2240 100%)}
+.reg-sec{background:var(--navy);position:relative;overflow:hidden}
+.reg-sec::before{content:'';position:absolute;top:-150px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(196,146,42,.08) 0%,transparent 60%);pointer-events:none}
 .reg-sec .sl{color:var(--gold-light)}.reg-sec .st{color:#fff}.reg-sec .ss{color:rgba(255,255,255,.55)}
-.reg-card{max-width:640px;background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.1);border-radius:14px;padding:32px 28px}
+.reg-card{max-width:640px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:32px 28px}
 .reg-row{display:flex;gap:14px;margin-bottom:14px}
 .reg-fg{flex:1;display:flex;flex-direction:column;gap:5px}
 .reg-fg label{font-size:11px;font-weight:600;color:rgba(255,255,255,.7);letter-spacing:.3px;text-transform:uppercase}
@@ -200,18 +314,31 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
   .nav-ham{display:block}
   .reg-row{flex-direction:column;gap:14px}
   .proof{gap:18px}
+  .facts-grid{grid-template-columns:repeat(2,1fr)}
+  .salary-grid{grid-template-columns:1fr}
+  .hosp-grid{grid-template-columns:1fr}
+  .why-grid{grid-template-columns:1fr 1fr}
+  .pkg-hero{grid-template-columns:1fr}
+  .j-node:nth-child(odd),.j-node:nth-child(even){flex-direction:column;padding:0 0 0 72px}
+  .j-marker{left:0;transform:none}
+  .road-path{left:26px;transform:none}
 }
 @media(max-width:600px){
   .hero{padding:36px 16px 32px}
   section{padding:40px 16px}
-  .timeline::before{left:18px}
-  .tl-dot{left:6px;width:24px;height:24px;font-size:10px}
-  .tl-item{padding-left:52px}
+  .facts-grid{grid-template-columns:1fr 1fr}
   .why-grid{grid-template-columns:1fr}
+  .j-node:nth-child(odd),.j-node:nth-child(even){padding-left:62px}
+  .j-marker{width:42px;height:42px;font-size:16px}
+  .photo-banner{grid-template-columns:1fr;height:160px}
+  .photo-banner img:nth-child(2),.photo-banner img:nth-child(3){display:none}
 }
 </style>
 </head>
 <body>
+
+<!-- GERMANY FLAG BAR -->
+<div class="de-flag-bar"></div>
 
 <!-- ANNOUNCEMENT BAR -->
 <div class="ann">
@@ -221,11 +348,11 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 <!-- NAV -->
 <nav>
   <div class="nav-in">
-    <a href="/germanypathway"><img src="/static/img/goocampus-logo.png" alt="GooCampus" class="logo-img" onerror="this.outerHTML='<span style=&quot;font-family:var(--fh);font-size:1.3rem;font-weight:700;color:#fff&quot;>GooCampus</span>'"></a>
+    <a href="/germanypathway"><img src="/static/logo-white.png" alt="GooCampus" class="logo-img" onerror="this.outerHTML='<span style=&quot;font-family:var(--fh);font-size:1.3rem;font-weight:700;color:#fff&quot;>GooCampus</span>'"></a>
     <div class="nav-l">
       <a href="#why-germany">Why Germany</a>
-      <a href="#process">Process</a>
-      <a href="#services">Services</a>
+      <a href="#journey">Journey</a>
+      <a href="#package">Package</a>
       <a href="#faq">FAQ</a>
     </div>
     <button class="nav-cta" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Book Free Counselling</button>
@@ -241,14 +368,14 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
       <h1>Medical PG in Germany — Your Path to Facharzt</h1>
       <p class="hero-sub">Germany needs <strong>20,000+ doctors every year</strong>. Train in world-class hospitals with <strong>zero tuition fees</strong>, earn up to <strong>€4,500/month</strong> with a temporary license, and build your path to <strong>permanent residency</strong> — all with GooCampus end-to-end support.</p>
       <div class="hero-btns">
-        <button class="btn-p" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now</button>
-        <button class="btn-o" onclick="document.getElementById('services').scrollIntoView({behavior:'smooth'})">View Services</button>
+        <button class="btn-p" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now — It's Free</button>
+        <a href="/germanypathway/package" class="btn-o" style="display:inline-flex;align-items:center;gap:6px;text-decoration:none">&#128176; View Package Details</a>
       </div>
       <div class="proof">
-        <div class="p-item"><span class="p-num">20,000+</span><span class="p-label">Doctors Needed / Year</span></div>
+        <div class="p-item"><span class="p-num">€0</span><span class="p-label">Tuition Fees</span></div>
         <div class="p-item"><span class="p-num">€4,500</span><span class="p-label">Monthly Salary</span></div>
-        <div class="p-item"><span class="p-num">€2,700</span><span class="p-label">Training Stipend</span></div>
         <div class="p-item"><span class="p-num">5 Years</span><span class="p-label">PG Duration</span></div>
+        <div class="p-item"><span class="p-num">21 Mo.</span><span class="p-label">Fast-Track PR</span></div>
       </div>
     </div>
     <div>
@@ -274,8 +401,39 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
   <div class="tbar-in">
     <div class="ti"><span class="ico">&#9989;</span><span class="txt">GooCampus Verified</span></div>
     <div class="ti"><span class="ico">&#127919;</span><span class="txt">End-to-End Support</span></div>
-    <div class="ti"><span class="ico">&#127758;</span><span class="txt">India + Germany Offices</span></div>
+    <div class="ti"><span class="ico">&#127758;</span><span class="txt">India + Germany</span></div>
+    <div class="ti"><span class="ico">&#128176;</span><span class="txt">Zero Tuition</span></div>
     <div class="ti"><span class="ico">&#129657;</span><span class="txt">1000+ Doctors Counselled</span></div>
+  </div>
+</div>
+
+<!-- KEY FACTS -->
+<div class="facts-strip">
+  <div class="facts-grid">
+    <div class="fact-card">
+      <div class="fact-ico">&#127891;</div>
+      <div class="fact-val">Facharzt</div>
+      <div class="fact-label">Specialist Qualification</div>
+      <div class="fact-sub">EU-wide recognition</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-ico">&#128176;</div>
+      <div class="fact-val">€57K–€66K</div>
+      <div class="fact-label">Year 1 Gross Salary</div>
+      <div class="fact-sub">~&#8377;51L – &#8377;59L per year</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-ico">&#127968;</div>
+      <div class="fact-val">21 Months</div>
+      <div class="fact-label">PR Eligibility</div>
+      <div class="fact-sub">Blue Card fast-track</div>
+    </div>
+    <div class="fact-card">
+      <div class="fact-ico">&#128203;</div>
+      <div class="fact-val">No NEET</div>
+      <div class="fact-label">Entry Requirement</div>
+      <div class="fact-sub">MBBS + German language</div>
+    </div>
   </div>
 </div>
 
@@ -284,73 +442,220 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
   <div class="con">
     <p class="sl">Why Germany</p>
     <h2 class="st">Why Indian Doctors Choose Germany for PG</h2>
-    <p class="ss">Germany offers a unique combination of world-class training, financial independence, and a clear path to permanent residency for medical professionals.</p>
+    <p class="ss">Germany offers world-class training, financial independence, and a clear path to permanent residency for medical professionals.</p>
     <div class="why-grid">
-      <div class="wc c1"><div class="wc-ico">&#127973;</div><h3>World-Class Healthcare</h3><p>Train in modern infrastructure with advanced equipment in one of the world's best healthcare systems.</p></div>
-      <div class="wc c2"><div class="wc-ico">&#128176;</div><h3>Zero Tuition Fees</h3><p>No tuition fees for most PG courses in Germany. The cost of medical education is next to zero.</p></div>
-      <div class="wc c3"><div class="wc-ico">&#128188;</div><h3>Earn While You Train</h3><p>PG courses include on-the-job training with a monthly stipend of around €2,700 during training.</p></div>
-      <div class="wc c4"><div class="wc-ico">&#127891;</div><h3>Facharzt Title</h3><p>After completing training, you receive the title of Facharzt (specialist) — recognized across Europe.</p></div>
-      <div class="wc c5"><div class="wc-ico">&#127968;</div><h3>Permanent Residency</h3><p>Your chances of getting permanent German residency increase significantly after completing your PG.</p></div>
-      <div class="wc c6"><div class="wc-ico">&#128200;</div><h3>High Demand</h3><p>Germany faces a massive shortage of qualified doctors. Hospitals actively recruit foreign Non-EU doctors.</p></div>
+      <div class="wc c1"><div class="wc-ico">&#127973;</div><h3>World-Class Healthcare</h3><p>Train in modern infrastructure with advanced equipment. Charit&eacute;, LMU Klinikum, Heidelberg — the best in Europe.</p></div>
+      <div class="wc c2"><div class="wc-ico">&#128176;</div><h3>Zero Tuition Fees</h3><p>No tuition fees for Weiterbildung. This is paid hospital employment, not a tuition-based course.</p></div>
+      <div class="wc c3"><div class="wc-ico">&#128188;</div><h3>Earn While You Train</h3><p>€4,800–€5,500/month gross as Assistenzarzt. Even during temporary license phase, earn ~€2,700/month.</p></div>
+      <div class="wc c4"><div class="wc-ico">&#127891;</div><h3>Facharzt Title</h3><p>Receive the Facharzt (specialist) title — recognized across the EU, valued by UK GMC, ECFMG, and AHPRA.</p></div>
+      <div class="wc c5"><div class="wc-ico">&#127968;</div><h3>Fast Permanent Residency</h3><p>Blue Card holders with B2 German can get PR in just 21 months. Germany now allows dual nationality.</p></div>
+      <div class="wc c6"><div class="wc-ico">&#128200;</div><h3>Massive Doctor Shortage</h3><p>20,000+ vacancies yearly. Hospitals actively recruit non-EU doctors. Year-round hiring, especially Feb &amp; Oct.</p></div>
     </div>
   </div>
 </section>
 
-<!-- PROCESS TIMELINE -->
-<section class="tl-sec" id="process">
+<!-- PHOTO BANNER -->
+<div class="photo-banner">
+  <img src="https://images.unsplash.com/photo-1599045118108-bf9954418b76?w=600&q=75" alt="German hospital corridor" loading="lazy">
+  <img src="https://images.unsplash.com/photo-1527576539890-dfa815648363?w=600&q=75" alt="German architecture" loading="lazy">
+  <img src="https://images.unsplash.com/photo-1579684385127-1ef15d508118?w=600&q=75" alt="Medical professionals" loading="lazy">
+</div>
+
+<!-- ════════ GRAPHICAL JOURNEY MAP ════════ -->
+<section class="journey-sec" id="journey">
   <div class="con">
-    <p class="sl">The Process</p>
-    <h2 class="st">Your Journey to Medical PG in Germany</h2>
-    <p class="ss">A structured pathway from language training in India to your permanent medical license in Germany.</p>
-    <div class="timeline">
-      <div class="tl-item">
-        <div class="tl-dot">1</div>
-        <span class="tl-dur">7–8 Months</span>
+    <p class="sl">The Journey</p>
+    <h2 class="st">Your Roadmap to Medical PG in Germany</h2>
+    <p class="ss">A structured pathway from language training in India to your permanent medical license and Facharzt specialization in Germany.</p>
+  </div>
+
+  <div class="road-wrap">
+    <div class="road-path"></div>
+
+    <div class="j-start">
+      <span class="j-start-badge">&#127470;&#127475; Start in India — Month 0</span>
+    </div>
+
+    <!-- Step 1 -->
+    <div class="j-node">
+      <div class="j-marker india"><span class="j-step">1</span></div>
+      <div class="j-card">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> 7–8 Months</div>
         <h3>German Language Training — A1, A2, B1</h3>
-        <p>Start with online German language classes from Level A1 to B1 in India. Appear for A2 level exam at Goethe Institute (GooCampus covers exam fees). This certificate is required for your visa application.</p>
-        <span class="tl-loc">&#127470;&#127475; In India &middot; Online Mode</span>
+        <p>Start with online German language classes from A1 to B1 in India. Appear for A2 level exam at Goethe Institute (GooCampus covers exam fees). This certificate is required for your visa application.</p>
+        <div class="j-loc">&#127470;&#127475; In India &middot; Online Mode</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">2</div>
-        <span class="tl-dur">~5 Months</span>
+    </div>
+
+    <!-- Step 2 -->
+    <div class="j-node">
+      <div class="j-marker india"><span class="j-step">2</span></div>
+      <div class="j-card">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> ~5 Months</div>
         <h3>Degree Evaluation — Defizitbescheid</h3>
         <p>Submit all attested and notarized documents for evaluation by German authorities. GooCampus handles translation through native German translators and lawyers. Focus on language classes during this processing time.</p>
-        <span class="tl-loc">&#127470;&#127475; India &rarr; &#127465;&#127466; Germany (Document Processing)</span>
+        <div class="j-loc">&#127470;&#127475; India &rarr; &#127465;&#127466; Germany (Document Processing)</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">3</div>
-        <span class="tl-dur">~1 Month</span>
+    </div>
+
+    <!-- Step 3 -->
+    <div class="j-node">
+      <div class="j-marker india"><span class="j-step">3</span></div>
+      <div class="j-card">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> ~1 Month</div>
         <h3>Receive Defizitbescheid &amp; Apply for Visa</h3>
-        <p>Once the Defizitbescheid is received, prepare and submit visa documents to the German Embassy. GooCampus assists with completing the visa file and embassy appointment.</p>
-        <span class="tl-loc">&#127470;&#127475; India &middot; German Embassy</span>
+        <p>Once the Defizitbescheid is received, prepare and submit visa documents to the German Embassy. GooCampus assists with completing the visa file and embassy appointment. D16 visa fee is included in the package.</p>
+        <div class="j-loc">&#127470;&#127475; India &middot; German Embassy</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">4</div>
-        <span class="tl-dur">3–4 Months</span>
-        <h3>Advanced Language Training — B2 &amp; C1</h3>
-        <p>Continue learning advanced German (B2 to C1) in Germany with a special course designed for doctors. This is critical for the medical language exam that follows.</p>
-        <span class="tl-loc">&#127465;&#127466; In Germany &middot; Special Doctors Course</span>
+    </div>
+
+    <!-- Step 4 — Arrival in Germany -->
+    <div class="j-node">
+      <div class="j-marker germany"><span class="j-step">4</span></div>
+      <div class="j-card">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> 3–4 Months</div>
+        <h3>Advanced Language Training — B2 &amp; C1 (Doctors Course)</h3>
+        <p>Continue advanced medical German (B2 to C1) in Germany with a specialized course for doctors. Covers patient communication, clinical documentation, Arztbrief writing — critical for FSP exam.</p>
+        <div class="j-loc">&#127465;&#127466; In Germany &middot; Special Doctors Course</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">5</div>
-        <span class="tl-dur">~1 Month</span>
+    </div>
+
+    <!-- Step 5 -->
+    <div class="j-node">
+      <div class="j-marker germany"><span class="j-step">5</span></div>
+      <div class="j-card">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> ~1 Month</div>
         <h3>FSP Exam — Fachsprachpr&uuml;fung</h3>
-        <p>A 1-hour medical language exam with three parts: Patient Case History (20 min), Documentation (20 min), and Doctor-to-Doctor Conversation (20 min). Results declared same day. Unlimited attempts every 3 months.</p>
-        <span class="tl-loc">&#127465;&#127466; In Germany</span>
+        <p>A 1-hour medical language exam: Patient Case History (20 min), Documentation (20 min), Doctor-to-Doctor Conversation (20 min). Results same day. Unlimited attempts every 3 months. FSP training with native German teacher included.</p>
+        <div class="j-loc">&#127465;&#127466; In Germany &middot; &Auml;rztekammer</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">6</div>
-        <span class="tl-dur">2 Years</span>
+    </div>
+
+    <!-- Step 6 — Earning begins -->
+    <div class="j-node">
+      <div class="j-marker germany"><span class="j-step">6</span></div>
+      <div class="j-card j-highlight">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> 2 Years</div>
         <h3>Temporary Medical License &amp; Clinical Practice</h3>
-        <p>On passing FSP, receive a 2-year temporary medical license. Start working as an assistant doctor earning around €4,500/month (plus OT/night shift bonuses). Begin your clinical practice in German hospitals.</p>
-        <span class="tl-loc">&#127465;&#127466; In Germany &middot; Hospitals</span>
+        <p>On passing FSP, receive a 2-year Berufserlaubnis (temporary medical license). Start working as an assistant doctor in German hospitals. Begin earning immediately with OT and night shift bonuses on top.</p>
+        <div class="j-salary">&#128176; Earning: ~€4,500/month + bonuses</div>
+        <div class="j-loc">&#127465;&#127466; In Germany &middot; Hospitals</div>
       </div>
-      <div class="tl-item">
-        <div class="tl-dot">7</div>
-        <span class="tl-dur">5 Years PG</span>
-        <h3>Approbation Exam &rarr; Permanent License &rarr; PG</h3>
-        <p>Pass the Approbation/Knowledge exam (3 attempts, 50% to pass) to become a permanently licensed doctor in Germany. Then start your 5-year PG specialization — Cardiology, Urology, Cardiac Surgery, and more.</p>
-        <span class="tl-loc">&#127465;&#127466; In Germany &middot; Universities &amp; Hospitals</span>
+    </div>
+
+    <!-- Step 7 -->
+    <div class="j-node">
+      <div class="j-marker germany"><span class="j-step">7</span></div>
+      <div class="j-card j-highlight">
+        <div class="j-dur"><svg viewBox="0 0 24 24"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm0 18c-4.4 0-8-3.6-8-8s3.6-8 8-8 8 3.6 8 8-3.6 8-8 8zm.5-13H11v6l5.2 3.2.8-1.3-4.5-2.7V7z"/></svg> 5 Years PG</div>
+        <h3>Approbation Exam &rarr; Permanent License &rarr; Facharzt</h3>
+        <p>Pass the Approbation/Kenntnisprufung exam (3 attempts, 50% pass mark) to become a permanently licensed doctor. Then pursue your 5-year Facharzt specialization — Cardiology, Surgery, Internal Medicine, and more.</p>
+        <div class="j-salary">&#128176; Specialist salary: €4,800–€5,500/month gross</div>
+        <div class="j-loc">&#127465;&#127466; In Germany &middot; Universities &amp; Hospitals</div>
+      </div>
+    </div>
+
+    <div class="j-end">
+      <span class="j-end-badge">&#127942; Facharzt Specialist — Permanent License &amp; PR Eligibility</span>
+    </div>
+  </div>
+</section>
+
+<!-- SALARY DATA -->
+<section class="salary-sec" id="salary">
+  <div class="con">
+    <p class="sl">Salary Data</p>
+    <h2 class="st">How German Doctor Income Scales</h2>
+    <p class="ss">From residency to Chefarzt — German medicine offers substantial long-term earning potential.</p>
+    <div class="salary-grid">
+      <div class="sal-card">
+        <div class="sal-stage">Resident Year 1</div>
+        <div class="sal-amt">€4,800–€5,500</div>
+        <div class="sal-period">per month (gross)</div>
+        <div class="sal-inr">&#8377;4.3L – &#8377;4.9L / month</div>
+      </div>
+      <div class="sal-card">
+        <div class="sal-stage">Senior Resident / Oberarzt</div>
+        <div class="sal-amt">€6,600–€7,900</div>
+        <div class="sal-period">per month (gross)</div>
+        <div class="sal-inr">&#8377;5.9L – &#8377;7.1L / month</div>
+      </div>
+      <div class="sal-card">
+        <div class="sal-stage">Chief Physician / Chefarzt</div>
+        <div class="sal-amt">€10,000–€16,000+</div>
+        <div class="sal-period">per month (gross)</div>
+        <div class="sal-inr">&#8377;8.9L – &#8377;14.3L+ / month</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- TOP HOSPITALS -->
+<section class="hosp-sec" id="hospitals">
+  <div class="con">
+    <p class="sl">Top Hospitals</p>
+    <h2 class="st">Where Indian Doctors Train in Germany</h2>
+    <p class="ss">Leading medical centers that actively recruit international doctors for specialist training.</p>
+    <div class="hosp-grid">
+      <div class="hosp-card"><div class="hosp-rank">1</div><div class="hosp-info"><h4>Charit&eacute; — Universit&auml;tsmedizin Berlin</h4><p>Berlin &middot; Largest academic ecosystem</p></div><div class="hosp-sal"><div class="amt">€4,800–€5,500</div><div class="per">/month</div></div></div>
+      <div class="hosp-card"><div class="hosp-rank">2</div><div class="hosp-info"><h4>LMU Klinikum</h4><p>Munich &middot; Premium Bavaria brand</p></div><div class="hosp-sal"><div class="amt">€5,000–€5,800</div><div class="per">/month</div></div></div>
+      <div class="hosp-card"><div class="hosp-rank">3</div><div class="hosp-info"><h4>Heidelberg University Hospital</h4><p>Heidelberg &middot; Outstanding oncology</p></div><div class="hosp-sal"><div class="amt">€4,800–€5,400</div><div class="per">/month</div></div></div>
+      <div class="hosp-card"><div class="hosp-rank">4</div><div class="hosp-info"><h4>Hannover Medical School</h4><p>Hannover &middot; Strong transplant center</p></div><div class="hosp-sal"><div class="amt">€4,700–€5,300</div><div class="per">/month</div></div></div>
+      <div class="hosp-card"><div class="hosp-rank">5</div><div class="hosp-info"><h4>TUM Klinikum</h4><p>Munich &middot; Research-heavy environment</p></div><div class="hosp-sal"><div class="amt">€5,000–€5,700</div><div class="per">/month</div></div></div>
+      <div class="hosp-card"><div class="hosp-rank">6</div><div class="hosp-info"><h4>University Hospital Frankfurt</h4><p>Frankfurt &middot; International city</p></div><div class="hosp-sal"><div class="amt">€4,800–€5,400</div><div class="per">/month</div></div></div>
+    </div>
+  </div>
+</section>
+
+<!-- PACKAGE PREVIEW -->
+<section class="pkg-sec" id="package">
+  <div class="con">
+    <p class="sl">Investment</p>
+    <h2 class="st">Programme Fee &amp; Payment Structure</h2>
+    <p class="ss">Structured across three milestone-based installments. Each payment unlocks the next phase of your journey.</p>
+
+    <div class="pkg-hero">
+      <div class="pkg-left">
+        <h3>Total Programme Fee</h3>
+        <div class="pkg-price">€15,000</div>
+        <div class="pkg-price-sub">Paid in 3 installments of €5,000 each &middot; tied to key milestones</div>
+
+        <ul class="pkg-includes">
+          <li><span class="chk">&#10003;</span> German language training A1–C1 (India + Germany)</li>
+          <li><span class="chk">&#10003;</span> Complete document preparation &amp; translation</li>
+          <li><span class="chk">&#10003;</span> Defizitbescheid application &amp; follow-up</li>
+          <li><span class="chk">&#10003;</span> D16 visa fee included</li>
+          <li><span class="chk">&#10003;</span> FSP training with native German teacher</li>
+          <li><span class="chk">&#10003;</span> Airport pickup &amp; accommodation assistance</li>
+          <li><span class="chk">&#10003;</span> Approbation exam guidance</li>
+          <li><span class="chk">&#10003;</span> Job guidance &amp; PR assistance</li>
+        </ul>
+
+        <div class="pkg-cta-row">
+          <a href="/germanypathway/package" class="btn-p" style="text-decoration:none">View Full Package Details</a>
+          <button class="btn-o" onclick="document.getElementById('register').scrollIntoView({behavior:'smooth'})">Register Now</button>
+        </div>
+      </div>
+
+      <div class="inst-cards">
+        <div class="inst-card">
+          <div class="inst-head"><span class="inst-badge i1">Installment 1</span><span class="inst-amt">€5,000</span></div>
+          <div class="inst-title">End-to-End Document Handling</div>
+          <div class="inst-desc">German language training (A1–B1, online, India), document preparation for Defizitbescheid, document evaluation &amp; German translation, LOR &amp; motivation letter assistance, contract agreement execution.</div>
+          <div class="inst-when">&#128197; Paid at enrolment</div>
+        </div>
+        <div class="inst-card">
+          <div class="inst-head"><span class="inst-badge i2">Installment 2</span><span class="inst-amt">€5,000</span></div>
+          <div class="inst-title">Defizitbescheid + Visa Phase</div>
+          <div class="inst-desc">Defizitbescheid/deficit letter application, document attestation, visa documentation &amp; appointment, visa fee &amp; interview preparation, forex services, blocked account opening, travel &amp; health insurance.</div>
+          <div class="inst-when">&#128197; Paid after Installment 1 completion</div>
+        </div>
+        <div class="inst-card">
+          <div class="inst-head"><span class="inst-badge i3">Installment 3</span><span class="inst-amt">€5,000</span></div>
+          <div class="inst-title">Germany Arrival + FSP + Residency</div>
+          <div class="inst-desc">B2 &amp; C1 doctors course, airport pickup &amp; accommodation, city registration &amp; bank account, FSP training &amp; exam booking, Approbation exam guidance, temporary employment registration, job guidance &amp; PR assistance.</div>
+          <div class="inst-when">&#128197; Paid after visa is received</div>
+        </div>
       </div>
     </div>
   </div>
@@ -385,7 +690,7 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         <ol class="svc-list">
           <li>German Language Training B2 &amp; C1 (Doctors Course)</li>
           <li>Document Translation &amp; Attestation</li>
-          <li>Document Evaluation / Eingangsbestatigung</li>
+          <li>Document Evaluation / Eingangsbest&auml;tigung</li>
           <li>Airport Pickup &amp; Accommodation Assistance</li>
           <li>City Registration &amp; Bank Account Opening</li>
           <li>FSP Training &amp; Exam Booking Assistance</li>
@@ -401,6 +706,29 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     </div>
     <div style="text-align:center;margin-top:28px">
       <a href="/germanypathway/services" class="btn-p" style="display:inline-block;text-decoration:none;padding:13px 30px;border-radius:6px">View Detailed Services &rarr;</a>
+    </div>
+  </div>
+</section>
+
+<!-- COUNTRY COMPARISON -->
+<section class="cmp-sec" id="compare">
+  <div class="con">
+    <p class="sl">Compare Options</p>
+    <h2 class="st">Germany vs Other PG Destinations</h2>
+    <p class="ss">See how Germany stacks up against other popular PG routes for Indian doctors.</p>
+    <div class="cmp-wrap">
+      <table class="cmp-table">
+        <thead><tr><th>Parameter</th><th>Germany</th><th>India</th><th>UK</th><th>USA</th></tr></thead>
+        <tbody>
+          <tr class="hl"><td>Tuition / Cost</td><td>Zero tuition + prep cost</td><td>Low govt, high private</td><td>PLAB route cost</td><td>USMLE route cost</td></tr>
+          <tr><td>Residency Salary</td><td><strong>€4,800–€5,500/mo</strong></td><td>&#8377;30K–60K/mo</td><td>£3,000–4,500/mo</td><td>$5,000–8,000/mo</td></tr>
+          <tr class="hl"><td>Language</td><td>B2 + C1 Medical German</td><td>English</td><td>English</td><td>English</td></tr>
+          <tr><td>NEET Required</td><td><strong>No</strong></td><td>Yes</td><td>No</td><td>No</td></tr>
+          <tr class="hl"><td>Time to First Job</td><td>18–24 months</td><td>Immediate</td><td>6–12 months</td><td>12–18 months</td></tr>
+          <tr><td>Permanent Residency</td><td><strong>Fast (21 mo Blue Card)</strong></td><td>N/A</td><td>Longer ILR route</td><td>Long green-card</td></tr>
+          <tr class="hl"><td>Post-PG Salary</td><td>€80K–€200K+/yr</td><td>&#8377;15L–40L/yr</td><td>£60K–120K/yr</td><td>$200K–400K/yr</td></tr>
+        </tbody>
+      </table>
     </div>
   </div>
 </section>
@@ -434,10 +762,12 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         <ul class="doc-list">
           <li>Signed Application Form</li>
           <li>Defizitbescheid (Degree Evaluation Letter)</li>
-          <li>Blocked Account Confirmation (~€12,000)</li>
+          <li>Blocked Account Confirmation (~€13,000–€14,000)</li>
           <li>Valid Passport</li>
           <li>Police Clearance Certificate (PCC)</li>
           <li>Interview Appointment Confirmation Letter</li>
+          <li>Health Insurance Proof</li>
+          <li>Europass CV</li>
         </ul>
       </div>
     </div>
@@ -451,10 +781,10 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     <h2 class="st">Who Can Apply?</h2>
     <p class="ss">If you hold an MBBS degree and are ready to invest in learning German, you can pursue this pathway.</p>
     <div class="elig-grid">
-      <div class="eg"><div class="eg-ico">&#127891;</div><h4>MBBS Degree</h4><p>Indian MBBS or equivalent foreign medical degree. Internship completion preferred.</p></div>
-      <div class="eg"><div class="eg-ico">&#128483;&#65039;</div><h4>German Language</h4><p>Proficiency at C1-C2 level required. GooCampus trains you from scratch — A1 to C1.</p></div>
-      <div class="eg"><div class="eg-ico">&#128221;</div><h4>FSP Exam</h4><p>Pass the Fachsprachpr&uuml;fung (medical language exam) for a temporary license. Unlimited attempts.</p></div>
-      <div class="eg"><div class="eg-ico">&#127942;</div><h4>Approbation Exam</h4><p>Pass the Knowledge Exam within 2 years for permanent license. 3 attempts, 50% pass mark.</p></div>
+      <div class="eg"><div class="eg-ico">&#127891;</div><h4>MBBS Degree</h4><p>Indian MBBS or equivalent foreign medical degree from NMC-approved, WDOMS-listed institution. Internship completion required.</p></div>
+      <div class="eg"><div class="eg-ico">&#128483;&#65039;</div><h4>German Language</h4><p>B2 for document filing, C1 medical German for FSP and hospital work. GooCampus trains you from scratch — A1 to C1.</p></div>
+      <div class="eg"><div class="eg-ico">&#128221;</div><h4>FSP Exam</h4><p>Pass the Fachsprachpr&uuml;fung (medical language exam) for temporary license. Unlimited attempts every 3 months.</p></div>
+      <div class="eg"><div class="eg-ico">&#127942;</div><h4>Approbation Exam</h4><p>Pass the Kenntnisprufung within 2 years for permanent license. 3 attempts, 50% pass mark. Common for Indian MBBS holders.</p></div>
     </div>
   </div>
 </section>
@@ -467,31 +797,35 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     <div class="faq-list">
       <div class="faq-item">
         <button class="faq-q">What is the total timeline from start to PG in Germany?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">The entire journey from starting German language training in India to beginning your PG specialization takes approximately 3–4 years. This includes 7–8 months of language training (A1–B1), 5 months for Defizitbescheid processing, 3–4 months for B2–C1 in Germany, FSP exam, and 2 years with temporary license before Approbation.</div></div>
+        <div class="faq-a"><div class="faq-a-in">Expect 18–24 months of preparation (language, Approbation, FSP) before your first hospital job, followed by 4–6 years of specialist training. The full route from India to Facharzt usually spans about 6–8 years.</div></div>
       </div>
       <div class="faq-item">
         <button class="faq-q">Is there a tuition fee for Medical PG in Germany?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">No. There are no tuition fees for most medical PG courses in Germany. The cost of education is next to zero. You will need funds for living expenses, blocked account (~€12,000), and exam fees, but GooCampus guides you through the entire financial planning.</div></div>
+        <div class="faq-a"><div class="faq-a-in">No. Germany does not charge tuition for specialist training (Weiterbildung). Doctors earn €4,800–€5,500/month gross during residency. The main cost is the preparation phase — usually around &#8377;13L–22L for language, FSP, KP, and relocation.</div></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">How much can I earn with a temporary medical license?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">With a temporary medical license (after passing FSP), you can earn approximately €4,500 per month as an assistant doctor. OT and night shifts are paid extra. During training/internship phase, the stipend is around €2,700 per month.</div></div>
+        <button class="faq-q">How much does the GooCampus package cost?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">The total programme fee is €15,000 paid in 3 installments of €5,000 each, tied to key milestones. This covers everything from language training in India through job guidance in Germany. Ticket fare and accommodation in Germany are not included — candidates use their blocked account (~€1,000–€1,500/month) for living expenses.</div></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">What if I fail the FSP exam?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">There are unlimited attempts for the FSP exam. You can reattempt every 3 months. GooCampus provides FSP training and exam booking assistance, along with preparation through native German teachers.</div></div>
+        <button class="faq-q">What German language level is required?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">B2 general German is the minimum for document filing, but C1 medical German is the real standard for the FSP exam and most hospital positions. No prior German knowledge is needed — GooCampus provides complete training from A1 to C1.</div></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">Do I need to know German before applying?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">No prior German knowledge is required. GooCampus provides complete language training from A1 (absolute beginner) to B1 in India through online classes, and then B2–C1 in Germany with a special course designed for doctors.</div></div>
+        <button class="faq-q">Is the German Facharzt recognized in India?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">German Facharzt is not directly accepted as Indian MD/MS equivalence by NMC. However, it carries strong value across the EU, UK (GMC), USA (ECFMG), and Australia (AHPRA). Doctors returning to India would need to go through the NExT licensing route.</div></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">What specializations are available for PG in Germany?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">All major and super-specializations are available including Cardiology, Urology, Cardiac Surgery, General Surgery, Internal Medicine, Orthopedics, and more. PG duration is 5 years. There is no entrance exam for PG — GooCampus assists in finding positions based on your preferred specialization.</div></div>
+        <button class="faq-q">Can I bring my family to Germany?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">Yes. Doctors on the right work-residence route can bring spouse and children through family reunification. Germany also now allows dual nationality, improving long-term settlement options.</div></div>
       </div>
       <div class="faq-item">
-        <button class="faq-q">Can I get Permanent Residency in Germany?<span class="arr">&#9660;</span></button>
-        <div class="faq-a"><div class="faq-a-in">Yes. After completing your training and obtaining the Facharzt title, your chances of getting permanent German residency are significantly increased. GooCampus also provides PR guidance as part of the Germany services.</div></div>
+        <button class="faq-q">What specializations are available?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">All major and super-specializations are available: General Medicine, Internal Medicine, Cardiology, General Surgery, Orthopaedics, Anaesthesiology, Dermatology, Radiology, Neurosurgery, Paediatrics, and more. Duration is typically 4–6 years depending on specialty.</div></div>
+      </div>
+      <div class="faq-item">
+        <button class="faq-q">How fast can I get Permanent Residency?<span class="arr">&#9660;</span></button>
+        <div class="faq-a"><div class="faq-a-in">In strong Blue Card cases with B2 German, permanent residence can come in as little as 21 months — much faster than most competing countries. Germany now also allows dual nationality.</div></div>
       </div>
     </div>
   </div>
@@ -505,7 +839,7 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
     <p class="ss">Fill in your details below. Our counsellor will contact you within 24 hours for a free one-to-one session.</p>
 
     <div class="reg-card" id="regCard">
-      <!-- STEP 1: Phone verification -->
+      <!-- STEP 1: Phone -->
       <div class="otp-step active" id="otpStep1">
         <p class="otp-info">Verify your WhatsApp number to proceed with registration. We'll send a 6-digit OTP to your WhatsApp.</p>
         <div class="reg-fg" style="margin-bottom:14px">
@@ -519,7 +853,7 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         <div id="otpErr1" style="color:#ff6b6b;font-size:.82rem;margin-top:8px;display:none"></div>
       </div>
 
-      <!-- STEP 2: OTP entry -->
+      <!-- STEP 2: OTP -->
       <div class="otp-step" id="otpStep2">
         <p class="otp-info">Enter the 6-digit OTP sent to your WhatsApp number <strong id="otpPhoneDisplay"></strong></p>
         <div class="reg-fg" style="margin-bottom:14px">
@@ -531,7 +865,7 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
         <div id="otpErr2" style="color:#ff6b6b;font-size:.82rem;margin-top:8px;display:none"></div>
       </div>
 
-      <!-- STEP 3: Full registration form -->
+      <!-- STEP 3: Full form -->
       <div class="otp-step" id="otpStep3">
         <div class="reg-row">
           <div class="reg-fg"><label>Full Name *</label><input type="text" id="regName" placeholder="Dr. Full Name"></div>
@@ -622,14 +956,16 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 <footer class="ft">
   <div class="ft-in">
     <div class="ft-brand">
-      <h3>GooCampus</h3>
+      <img src="/static/logo-white.png" alt="GooCampus" style="height:48px;margin-bottom:10px;display:block" onerror="this.outerHTML='<h3 style=&quot;font-family:var(--fh);color:#fff&quot;>GooCampus</h3>'">
       <p>Your trusted partner for Medical PG pathways abroad. End-to-end support from counselling to career placement — UK, Germany, and beyond.</p>
     </div>
     <div class="ft-col">
       <h4>Quick Links</h4>
       <a href="#why-germany">Why Germany</a>
-      <a href="#process">Process &amp; Timeline</a>
-      <a href="#services">Our Services</a>
+      <a href="#journey">Journey Map</a>
+      <a href="#package">Package &amp; Pricing</a>
+      <a href="/germanypathway/services">All Services</a>
+      <a href="/germanypathway/package">Package Details</a>
       <a href="#faq">FAQ</a>
       <a href="#register">Register Now</a>
     </div>
@@ -666,6 +1002,9 @@ function showStep(n){
   document.getElementById('otpStep'+n).classList.add('active');
 }
 
+function showErr(id,msg){var e=document.getElementById(id);e.textContent=msg;e.style.display='block'}
+function hideErr(id){document.getElementById(id).style.display='none'}
+
 function sendOtp(){
   var phone=document.getElementById('otpPhone').value.replace(/\D/g,'');
   if(phone.length!==10){showErr('otpErr1','Please enter a valid 10-digit number');return}
@@ -681,8 +1020,14 @@ function sendOtp(){
   }).catch(function(){btn.disabled=false;btn.textContent='Send OTP via WhatsApp';showErr('otpErr1','Network error. Please try again.')});
 }
 
+function startResendTimer(){
+  var sec=60;var el=document.getElementById('resendTimer');var btn=document.getElementById('resendBtn');btn.disabled=true;
+  clearInterval(resendInterval);
+  resendInterval=setInterval(function(){sec--;el.textContent=sec;if(sec<=0){clearInterval(resendInterval);btn.disabled=false;btn.textContent='Resend OTP'}},1000);
+}
+
 function verifyOtp(){
-  var otp=document.getElementById('otpCode').value.trim();
+  var otp=document.getElementById('otpCode').value.replace(/\D/g,'');
   if(otp.length!==6){showErr('otpErr2','Please enter the 6-digit OTP');return}
   hideErr('otpErr2');
   var btn=document.getElementById('verifyOtpBtn');btn.disabled=true;btn.textContent='Verifying...';
@@ -692,41 +1037,28 @@ function verifyOtp(){
     btn.disabled=false;btn.textContent='Verify OTP';
     if(!res.ok){showErr('otpErr2',res.data.error||'Invalid OTP');return}
     showStep(3);
-  }).catch(function(){btn.disabled=false;btn.textContent='Verify OTP';showErr('otpErr2','Network error.')});
+  }).catch(function(){btn.disabled=false;btn.textContent='Verify OTP';showErr('otpErr2','Network error. Please try again.')});
 }
 
 function submitRegistration(){
   var name=document.getElementById('regName').value.trim();
   var email=document.getElementById('regEmail').value.trim();
-  if(!name||!email){showErr('regErr','Name and email are required');return}
+  var phone=document.getElementById('otpPhone').value.replace(/\D/g,'');
+  if(!name||!email){showErr('regErr','Please fill in name and email');return}
   hideErr('regErr');
   var btn=document.getElementById('regSubmitBtn');btn.disabled=true;btn.textContent='Submitting...';
-  var payload={
-    name:name,email:email,
-    phone:document.getElementById('otpPhone').value.trim(),
-    city:document.getElementById('regCity').value.trim(),
-    currentStatus:document.getElementById('regStatus').value,
-    germanLevel:document.getElementById('regGerman').value,
-    specialization:document.getElementById('regSpec').value.trim()
-  };
+  var payload={name:name,email:email,phone:phone,city:document.getElementById('regCity').value.trim(),currentStatus:document.getElementById('regStatus').value,germanLevel:document.getElementById('regGerman').value,specialization:document.getElementById('regSpec').value.trim()};
   fetch('/germanypathway/register',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)})
   .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
   .then(function(res){
     btn.disabled=false;btn.textContent='Register for Germany Pathway';
     if(!res.ok){showErr('regErr',res.data.error||'Registration failed');return}
-    document.getElementById('regCard').querySelectorAll('.otp-step').forEach(function(s){s.classList.remove('active')});
+    document.querySelectorAll('.otp-step').forEach(function(s){s.classList.remove('active')});
     document.getElementById('regSuccess').style.display='block';
-  }).catch(function(){btn.disabled=false;btn.textContent='Register for Germany Pathway';showErr('regErr','Network error.')});
+  }).catch(function(){btn.disabled=false;btn.textContent='Register for Germany Pathway';showErr('regErr','Network error. Please try again.')});
 }
 
-function startResendTimer(){
-  var s=60;var el=document.getElementById('resendTimer');var btn=document.getElementById('resendBtn');
-  btn.disabled=true;el.textContent=s;
-  clearInterval(resendInterval);
-  resendInterval=setInterval(function(){s--;el.textContent=s;if(s<=0){clearInterval(resendInterval);btn.disabled=false;btn.textContent='Resend OTP'}},1000);
-}
-
-/* BROCHURE MODAL OTP */
+/* BROCHURE MODAL */
 function openBrochModal(){document.getElementById('brochModal').classList.add('show')}
 function closeBrochModal(){document.getElementById('brochModal').classList.remove('show')}
 document.getElementById('brochModal').addEventListener('click',function(e){if(e.target===this)closeBrochModal()});
@@ -745,8 +1077,8 @@ function brochSendOtp(){
 }
 
 function brochVerifyOtp(){
-  var otp=document.getElementById('brochOtp').value.trim();
-  if(otp.length!==6){showErr('brochErr2','Enter 6-digit OTP');return}
+  var otp=document.getElementById('brochOtp').value.replace(/\D/g,'');
+  if(otp.length!==6){showErr('brochErr2','Enter the 6-digit OTP');return}
   hideErr('brochErr2');
   fetch('/germanypathway/verify-otp',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({otp:otp})})
   .then(function(r){return r.json().then(function(d){return{ok:r.ok,data:d}})})
@@ -757,8 +1089,20 @@ function brochVerifyOtp(){
   }).catch(function(){showErr('brochErr2','Network error')});
 }
 
-function showErr(id,msg){var el=document.getElementById(id);el.textContent=msg;el.style.display='block'}
-function hideErr(id){document.getElementById(id).style.display='none'}
+/* ANIMATED COUNTERS */
+function animateCounters(){
+  document.querySelectorAll('.p-num,.fact-val,.sal-amt').forEach(function(el){
+    if(el.dataset.animated) return;
+    var rect=el.getBoundingClientRect();
+    if(rect.top<window.innerHeight&&rect.bottom>0){
+      el.dataset.animated='1';
+      el.style.opacity='0';el.style.transform='translateY(10px)';el.style.transition='all .6s ease';
+      setTimeout(function(){el.style.opacity='1';el.style.transform='translateY(0)'},100);
+    }
+  });
+}
+window.addEventListener('scroll',animateCounters);
+animateCounters();
 </script>
 </body>
 </html>
