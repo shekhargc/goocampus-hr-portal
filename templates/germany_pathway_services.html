@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Germany PGCP Services — GooCampus</title>
+<meta name="description" content="Complete list of GooCampus services for the Germany PG Career Pathway — from language training in India to job guidance in Germany.">
+<link rel="canonical" href="https://goocampus.org/germanypathway/services">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;600;700&family=DM+Sans:opsz,wght@9..40,300;9..40,400;9..40,500;9..40,600;9..40,700&display=swap" rel="stylesheet">
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{--navy:#0B1F3A;--navy-mid:#122a4e;--gold:#C4922A;--gold-light:#f0c96c;--gold-pale:#fef5e3;--cream:#FAF8F4;--white:#fff;--text:#1C1C1C;--muted:#5A5A5A;--border:#E0DBD4;--de-red:#DD0000;--de-gold:#FFCC00;--fh:'Playfair Display',Georgia,serif;--fb:'DM Sans',system-ui,sans-serif}
+html{scroll-behavior:smooth}body{font-family:var(--fb);background:var(--cream);color:var(--text);line-height:1.65}a{color:inherit;text-decoration:none}
+
+/* NAV */
+nav{background:var(--navy);border-bottom:2px solid var(--gold);position:sticky;top:0;z-index:200}
+.nav-in{max-width:1120px;margin:0 auto;padding:0 24px;display:flex;align-items:center;justify-content:space-between;height:72px}
+.logo-img{height:60px;width:auto;mix-blend-mode:screen;display:block}
+.nav-l{display:flex;gap:24px}.nav-l a{font-size:13px;font-weight:500;color:rgba(255,255,255,.7);transition:color .2s}.nav-l a:hover{color:var(--gold-light)}
+.nav-cta{background:var(--gold);color:var(--navy);font-size:13px;font-weight:700;padding:8px 18px;border-radius:4px;cursor:pointer;border:none;font-family:var(--fb);transition:background .2s}.nav-cta:hover{background:var(--gold-light)}
+.nav-ham{display:none;background:none;border:none;color:#fff;font-size:24px;cursor:pointer}
+
+/* HERO */
+.hero{background:var(--navy);padding:48px 24px 42px;text-align:center}
+.hero-tag{display:inline-flex;align-items:center;gap:8px;background:rgba(196,146,42,.14);border:1px solid rgba(196,146,42,.38);color:var(--gold-light);font-size:11px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;padding:5px 13px;border-radius:3px;margin-bottom:16px}
+.hero h1{font-family:var(--fh);font-size:clamp(1.6rem,3.5vw,2.4rem);font-weight:700;color:#fff;line-height:1.2;margin-bottom:10px}
+.hero-sub{font-size:.92rem;color:rgba(255,255,255,.6);max-width:640px;margin:0 auto 20px;line-height:1.7}
+.hero-sub strong{color:var(--gold-light);font-weight:600}
+.bread{font-size:12.5px;color:rgba(255,255,255,.4)}.bread a{color:rgba(255,255,255,.55);text-decoration:underline}.bread a:hover{color:var(--gold-light)}
+
+/* PHASE SECTIONS */
+.con{max-width:1080px;margin:0 auto;padding:0 24px}
+.phase{padding:56px 0 48px}
+.phase:nth-child(even){background:var(--white)}
+.phase-head{display:flex;align-items:center;gap:14px;margin-bottom:8px}
+.phase-flag{font-size:28px}
+.phase-label{font-size:11px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--gold);background:var(--gold-pale);padding:3px 10px;border-radius:3px}
+.phase h2{font-family:var(--fh);font-size:1.6rem;font-weight:700;color:var(--navy);margin-bottom:6px}
+.phase-desc{font-size:.9rem;color:var(--muted);max-width:700px;margin-bottom:32px;line-height:1.7}
+
+/* SERVICE CARDS */
+.svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(310px,1fr));gap:20px}
+.svc-card{background:var(--white);border:1px solid var(--border);border-radius:10px;padding:26px 24px;transition:box-shadow .2s,transform .15s}
+.phase:nth-child(even) .svc-card{background:var(--cream)}
+.svc-card:hover{box-shadow:0 6px 20px rgba(11,31,58,.08);transform:translateY(-2px)}
+.svc-num{font-size:11px;font-weight:700;color:var(--gold);letter-spacing:1px;margin-bottom:6px}
+.svc-card h3{font-family:var(--fh);font-size:1.05rem;font-weight:600;color:var(--navy);margin-bottom:8px;line-height:1.35}
+.svc-card p{font-size:.85rem;color:var(--muted);line-height:1.65}
+.svc-card .svc-tags{display:flex;flex-wrap:wrap;gap:6px;margin-top:12px}
+.svc-tag{font-size:10.5px;font-weight:600;padding:3px 9px;border-radius:3px;background:rgba(196,146,42,.08);color:var(--gold);border:1px solid rgba(196,146,42,.18)}
+
+/* CTA STRIP */
+.cta-strip{background:var(--navy);padding:56px 24px;text-align:center}
+.cta-strip h2{font-family:var(--fh);font-size:clamp(1.3rem,3vw,1.9rem);font-weight:700;color:#fff;margin-bottom:10px}
+.cta-strip p{font-size:.9rem;color:rgba(255,255,255,.55);max-width:560px;margin:0 auto 24px;line-height:1.7}
+.btn-p{background:var(--gold);color:var(--navy);font-family:var(--fb);font-size:14.5px;font-weight:700;padding:13px 30px;border:none;border-radius:4px;cursor:pointer;transition:all .2s;display:inline-block;text-decoration:none}.btn-p:hover{background:var(--gold-light);transform:translateY(-1px)}
+.btn-o{background:transparent;color:#fff;font-family:var(--fb);font-size:14px;font-weight:500;padding:12px 26px;border:1.5px solid rgba(255,255,255,.25);border-radius:4px;cursor:pointer;transition:all .2s;display:inline-block;text-decoration:none;margin-left:12px}.btn-o:hover{border-color:var(--gold-light);color:var(--gold-light)}
+
+/* FOOTER */
+footer{background:var(--navy);border-top:2px solid var(--gold);padding:32px 24px;text-align:center}
+.ft-copy{font-size:12px;color:rgba(255,255,255,.35)}
+
+/* WHATSAPP FAB */
+.wa-fab{position:fixed;bottom:24px;right:24px;z-index:999;width:56px;height:56px;border-radius:50%;background:#25d366;display:flex;align-items:center;justify-content:center;box-shadow:0 4px 14px rgba(0,0,0,.25);transition:transform .2s}
+.wa-fab:hover{transform:scale(1.08)}
+.wa-fab svg{width:28px;height:28px;fill:#fff}
+
+@media(max-width:768px){
+  .nav-l{display:none}.nav-ham{display:block}
+  .svc-grid{grid-template-columns:1fr}
+  .cta-strip .btn-o{margin-left:0;margin-top:10px}
+}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="nav-in">
+    <a href="/germanypathway"><img src="/static/images/goocampus-logo-dark.png" alt="GooCampus" class="logo-img"></a>
+    <div class="nav-l">
+      <a href="/germanypathway">Home</a>
+      <a href="/germanypathway#process">Process</a>
+      <a href="/germanypathway#documents">Documents</a>
+      <a href="/germanypathway#faq">FAQ</a>
+    </div>
+    <a href="/germanypathway#register" class="nav-cta">Register Now</a>
+    <button class="nav-ham" onclick="document.querySelector('.nav-l').style.display=document.querySelector('.nav-l').style.display==='flex'?'none':'flex'">&#9776;</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<div class="hero">
+  <div class="bread"><a href="/germanypathway">Germany Pathway</a> &nbsp;/&nbsp; Services</div>
+  <div class="hero-tag">&#127465;&#127466; Complete Services Catalog</div>
+  <h1>Germany PGCP — Our Services</h1>
+  <p class="hero-sub">GooCampus provides <strong>end-to-end support</strong> across two phases — everything you need in India before departure, and on-ground support after you arrive in Germany.</p>
+</div>
+
+<!-- ═══════ PHASE 1: INDIA ═══════ -->
+<section class="phase">
+  <div class="con">
+    <div class="phase-head">
+      <span class="phase-flag">&#127470;&#127475;</span>
+      <span class="phase-label">Phase 1</span>
+    </div>
+    <h2>Services in India</h2>
+    <p class="phase-desc">Pre-departure preparation — language training, documentation, visa processing, and financial setup before you travel to Germany.</p>
+
+    <div class="svc-grid">
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 01</div>
+        <h3>German Language Preparation A1 – B1</h3>
+        <p>Structured German language training from beginner (A1) through intermediate (B1) level, specifically designed for medical professionals. Covers everyday German and basic medical vocabulary to prepare you for the B2 medical course in Germany.</p>
+        <div class="svc-tags"><span class="svc-tag">Language</span><span class="svc-tag">A1–B1</span><span class="svc-tag">Pre-departure</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 02</div>
+        <h3>Document Preparation for Defizitbescheid</h3>
+        <p>Complete assistance with gathering, organizing, and preparing all documents required for the Defizitbescheid (deficit letter) application — including degree certificates, transcripts, medical council registration, and internship completion letters.</p>
+        <div class="svc-tags"><span class="svc-tag">Documentation</span><span class="svc-tag">Defizitbescheid</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 03</div>
+        <h3>Letter of Recommendation Assistance</h3>
+        <p>Guidance on obtaining strong Letters of Recommendation from your professors and clinical supervisors, formatted to meet German institutional standards.</p>
+        <div class="svc-tags"><span class="svc-tag">Documentation</span><span class="svc-tag">LOR</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 04</div>
+        <h3>Statement of Purpose Writing</h3>
+        <p>Professional support in drafting a compelling Statement of Purpose that highlights your medical background, motivation for pursuing PG in Germany, and career goals — tailored for German authorities and institutions.</p>
+        <div class="svc-tags"><span class="svc-tag">Documentation</span><span class="svc-tag">SOP</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 05</div>
+        <h3>Defizitbescheid / Deficit Letter Application</h3>
+        <p>End-to-end management of your Defizitbescheid application — the official document from German authorities identifying any gaps in your medical qualification that need to be bridged before Approbation. GooCampus handles submission and follow-up.</p>
+        <div class="svc-tags"><span class="svc-tag">Application</span><span class="svc-tag">Critical Step</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 06</div>
+        <h3>Visa Documentation &amp; Appointment Assistance</h3>
+        <p>Complete visa documentation preparation including cover letter, proof of funds, insurance, and appointment booking at the German Embassy/Consulate. We ensure your application package is complete and error-free.</p>
+        <div class="svc-tags"><span class="svc-tag">Visa</span><span class="svc-tag">Embassy</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 07</div>
+        <h3>Visa Fee &amp; Interview Preparation</h3>
+        <p>Mock interview sessions covering common visa interview questions, guidance on presenting your case confidently, and assistance with visa fee payment procedures.</p>
+        <div class="svc-tags"><span class="svc-tag">Visa</span><span class="svc-tag">Interview Prep</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 08</div>
+        <h3>Foreign Exchange Services</h3>
+        <p>Assistance with foreign exchange requirements — currency conversion guidance, best rates, and compliance with RBI regulations for educational remittances under LRS.</p>
+        <div class="svc-tags"><span class="svc-tag">Financial</span><span class="svc-tag">Forex</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 09</div>
+        <h3>Blocked Account Opening</h3>
+        <p>Help setting up a German Blocked Account (Sperrkonto) — a mandatory requirement for the student/job-seeker visa showing proof of financial sustenance during your stay in Germany.</p>
+        <div class="svc-tags"><span class="svc-tag">Financial</span><span class="svc-tag">Sperrkonto</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 10</div>
+        <h3>Travel &amp; Health Insurance Assistance</h3>
+        <p>Guidance on selecting appropriate travel insurance for your journey and health insurance that meets German visa requirements and covers you during your initial stay.</p>
+        <div class="svc-tags"><span class="svc-tag">Insurance</span><span class="svc-tag">Travel</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- ═══════ PHASE 2: GERMANY ═══════ -->
+<section class="phase">
+  <div class="con">
+    <div class="phase-head">
+      <span class="phase-flag">&#127465;&#127466;</span>
+      <span class="phase-label">Phase 2</span>
+    </div>
+    <h2>Services in Germany</h2>
+    <p class="phase-desc">On-ground support after arrival — advanced language training, exam preparation, clinical placements, and settlement assistance throughout your Germany journey.</p>
+
+    <div class="svc-grid">
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 11</div>
+        <h3>German Language Training B2 &amp; C1 (Doctors Course)</h3>
+        <p>Specialized medical German language training from B2 to C1 level, covering clinical terminology, patient communication, medical documentation, and the specific language skills needed for the FSP exam. Taught by instructors experienced in training international doctors.</p>
+        <div class="svc-tags"><span class="svc-tag">Language</span><span class="svc-tag">B2–C1 Medical</span><span class="svc-tag">In Germany</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 12</div>
+        <h3>Document Translation &amp; Attestation</h3>
+        <p>Certified translation of all your Indian medical documents into German by sworn translators, plus apostille and attestation services required by German medical authorities.</p>
+        <div class="svc-tags"><span class="svc-tag">Documentation</span><span class="svc-tag">Translation</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 13</div>
+        <h3>Document Evaluation / Eingangsbestatigung</h3>
+        <p>Assistance with getting your medical qualifications evaluated and recognized by the relevant German state authority (Landesprufungsamt). The Eingangsbestatigung confirms receipt and begins the formal recognition process.</p>
+        <div class="svc-tags"><span class="svc-tag">Recognition</span><span class="svc-tag">Evaluation</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 14</div>
+        <h3>Airport Pickup &amp; Accommodation Assistance</h3>
+        <p>Welcome service at the German airport on arrival, followed by assistance finding suitable accommodation — whether shared apartments, student housing, or private rentals near your language school or hospital.</p>
+        <div class="svc-tags"><span class="svc-tag">Settlement</span><span class="svc-tag">Arrival</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 15</div>
+        <h3>City Registration &amp; Bank Account Opening</h3>
+        <p>Guidance through the mandatory Anmeldung (city registration) process at the Burgeramt, plus assistance opening a German bank account — both essential first steps for any new resident.</p>
+        <div class="svc-tags"><span class="svc-tag">Settlement</span><span class="svc-tag">Anmeldung</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 16</div>
+        <h3>FSP Training &amp; Exam Booking Assistance</h3>
+        <p>Comprehensive preparation for the Fachsprachprufung (FSP) — the medical German language proficiency exam. Includes mock exams, clinical scenario practice, and assistance with booking your FSP exam date at the Arztekammer.</p>
+        <div class="svc-tags"><span class="svc-tag">Exam Prep</span><span class="svc-tag">FSP</span><span class="svc-tag">Critical Step</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 17</div>
+        <h3>Guidance for Approbation Exams</h3>
+        <p>Support and guidance for the Kenntnisprufung (knowledge exam) or other Approbation pathway exams, including study resources, exam strategy, and booking assistance. Passing these exams is required for the full German medical license.</p>
+        <div class="svc-tags"><span class="svc-tag">Exam Prep</span><span class="svc-tag">Approbation</span><span class="svc-tag">Critical Step</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 18</div>
+        <h3>Observership Placement (2–3 months, Private Clinic)</h3>
+        <p>Placement in a private German clinic for a 2–3 month observership — gain hands-on exposure to the German healthcare system, build clinical vocabulary, and strengthen your profile for residency applications.</p>
+        <div class="svc-tags"><span class="svc-tag">Clinical</span><span class="svc-tag">Observership</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 19</div>
+        <h3>Temporary Employment Registration</h3>
+        <p>Assistance with registering for temporary employment (Berufserlaubnis) — allowing you to work in a clinical setting under supervision while completing your Approbation requirements. Earn a stipend of approximately €2,700/month.</p>
+        <div class="svc-tags"><span class="svc-tag">Employment</span><span class="svc-tag">Berufserlaubnis</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 20</div>
+        <h3>Visa Extension Support</h3>
+        <p>Assistance with extending your German residence permit/visa as your training progresses — including documentation, appointment booking at the Auslanderbehorde, and compliance with immigration requirements.</p>
+        <div class="svc-tags"><span class="svc-tag">Visa</span><span class="svc-tag">Extension</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 21</div>
+        <h3>Job Guidance after Approbation</h3>
+        <p>Career counselling and job placement guidance after obtaining your Approbation (full medical license). Assistance with CV preparation, interview coaching, and navigating the German medical job market to secure a Facharzt (specialist training) position earning €4,500+/month.</p>
+        <div class="svc-tags"><span class="svc-tag">Career</span><span class="svc-tag">Facharzt</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 22</div>
+        <h3>Health Insurance Assistance</h3>
+        <p>Help selecting and enrolling in the right German health insurance plan — whether public (gesetzliche) or private (private) — based on your employment status and needs. Health insurance is mandatory in Germany.</p>
+        <div class="svc-tags"><span class="svc-tag">Insurance</span><span class="svc-tag">Health</span></div>
+      </div>
+
+      <div class="svc-card">
+        <div class="svc-num">SERVICE 23</div>
+        <h3>PR (Permanent Residency) Guidance</h3>
+        <p>Long-term settlement support — guidance on applying for Niederlassungserlaubnis (permanent residence permit) after completing your Facharzt training, including documentation and eligibility assessment.</p>
+        <div class="svc-tags"><span class="svc-tag">Immigration</span><span class="svc-tag">PR</span><span class="svc-tag">Long-term</span></div>
+      </div>
+
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<div class="cta-strip">
+  <h2>Ready to Start Your Germany PG Journey?</h2>
+  <p>Register now for a free one-on-one counselling session with our Germany pathway experts. No obligation, no fees.</p>
+  <a href="/germanypathway#register" class="btn-p">Register for Free Counselling</a>
+  <a href="https://wa.me/916363141075?text=Hi%20GooCampus%2C%20I%27m%20interested%20in%20the%20Germany%20Pathway" target="_blank" class="btn-o">WhatsApp Us</a>
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <div class="ft-copy">&copy; 2025 GooCampus. All rights reserved. | Germany PG Career Pathway</div>
+</footer>
+
+<!-- WHATSAPP FAB -->
+<a href="https://wa.me/916363141075?text=Hi%20GooCampus%2C%20I%27m%20interested%20in%20Germany%20PGCP%20services" target="_blank" class="wa-fab" aria-label="Chat on WhatsApp">
+<svg viewBox="0 0 24 24"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/></svg>
+</a>
+
+</body>
+</html>
