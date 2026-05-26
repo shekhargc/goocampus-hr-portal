@@ -11995,6 +11995,19 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Field Registry (links sections → fields → lookup_options) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS field_registry (
+            id SERIAL PRIMARY KEY,
+            section TEXT NOT NULL,
+            field_name TEXT NOT NULL,
+            field_label TEXT NOT NULL,
+            field_type TEXT DEFAULT 'select',
+            lookup_category TEXT,
+            display_order INTEGER DEFAULT 0,
+            is_active BOOLEAN DEFAULT TRUE,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── Vendors & Providers (centralised vendor database) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS vendors_providers (
             id SERIAL PRIMARY KEY,
@@ -12969,6 +12982,50 @@ def ensure_ops_tables():
                 pass
             logging.error(f"counsellor migration: {e}")
 
+        # ── Seed field_registry from CATEGORY_GROUPS + extras ──
+        try:
+            fr_count = conn.execute("SELECT COUNT(*) as c FROM field_registry").fetchone()['c']
+            if fr_count == 0:
+                _FR_EXTRA_SECTIONS = {
+                    'ielts_vendor': 'Coaching & Training',
+                    'oet_vendor': 'Coaching & Training',
+                    'plab1_partner': 'Coaching & Training',
+                    'plab2_vendor': 'Coaching & Training',
+                    'other_training_vendor': 'Coaching & Training',
+                    'coaching_blueprint_stage': 'Coaching & Training',
+                    'research_provider': 'Research & Publication',
+                    'course_provider': 'Online Courses',
+                    'lead_status': 'Partners',
+                }
+                # Collect all categories already in CATEGORY_GROUPS
+                _all_in_groups = set()
+                for cats in CATEGORY_GROUPS.values():
+                    _all_in_groups.update(cats)
+                # Build ordered list: CATEGORY_GROUPS first, then extras appended to their sections
+                _section_fields = {}  # section -> list of category names in order
+                for section, cats in CATEGORY_GROUPS.items():
+                    _section_fields[section] = list(cats)
+                for cat_name, section in _FR_EXTRA_SECTIONS.items():
+                    if cat_name not in _all_in_groups:
+                        if section not in _section_fields:
+                            _section_fields[section] = []
+                        _section_fields[section].append(cat_name)
+                for section, cats in _section_fields.items():
+                    for idx, cat_name in enumerate(cats, 1):
+                        lbl = CATEGORY_LABELS.get(cat_name, cat_name.replace('_', ' ').title())
+                        conn.execute(
+                            "INSERT INTO field_registry (section, field_name, field_label, field_type, lookup_category, display_order, is_active) VALUES (?, ?, ?, ?, ?, ?, TRUE)",
+                            (section, cat_name, lbl, 'select', cat_name, idx)
+                        )
+                conn.commit()
+                logging.info("Seeded field_registry with all categories")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"field_registry seed: {e}")
+
         conn.close()
     except Exception as e:
         logging.error(f"ensure_ops_tables: {e}")
@@ -13375,39 +13432,74 @@ CATEGORY_LABELS = {
 @app.route('/operations/plab-settings')
 @login_required
 def ops_plab_settings():
-    """PLAB Settings admin page - manage lookup options."""
+    """Redirect old PLAB Settings URL to new Field Manager."""
+    return redirect(url_for('ops_field_manager'), code=301)
+
+
+@app.route('/operations/field-manager')
+@login_required
+def ops_field_manager():
+    """Unified Field Manager — manage all lookup fields and options."""
     conn = get_db()
     try:
-        # Fetch all lookup options grouped by category
+        # Fetch all field_registry rows
+        fields = conn.execute(
+            "SELECT * FROM field_registry ORDER BY section, display_order, id"
+        ).fetchall()
+
+        # Fetch ALL lookup_options in one query
         all_options = conn.execute(
             "SELECT * FROM lookup_options ORDER BY category, sort_order, id"
         ).fetchall()
 
-        # Group by category
-        grouped = {}
+        # Group options by category
+        options_by_cat = {}
         for opt in all_options:
             cat = opt['category']
-            if cat not in grouped:
-                grouped[cat] = []
-            grouped[cat].append(opt)
+            if cat not in options_by_cat:
+                options_by_cat[cat] = []
+            options_by_cat[cat].append(opt)
 
-        # Fetch kit items and email template for onboarding tab
+        # Group fields by section, attach options
+        from collections import OrderedDict
+        sections = OrderedDict()
+        for f in fields:
+            sec = f['section']
+            if sec not in sections:
+                sections[sec] = []
+            field_dict = dict(f)
+            field_dict['options'] = options_by_cat.get(f['lookup_category'], [])
+            sections[sec].append(field_dict)
+
+        # If field_registry is empty, fall back to CATEGORY_GROUPS
+        if not sections:
+            for sec, cats in CATEGORY_GROUPS.items():
+                sections[sec] = []
+                for cat in cats:
+                    sections[sec].append({
+                        'id': 0, 'section': sec, 'field_name': cat,
+                        'field_label': CATEGORY_LABELS.get(cat, cat),
+                        'field_type': 'select', 'lookup_category': cat,
+                        'display_order': 0, 'is_active': True,
+                        'options': options_by_cat.get(cat, [])
+                    })
+
+        # Fetch kit items and email template for Onboarding tab
         kit_items = conn.execute("SELECT * FROM onboarding_kit_items ORDER BY sort_order, id").fetchall()
         email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
 
         conn.close()
-        return render_template('ops_plab_settings.html',
-                             grouped_options=grouped,
-                             category_groups=CATEGORY_GROUPS,
+        return render_template('ops_field_manager.html',
+                             sections=sections,
                              category_labels=CATEGORY_LABELS,
                              kit_items=kit_items,
                              email_template=email_tpl,
                              active_ops_page='settings')
     except Exception as e:
-        logging.error(f"ops_plab_settings error: {e}")
+        logging.error(f"ops_field_manager error: {e}")
+        logging.exception("Full traceback for ops_field_manager:")
         conn.close()
-        flash(f'Error loading settings. Please try again.', 'error')
-        logging.exception("Full traceback for ops_plab_settings:")
+        flash('Error loading Field Manager. Please try again.', 'error')
         return redirect(url_for('ops_plab_pathway_dashboard'))
 
 
@@ -13544,6 +13636,33 @@ def ops_plab_settings_reorder():
     except Exception as e:
         logging.error(f"ops_plab_settings_reorder error: {e}")
         return jsonify({'error': str(e)}), 500
+
+
+# ── Field Manager AJAX aliases (point to existing plab-settings handlers) ──
+@app.route('/operations/field-manager/options/add', methods=['POST'])
+@login_required
+def ops_field_manager_add():
+    return ops_plab_settings_add()
+
+@app.route('/operations/field-manager/options/<int:opt_id>/toggle', methods=['POST'])
+@login_required
+def ops_field_manager_toggle(opt_id):
+    return ops_plab_settings_toggle(opt_id)
+
+@app.route('/operations/field-manager/options/<int:opt_id>/edit', methods=['POST'])
+@login_required
+def ops_field_manager_edit(opt_id):
+    return ops_plab_settings_edit(opt_id)
+
+@app.route('/operations/field-manager/options/<int:opt_id>/delete', methods=['POST'])
+@login_required
+def ops_field_manager_delete(opt_id):
+    return ops_plab_settings_delete(opt_id)
+
+@app.route('/operations/field-manager/options/reorder', methods=['POST'])
+@login_required
+def ops_field_manager_reorder():
+    return ops_plab_settings_reorder()
 
 
 # ─────────────────────────────────────────────────────────

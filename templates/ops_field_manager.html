@@ -1,0 +1,939 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Field Manager - GooCampus HR Portal{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    /* ── Page container ── */
+    .settings-container {
+        max-width: 100%;
+        margin: 0 auto;
+        padding: 2rem 2.5rem;
+    }
+
+    .settings-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 1.5rem;
+    }
+
+    .settings-header h1 {
+        font-size: 1.5rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin: 0;
+    }
+
+    .settings-header-back {
+        font-size: 0.85rem;
+        color: var(--gray-500);
+        text-decoration: none;
+        display: flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .settings-header-back:hover {
+        color: var(--orange);
+    }
+
+    /* ── Layout grid ── */
+    .settings-layout {
+        display: grid;
+        grid-template-columns: 240px 1fr;
+        gap: 1.5rem;
+        align-items: start;
+    }
+
+    /* ── Sidebar ── */
+    .settings-sidebar {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        position: sticky;
+        top: 80px;
+    }
+
+    .sidebar-section {
+        border-bottom: 1px solid var(--gray-100);
+    }
+
+    .sidebar-section:last-child {
+        border-bottom: none;
+    }
+
+    .sidebar-section-btn {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        text-align: left;
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: var(--gray-600);
+        background: none;
+        border: none;
+        cursor: pointer;
+        transition: background 0.15s, color 0.15s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .sidebar-section-btn:hover {
+        background: var(--gray-50);
+        color: var(--navy);
+    }
+
+    .sidebar-section-btn.active {
+        background: var(--orange-light);
+        color: var(--orange-dark);
+        font-weight: 700;
+    }
+
+    .sidebar-section-btn .field-count {
+        font-size: 0.7rem;
+        font-weight: 500;
+        background: var(--gray-100);
+        color: var(--gray-500);
+        padding: 2px 7px;
+        border-radius: 10px;
+    }
+
+    .sidebar-section-btn.active .field-count {
+        background: var(--orange);
+        color: white;
+    }
+
+    /* ── Main content ── */
+    .settings-main {
+        min-width: 0;
+    }
+
+    /* ── Section panel (hidden by default, shown when active) ── */
+    .section-panel {
+        display: none;
+    }
+
+    .section-panel.active {
+        display: block;
+    }
+
+    .section-title {
+        font-size: 1.1rem;
+        font-weight: 700;
+        color: var(--navy);
+        margin: 0 0 1rem;
+    }
+
+    /* ── Field card ── */
+    .field-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.6rem;
+        margin-bottom: 0.75rem;
+        overflow: hidden;
+        transition: box-shadow 0.15s;
+    }
+
+    .field-card:hover {
+        box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+    }
+
+    .field-card-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.85rem 1rem;
+        cursor: pointer;
+        user-select: none;
+    }
+
+    .field-card-header:hover {
+        background: var(--gray-50);
+    }
+
+    .field-expand-icon {
+        font-size: 0.75rem;
+        color: var(--gray-400);
+        transition: transform 0.2s;
+        width: 16px;
+        text-align: center;
+    }
+
+    .field-card.expanded .field-expand-icon {
+        transform: rotate(90deg);
+    }
+
+    .field-label {
+        font-weight: 600;
+        font-size: 0.88rem;
+        color: var(--gray-800);
+        flex: 1;
+    }
+
+    .field-meta {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .field-type-badge {
+        font-size: 0.68rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: var(--gray-100);
+        color: var(--gray-500);
+    }
+
+    .field-type-badge.select {
+        background: #EFF6FF;
+        color: #2563EB;
+    }
+
+    .field-type-badge.text {
+        background: #F0FDF4;
+        color: #16A34A;
+    }
+
+    .field-type-badge.date {
+        background: #FFF7ED;
+        color: #EA580C;
+    }
+
+    .field-category-tag {
+        font-size: 0.7rem;
+        color: var(--gray-400);
+        font-family: monospace;
+    }
+
+    .field-option-count {
+        font-size: 0.72rem;
+        color: var(--gray-400);
+    }
+
+    /* ── Options panel (inside field card) ── */
+    .field-options-panel {
+        display: none;
+        border-top: 1px solid var(--gray-100);
+        padding: 0.75rem 1rem 1rem;
+        background: var(--gray-50);
+    }
+
+    .field-card.expanded .field-options-panel {
+        display: block;
+    }
+
+    /* ── Option list ── */
+    .option-list {
+        margin-bottom: 0.5rem;
+    }
+
+    .option-item {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem 0.6rem;
+        background: white;
+        border: 1px solid var(--gray-100);
+        border-radius: 0.4rem;
+        margin-bottom: 4px;
+        transition: opacity 0.2s, transform 0.2s;
+    }
+
+    .option-item.inactive {
+        opacity: 0.5;
+    }
+
+    .option-content {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex: 1;
+        min-width: 0;
+    }
+
+    .option-drag-handle {
+        cursor: grab;
+        color: var(--gray-300);
+        font-size: 1rem;
+        line-height: 1;
+        padding: 0 2px;
+    }
+
+    .option-value {
+        font-size: 0.85rem;
+        color: var(--gray-700);
+    }
+
+    .option-status-badge {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 2px 6px;
+        border-radius: 3px;
+        white-space: nowrap;
+    }
+
+    .option-status-badge.active {
+        background: #DCFCE7;
+        color: #15803D;
+    }
+
+    .option-status-badge.inactive {
+        background: #FEE2E2;
+        color: #DC2626;
+    }
+
+    .option-actions {
+        display: flex;
+        gap: 4px;
+        flex-shrink: 0;
+    }
+
+    .option-btn {
+        padding: 3px 8px;
+        font-size: 0.72rem;
+        font-weight: 500;
+        border: 1px solid var(--gray-200);
+        border-radius: 4px;
+        background: white;
+        color: var(--gray-600);
+        cursor: pointer;
+        transition: background 0.1s;
+    }
+
+    .option-btn:hover {
+        background: var(--gray-100);
+    }
+
+    .option-btn.btn-toggle {
+        color: var(--orange);
+        border-color: var(--orange);
+    }
+
+    .option-btn.btn-toggle:hover {
+        background: var(--orange-light);
+    }
+
+    .option-btn.btn-delete {
+        color: #DC2626;
+        border-color: #FCA5A5;
+    }
+
+    .option-btn.btn-delete:hover {
+        background: #FEE2E2;
+    }
+
+    /* ── Add option ── */
+    .add-option-box {
+        margin-top: 0.5rem;
+        padding-top: 0.5rem;
+        border-top: 1px dashed var(--gray-200);
+    }
+
+    .add-option-form {
+        display: flex;
+        gap: 6px;
+    }
+
+    .add-option-input {
+        flex: 1;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.4rem;
+        font-family: inherit;
+        font-size: 0.82rem;
+        color: var(--gray-700);
+    }
+
+    .add-option-input:focus {
+        outline: none;
+        border-color: var(--orange);
+        box-shadow: 0 0 0 2px var(--orange-light);
+    }
+
+    .add-option-btn {
+        padding: 0.45rem 1rem;
+        background: var(--navy);
+        color: white;
+        border: none;
+        border-radius: 0.4rem;
+        font-size: 0.82rem;
+        font-weight: 600;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .add-option-btn:hover {
+        background: var(--navy-light);
+    }
+
+    /* ── Edit mode ── */
+    .option-item.edit-mode {
+        background: var(--orange-light);
+    }
+
+    .edit-input {
+        flex: 1;
+        padding: 0.45rem 0.7rem;
+        border: 1px solid var(--orange);
+        border-radius: 0.4rem;
+        font-family: inherit;
+        font-size: 0.85rem;
+        color: var(--gray-800);
+    }
+
+    .edit-input:focus {
+        outline: none;
+        box-shadow: 0 0 0 2px var(--orange-light);
+    }
+
+    /* ── Empty state ── */
+    .empty-options {
+        text-align: center;
+        padding: 1.5rem;
+        color: var(--gray-400);
+        font-size: 0.82rem;
+    }
+
+    /* ── Responsive ── */
+    @media (max-width: 1024px) {
+        .settings-layout {
+            grid-template-columns: 1fr;
+        }
+
+        .settings-sidebar {
+            position: static;
+            display: grid;
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        .sidebar-section {
+            border-bottom: none;
+            border-right: 1px solid var(--gray-100);
+        }
+
+        .sidebar-section:last-child {
+            border-right: none;
+        }
+    }
+
+    @media (max-width: 640px) {
+        .settings-container {
+            padding: 1.5rem 1rem;
+        }
+
+        .settings-sidebar {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        .field-card-header {
+            flex-wrap: wrap;
+        }
+
+        .add-option-form {
+            flex-direction: column;
+        }
+
+        .option-item {
+            flex-wrap: wrap;
+        }
+    }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="settings-container">
+    <div class="settings-header">
+        <div>
+            <h1>Field <span style="color: var(--orange);">Manager</span></h1>
+        </div>
+        <a href="/operations/plab-dashboard" class="settings-header-back">
+            <span>&larr;</span> Back to Dashboard
+        </a>
+    </div>
+
+    <div class="settings-layout">
+        <!-- ── Sidebar ── -->
+        <div class="settings-sidebar">
+            {% set ns = namespace(first=true) %}
+            {% for section_name, fields in sections.items() %}
+            <div class="sidebar-section">
+                <button class="sidebar-section-btn {% if ns.first %}active{% endif %}"
+                        data-section="{{ section_name }}"
+                        onclick="switchSection(this)">
+                    {{ section_name }}
+                    <span class="field-count">{{ fields|length }}</span>
+                </button>
+            </div>
+            {% if ns.first %}{% set ns.first = false %}{% endif %}
+            {% endfor %}
+
+            <!-- Onboarding special tabs -->
+            <div class="sidebar-section">
+                <button class="sidebar-section-btn"
+                        data-section="__onboarding_kit"
+                        onclick="switchSection(this)">
+                    Onboarding Kit
+                </button>
+            </div>
+            <div class="sidebar-section">
+                <button class="sidebar-section-btn"
+                        data-section="__onboarding_email"
+                        onclick="switchSection(this)">
+                    Welcome Email
+                </button>
+            </div>
+        </div>
+
+        <!-- ── Main content ── -->
+        <div class="settings-main">
+            {% set ns2 = namespace(first=true) %}
+            {% for section_name, fields in sections.items() %}
+            <div class="section-panel {% if ns2.first %}active{% endif %}" data-section="{{ section_name }}">
+                <h2 class="section-title">{{ section_name }}</h2>
+
+                {% for field in fields %}
+                <div class="field-card" data-field-id="{{ field.id }}">
+                    <div class="field-card-header" onclick="toggleFieldCard(this)">
+                        <span class="field-expand-icon">&#9654;</span>
+                        <span class="field-label">{{ field.field_label }}</span>
+                        <div class="field-meta">
+                            <span class="field-type-badge {{ field.field_type }}">{{ field.field_type }}</span>
+                            {% if field.options %}
+                            <span class="field-option-count">{{ field.options|length }} options</span>
+                            {% endif %}
+                            <span class="field-category-tag">{{ field.lookup_category or '' }}</span>
+                        </div>
+                    </div>
+
+                    {% if field.field_type == 'select' and field.lookup_category %}
+                    <div class="field-options-panel">
+                        <div class="option-list" data-category="{{ field.lookup_category }}">
+                            {% for option in field.options %}
+                            <div class="option-item {% if not option.is_active %}inactive{% endif %}"
+                                 data-id="{{ option.id }}"
+                                 data-active="{{ option.is_active }}">
+                                <div class="option-content">
+                                    <span class="option-drag-handle">&#8801;</span>
+                                    <span class="option-value">{{ option.value }}</span>
+                                </div>
+                                <span class="option-status-badge {% if option.is_active %}active{% else %}inactive{% endif %}">
+                                    {% if option.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                                <div class="option-actions">
+                                    <button class="option-btn btn-toggle" onclick="toggleOption({{ option.id }}, this)">
+                                        {% if option.is_active %}Deactivate{% else %}Activate{% endif %}
+                                    </button>
+                                    <button class="option-btn" onclick="startEditOption({{ option.id }}, this)">Edit</button>
+                                    <button class="option-btn btn-delete" onclick="deleteOption({{ option.id }}, this)">Delete</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                            {% if not field.options %}
+                            <div class="empty-options">No options yet. Add one below.</div>
+                            {% endif %}
+                        </div>
+
+                        <div class="add-option-box">
+                            <div class="add-option-form">
+                                <input type="text"
+                                       class="add-option-input"
+                                       placeholder="Add new option..."
+                                       data-category="{{ field.lookup_category }}"
+                                       onkeypress="if (event.key === 'Enter') addOption(this)">
+                                <button class="add-option-btn" onclick="addOption(this.previousElementSibling)">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+            {% if ns2.first %}{% set ns2.first = false %}{% endif %}
+            {% endfor %}
+
+            <!-- ── Onboarding: Welcome Kit Items ── -->
+            <div class="section-panel" data-section="__onboarding_kit">
+                <h2 class="section-title">Welcome Kit Items</h2>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin:-0.5rem 0 1rem;">
+                    Manage the default items included in every new client's welcome kit.
+                </p>
+
+                <div class="field-card expanded">
+                    <div class="field-options-panel" style="display:block;border-top:none;">
+                        <div class="option-list" id="kitItemsList">
+                            {% for ki in kit_items %}
+                            <div class="option-item {% if not ki.active %}inactive{% endif %}" data-id="{{ ki.id }}">
+                                <div class="option-content">
+                                    <span class="option-drag-handle">&#8801;</span>
+                                    <span class="option-value">{{ ki.item_name }}</span>
+                                </div>
+                                <span class="option-status-badge {% if ki.active %}active{% else %}inactive{% endif %}">
+                                    {% if ki.active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                                <div class="option-actions">
+                                    <button class="option-btn btn-toggle" onclick="toggleKitItem({{ ki.id }}, this)">
+                                        {% if ki.active %}Deactivate{% else %}Activate{% endif %}
+                                    </button>
+                                    <button class="option-btn btn-delete" onclick="deleteKitItem({{ ki.id }}, this)">Delete</button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+
+                        <div class="add-option-box">
+                            <div class="add-option-form">
+                                <input type="text" class="add-option-input" id="newKitItemInput"
+                                       placeholder="Enter item name..."
+                                       onkeypress="if (event.key === 'Enter') addKitItem()">
+                                <button class="add-option-btn" onclick="addKitItem()">Add</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ── Onboarding: Welcome Email Template ── -->
+            <div class="section-panel" data-section="__onboarding_email">
+                <h2 class="section-title">Welcome Email Template</h2>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin:-0.5rem 0 1rem;">
+                    Customise the welcome email sent to new clients. Use placeholders:
+                    <code>{% raw %}{{client_name}}{% endraw %}</code>,
+                    <code>{% raw %}{{registration_number}}{% endraw %}</code>,
+                    <code>{% raw %}{{plan_type}}{% endraw %}</code>,
+                    <code>{% raw %}{{email}}{% endraw %}</code>
+                </p>
+
+                <div class="field-card expanded" style="padding:1rem;">
+                    <form id="emailTemplateForm" onsubmit="saveEmailTemplate(event)">
+                        <div style="margin-bottom:14px;">
+                            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--gray-500);margin-bottom:4px;">Subject Line</label>
+                            <input type="text" name="subject"
+                                   value="{{ email_template.subject if email_template else 'Welcome to GooCampus — Your PLAB Journey Starts Now!' }}"
+                                   style="width:100%;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;font-size:0.85rem;box-sizing:border-box;">
+                        </div>
+                        <div style="margin-bottom:14px;">
+                            <label style="display:block;font-size:0.75rem;font-weight:600;color:var(--gray-500);margin-bottom:4px;">Email Body (HTML)</label>
+                            <textarea name="body_html" rows="16"
+                                      style="width:100%;padding:10px;border:1px solid var(--gray-200);border-radius:6px;font-size:0.82rem;font-family:monospace;box-sizing:border-box;resize:vertical;">{{ email_template.body_html if email_template else '' }}</textarea>
+                        </div>
+                        <div style="display:flex;gap:10px;">
+                            <button type="submit" style="padding:10px 22px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer;">
+                                Save Template
+                            </button>
+                            <button type="button" onclick="previewEmailTemplate()" style="padding:10px 22px;background:var(--gray-100);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:0.85rem;cursor:pointer;">
+                                Preview
+                            </button>
+                        </div>
+                    </form>
+                </div>
+
+                <!-- Preview modal -->
+                <div id="emailPreviewModal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;align-items:center;justify-content:center;">
+                    <div style="background:white;border-radius:12px;width:90%;max-width:700px;max-height:80vh;overflow:auto;padding:24px;position:relative;">
+                        <button onclick="document.getElementById('emailPreviewModal').style.display='none'" style="position:absolute;top:12px;right:12px;background:none;border:none;font-size:1.2rem;cursor:pointer;">&times;</button>
+                        <h4 style="margin:0 0 12px;font-size:1rem;font-weight:700;color:var(--navy);">Email Preview</h4>
+                        <div id="emailPreviewContent" style="border:1px solid var(--gray-200);border-radius:8px;padding:16px;"></div>
+                    </div>
+                </div>
+            </div>
+
+        </div>
+    </div>
+</div>
+
+<script>
+    /* ── Section switching ── */
+    function switchSection(btn) {
+        document.querySelectorAll('.sidebar-section-btn').forEach(b => b.classList.remove('active'));
+        btn.classList.add('active');
+
+        const section = btn.dataset.section;
+        document.querySelectorAll('.section-panel').forEach(p => {
+            p.classList.toggle('active', p.dataset.section === section);
+        });
+    }
+
+    /* ── Field card expand/collapse ── */
+    function toggleFieldCard(header) {
+        const card = header.closest('.field-card');
+        card.classList.toggle('expanded');
+    }
+
+    /* ── Add option ── */
+    function addOption(inputElement) {
+        const value = inputElement.value.trim();
+        const category = inputElement.dataset.category;
+        if (!value) { alert('Please enter a value'); return; }
+
+        fetch('/operations/plab-settings/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ category, value })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const optionList = inputElement.closest('.field-options-panel').querySelector('.option-list');
+            // Remove empty state if present
+            const emptyMsg = optionList.querySelector('.empty-options');
+            if (emptyMsg) emptyMsg.remove();
+
+            const newItem = document.createElement('div');
+            newItem.className = 'option-item';
+            newItem.dataset.id = data.id;
+            newItem.dataset.active = 'true';
+            newItem.innerHTML = `
+                <div class="option-content">
+                    <span class="option-drag-handle">&#8801;</span>
+                    <span class="option-value">${escHtml(value)}</span>
+                </div>
+                <span class="option-status-badge active">Active</span>
+                <div class="option-actions">
+                    <button class="option-btn btn-toggle" onclick="toggleOption(${data.id}, this)">Deactivate</button>
+                    <button class="option-btn" onclick="startEditOption(${data.id}, this)">Edit</button>
+                    <button class="option-btn btn-delete" onclick="deleteOption(${data.id}, this)">Delete</button>
+                </div>
+            `;
+            optionList.appendChild(newItem);
+            inputElement.value = '';
+
+            // Update option count on the header
+            updateFieldOptionCount(optionList);
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    /* ── Toggle option ── */
+    function toggleOption(optionId, button) {
+        fetch(`/operations/plab-settings/${optionId}/toggle`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            const isActive = data.is_active;
+            item.dataset.active = isActive;
+            item.classList.toggle('inactive', !isActive);
+            const badge = item.querySelector('.option-status-badge');
+            badge.className = `option-status-badge ${isActive ? 'active' : 'inactive'}`;
+            badge.textContent = isActive ? 'Active' : 'Inactive';
+            button.textContent = isActive ? 'Deactivate' : 'Activate';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    /* ── Edit option ── */
+    function startEditOption(optionId, button) {
+        const item = button.closest('.option-item');
+        if (!item) return;
+        if (item.classList.contains('edit-mode')) { cancelEditOption(item); return; }
+
+        const valueSpan = item.querySelector('.option-value');
+        const oldValue = valueSpan.textContent;
+
+        item.classList.add('edit-mode');
+        const content = item.querySelector('.option-content');
+        content.innerHTML = `
+            <span class="option-drag-handle">&#8801;</span>
+            <input type="text" class="edit-input" value="${escAttr(oldValue)}" />
+        `;
+
+        const input = content.querySelector('.edit-input');
+        input.focus();
+        input.select();
+        button.textContent = 'Save';
+        button.onclick = () => saveEditOption(optionId, input.value, item, oldValue);
+        input.onkeydown = (e) => {
+            if (e.key === 'Enter') saveEditOption(optionId, input.value, item, oldValue);
+            if (e.key === 'Escape') cancelEditOption(item, oldValue);
+        };
+    }
+
+    function saveEditOption(optionId, newValue, item, oldValue) {
+        if (!newValue.trim()) { alert('Value cannot be empty'); return; }
+        fetch(`/operations/plab-settings/${optionId}/edit`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ value: newValue.trim() })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const content = item.querySelector('.option-content');
+            content.innerHTML = `
+                <span class="option-drag-handle">&#8801;</span>
+                <span class="option-value">${escHtml(newValue.trim())}</span>
+            `;
+            item.classList.remove('edit-mode');
+            const btn = item.querySelector('.option-btn:not(.btn-toggle):not(.btn-delete)');
+            if (btn) { btn.textContent = 'Edit'; btn.onclick = () => startEditOption(optionId, btn); }
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function cancelEditOption(item, oldValue) {
+        item.classList.remove('edit-mode');
+        const content = item.querySelector('.option-content');
+        const optionId = item.dataset.id;
+        content.innerHTML = `
+            <span class="option-drag-handle">&#8801;</span>
+            <span class="option-value">${escHtml(oldValue || '')}</span>
+        `;
+        const btn = item.querySelector('.option-btn:not(.btn-toggle):not(.btn-delete)');
+        if (btn) { btn.textContent = 'Edit'; btn.onclick = () => startEditOption(parseInt(optionId), btn); }
+    }
+
+    /* ── Delete option ── */
+    function deleteOption(optionId, button) {
+        if (!confirm('Are you sure you want to delete this option?')) return;
+        fetch(`/operations/plab-settings/${optionId}/delete`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            const optionList = item.closest('.option-list');
+            item.style.opacity = '0';
+            item.style.transform = 'scale(0.95)';
+            setTimeout(() => {
+                item.remove();
+                updateFieldOptionCount(optionList);
+            }, 200);
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    /* ── Kit Items ── */
+    function toggleKitItem(itemId, button) {
+        fetch('/operations/onboarding/kit-items/' + itemId + '/toggle', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            const isActive = data.active;
+            item.classList.toggle('inactive', !isActive);
+            const badge = item.querySelector('.option-status-badge');
+            badge.className = 'option-status-badge ' + (isActive ? 'active' : 'inactive');
+            badge.textContent = isActive ? 'Active' : 'Inactive';
+            button.textContent = isActive ? 'Deactivate' : 'Activate';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function deleteKitItem(itemId, button) {
+        if (!confirm('Delete this kit item?')) return;
+        fetch('/operations/onboarding/kit-items/' + itemId + '/delete', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' }
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const item = button.closest('.option-item');
+            item.style.opacity = '0';
+            item.style.transform = 'scale(0.95)';
+            setTimeout(() => item.remove(), 200);
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function addKitItem() {
+        const input = document.getElementById('newKitItemInput');
+        const name = input.value.trim();
+        if (!name) { alert('Please enter an item name'); return; }
+        fetch('/operations/onboarding/kit-items/add', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ item_name: name })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            const list = document.getElementById('kitItemsList');
+            const newItem = document.createElement('div');
+            newItem.className = 'option-item';
+            newItem.dataset.id = data.id;
+            newItem.innerHTML = '<div class="option-content"><span class="option-drag-handle">&#8801;</span><span class="option-value">' + escHtml(name) + '</span></div>' +
+                '<span class="option-status-badge active">Active</span>' +
+                '<div class="option-actions"><button class="option-btn btn-toggle" onclick="toggleKitItem(' + data.id + ', this)">Deactivate</button>' +
+                '<button class="option-btn btn-delete" onclick="deleteKitItem(' + data.id + ', this)">Delete</button></div>';
+            list.appendChild(newItem);
+            input.value = '';
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    /* ── Email Template ── */
+    function saveEmailTemplate(e) {
+        e.preventDefault();
+        const form = document.getElementById('emailTemplateForm');
+        const subject = form.querySelector('[name="subject"]').value;
+        const body_html = form.querySelector('[name="body_html"]').value;
+        fetch('/operations/onboarding/email-template/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ subject, body_html })
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) { alert('Error: ' + data.error); return; }
+            alert('Email template saved successfully!');
+        })
+        .catch(e => alert('Error: ' + e));
+    }
+
+    function previewEmailTemplate() {
+        const form = document.getElementById('emailTemplateForm');
+        let html = form.querySelector('[name="body_html"]').value;
+        html = html.replace(/\{\{client_name\}\}/g, 'John Doe')
+                   .replace(/\{\{registration_number\}\}/g, 'GC-2025-0001')
+                   .replace(/\{\{plan_type\}\}/g, 'Premium Plan')
+                   .replace(/\{\{email\}\}/g, 'john@example.com');
+        document.getElementById('emailPreviewContent').innerHTML = html;
+        document.getElementById('emailPreviewModal').style.display = 'flex';
+    }
+
+    /* ── Helpers ── */
+    function updateFieldOptionCount(optionList) {
+        const card = optionList.closest('.field-card');
+        if (!card) return;
+        const countEl = card.querySelector('.field-option-count');
+        if (countEl) {
+            const n = optionList.querySelectorAll('.option-item').length;
+            countEl.textContent = n + ' option' + (n !== 1 ? 's' : '');
+        }
+    }
+
+    function escHtml(str) {
+        const d = document.createElement('div');
+        d.textContent = str;
+        return d.innerHTML;
+    }
+
+    function escAttr(str) {
+        return str.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    /* ── Init: activate first section ── */
+    document.addEventListener('DOMContentLoaded', function() {
+        const firstBtn = document.querySelector('.sidebar-section-btn');
+        if (firstBtn && !document.querySelector('.sidebar-section-btn.active')) {
+            firstBtn.click();
+        }
+    });
+</script>
+{% endblock %}
