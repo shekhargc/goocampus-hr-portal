@@ -210,6 +210,36 @@
         font-family: monospace;
     }
 
+    .field-vendor-badge {
+        font-size: 0.65rem;
+        font-weight: 600;
+        padding: 2px 8px;
+        border-radius: 4px;
+        background: #DBEAFE;
+        color: #1D4ED8;
+        white-space: nowrap;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .field-vendor-badge svg {
+        width: 12px;
+        height: 12px;
+    }
+
+    .vendor-manage-link {
+        display: inline-block;
+        margin-top: 0.5rem;
+        font-size: 0.78rem;
+        color: #2563EB;
+        text-decoration: none;
+    }
+
+    .vendor-manage-link:hover {
+        text-decoration: underline;
+    }
+
     .field-option-count {
         font-size: 0.72rem;
         color: var(--gray-400);
@@ -504,6 +534,12 @@
                         <span class="field-expand-icon">&#9654;</span>
                         <span class="field-label">{{ field.field_label }}</span>
                         <div class="field-meta">
+                            {% if field.lookup_category in vendor_linked_categories %}
+                            <span class="field-vendor-badge">
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+                                Synced from Vendors
+                            </span>
+                            {% endif %}
                             <span class="field-type-badge {{ field.field_type }}">{{ field.field_type }}</span>
                             {% if field.options %}
                             <span class="field-option-count">{{ field.options|length }} options</span>
@@ -514,6 +550,29 @@
 
                     {% if field.field_type == 'select' and field.lookup_category %}
                     <div class="field-options-panel">
+                        {% if field.lookup_category in vendor_linked_categories %}
+                        {# ── Vendor-linked: read-only options with manage link ── #}
+                        <div class="option-list" data-category="{{ field.lookup_category }}">
+                            {% for option in field.options %}
+                            <div class="option-item {% if not option.is_active %}inactive{% endif %}"
+                                 data-id="{{ option.id }}">
+                                <div class="option-content">
+                                    <span class="option-value">{{ option.value }}</span>
+                                </div>
+                                <span class="option-status-badge {% if option.is_active %}active{% else %}inactive{% endif %}">
+                                    {% if option.is_active %}Active{% else %}Inactive{% endif %}
+                                </span>
+                            </div>
+                            {% endfor %}
+                            {% if not field.options %}
+                            <div class="empty-options">No vendors linked yet. Add them in Vendors &amp; Providers.</div>
+                            {% endif %}
+                        </div>
+                        <a href="/operations/vendors-providers" class="vendor-manage-link">
+                            Manage in Vendors &amp; Providers &rarr;
+                        </a>
+                        {% else %}
+                        {# ── Regular field: full CRUD options ── #}
                         <div class="option-list" data-category="{{ field.lookup_category }}">
                             {% for option in field.options %}
                             <div class="option-item {% if not option.is_active %}inactive{% endif %}"
@@ -550,6 +609,7 @@
                                 <button class="add-option-btn" onclick="addOption(this.previousElementSibling)">Add</button>
                             </div>
                         </div>
+                        {% endif %}
                     </div>
                     {% endif %}
                 </div>

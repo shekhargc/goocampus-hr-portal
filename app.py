@@ -12003,10 +12003,21 @@ def ensure_ops_tables():
             field_label TEXT NOT NULL,
             field_type TEXT DEFAULT 'select',
             lookup_category TEXT,
+            vendor_link TEXT,
             display_order INTEGER DEFAULT 0,
             is_active BOOLEAN DEFAULT TRUE,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Migration: add vendor_link column if missing
+        try:
+            conn.execute("SELECT vendor_link FROM field_registry LIMIT 1")
+        except Exception:
+            try:
+                conn.execute("ALTER TABLE field_registry ADD COLUMN vendor_link TEXT")
+                conn.commit()
+                logging.info("Added vendor_link column to field_registry")
+            except Exception:
+                pass
 
         # ── Vendors & Providers (centralised vendor database) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS vendors_providers (
@@ -12418,6 +12429,10 @@ def ensure_ops_tables():
                 ('Dr. Urvish', 'UK Pathway', 'Research & Publications', []),
                 ('Cognibrain', 'UK Pathway', 'Research & Publications', []),
                 ('The Good Research Project', 'UK Pathway', 'Research & Publications', []),
+                # NGO Activities — UK Pathway
+                ('Aarogya Seva', 'UK Pathway', 'NGO Activities', []),
+                ('StepOne', 'UK Pathway', 'NGO Activities', []),
+                ('Other', 'UK Pathway', 'NGO Activities', []),
             ]
             for sort_idx, (name, country, category, services) in enumerate(VENDOR_SEED, 1):
                 conn.execute(
@@ -13013,18 +13028,37 @@ def ensure_ops_tables():
                 for section, cats in _section_fields.items():
                     for idx, cat_name in enumerate(cats, 1):
                         lbl = CATEGORY_LABELS.get(cat_name, cat_name.replace('_', ' ').title())
+                        vlink = None
+                        if cat_name in VENDOR_LOOKUP_MAP:
+                            import json as _json
+                            vlink = _json.dumps(VENDOR_LOOKUP_MAP[cat_name])
                         conn.execute(
-                            "INSERT INTO field_registry (section, field_name, field_label, field_type, lookup_category, display_order, is_active) VALUES (?, ?, ?, ?, ?, ?, TRUE)",
-                            (section, cat_name, lbl, 'select', cat_name, idx)
+                            "INSERT INTO field_registry (section, field_name, field_label, field_type, lookup_category, vendor_link, display_order, is_active) VALUES (?, ?, ?, ?, ?, ?, ?, TRUE)",
+                            (section, cat_name, lbl, 'select', cat_name, vlink, idx)
                         )
                 conn.commit()
                 logging.info("Seeded field_registry with all categories")
+            else:
+                # Backfill vendor_link for existing field_registry rows that don't have it
+                import json as _json
+                for cat_name, vlink_dict in VENDOR_LOOKUP_MAP.items():
+                    conn.execute(
+                        "UPDATE field_registry SET vendor_link = ? WHERE lookup_category = ? AND (vendor_link IS NULL OR vendor_link = '')",
+                        (_json.dumps(vlink_dict), cat_name)
+                    )
+                conn.commit()
         except Exception as e:
             try:
                 conn.rollback()
             except Exception:
                 pass
             logging.error(f"field_registry seed: {e}")
+
+        # ── Sync vendors → lookup_options on startup ──
+        try:
+            sync_vendors_to_lookup_options(conn)
+        except Exception as e:
+            logging.error(f"startup vendor sync: {e}")
 
         conn.close()
     except Exception as e:
@@ -13492,6 +13526,7 @@ def ops_field_manager():
         return render_template('ops_field_manager.html',
                              sections=sections,
                              category_labels=CATEGORY_LABELS,
+                             vendor_linked_categories=list(VENDOR_LOOKUP_MAP.keys()),
                              kit_items=kit_items,
                              email_template=email_tpl,
                              active_ops_page='settings')
@@ -13670,7 +13705,7 @@ def ops_field_manager_reorder():
 # ─────────────────────────────────────────────────────────
 
 VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
-VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications']
+VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
 VENDOR_SERVICE_MAP = {
@@ -13681,6 +13716,100 @@ VENDOR_SERVICE_MAP = {
     'PLAB 2 Mock': ['Aspire Academy', 'ABMA & Aspire', 'Other'],
     'MRCP 1': ['Other'],
 }
+
+# ── Vendor ↔ lookup_options sync mapping ──
+# Maps lookup_options category → how to query vendors_providers
+# 'service' = filter by vendor_service_map.service_name
+# 'category' = filter by vendors_providers.category
+VENDOR_LOOKUP_MAP = {
+    'ielts_vendor':      {'type': 'service',  'service': 'IELTS Training',  'country': 'UK Pathway'},
+    'oet_vendor':        {'type': 'service',  'service': 'OET Training',    'country': 'UK Pathway'},
+    'plab1_partner':     {'type': 'service',  'service': 'PLAB 1 Training', 'country': 'UK Pathway'},
+    'research_provider': {'type': 'category', 'category': 'Research & Publications', 'country': 'UK Pathway'},
+    'ngo_vendor':        {'type': 'category', 'category': 'NGO Activities', 'country': 'UK Pathway'},
+}
+
+
+def sync_vendors_to_lookup_options(conn=None):
+    """Sync vendors_providers → lookup_options for vendor-linked categories.
+    Additive only: adds missing options and deactivates removed vendors, never deletes data.
+    """
+    should_close = False
+    if conn is None:
+        conn = get_db()
+        should_close = True
+    try:
+        for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
+            # Fetch active vendor names for this mapping
+            if vlink['type'] == 'service':
+                vendor_rows = conn.execute("""
+                    SELECT DISTINCT vp.name FROM vendors_providers vp
+                    JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+                    WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
+                    ORDER BY vp.sort_order, vp.name
+                """, (vlink['service'], vlink.get('country', 'UK Pathway'))).fetchall()
+            else:
+                vendor_rows = conn.execute("""
+                    SELECT name FROM vendors_providers
+                    WHERE category = ? AND country = ? AND is_active = TRUE
+                    ORDER BY sort_order, name
+                """, (vlink['category'], vlink.get('country', 'UK Pathway'))).fetchall()
+
+            vendor_names = [r['name'] for r in vendor_rows]
+
+            # Fetch existing lookup_options for this category
+            existing = conn.execute(
+                "SELECT id, value, is_active FROM lookup_options WHERE category = ? ORDER BY sort_order",
+                (lo_category,)
+            ).fetchall()
+            existing_values = {r['value']: r for r in existing}
+
+            # Get current max sort_order
+            max_so = conn.execute(
+                "SELECT COALESCE(MAX(sort_order), 0) as m FROM lookup_options WHERE category = ?",
+                (lo_category,)
+            ).fetchone()['m']
+
+            # Add vendor names not yet in lookup_options
+            for vname in vendor_names:
+                if vname not in existing_values:
+                    max_so += 1
+                    conn.execute(
+                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
+                        (lo_category, vname, vname, max_so)
+                    )
+                    logging.info(f"Vendor sync: added '{vname}' to lookup_options.{lo_category}")
+                elif not existing_values[vname]['is_active']:
+                    # Re-activate if vendor is active but lookup was deactivated
+                    conn.execute(
+                        "UPDATE lookup_options SET is_active = TRUE WHERE id = ?",
+                        (existing_values[vname]['id'],)
+                    )
+                    logging.info(f"Vendor sync: re-activated '{vname}' in lookup_options.{lo_category}")
+
+            # Deactivate lookup_options whose vendor is no longer active (but don't delete)
+            for val, row in existing_values.items():
+                if val not in vendor_names and row['is_active'] and val != 'Other':
+                    # Check if this vendor exists but is inactive
+                    inactive_check = conn.execute(
+                        "SELECT id FROM vendors_providers WHERE name = ? AND is_active = FALSE LIMIT 1",
+                        (val,)
+                    ).fetchone()
+                    if inactive_check:
+                        conn.execute(
+                            "UPDATE lookup_options SET is_active = FALSE WHERE id = ?",
+                            (row['id'],)
+                        )
+                        logging.info(f"Vendor sync: deactivated '{val}' in lookup_options.{lo_category} (vendor inactive)")
+
+        conn.commit()
+        logging.info("Vendor ↔ lookup_options sync completed")
+    except Exception as e:
+        logging.error(f"sync_vendors_to_lookup_options error: {e}")
+    finally:
+        if should_close:
+            conn.close()
+
 
 def _build_vendor_map():
     """Build vendor map from DB, falling back to hard-coded map."""
@@ -13824,6 +13953,7 @@ def ops_vendor_add():
             if svc.strip():
                 conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
         conn.commit()
+        sync_vendors_to_lookup_options(conn)
         conn.close()
         return jsonify({'success': True, 'id': vid, 'message': f'Added {name}'})
     except Exception as e:
@@ -13854,6 +13984,7 @@ def ops_vendor_edit(vid):
             if svc.strip():
                 conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
         conn.commit()
+        sync_vendors_to_lookup_options(conn)
         conn.close()
         return jsonify({'success': True, 'message': f'Updated {name}'})
     except Exception as e:
@@ -13870,6 +14001,7 @@ def ops_vendor_toggle(vid):
         conn.execute("UPDATE vendors_providers SET is_active = NOT is_active WHERE id = ?", (vid,))
         conn.commit()
         new_status = conn.execute("SELECT is_active FROM vendors_providers WHERE id = ?", (vid,)).fetchone()['is_active']
+        sync_vendors_to_lookup_options(conn)
         conn.close()
         return jsonify({'success': True, 'is_active': bool(new_status)})
     except Exception as e:
@@ -13886,6 +14018,7 @@ def ops_vendor_delete(vid):
         conn.execute("DELETE FROM vendor_service_map WHERE vendor_id = ?", (vid,))
         conn.execute("DELETE FROM vendors_providers WHERE id = ?", (vid,))
         conn.commit()
+        sync_vendors_to_lookup_options(conn)
         conn.close()
         return jsonify({'success': True, 'message': 'Vendor deleted'})
     except Exception as e:
