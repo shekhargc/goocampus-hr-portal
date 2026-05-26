@@ -1,6 +1,6 @@
 """
-Generate Germany PG Brochure PDF — GooCampus branded, A4 landscape-style pages.
-Replaces the old third-party brochure with GooCampus-branded content.
+Generate Germany PG Brochure PDF — GooCampus branded, A4 pages.
+Cover with Germany image, Why Germany, Journey, Package (elaborated), Checklist.
 """
 import os
 from weasyprint import HTML
@@ -29,7 +29,6 @@ body {
   font-size: 10pt;
 }
 
-/* COLORS */
 :root {
   --navy: #0B1F3A;
   --gold: #C4922A;
@@ -44,7 +43,6 @@ body {
   --border: #E0DBD4;
 }
 
-/* FLAG BAR */
 .de-bar {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -58,7 +56,6 @@ body {
   background: linear-gradient(90deg, #000 33%, #DD0000 33%, #DD0000 66%, #FFCC00 66%);
 }
 
-/* PAGE */
 .page {
   width: 210mm;
   height: 297mm;
@@ -68,7 +65,6 @@ body {
 }
 .page:last-child { page-break-after: auto; }
 
-/* PAGE HEADER BAR */
 .page-bar {
   position: absolute;
   top: 5px; left: 0; right: 0;
@@ -83,76 +79,86 @@ body {
 .page-bar .logo span { color: var(--gold-light); }
 .page-bar .tag { font-size: 7pt; font-weight: 600; color: rgba(255,255,255,.45); text-transform: uppercase; letter-spacing: 1.5px; }
 
-/* CONTENT AREA */
 .body { padding: 60px 28px 28px; }
 
 /* ═══ PAGE 1: COVER ═══ */
 .cover {
-  background: var(--navy);
+  background: var(--white);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
+}
+.cover-top {
   text-align: center;
-  color: #fff;
+  padding: 40px 32px 24px;
+  flex-shrink: 0;
 }
-.cover .logo-big { font-size: 22pt; font-weight: 900; margin-bottom: 6px; }
-.cover .logo-big span { color: var(--gold-light); }
-.cover .badge {
-  display: inline-block;
-  font-size: 7pt;
-  font-weight: 700;
-  letter-spacing: 3px;
-  text-transform: uppercase;
-  color: var(--gold);
-  border: 1px solid rgba(196,146,42,.3);
-  border-radius: 20px;
-  padding: 6px 18px;
-  margin-bottom: 28px;
-}
-.cover h1 {
-  font-size: 32pt;
+.cover-logo {
+  font-size: 15pt;
   font-weight: 900;
-  line-height: 1.12;
-  letter-spacing: -0.02em;
-  margin-bottom: 12px;
-  max-width: 440px;
+  color: var(--navy);
+  margin-bottom: 18px;
 }
-.cover h1 em { color: var(--gold-light); font-style: normal; }
-.cover .sub {
-  font-size: 11pt;
-  color: rgba(255,255,255,.5);
-  max-width: 400px;
-  line-height: 1.6;
-  margin-bottom: 36px;
-}
-.cover-stats {
-  display: flex;
-  gap: 32px;
-  margin-bottom: 40px;
-}
-.cover-stat {
-  text-align: center;
-  padding: 16px 20px;
-  background: rgba(255,255,255,.06);
-  border: 1px solid rgba(255,255,255,.1);
-  border-radius: 12px;
-  min-width: 110px;
-}
-.cover-stat .val { font-size: 20pt; font-weight: 900; color: var(--gold-light); }
-.cover-stat .lbl { font-size: 7pt; color: rgba(255,255,255,.45); margin-top: 3px; text-transform: uppercase; letter-spacing: .5px; }
-.cover-foot {
-  position: absolute;
-  bottom: 20px;
+.cover-logo span { color: var(--gold); }
+.cover-logo-sub {
   font-size: 7pt;
-  color: rgba(255,255,255,.2);
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-top: 2px;
+}
+.cover-country {
+  font-size: 48pt;
+  font-weight: 900;
+  color: var(--navy);
+  letter-spacing: -0.03em;
+  line-height: 1;
+  margin-bottom: 6px;
+}
+.cover-program {
+  font-size: 18pt;
+  font-weight: 800;
+  color: var(--navy);
+  line-height: 1.2;
+  margin-bottom: 6px;
+}
+.cover-badge {
+  display: inline-block;
+  font-size: 9pt;
+  font-weight: 800;
+  color: var(--white);
+  background: var(--navy);
+  border-radius: 8px;
+  padding: 8px 24px;
+  margin-top: 14px;
+  letter-spacing: 1px;
+}
+.cover-img {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+.cover-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-img::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 0; right: 0;
+  height: 60px;
+  background: linear-gradient(180deg, var(--white), transparent);
+  z-index: 1;
 }
 
-/* ═══ PAGE 2: WHY GERMANY ═══ */
+/* ═══ SECTION STYLES ═══ */
 .sec-label { font-size: 7pt; font-weight: 700; letter-spacing: 2.5px; text-transform: uppercase; color: var(--gold); margin-bottom: 5px; }
 .sec-title { font-size: 17pt; font-weight: 800; color: var(--navy); margin-bottom: 6px; letter-spacing: -0.01em; }
 .sec-sub { font-size: 9pt; color: var(--muted); margin-bottom: 18px; line-height: 1.5; }
 
+/* WHY GERMANY */
 .why-grid {
   display: flex;
   flex-wrap: wrap;
@@ -199,10 +205,8 @@ body {
 .salary-box .s-amt { font-size: 22pt; font-weight: 900; color: var(--gold-light); }
 .salary-box .s-per { font-size: 7pt; color: rgba(255,255,255,.4); }
 
-/* ═══ PAGE 3: PATHWAY / JOURNEY ═══ */
-.journey-steps {
-  margin-top: 10px;
-}
+/* JOURNEY */
+.journey-steps { margin-top: 10px; }
 .j-step {
   display: flex;
   gap: 14px;
@@ -233,7 +237,7 @@ body {
 .j-content .j-dur { font-size: 7pt; color: var(--gold); font-weight: 600; text-transform: uppercase; letter-spacing: .5px; }
 .j-content p { font-size: 8pt; color: var(--muted); margin-top: 3px; line-height: 1.45; }
 
-/* ═══ PAGE 4: PACKAGE ═══ */
+/* PACKAGE */
 .pkg-header {
   background: var(--navy);
   border-radius: 12px;
@@ -242,43 +246,89 @@ body {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 16px;
+  margin-bottom: 14px;
 }
 .pkg-header .left h3 { font-size: 12pt; font-weight: 800; }
 .pkg-header .left p { font-size: 8pt; color: rgba(255,255,255,.5); margin-top: 2px; }
 .pkg-header .right .amt { font-size: 28pt; font-weight: 900; text-align: right; }
 .pkg-header .right .sub { font-size: 7.5pt; color: var(--gold-light); text-align: right; }
 
-.inst-row { display: flex; gap: 10px; margin-bottom: 14px; }
-.inst-box {
-  flex: 1;
+/* Installment cards */
+.inst-card {
   border: 1px solid var(--border);
   border-radius: 10px;
-  padding: 12px;
+  padding: 14px 16px;
+  margin-bottom: 10px;
   position: relative;
   overflow: hidden;
+  background: var(--white);
 }
-.inst-box::before {
+.inst-card::before {
   content: '';
   position: absolute;
   top: 0; left: 0; right: 0;
   height: 3px;
 }
-.inst-box:nth-child(1)::before { background: #FF9933; }
-.inst-box:nth-child(2)::before { background: #1565c0; }
-.inst-box:nth-child(3)::before { background: #2e7d32; }
-.inst-box .i-label { font-size: 7pt; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; margin-bottom: 2px; }
-.inst-box:nth-child(1) .i-label { color: #e65100; }
-.inst-box:nth-child(2) .i-label { color: #1565c0; }
-.inst-box:nth-child(3) .i-label { color: #2e7d32; }
-.inst-box .i-amt { font-size: 14pt; font-weight: 900; color: var(--navy); margin-bottom: 1px; }
-.inst-box .i-when { font-size: 7pt; color: var(--muted); font-style: italic; margin-bottom: 6px; padding-bottom: 6px; border-bottom: 1px solid var(--border); }
-.inst-box .i-title { font-size: 8pt; font-weight: 700; color: var(--navy); margin-bottom: 4px; }
-.i-list { list-style: none; padding: 0; margin: 0; }
-.i-list li { padding: 1.5px 0 1.5px 12px; font-size: 6.8pt; color: var(--text); position: relative; line-height: 1.4; }
-.i-list li::before { content: '\\2713'; position: absolute; left: 0; color: var(--gold); font-weight: 800; font-size: 6.5pt; }
+.inst-card.i1::before { background: #FF9933; }
+.inst-card.i2::before { background: #1565c0; }
+.inst-card.i3::before { background: #2e7d32; }
+.inst-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+.inst-top .i-label { font-size: 8pt; font-weight: 700; text-transform: uppercase; letter-spacing: .8px; }
+.inst-card.i1 .i-label { color: #e65100; }
+.inst-card.i2 .i-label { color: #1565c0; }
+.inst-card.i3 .i-label { color: #2e7d32; }
+.inst-top .i-amt { font-size: 16pt; font-weight: 900; color: var(--navy); }
+.inst-top .i-when { font-size: 7pt; color: var(--muted); font-style: italic; }
+.inst-title { font-size: 9pt; font-weight: 700; color: var(--navy); margin-bottom: 6px; }
+.inst-services {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 0;
+}
+.inst-services li {
+  width: 50%;
+  padding: 1.5px 0 1.5px 14px;
+  font-size: 7.5pt;
+  color: var(--text);
+  position: relative;
+  line-height: 1.4;
+  list-style: none;
+}
+.inst-services li::before { content: '\\2713'; position: absolute; left: 0; color: var(--gold); font-weight: 800; font-size: 7pt; }
 
-/* ═══ PAGE 5: CHECKLIST ═══ */
+/* Payment table */
+.pay-table {
+  width: 100%;
+  border-collapse: collapse;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+  margin: 14px 0 12px;
+}
+.pay-table th {
+  background: var(--navy);
+  color: #fff;
+  font-size: 7.5pt;
+  font-weight: 600;
+  padding: 8px 12px;
+  text-align: left;
+}
+.pay-table td {
+  padding: 7px 12px;
+  font-size: 8pt;
+  border-bottom: 1px solid var(--border);
+}
+.pay-table tr:last-child td { border-bottom: none; font-weight: 700; }
+.pay-table tr:nth-child(even) td { background: rgba(250,248,244,.5); }
+
+/* CHECKLIST */
 .chk-grid { display: flex; gap: 14px; }
 .chk-col {
   flex: 1;
@@ -317,33 +367,7 @@ body {
 .blocked-note p { font-size: 7.5pt; color: var(--muted); line-height: 1.5; }
 .blocked-note strong { color: var(--navy); }
 
-/* ═══ PAGE 6: COMPARISON + CONTACT ═══ */
-.cmp-table {
-  width: 100%;
-  border-collapse: collapse;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  overflow: hidden;
-  margin-bottom: 16px;
-}
-.cmp-table th {
-  background: var(--navy);
-  color: #fff;
-  font-size: 7.5pt;
-  font-weight: 600;
-  padding: 8px 10px;
-  text-align: left;
-}
-.cmp-table td {
-  padding: 6px 10px;
-  font-size: 7.5pt;
-  border-bottom: 1px solid var(--border);
-}
-.cmp-table tr:nth-child(even) td { background: rgba(250,248,244,.5); }
-.cmp-table tr:last-child td { border-bottom: none; }
-.chk { color: var(--green); font-weight: 700; }
-.xmk { color: var(--red); font-weight: 700; }
-
+/* Contact box */
 .contact-box {
   background: var(--navy);
   border-radius: 12px;
@@ -352,6 +376,7 @@ body {
   text-align: center;
   position: relative;
   overflow: hidden;
+  margin-top: 16px;
 }
 .contact-box::before {
   content: '';
@@ -386,16 +411,17 @@ body {
 <div class="page cover">
   <div class="de-bar"></div>
   <div class="de-bar-bottom"></div>
-  <div class="logo-big">Goo<span>Campus</span></div>
-  <div class="badge">Germany PG Career Pathway</div>
-  <h1>Your Complete Guide to <em>Medical PG in Germany</em></h1>
-  <p class="sub">Train in world-class German hospitals with zero tuition fees, earn up to &euro;5,500/month as Assistenzarzt, and fast-track your permanent residency.</p>
-  <div class="cover-stats">
-    <div class="cover-stat"><div class="val">&euro;0</div><div class="lbl">Tuition Fees</div></div>
-    <div class="cover-stat"><div class="val">&euro;5,500</div><div class="lbl">Monthly Salary</div></div>
-    <div class="cover-stat"><div class="val">1000+</div><div class="lbl">Doctors Counselled</div></div>
+  <div class="cover-top">
+    <div class="cover-logo">Goo<span>Campus</span>
+      <div class="cover-logo-sub">Your Gateway to Global Medical Careers</div>
+    </div>
+    <div class="cover-country">GERMANY</div>
+    <div class="cover-program">Post-Graduate<br>Career Pathway</div>
+    <div class="cover-badge">GERMANY &mdash; PGCP</div>
   </div>
-  <div class="cover-foot">GooCampus &mdash; Your Gateway to Global Medical Careers &bull; goocampus.org/germanypathway &bull; +91 636 314 1075</div>
+  <div class="cover-img">
+    <img src="https://images.unsplash.com/photo-1467269204594-9661b134dd2b?w=1200&q=85" alt="Germany cityscape">
+  </div>
 </div>
 
 <!-- ═══ PAGE 2: WHY GERMANY ═══ -->
@@ -519,178 +545,150 @@ body {
   <div class="pf">GooCampus Germany PGCP &bull; Journey Map &bull; Page 3</div>
 </div>
 
-<!-- ═══ PAGE 4: PACKAGE ═══ -->
+<!-- ═══ PAGE 4: PACKAGE & PAYMENT DETAILS (ELABORATED) ═══ -->
 <div class="page">
   <div class="de-bar"></div>
   <div class="page-bar"><div class="logo">Goo<span>Campus</span></div><div class="tag">Germany PG Career Pathway</div></div>
   <div class="body">
     <div class="sec-label">Programme Fee</div>
     <div class="sec-title">Package &amp; Payment Structure</div>
-    <p class="sec-sub">Three milestone-based installments. Each payment unlocks the next phase. No hidden fees.</p>
+    <p class="sec-sub">Three milestone-based installments. Each payment unlocks the next phase of services. No hidden charges.</p>
 
     <div class="pkg-header">
       <div class="left">
         <h3>Total Programme Fee</h3>
-        <p>3 milestone-based installments</p>
+        <p>3 milestone-based installments &bull; Pay as you progress</p>
       </div>
       <div class="right">
         <div class="amt">&euro;15,000</div>
-        <div class="sub">Approx. &#8377;13.5L at current rates</div>
+        <div class="sub">Approx. &#8377;13.5 Lakhs at current rates</div>
       </div>
     </div>
 
-    <div class="inst-row">
-      <div class="inst-box">
-        <div class="i-label">Installment 1</div>
+    <!-- Installment 1 -->
+    <div class="inst-card i1">
+      <div class="inst-top">
+        <div>
+          <div class="i-label">Installment 1 &mdash; India Phase</div>
+          <div class="i-when">Paid at enrolment &bull; Before language training begins</div>
+        </div>
         <div class="i-amt">&euro;5,000</div>
-        <div class="i-when">Paid at enrolment</div>
-        <div class="i-title">India Phase</div>
-        <ul class="i-list">
-          <li>German language training A1&ndash;B1</li>
-          <li>Document preparation &amp; translation</li>
-          <li>LOR &amp; motivation letter</li>
-          <li>Dedicated counsellor</li>
-          <li>Contract agreement</li>
-        </ul>
       </div>
-      <div class="inst-box">
-        <div class="i-label">Installment 2</div>
-        <div class="i-amt">&euro;5,000</div>
-        <div class="i-when">After Phase 1 completion</div>
-        <div class="i-title">Visa Phase</div>
-        <ul class="i-list">
-          <li>Defizitbescheid application</li>
-          <li>Document attestation</li>
-          <li>Visa documentation &amp; appointment</li>
-          <li>D16 visa fee (included)</li>
-          <li>Blocked account &amp; insurance guidance</li>
-        </ul>
-      </div>
-      <div class="inst-box">
-        <div class="i-label">Installment 3</div>
-        <div class="i-amt">&euro;5,000</div>
-        <div class="i-when">After visa received</div>
-        <div class="i-title">Germany Phase</div>
-        <ul class="i-list">
-          <li>B2/C1 medical German</li>
-          <li>Airport pickup &amp; accommodation</li>
-          <li>FSP exam training &amp; booking</li>
-          <li>Approbation guidance</li>
-          <li>Observership (2&ndash;3 months)</li>
-          <li>Job &amp; PR guidance</li>
-        </ul>
-      </div>
-    </div>
-
-    <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:12px 14px;margin-top:6px">
-      <h4 style="font-size:8.5pt;font-weight:700;color:#e65100;margin-bottom:5px">Important Financial Notes</h4>
-      <ul style="list-style:none;padding:0;margin:0">
-        <li style="padding:2px 0 2px 12px;font-size:7.5pt;position:relative;line-height:1.4"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>D16 visa fee IS included</strong> &mdash; no separate visa fee</li>
-        <li style="padding:2px 0 2px 12px;font-size:7.5pt;position:relative;line-height:1.4"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>Blocked account (~&euro;13K&ndash;&euro;14K)</strong> is YOUR money for living expenses, not a fee</li>
-        <li style="padding:2px 0 2px 12px;font-size:7.5pt;position:relative;line-height:1.4"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>Exam fees</strong> (FSP, KP, language) paid to German authorities &mdash; not included</li>
-        <li style="padding:2px 0 2px 12px;font-size:7.5pt;position:relative;line-height:1.4"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span>Fee recoverable within <strong>3&ndash;4 months</strong> of Assistenzarzt salary</li>
+      <div class="inst-title">Services Covered:</div>
+      <ul class="inst-services">
+        <li>German language training A1 to B1</li>
+        <li>Dedicated counsellor assignment</li>
+        <li>Complete document preparation</li>
+        <li>Certified German translation</li>
+        <li>Letter of Recommendation drafting</li>
+        <li>Motivation letter preparation</li>
+        <li>Contract &amp; agreement signing</li>
+        <li>Ongoing progress monitoring</li>
       </ul>
     </div>
+
+    <!-- Installment 2 -->
+    <div class="inst-card i2">
+      <div class="inst-top">
+        <div>
+          <div class="i-label">Installment 2 &mdash; Visa Phase</div>
+          <div class="i-when">After Phase 1 completion &bull; Before visa application</div>
+        </div>
+        <div class="i-amt">&euro;5,000</div>
+      </div>
+      <div class="inst-title">Services Covered:</div>
+      <ul class="inst-services">
+        <li>Defizitbescheid application</li>
+        <li>Document attestation</li>
+        <li>Visa documentation &amp; file prep</li>
+        <li>D16 visa fee (included)</li>
+        <li>Visa appointment booking</li>
+        <li>Visa interview preparation</li>
+        <li>Blocked account guidance</li>
+        <li>Travel &amp; health insurance assistance</li>
+      </ul>
+    </div>
+
+    <!-- Installment 3 -->
+    <div class="inst-card i3">
+      <div class="inst-top">
+        <div>
+          <div class="i-label">Installment 3 &mdash; Germany Phase</div>
+          <div class="i-when">After visa received &bull; Before arrival in Germany</div>
+        </div>
+        <div class="i-amt">&euro;5,000</div>
+      </div>
+      <div class="inst-title">Services Covered:</div>
+      <ul class="inst-services">
+        <li>B2 &amp; C1 medical German</li>
+        <li>Airport pickup on arrival</li>
+        <li>Initial accommodation assistance</li>
+        <li>City registration (Anmeldung)</li>
+        <li>German bank account opening</li>
+        <li>FSP exam training &amp; booking</li>
+        <li>Approbation / KP exam guidance</li>
+        <li>Observership (2&ndash;3 months)</li>
+        <li>Health insurance setup</li>
+        <li>Job guidance after license</li>
+        <li>Visa extension support</li>
+        <li>PR (Permanent Residency) guidance</li>
+      </ul>
+    </div>
+
   </div>
   <div class="pf">GooCampus Germany PGCP &bull; Package Details &bull; Page 4</div>
 </div>
 
-<!-- ═══ PAGE 5: CHECKLIST ═══ -->
-<div class="page">
-  <div class="de-bar"></div>
-  <div class="page-bar"><div class="logo">Goo<span>Campus</span></div><div class="tag">Germany PG Career Pathway</div></div>
-  <div class="body">
-    <div class="sec-label">Service Checklist</div>
-    <div class="sec-title">What&rsquo;s Included &amp; What&rsquo;s Not</div>
-    <p class="sec-sub">Full transparency on everything covered in the &euro;15,000 package.</p>
-
-    <div class="chk-grid">
-      <div class="chk-col inc">
-        <h3>&#10003; Included in Package (&euro;15,000)</h3>
-        <ul class="chk-list">
-          <li>German language training A1&ndash;B1 (India)</li>
-          <li>B2 &amp; C1 medical German (Germany)</li>
-          <li>Complete document prep &amp; translation</li>
-          <li>Defizitbescheid / Deficit letter application</li>
-          <li>Document attestation</li>
-          <li>LOR &amp; motivation letter</li>
-          <li>D16 visa fee</li>
-          <li>Visa documentation &amp; appointment</li>
-          <li>Visa interview preparation</li>
-          <li>Foreign exchange assistance</li>
-          <li>Blocked account guidance</li>
-          <li>Travel &amp; health insurance assistance</li>
-          <li>Airport pickup on arrival</li>
-          <li>Initial accommodation assistance</li>
-          <li>City registration (Anmeldung)</li>
-          <li>German bank account opening</li>
-          <li>FSP exam training &amp; booking</li>
-          <li>Approbation / KP exam guidance</li>
-          <li>Observership placement (2&ndash;3 months)</li>
-          <li>Job guidance after Approbation</li>
-          <li>Health insurance setup</li>
-          <li>Visa extension support</li>
-          <li>PR (Permanent Residency) guidance</li>
-          <li>Dedicated counsellor throughout</li>
-        </ul>
-      </div>
-      <div class="chk-col exc">
-        <h3>&#10007; Not Included</h3>
-        <ul class="chk-list">
-          <li>Flight tickets (India to Germany)</li>
-          <li>Accommodation (after initial setup)</li>
-          <li>Blocked account deposit (~&euro;13K&ndash;&euro;14K)</li>
-          <li>Living expenses (~&euro;1K&ndash;&euro;1.5K/month)</li>
-          <li>Employment visa (after 1 year)</li>
-          <li>FSP / KP exam fees</li>
-          <li>Language exam fees (Goethe/Telc)</li>
-          <li>Personal expenses</li>
-          <li>Medical council registration fees</li>
-          <li>Notarization costs</li>
-        </ul>
-
-        <div class="blocked-note">
-          <p><strong>About the Blocked Account:</strong> The ~&euro;13K&ndash;&euro;14K is required by German authorities as proof of financial support. This is <strong>your money</strong> &mdash; you withdraw ~&euro;1K&ndash;&euro;1.5K/month for living expenses. It is NOT a fee.</p>
-        </div>
-      </div>
-    </div>
-  </div>
-  <div class="pf">GooCampus Germany PGCP &bull; Service Checklist &bull; Page 5</div>
-</div>
-
-<!-- ═══ PAGE 6: COMPARISON + CONTACT ═══ -->
+<!-- ═══ PAGE 5: PAYMENT TABLE + FINANCIAL NOTES + CHECKLIST + CONTACT ═══ -->
 <div class="page" style="page-break-after:auto">
   <div class="de-bar"></div>
   <div class="page-bar"><div class="logo">Goo<span>Campus</span></div><div class="tag">Germany PG Career Pathway</div></div>
   <div class="body">
-    <div class="sec-label">Why GooCampus</div>
-    <div class="sec-title">GooCampus vs Others</div>
-    <p class="sec-sub">Compare our end-to-end package with other providers and the DIY route.</p>
+    <div class="sec-label">Costing &amp; Installments</div>
+    <div class="sec-title">Payment Summary &amp; Important Notes</div>
 
-    <table class="cmp-table">
+    <table class="pay-table">
       <thead>
         <tr>
-          <th style="width:32%">Service</th>
-          <th style="width:23%">GooCampus PGCP</th>
-          <th style="width:23%">Other Consultants</th>
-          <th style="width:22%">DIY Route</th>
+          <th style="width:30%">Particulars</th>
+          <th style="width:20%">Fee (EUR)</th>
+          <th style="width:25%">Approx. INR</th>
+          <th style="width:25%">When to Pay</th>
         </tr>
       </thead>
       <tbody>
-        <tr><td>Language Training A1&ndash;C1</td><td><span class="chk">&#10003;</span> Included</td><td>Extra cost</td><td>Self-arranged</td></tr>
-        <tr><td>Document Prep &amp; Translation</td><td><span class="chk">&#10003;</span> Included</td><td>Partial</td><td>Self-arranged</td></tr>
-        <tr><td>Defizitbescheid Application</td><td><span class="chk">&#10003;</span> Included</td><td>Extra cost</td><td>Self-arranged</td></tr>
-        <tr><td>Visa Process + D16 Fee</td><td><span class="chk">&#10003;</span> Fee included</td><td>Fee not included</td><td>Self-arranged</td></tr>
-        <tr><td>Airport Pickup</td><td><span class="chk">&#10003;</span> Included</td><td><span class="xmk">&#10007;</span></td><td><span class="xmk">&#10007;</span></td></tr>
-        <tr><td>B2/C1 Medical German</td><td><span class="chk">&#10003;</span> Included</td><td>Extra &euro;3,000+</td><td>Self-arranged</td></tr>
-        <tr><td>FSP Exam Training</td><td><span class="chk">&#10003;</span> Included</td><td>Extra cost</td><td>Self-arranged</td></tr>
-        <tr><td>Observership Placement</td><td><span class="chk">&#10003;</span> 2&ndash;3 months</td><td><span class="xmk">&#10007;</span></td><td><span class="xmk">&#10007;</span></td></tr>
-        <tr><td>Job Guidance after License</td><td><span class="chk">&#10003;</span> Included</td><td><span class="xmk">&#10007;</span></td><td><span class="xmk">&#10007;</span></td></tr>
-        <tr><td>PR Guidance</td><td><span class="chk">&#10003;</span> Included</td><td><span class="xmk">&#10007;</span></td><td><span class="xmk">&#10007;</span></td></tr>
-        <tr><td>Milestone Payments</td><td><span class="chk">&#10003;</span> 3 installments</td><td>Upfront usually</td><td>N/A</td></tr>
-        <tr><td><strong>Total Cost</strong></td><td><strong>&euro;15,000</strong></td><td><strong>&euro;18K&ndash;&euro;25K+</strong></td><td><strong>&euro;12K&ndash;&euro;20K+</strong></td></tr>
+        <tr><td>Installment 1 &mdash; India Phase</td><td>&euro;5,000</td><td>&#8377;4,50,000</td><td>At enrolment</td></tr>
+        <tr><td>Installment 2 &mdash; Visa Phase</td><td>&euro;5,000</td><td>&#8377;4,50,000</td><td>After Phase 1</td></tr>
+        <tr><td>Installment 3 &mdash; Germany Phase</td><td>&euro;5,000</td><td>&#8377;4,50,000</td><td>After visa received</td></tr>
+        <tr><td><strong>Total Programme Fee</strong></td><td><strong>&euro;15,000</strong></td><td><strong>&#8377;13,50,000</strong></td><td></td></tr>
       </tbody>
     </table>
+
+    <div style="background:#fff3e0;border:1px solid #ffcc80;border-radius:8px;padding:12px 14px;margin-bottom: 14px">
+      <h4 style="font-size:8.5pt;font-weight:700;color:#e65100;margin-bottom:6px">Important Financial Notes</h4>
+      <ul style="list-style:none;padding:0;margin:0">
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>D16 visa fee IS included</strong> in Installment 2 &mdash; no separate visa fee to pay</li>
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>Blocked account (~&euro;13K&ndash;&euro;14K)</strong> is YOUR money deposited in a German bank for living expenses &mdash; you withdraw ~&euro;1K&ndash;&euro;1.5K/month. It is NOT a fee paid to GooCampus</li>
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>Exam fees</strong> for FSP, Kenntnispr&uuml;fung, and language exams (Goethe/Telc) are paid directly to German authorities &mdash; not included in programme fee</li>
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>Flight tickets, accommodation</strong> (after initial setup), personal expenses, and medical council fees are the candidate's responsibility</li>
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span><strong>INR amounts are approximate</strong> based on current exchange rates and may vary at time of payment</li>
+        <li style="padding:3px 0 3px 14px;font-size:7.8pt;position:relative;line-height:1.5"><span style="position:absolute;left:0;color:#e65100;font-weight:700">&bull;</span>Fee is <strong>recoverable within 3&ndash;4 months</strong> of starting your Assistenzarzt position (&euro;4,500&ndash;&euro;5,500/month salary)</li>
+      </ul>
+    </div>
+
+    <div style="background:var(--cream);border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:14px">
+      <h4 style="font-size:8.5pt;font-weight:700;color:var(--navy);margin-bottom:4px">Additional Costs (Not Included &mdash; Paid by Candidate)</h4>
+      <div style="display:flex;flex-wrap:wrap;gap:0">
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Flight tickets (India to Germany)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Blocked account deposit (~&euro;13K&ndash;&euro;14K)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Accommodation (after initial setup)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Living expenses (~&euro;1K&ndash;&euro;1.5K/month)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; FSP / KP exam fees</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Language exam fees (Goethe/Telc)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Employment visa (after 1 year)</div>
+        <div style="width:50%;padding:2px 0;font-size:7.5pt;color:var(--text)">&#10007; Medical council &amp; notarization fees</div>
+      </div>
+    </div>
 
     <div class="contact-box">
       <h3>Ready to Start Your Germany Journey?</h3>
@@ -702,7 +700,7 @@ body {
       </div>
     </div>
   </div>
-  <div class="pf">GooCampus Germany PGCP &bull; &copy; 2025 GooCampus. All rights reserved. &bull; Page 6</div>
+  <div class="pf">GooCampus Germany PGCP &bull; &copy; 2025 GooCampus. All rights reserved. &bull; Page 5</div>
 </div>
 
 </body>

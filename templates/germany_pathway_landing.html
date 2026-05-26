@@ -263,20 +263,20 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 .faq-a-in{padding:0 0 16px;font-size:.86rem;color:var(--muted);line-height:1.72}
 
 /* REGISTER FORM */
-.reg-sec{background:var(--navy);position:relative;overflow:hidden}
-.reg-sec::before{content:'';position:absolute;top:-150px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(196,146,42,.08) 0%,transparent 60%);pointer-events:none}
-.reg-sec .sl{color:var(--gold-light)}.reg-sec .st{color:#fff}.reg-sec .ss{color:rgba(255,255,255,.55)}
-.reg-card{max-width:640px;background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.12);border-radius:14px;padding:32px 28px}
+.reg-sec{background:var(--cream);position:relative;overflow:hidden;border-top:1px solid var(--border)}
+.reg-sec::before{content:'';position:absolute;top:-150px;right:-100px;width:400px;height:400px;background:radial-gradient(circle,rgba(196,146,42,.06) 0%,transparent 60%);pointer-events:none}
+.reg-sec .sl{color:var(--gold)}.reg-sec .st{color:var(--navy)}.reg-sec .ss{color:var(--muted)}
+.reg-card{max-width:640px;background:var(--white);border:1.5px solid var(--border);border-radius:14px;padding:32px 28px;box-shadow:0 4px 20px rgba(0,0,0,.06)}
 .reg-row{display:flex;gap:14px;margin-bottom:14px}
 .reg-fg{flex:1;display:flex;flex-direction:column;gap:5px}
-.reg-fg label{font-size:11px;font-weight:600;color:rgba(255,255,255,.7);letter-spacing:.3px;text-transform:uppercase}
-.reg-fg input,.reg-fg select{background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;padding:11px 14px;color:#fff;font-size:14px;font-family:var(--fb);outline:none;transition:border-color .15s;width:100%}
-.reg-fg input::placeholder{color:rgba(255,255,255,.32)}
+.reg-fg label{font-size:11px;font-weight:600;color:var(--muted);letter-spacing:.3px;text-transform:uppercase}
+.reg-fg input,.reg-fg select{background:var(--cream);border:1.5px solid var(--border);border-radius:8px;padding:11px 14px;color:var(--text);font-size:14px;font-family:var(--fb);outline:none;transition:border-color .15s;width:100%}
+.reg-fg input::placeholder{color:#aaa}
 .reg-fg input:focus,.reg-fg select:focus{border-color:var(--gold)}
-.reg-fg select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(255,255,255,0.5)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
-.reg-fg select option{background:var(--navy);color:#fff}
+.reg-fg select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='rgba(0,0,0,0.35)' viewBox='0 0 16 16'%3E%3Cpath d='M8 11L3 6h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 14px center}
+.reg-fg select option{background:var(--white);color:var(--text)}
 .phone-wrap{display:flex;gap:8px}
-.phone-wrap span{display:flex;align-items:center;padding:0 12px;background:rgba(255,255,255,.06);border:1.5px solid rgba(255,255,255,.12);border-radius:8px;font-size:13.5px;color:#fff;white-space:nowrap;font-weight:600}
+.phone-wrap span{display:flex;align-items:center;padding:0 12px;background:var(--cream);border:1.5px solid var(--border);border-radius:8px;font-size:13.5px;color:var(--navy);white-space:nowrap;font-weight:600}
 .phone-wrap input{flex:1}
 .reg-submit{width:100%;background:linear-gradient(135deg,var(--gold),var(--gold-light));color:var(--navy);font-weight:700;font-size:15px;padding:14px;border-radius:8px;border:none;cursor:pointer;font-family:var(--fb);margin-top:8px;transition:transform .2s,box-shadow .2s}
 .reg-submit:hover{transform:translateY(-1px);box-shadow:0 8px 22px rgba(196,146,42,0.32)}
@@ -284,13 +284,13 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
 
 /* OTP STEPS */
 .otp-step{display:none}.otp-step.active{display:block}
-.otp-info{font-size:.84rem;color:rgba(255,255,255,.55);margin-bottom:14px;line-height:1.55}
-.otp-resend{font-size:.82rem;color:var(--gold-light);cursor:pointer;margin-top:8px;background:none;border:none;font-family:var(--fb)}
-.otp-resend:disabled{color:rgba(255,255,255,.3);cursor:default}
+.otp-info{font-size:.84rem;color:var(--muted);margin-bottom:14px;line-height:1.55}
+.otp-resend{font-size:.82rem;color:var(--gold);cursor:pointer;margin-top:8px;background:none;border:none;font-family:var(--fb)}
+.otp-resend:disabled{color:#bbb;cursor:default}
 .reg-success{display:none;text-align:center;padding:20px 0}
 .reg-success .suc-ico{font-size:48px;margin-bottom:12px}
-.reg-success h3{font-family:var(--fh);font-size:1.2rem;color:#fff;margin-bottom:8px}
-.reg-success p{font-size:.88rem;color:rgba(255,255,255,.6);line-height:1.6}
+.reg-success h3{font-family:var(--fh);font-size:1.2rem;color:var(--navy);margin-bottom:8px}
+.reg-success p{font-size:.88rem;color:var(--muted);line-height:1.6}
 
 /* BROCHURE MODAL */
 .dl-modal{display:none;position:fixed;inset:0;z-index:600;background:rgba(0,0,0,0.78);backdrop-filter:blur(8px);align-items:center;justify-content:center;padding:20px}
@@ -969,10 +969,18 @@ section{padding:56px 24px}.con{max-width:1120px;margin:0 auto}
       <div id="brochErr2" style="color:#ff6b6b;font-size:.82rem;margin-top:6px;display:none"></div>
     </div>
     <div id="brochStep3" style="display:none;text-align:center;padding:16px 0">
-      <div style="font-size:42px;margin-bottom:10px">&#9989;</div>
-      <div class="dl-h">Verified! Your brochure is ready.</div>
-      <p class="dl-p">Click below to download the complete Germany PG Medical brochure.</p>
-      <a href="/static/docs/germany-pg-brochure.pdf" download class="reg-submit" style="display:inline-block;text-decoration:none;text-align:center;max-width:280px;margin:0 auto">&#128229; Download Brochure</a>
+      <div style="width:80px;height:80px;margin:0 auto 14px;background:linear-gradient(135deg,#1a6b3a,#2e7d32);border-radius:50%;display:flex;align-items:center;justify-content:center">
+        <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+      </div>
+      <div class="dl-h" style="font-size:1.2rem;margin-bottom:6px">Brochure Downloaded!</div>
+      <p class="dl-p" style="color:rgba(255,255,255,.5);margin-bottom:18px">Your Germany PG Medical brochure has been downloaded. Take the next step towards your Germany medical career.</p>
+      <div style="background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:18px 16px;margin-bottom:18px">
+        <div style="font-size:28px;margin-bottom:6px">&#128188;</div>
+        <div style="font-size:.95rem;font-weight:700;color:#fff;margin-bottom:4px">Free 1-on-1 Counselling Session</div>
+        <p style="font-size:.8rem;color:rgba(255,255,255,.45);line-height:1.5">Speak with our Germany pathway expert. Get a personalized roadmap, timeline, and answers to all your questions — completely free.</p>
+      </div>
+      <button class="reg-submit" onclick="closeBrochModal();openRegModal()" style="max-width:300px;margin:0 auto;display:block;font-size:15px">Book Free Counselling Session</button>
+      <p style="font-size:.72rem;color:rgba(255,255,255,.3);margin-top:10px">Our counsellor will contact you within 24 hours on WhatsApp</p>
     </div>
   </div>
 </div>
@@ -1216,6 +1224,7 @@ function brochVerifyOtp(){
     if(!res.ok){showErr('brochErr2',res.data.error||'Invalid OTP');return}
     document.getElementById('brochStep2').style.display='none';
     document.getElementById('brochStep3').style.display='block';
+    var a=document.createElement('a');a.href='/static/docs/germany-pg-brochure.pdf';a.download='GooCampus-Germany-PG-Brochure.pdf';document.body.appendChild(a);a.click();document.body.removeChild(a);
   }).catch(function(){showErr('brochErr2','Network error')});
 }
 
