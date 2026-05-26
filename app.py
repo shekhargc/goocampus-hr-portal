@@ -12433,6 +12433,23 @@ def ensure_ops_tables():
                 ('Aarogya Seva', 'UK Pathway', 'NGO Activities', []),
                 ('StepOne', 'UK Pathway', 'NGO Activities', []),
                 ('Other', 'UK Pathway', 'NGO Activities', []),
+                # Certification Bodies — UK Pathway
+                ('Royal College', 'UK Pathway', 'Certification Bodies', []),
+                ('BMA', 'UK Pathway', 'Certification Bodies', []),
+                ('BMJ', 'UK Pathway', 'Certification Bodies', []),
+                ('ALS', 'UK Pathway', 'Certification Bodies', []),
+                ('Other', 'UK Pathway', 'Certification Bodies', []),
+                # Online Subscriptions — UK Pathway
+                ('Plabable (PLAB)', 'UK Pathway', 'Online Subscriptions', []),
+                ('Passmedicine', 'UK Pathway', 'Online Subscriptions', []),
+                ('ABMA Online (PLAB)', 'UK Pathway', 'Online Subscriptions', []),
+                ('Plab keys (PLAB)', 'UK Pathway', 'Online Subscriptions', []),
+                ('Swoosh OET', 'UK Pathway', 'Online Subscriptions', []),
+                ('Swoosh IELTS', 'UK Pathway', 'Online Subscriptions', []),
+                ('Arora PLAB 1 Access', 'UK Pathway', 'Online Subscriptions', []),
+                ('Pastest', 'UK Pathway', 'Online Subscriptions', []),
+                ('MRCEM Success', 'UK Pathway', 'Online Subscriptions', []),
+                ('E-MRCS', 'UK Pathway', 'Online Subscriptions', []),
             ]
             for sort_idx, (name, country, category, services) in enumerate(VENDOR_SEED, 1):
                 conn.execute(
@@ -12444,6 +12461,32 @@ def ensure_ops_tables():
                     conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc))
             conn.commit()
             logging.info("Seeded vendors_providers with existing vendor data")
+
+        # Migration: add Certification Bodies & Online Subscriptions vendors if missing
+        NEW_VENDOR_CATS = {
+            'Certification Bodies': ['Royal College', 'BMA', 'BMJ', 'ALS', 'Other'],
+            'Online Subscriptions': ['Plabable (PLAB)', 'Passmedicine', 'ABMA Online (PLAB)', 'Plab keys (PLAB)', 'Swoosh OET', 'Swoosh IELTS', 'Arora PLAB 1 Access', 'Pastest', 'MRCEM Success', 'E-MRCS'],
+        }
+        try:
+            for cat, names in NEW_VENDOR_CATS.items():
+                existing = conn.execute(
+                    "SELECT COUNT(*) as c FROM vendors_providers WHERE category = ? AND country = 'UK Pathway'", (cat,)
+                ).fetchone()['c']
+                if existing == 0:
+                    max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM vendors_providers").fetchone()['m']
+                    for i, vname in enumerate(names, 1):
+                        conn.execute(
+                            "INSERT INTO vendors_providers (name, country, category, is_active, sort_order) VALUES (?, 'UK Pathway', ?, TRUE, ?)",
+                            (vname, cat, max_sort + i)
+                        )
+                    conn.commit()
+                    logging.info(f"Seeded vendors_providers with {cat} entries")
+        except Exception as e:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+            logging.error(f"New vendor categories migration: {e}")
 
         # Ensure vendor_service_map has data (may be empty if prior seed partially failed)
         vsm_count = conn.execute("SELECT COUNT(*) as c FROM vendor_service_map").fetchone()['c']
@@ -13705,7 +13748,7 @@ def ops_field_manager_reorder():
 # ─────────────────────────────────────────────────────────
 
 VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
-VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities']
+VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
 VENDOR_SERVICE_MAP = {
@@ -13727,6 +13770,10 @@ VENDOR_LOOKUP_MAP = {
     'plab1_partner':     {'type': 'service',  'service': 'PLAB 1 Training', 'country': 'UK Pathway'},
     'research_provider': {'type': 'category', 'category': 'Research & Publications', 'country': 'UK Pathway'},
     'ngo_vendor':        {'type': 'category', 'category': 'NGO Activities', 'country': 'UK Pathway'},
+    'plab2_vendor':      {'type': 'service',  'service': 'PLAB 2 Training', 'country': 'UK Pathway'},
+    'certification_body': {'type': 'category', 'category': 'Certification Bodies', 'country': 'UK Pathway'},
+    'course_provider':   {'type': 'category', 'category': 'Online Courses',  'country': 'UK Pathway'},
+    'subscription_type': {'type': 'category', 'category': 'Online Subscriptions', 'country': 'UK Pathway'},
 }
 
 
