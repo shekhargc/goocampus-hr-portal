@@ -193,14 +193,14 @@ function openCoursesDetail(id) {
         </div>
     </div>
     <div class="drawer-grid">
+            ${field('Course Provider', r.course_provider)}
             ${field('Course Name', r.courses_name)}
             ${field('Course Type', r.course_type)}
+            ${field('Certification Body', r.certification_body)}
             ${field('Status', r.course_status)}
             ${field('Start Date', r.start_date)}
             ${field('End Date', r.end_date)}
             ${field('Validity (Months)', r.validity_months)}
-            ${field('Course Provider', r.course_provider)}
-            ${field('Certification Body', r.certification_body)}
             ${field('Subject Name', r.subject_name)}
             ${field('Client Email', r.client_email)}
             ${field('Booked By', r.booked_by)}

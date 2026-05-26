@@ -35,6 +35,15 @@
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Provider</label>
+                    <select name="course_provider" id="courseProvider" onchange="filterCoursesByProvider()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Provider</option>
+                        {% for cp in course_providers %}
+                        <option value="{{ cp }}" {% if record and record.course_provider == cp %}selected{% endif %}>{{ cp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Name *</label>
                     <select name="courses_name" id="courseName" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Course</option>
@@ -43,12 +52,24 @@
                         {% endfor %}
                     </select>
                 </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type *</label>
                     <select name="course_type" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Type</option>
                         {% for t in course_types %}
                         <option value="{{ t }}" {% if record and record.course_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Certification Body</label>
+                    <select name="certification_body" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for cb in certification_bodies %}
+                        <option value="{{ cb }}" {% if record and record.certification_body == cb %}selected{% endif %}>{{ cb }}</option>
                         {% endfor %}
                     </select>
                 </div>
@@ -78,27 +99,6 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">End Date</label>
                     <input type="date" name="end_date" value="{{ record.end_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Provider</label>
-                    <select name="course_provider" id="courseProvider" onchange="filterCoursesByProvider()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Provider</option>
-                        {% for cp in course_providers %}
-                        <option value="{{ cp }}" {% if record and record.course_provider == cp %}selected{% endif %}>{{ cp }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Certification Body</label>
-                    <select name="certification_body" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
-                        {% for cb in certification_bodies %}
-                        <option value="{{ cb }}" {% if record and record.certification_body == cb %}selected{% endif %}>{{ cb }}</option>
-                        {% endfor %}
-                    </select>
                 </div>
             </div>
 
@@ -255,6 +255,11 @@ function rebuildCourseOptions(courses, selectedVal) {
         if (c === selectedVal) opt.selected = true;
         sel.appendChild(opt);
     });
+}
+
+// On edit, auto-filter courses based on pre-selected provider
+if (document.getElementById('courseProvider').value) {
+    filterCoursesByProvider();
 }
 </script>
 
