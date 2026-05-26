@@ -12462,25 +12462,29 @@ def ensure_ops_tables():
             conn.commit()
             logging.info("Seeded vendors_providers with existing vendor data")
 
-        # Migration: add Certification Bodies & Online Subscriptions vendors if missing
+        # Migration: add Certification Bodies & Online Subscriptions vendors if missing (per-vendor upsert)
         NEW_VENDOR_CATS = {
             'Certification Bodies': ['Royal College', 'BMA', 'BMJ', 'ALS', 'Other'],
             'Online Subscriptions': ['Plabable (PLAB)', 'Passmedicine', 'ABMA Online (PLAB)', 'Plab keys (PLAB)', 'Swoosh OET', 'Swoosh IELTS', 'Arora PLAB 1 Access', 'Pastest', 'MRCEM Success', 'E-MRCS'],
         }
         try:
+            added_any = False
             for cat, names in NEW_VENDOR_CATS.items():
-                existing = conn.execute(
-                    "SELECT COUNT(*) as c FROM vendors_providers WHERE category = ? AND country = 'UK Pathway'", (cat,)
-                ).fetchone()['c']
-                if existing == 0:
-                    max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM vendors_providers").fetchone()['m']
-                    for i, vname in enumerate(names, 1):
+                for vname in names:
+                    exists = conn.execute(
+                        "SELECT COUNT(*) as c FROM vendors_providers WHERE name = ? AND category = ? AND country = 'UK Pathway'",
+                        (vname, cat)
+                    ).fetchone()['c']
+                    if exists == 0:
+                        max_sort = conn.execute("SELECT COALESCE(MAX(sort_order), 0) as m FROM vendors_providers").fetchone()['m']
                         conn.execute(
                             "INSERT INTO vendors_providers (name, country, category, is_active, sort_order) VALUES (?, 'UK Pathway', ?, TRUE, ?)",
-                            (vname, cat, max_sort + i)
+                            (vname, cat, max_sort + 1)
                         )
-                    conn.commit()
-                    logging.info(f"Seeded vendors_providers with {cat} entries")
+                        added_any = True
+            if added_any:
+                conn.commit()
+                logging.info("Seeded vendors_providers with Certification Bodies / Online Subscriptions entries")
         except Exception as e:
             try:
                 conn.rollback()
@@ -12519,16 +12523,17 @@ def ensure_ops_tables():
         }
         try:
             # Check if any Online Courses vendor already has services mapped
+            oc_pattern = '%' + 'Online Courses' + '%'
             oc_svc_check = conn.execute("""
                 SELECT COUNT(*) as c FROM vendor_service_map vsm
                 JOIN vendors_providers vp ON vsm.vendor_id = vp.id
-                WHERE vp.category LIKE '%Online Courses%'
-            """).fetchone()['c']
+                WHERE vp.category LIKE ?
+            """, (oc_pattern,)).fetchone()['c']
             if oc_svc_check == 0:
                 for vname, courses in COURSE_VENDOR_SERVICES.items():
                     vrow = conn.execute(
-                        "SELECT id FROM vendors_providers WHERE name = ? AND category LIKE '%Online Courses%'",
-                        (vname,)
+                        "SELECT id FROM vendors_providers WHERE name = ? AND category LIKE ?",
+                        (vname, oc_pattern)
                     ).fetchone()
                     if vrow:
                         for crs in courses:
@@ -15574,7 +15579,8 @@ def ops_plab_fix_switched_program():
             results.append(f"Dr. Ashwin Rahul: switched_program=[{ashwin['switched_program']}], status=[{ashwin['account_status']}]")
         else:
             # Try LIKE match
-            ashwin2 = conn.execute("SELECT id, registration_number, first_name, last_name, switched_program, account_status FROM plab_clients WHERE registration_number LIKE '%25-26/017%'").fetchone()
+            ashwin_pattern = '%' + '25-26/017' + '%'
+            ashwin2 = conn.execute("SELECT id, registration_number, first_name, last_name, switched_program, account_status FROM plab_clients WHERE registration_number LIKE ?", (ashwin_pattern,)).fetchone()
             if ashwin2:
                 results.append(f"Found via LIKE: reg=[{ashwin2['registration_number']}], sp=[{ashwin2['switched_program']}]")
             else:
