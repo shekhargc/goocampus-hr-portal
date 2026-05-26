@@ -13795,8 +13795,9 @@ VENDOR_SERVICE_MAP = {
 
 # ── Vendor ↔ lookup_options sync mapping ──
 # Maps lookup_options category → how to query vendors_providers
-# 'service' = filter by vendor_service_map.service_name
-# 'category' = filter by vendors_providers.category
+# 'service'      = filter by vendor_service_map.service_name → vendor names become dropdown values
+# 'category'     = filter by vendors_providers.category → vendor names become dropdown values
+# 'deliverables' = collect all service_names from vendor_service_map for vendors in a category
 VENDOR_LOOKUP_MAP = {
     'ielts_vendor':      {'type': 'service',  'service': 'IELTS Training',  'country': 'UK Pathway'},
     'oet_vendor':        {'type': 'service',  'service': 'OET Training',    'country': 'UK Pathway'},
@@ -13807,6 +13808,7 @@ VENDOR_LOOKUP_MAP = {
     'certification_body': {'type': 'category', 'category': 'Certification Bodies', 'country': 'UK Pathway'},
     'course_provider':   {'type': 'category', 'category': 'Online Courses',  'country': 'UK Pathway'},
     'subscription_type': {'type': 'category', 'category': 'Online Subscriptions', 'country': 'UK Pathway'},
+    'course_name':       {'type': 'deliverables', 'category': 'Online Courses', 'country': 'UK Pathway'},
 }
 
 
@@ -13821,20 +13823,31 @@ def sync_vendors_to_lookup_options(conn=None):
     try:
         for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
             # Fetch active vendor names for this mapping
+            country = vlink.get('country', 'UK Pathway')
             if vlink['type'] == 'service':
                 vendor_rows = conn.execute("""
                     SELECT DISTINCT vp.name FROM vendors_providers vp
                     JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
                     WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
                     ORDER BY vp.sort_order, vp.name
-                """, (vlink['service'], vlink.get('country', 'UK Pathway'))).fetchall()
+                """, (vlink['service'], country)).fetchall()
+            elif vlink['type'] == 'deliverables':
+                # Collect all unique service_names from vendors in this category
+                cat_pattern = '%' + vlink['category'] + '%'
+                vendor_rows = conn.execute("""
+                    SELECT DISTINCT vsm.service_name as name
+                    FROM vendor_service_map vsm
+                    JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+                    WHERE vp.category LIKE ? AND vp.country = ? AND vp.is_active = TRUE
+                    ORDER BY vsm.service_name
+                """, (cat_pattern, country)).fetchall()
             else:
                 cat_pattern = '%' + vlink['category'] + '%'
                 vendor_rows = conn.execute("""
                     SELECT name FROM vendors_providers
                     WHERE category LIKE ? AND country = ? AND is_active = TRUE
                     ORDER BY sort_order, name
-                """, (cat_pattern, vlink.get('country', 'UK Pathway'))).fetchall()
+                """, (cat_pattern, country)).fetchall()
 
             vendor_names = [r['name'] for r in vendor_rows]
 
