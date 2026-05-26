@@ -12013,11 +12013,18 @@ def ensure_ops_tables():
             conn.execute("SELECT vendor_link FROM field_registry LIMIT 1")
         except Exception:
             try:
+                conn.rollback()
+            except Exception:
+                pass
+            try:
                 conn.execute("ALTER TABLE field_registry ADD COLUMN vendor_link TEXT")
                 conn.commit()
                 logging.info("Added vendor_link column to field_registry")
             except Exception:
-                pass
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
 
         # ── Vendors & Providers (centralised vendor database) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS vendors_providers (
@@ -12403,6 +12410,15 @@ def ensure_ops_tables():
                 except Exception:
                     pass
                 logging.error(f"vendor_provider migration: {e2}")
+
+        # Commit any pending DDL before vendor seeds (ensures clean transaction state for psycopg2)
+        try:
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
         # Seed vendors_providers from existing data
         vp_count = conn.execute("SELECT COUNT(*) as c FROM vendors_providers").fetchone()['c']
