@@ -1087,9 +1087,19 @@ def client_dashboard():
             ORDER BY requested_at DESC
         """, reg_ids).fetchall()
 
+    # Get PLAB documents for this client (via registration_number → plab_clients)
+    plab_documents = []
+    for reg in registrations:
+        if reg.get('registration_number'):
+            plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg['registration_number'],)).fetchone()
+            if plab_client:
+                docs = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (plab_client['id'],)).fetchall()
+                plab_documents.extend(docs)
+
     conn.close()
     return render_template('client_dashboard.html',
-        account=account, registrations=registrations, doc_requests=doc_requests)
+        account=account, registrations=registrations, doc_requests=doc_requests,
+        plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES)
 
 
 @app.route('/client/form/<int:reg_id>', methods=['GET', 'POST'])
@@ -1273,6 +1283,44 @@ def client_delete_doc(doc_id):
     if os.path.exists(fpath):
         os.remove(fpath)
     conn.execute("DELETE FROM client_documents WHERE id = ?", (doc_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/client/upload-plab-doc', methods=['POST'])
+@client_required
+def client_upload_plab_doc():
+    """Client uploads a document to plab_client_documents for ops review."""
+    acct_id = session.get('user_id')
+    conn = get_db()
+    # Find client's registration and linked plab_client
+    reg = conn.execute("""SELECT cr.registration_number FROM client_registrations cr
+        WHERE cr.account_id = ? AND cr.registration_number IS NOT NULL LIMIT 1""", (acct_id,)).fetchone()
+    if not reg or not reg['registration_number']:
+        conn.close()
+        return jsonify({'error': 'No linked registration found'}), 404
+    plab_client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg['registration_number'],)).fetchone()
+    if not plab_client:
+        conn.close()
+        return jsonify({'error': 'PLAB client not found'}), 404
+    doc_type = request.form.get('doc_type', 'Other')
+    doc_category = request.form.get('doc_category', 'personal')
+    file = request.files.get('file')
+    if not file or not file.filename:
+        conn.close()
+        return jsonify({'error': 'No file selected'}), 400
+    import os, uuid
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    fname = f"plab_{plab_client['id']}_{uuid.uuid4().hex[:8]}.{ext}"
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+    fpath = os.path.join(upload_dir, fname)
+    file.save(fpath)
+    file_size = os.path.getsize(fpath)
+    conn.execute("""INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by)
+        VALUES (?, ?, ?, ?, ?, ?, 'client')""",
+        (plab_client['id'], doc_type, doc_category, file.filename, f'static/uploads/plab_docs/{fname}', file_size))
     conn.commit()
     conn.close()
     return jsonify({'success': True})
@@ -11460,6 +11508,22 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # ── PLAB Client Documents ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS plab_client_documents (
+            id SERIAL PRIMARY KEY,
+            client_id INTEGER REFERENCES plab_clients(id) ON DELETE CASCADE,
+            doc_type TEXT NOT NULL,
+            doc_category TEXT DEFAULT 'personal',
+            file_name TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            file_size INTEGER DEFAULT 0,
+            status TEXT DEFAULT 'uploaded',
+            verified_by INTEGER REFERENCES employees(id),
+            verified_at TIMESTAMP,
+            notes TEXT,
+            uploaded_by TEXT DEFAULT 'ops_team',
+            uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
         # ── Coaching / Training ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_coaching (
             id SERIAL PRIMARY KEY,
@@ -13093,6 +13157,32 @@ def ensure_ops_tables():
             except Exception:
                 pass
             logging.error(f"counsellor migration: {e}")
+
+        # Migration: add address and document-related columns to plab_clients
+        _plab_address_cols = [
+            'perm_address_line1', 'perm_address_line2', 'perm_city_district',
+            'perm_state_province', 'perm_postal_code', 'perm_country',
+            'comm_address_same', 'comm_address_line1', 'comm_address_line2',
+            'comm_city_district', 'comm_state_province', 'comm_postal_code', 'comm_country'
+        ]
+        for col_name in _plab_address_cols:
+            try:
+                conn.execute(f"SELECT {col_name} FROM plab_clients LIMIT 1")
+            except Exception:
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+                try:
+                    conn.execute(f"ALTER TABLE plab_clients ADD COLUMN {col_name} TEXT")
+                    conn.commit()
+                    logging.info(f"Added {col_name} column to plab_clients")
+                except Exception as e2:
+                    try:
+                        conn.rollback()
+                    except Exception:
+                        pass
+                    logging.error(f"{col_name} migration: {e2}")
 
         # ── Seed field_registry from CATEGORY_GROUPS + extras ──
         try:
@@ -15053,6 +15143,7 @@ def ops_plab_dashboard(client_id):
     payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
+    documents = conn.execute("SELECT d.*, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
                            amount_paid=amount_paid, gst_paid=gst_paid,
@@ -15063,6 +15154,7 @@ def ops_plab_dashboard(client_id):
                            test_bookings=test_bookings, call_notes=call_notes,
                            call_notes_count=call_notes_count, payments=payments,
                            epic_records=epic_records, gmc_records=gmc_records,
+                           documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
 
@@ -15097,9 +15189,14 @@ def ops_plab_add():
                 inst2_amount, inst2_date, inst2_note,
                 inst3_amount, inst3_date, inst3_note,
                 inst4_amount, inst4_date, inst4_note,
-                additional_notes, created_by
+                additional_notes,
+                perm_address_line1, perm_address_line2, perm_city_district,
+                perm_state_province, perm_postal_code, perm_country,
+                comm_address_same, comm_address_line1, comm_address_line2,
+                comm_city_district, comm_state_province, comm_postal_code, comm_country,
+                created_by
             ) VALUES (
-                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             )''', (
                 reg_num, f.get('registration_date') or datetime.now().strftime('%Y-%m-%d'),
                 f.get('customer_id') or '',
@@ -15121,7 +15218,15 @@ def ops_plab_add():
                 float(f.get('inst2_amount') or 0), f.get('inst2_date', ''), f.get('inst2_note', ''),
                 float(f.get('inst3_amount') or 0), f.get('inst3_date', ''), f.get('inst3_note', ''),
                 float(f.get('inst4_amount') or 0), f.get('inst4_date', ''), f.get('inst4_note', ''),
-                f.get('additional_notes', ''), session['user_id']
+                f.get('additional_notes', ''),
+                f.get('perm_address_line1', ''), f.get('perm_address_line2', ''),
+                f.get('perm_city_district', ''), f.get('perm_state_province', ''),
+                f.get('perm_postal_code', ''), f.get('perm_country', ''),
+                f.get('comm_address_same', 'Yes'), f.get('comm_address_line1', ''),
+                f.get('comm_address_line2', ''), f.get('comm_city_district', ''),
+                f.get('comm_state_province', ''), f.get('comm_postal_code', ''),
+                f.get('comm_country', ''),
+                session['user_id']
             ))
             conn.commit()
 
@@ -15170,6 +15275,7 @@ def ops_plab_add():
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           documents=[], plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
 
@@ -15209,7 +15315,12 @@ def ops_plab_edit(client_id):
                 oxford_book=?, oxford_book_date=?,
                 plab_brochure=?, ceo_letter=?, refund_policy=?, service_agreement=?,
                 goodie_pen=?, goodie_diary=?, goodie_laptop_bag=?, goodie_stickers=?,
-                additional_notes=?, updated_at=CURRENT_TIMESTAMP
+                additional_notes=?,
+                perm_address_line1=?, perm_address_line2=?, perm_city_district=?,
+                perm_state_province=?, perm_postal_code=?, perm_country=?,
+                comm_address_same=?, comm_address_line1=?, comm_address_line2=?,
+                comm_city_district=?, comm_state_province=?, comm_postal_code=?, comm_country=?,
+                updated_at=CURRENT_TIMESTAMP
                 WHERE id=?
             ''', (
                 f.get('registration_date', ''), f.get('customer_id', ''),
@@ -15244,6 +15355,13 @@ def ops_plab_edit(client_id):
                 1 if f.get('goodie_laptop_bag') else 0,
                 1 if f.get('goodie_stickers') else 0,
                 f.get('additional_notes', ''),
+                f.get('perm_address_line1', ''), f.get('perm_address_line2', ''),
+                f.get('perm_city_district', ''), f.get('perm_state_province', ''),
+                f.get('perm_postal_code', ''), f.get('perm_country', ''),
+                f.get('comm_address_same', 'Yes'), f.get('comm_address_line1', ''),
+                f.get('comm_address_line2', ''), f.get('comm_city_district', ''),
+                f.get('comm_state_province', ''), f.get('comm_postal_code', ''),
+                f.get('comm_country', ''),
                 client_id
             ))
             conn.commit()
@@ -15259,10 +15377,12 @@ def ops_plab_edit(client_id):
             flash(f'Error: {e}', 'error')
 
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
-    conn.close()
     if not client:
+        conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
+    documents = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+    conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
                            plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
@@ -15270,6 +15390,7 @@ def ops_plab_edit(client_id):
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
 
@@ -15290,6 +15411,97 @@ def ops_plab_delete(client_id):
     finally:
         conn.close()
     return redirect(url_for('ops_plab_list'))
+
+
+# ── PLAB Client Document Upload/Delete/Verify ──
+PLAB_DOC_TYPES = {
+    'personal': [
+        'Photograph', 'Passport size Photograph',
+        'Passport Copy (Front)', 'Passport Copy (Back)',
+        'Aadhar Copy (Optional)'
+    ],
+    'academic': [
+        'MBBS Final Certificate', 'MBBS Course Completion Certificate',
+        'Internship Certificate', 'State Registration Certificate'
+    ]
+}
+
+@app.route('/operations/plab/<int:client_id>/upload-doc', methods=['POST'])
+@admin_required
+def ops_plab_upload_doc(client_id):
+    """Upload document for a PLAB client."""
+    conn = get_db()
+    client = conn.execute("SELECT id FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        return jsonify({'error': 'Client not found'}), 404
+    doc_type = request.form.get('doc_type', 'Other')
+    doc_category = request.form.get('doc_category', 'personal')
+    file = request.files.get('file')
+    if not file or not file.filename:
+        conn.close()
+        return jsonify({'error': 'No file selected'}), 400
+    import os, uuid
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    fname = f"plab_{client_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+    fpath = os.path.join(upload_dir, fname)
+    file.save(fpath)
+    file_size = os.path.getsize(fpath)
+    conn.execute(
+        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+        (client_id, doc_type, doc_category, file.filename, f'/static/uploads/plab_docs/{fname}', file_size, 'ops_team')
+    )
+    conn.commit()
+    doc_id = conn.execute("SELECT id FROM plab_client_documents WHERE file_path = ?", (f'/static/uploads/plab_docs/{fname}',)).fetchone()['id']
+    conn.close()
+    return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+
+
+@app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
+@admin_required
+def ops_plab_delete_doc(doc_id):
+    """Delete a PLAB client document."""
+    conn = get_db()
+    doc = conn.execute("SELECT * FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    if not doc:
+        conn.close()
+        return jsonify({'error': 'Document not found'}), 404
+    import os
+    fpath = os.path.join(app.root_path, doc['file_path'].lstrip('/'))
+    if os.path.exists(fpath):
+        os.remove(fpath)
+    conn.execute("DELETE FROM plab_client_documents WHERE id = ?", (doc_id,))
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True})
+
+
+@app.route('/operations/plab/doc/<int:doc_id>/verify', methods=['POST'])
+@admin_required
+def ops_plab_verify_doc(doc_id):
+    """Verify or reject a PLAB client document."""
+    conn = get_db()
+    doc = conn.execute("SELECT * FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    if not doc:
+        conn.close()
+        return jsonify({'error': 'Document not found'}), 404
+    action = request.form.get('action', 'verify')
+    notes = request.form.get('notes', '')
+    if action == 'verify':
+        conn.execute(
+            "UPDATE plab_client_documents SET status = 'verified', verified_by = ?, verified_at = CURRENT_TIMESTAMP, notes = ? WHERE id = ?",
+            (session['user_id'], notes, doc_id)
+        )
+    elif action == 'reject':
+        conn.execute(
+            "UPDATE plab_client_documents SET status = 'rejected', verified_by = ?, verified_at = CURRENT_TIMESTAMP, notes = ? WHERE id = ?",
+            (session['user_id'], notes, doc_id)
+        )
+    conn.commit()
+    conn.close()
+    return jsonify({'success': True, 'status': 'verified' if action == 'verify' else 'rejected'})
 
 
 @app.route('/operations/plab/import', methods=['GET', 'POST'])

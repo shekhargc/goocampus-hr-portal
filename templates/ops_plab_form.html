@@ -473,6 +473,157 @@
             </div>
             {% endif %}
 
+            <!-- ===== ADDRESS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Permanent Address</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Address Line 1</label>
+                    <input type="text" name="perm_address_line1" value="{{ item.perm_address_line1 or '' }}" placeholder="Street address" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Address Line 2</label>
+                    <input type="text" name="perm_address_line2" value="{{ item.perm_address_line2 or '' }}" placeholder="Apt, suite, etc." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City / District</label>
+                    <input type="text" name="perm_city_district" value="{{ item.perm_city_district or '' }}" placeholder="City or district" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State / Province</label>
+                    <input type="text" name="perm_state_province" value="{{ item.perm_state_province or '' }}" placeholder="State or province" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Postal Code</label>
+                    <input type="text" name="perm_postal_code" value="{{ item.perm_postal_code or '' }}" placeholder="PIN / ZIP" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Country</label>
+                <select name="perm_country" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">Select Country</option>
+                    {% for c in ['India','United Kingdom','United States','Australia','Canada','Germany','UAE','Other'] %}
+                    <option value="{{ c }}" {% if item and item.perm_country == c %}selected{% endif %}>{{ c }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Communication Address</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Is Communication Address same as Permanent?</label>
+                <div style="display:flex;gap:1.5rem;">
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.4rem;">
+                        <input type="radio" name="comm_address_same" value="Yes" onchange="toggleCommAddress()" {% if not item or item.comm_address_same == 'Yes' or not item.comm_address_same %}checked{% endif %} /> Yes
+                    </label>
+                    <label style="font-size:0.85rem;color:var(--gray-700);display:flex;align-items:center;gap:0.4rem;">
+                        <input type="radio" name="comm_address_same" value="No" onchange="toggleCommAddress()" {% if item and item.comm_address_same == 'No' %}checked{% endif %} /> No
+                    </label>
+                </div>
+            </div>
+            <div id="comm_address_block" style="{% if not item or item.comm_address_same != 'No' %}display:none;{% endif %}">
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Address Line 1</label>
+                        <input type="text" name="comm_address_line1" value="{{ item.comm_address_line1 or '' }}" placeholder="Street address" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Address Line 2</label>
+                        <input type="text" name="comm_address_line2" value="{{ item.comm_address_line2 or '' }}" placeholder="Apt, suite, etc." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City / District</label>
+                        <input type="text" name="comm_city_district" value="{{ item.comm_city_district or '' }}" placeholder="City or district" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State / Province</label>
+                        <input type="text" name="comm_state_province" value="{{ item.comm_state_province or '' }}" placeholder="State or province" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Postal Code</label>
+                        <input type="text" name="comm_postal_code" value="{{ item.comm_postal_code or '' }}" placeholder="PIN / ZIP" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+                <div style="margin-bottom:1.1rem;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Country</label>
+                    <select name="comm_country" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Country</option>
+                        {% for c in ['India','United Kingdom','United States','Australia','Canada','Germany','UAE','Other'] %}
+                        <option value="{{ c }}" {% if item and item.comm_country == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== DOCUMENTS (Edit mode only) ===== -->
+            {% if mode == 'edit' %}
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Documents</h3>
+            <div style="margin-bottom:1.5rem;">
+                {% for doc_type in plab_doc_types.get('personal', []) %}
+                {% set doc = documents|selectattr('doc_type','equalto',doc_type)|first if documents else none %}
+                <div style="display:flex;align-items:center;gap:0.8rem;padding:0.7rem 0;border-bottom:1px solid var(--gray-100);">
+                    <span style="flex:1;font-size:0.85rem;font-weight:600;color:var(--gray-700);">{{ doc_type }}</span>
+                    {% if doc %}
+                    <a href="/{{ doc.file_path }}" target="_blank" style="font-size:0.8rem;color:var(--orange);text-decoration:none;">View</a>
+                    <span style="font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:10px;font-weight:600;
+                        {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
+                        {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
+                        {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
+                    <button type="button" onclick="deletePlabDoc({{ doc.id }}, this)" style="background:none;border:none;color:#e53e3e;cursor:pointer;font-size:0.8rem;padding:0.2rem 0.4rem;">Delete</button>
+                    {% else %}
+                    <input type="file" id="doc_personal_{{ loop.index }}" accept=".pdf,.jpg,.jpeg,.png" style="font-size:0.8rem;max-width:220px;" />
+                    <button type="button" onclick="uploadPlabDoc({{ item.id }}, '{{ doc_type }}', 'personal', 'doc_personal_{{ loop.index }}', this)" style="background:var(--orange);color:white;border:none;padding:0.3rem 0.8rem;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;">Upload</button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Academic Documents</h3>
+            <div style="margin-bottom:1.5rem;">
+                {% for doc_type in plab_doc_types.get('academic', []) %}
+                {% set doc = documents|selectattr('doc_type','equalto',doc_type)|first if documents else none %}
+                <div style="display:flex;align-items:center;gap:0.8rem;padding:0.7rem 0;border-bottom:1px solid var(--gray-100);">
+                    <span style="flex:1;font-size:0.85rem;font-weight:600;color:var(--gray-700);">{{ doc_type }}</span>
+                    {% if doc %}
+                    <a href="/{{ doc.file_path }}" target="_blank" style="font-size:0.8rem;color:var(--orange);text-decoration:none;">View</a>
+                    <span style="font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:10px;font-weight:600;
+                        {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
+                        {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
+                        {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
+                    <button type="button" onclick="deletePlabDoc({{ doc.id }}, this)" style="background:none;border:none;color:#e53e3e;cursor:pointer;font-size:0.8rem;padding:0.2rem 0.4rem;">Delete</button>
+                    {% else %}
+                    <input type="file" id="doc_academic_{{ loop.index }}" accept=".pdf,.jpg,.jpeg,.png" style="font-size:0.8rem;max-width:220px;" />
+                    <button type="button" onclick="uploadPlabDoc({{ item.id }}, '{{ doc_type }}', 'academic', 'doc_academic_{{ loop.index }}', this)" style="background:var(--orange);color:white;border:none;padding:0.3rem 0.8rem;border-radius:6px;font-size:0.78rem;font-weight:600;cursor:pointer;">Upload</button>
+                    {% endif %}
+                </div>
+                {% endfor %}
+            </div>
+
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Additional Documents</h3>
+            <div id="additional_docs_list" style="margin-bottom:0.8rem;">
+                {% if documents %}
+                {% for doc in documents if doc.doc_category == 'additional' %}
+                <div style="display:flex;align-items:center;gap:0.8rem;padding:0.7rem 0;border-bottom:1px solid var(--gray-100);">
+                    <span style="flex:1;font-size:0.85rem;font-weight:600;color:var(--gray-700);">{{ doc.doc_type }}</span>
+                    <a href="/{{ doc.file_path }}" target="_blank" style="font-size:0.8rem;color:var(--orange);text-decoration:none;">View</a>
+                    <span style="font-size:0.72rem;padding:0.15rem 0.5rem;border-radius:10px;font-weight:600;
+                        {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
+                        {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
+                        {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
+                    <button type="button" onclick="deletePlabDoc({{ doc.id }}, this)" style="background:none;border:none;color:#e53e3e;cursor:pointer;font-size:0.8rem;padding:0.2rem 0.4rem;">Delete</button>
+                </div>
+                {% endfor %}
+                {% endif %}
+            </div>
+            <div style="display:flex;gap:0.6rem;align-items:center;margin-bottom:1.5rem;">
+                <input type="text" id="additional_doc_name" placeholder="Document name" style="flex:1;padding:0.5rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;box-sizing:border-box;" />
+                <input type="file" id="additional_doc_file" accept=".pdf,.jpg,.jpeg,.png,.doc,.docx" style="font-size:0.8rem;max-width:200px;" />
+                <button type="button" onclick="uploadAdditionalDoc({{ item.id }})" style="background:var(--orange);color:white;border:none;padding:0.45rem 1rem;border-radius:6px;font-size:0.8rem;font-weight:600;cursor:pointer;white-space:nowrap;">+ Add</button>
+            </div>
+            {% endif %}
+
             <!-- ===== NOTES ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
             <div style="margin-bottom:1.5rem;">
@@ -625,5 +776,70 @@ document.addEventListener('DOMContentLoaded', function() {
     toggleReferralFields();
     toggleSwitchedProgram();
 });
+</script>
+
+<script>
+function toggleCommAddress() {
+    var radios = document.getElementsByName('comm_address_same');
+    var block = document.getElementById('comm_address_block');
+    if (!block) return;
+    for (var i = 0; i < radios.length; i++) {
+        if (radios[i].checked) {
+            block.style.display = (radios[i].value === 'No') ? '' : 'none';
+            break;
+        }
+    }
+}
+
+function uploadPlabDoc(clientId, docType, category, fileInputId, btn) {
+    var fileInput = document.getElementById(fileInputId);
+    if (!fileInput || !fileInput.files.length) { alert('Please select a file first.'); return; }
+    var file = fileInput.files[0];
+    if (file.size > 10 * 1024 * 1024) { alert('File too large. Max 10 MB.'); return; }
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('doc_type', docType);
+    fd.append('doc_category', category);
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    fetch('/operations/plab/' + clientId + '/upload-doc', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { location.reload(); }
+            else { alert(data.error || 'Upload failed'); btn.disabled = false; btn.textContent = 'Upload'; }
+        })
+        .catch(function() { alert('Upload failed'); btn.disabled = false; btn.textContent = 'Upload'; });
+}
+
+function deletePlabDoc(docId, btn) {
+    if (!confirm('Delete this document?')) return;
+    btn.disabled = true;
+    fetch('/operations/plab/doc/' + docId + '/delete', { method: 'POST' })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { location.reload(); }
+            else { alert(data.error || 'Delete failed'); btn.disabled = false; }
+        })
+        .catch(function() { alert('Delete failed'); btn.disabled = false; });
+}
+
+function uploadAdditionalDoc(clientId) {
+    var nameInput = document.getElementById('additional_doc_name');
+    var fileInput = document.getElementById('additional_doc_file');
+    if (!nameInput.value.trim()) { alert('Please enter a document name.'); return; }
+    if (!fileInput.files.length) { alert('Please select a file.'); return; }
+    var file = fileInput.files[0];
+    if (file.size > 10 * 1024 * 1024) { alert('File too large. Max 10 MB.'); return; }
+    var fd = new FormData();
+    fd.append('file', file);
+    fd.append('doc_type', nameInput.value.trim());
+    fd.append('doc_category', 'additional');
+    fetch('/operations/plab/' + clientId + '/upload-doc', { method: 'POST', body: fd })
+        .then(function(r) { return r.json(); })
+        .then(function(data) {
+            if (data.success) { location.reload(); }
+            else { alert(data.error || 'Upload failed'); }
+        })
+        .catch(function() { alert('Upload failed'); });
+}
 </script>
 {% endblock %}
