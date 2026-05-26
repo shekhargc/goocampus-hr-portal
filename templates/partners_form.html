@@ -140,8 +140,8 @@
     const cityDropdown = document.getElementById('city_dropdown');
     if (!stateSelect || !cityInput) return;
 
-    const existingState = {{ (record.state or '')|tojson if record else '""' }};
-    const existingCity = {{ (record.city or '')|tojson if record else '""' }};
+    const existingState = {{ (record.state or '')|tojson if record else ""|tojson }};
+    const existingCity = {{ (record.city or '')|tojson if record else ""|tojson }};
     let allCities = [];
 
     // Load states

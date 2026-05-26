@@ -216,7 +216,7 @@
 
 // ── Course Provider → Course Name cascading ──
 const ALL_COURSE_NAMES = {{ course_names|tojson }};
-const INITIAL_COURSE = {{ (record.courses_name or '')|tojson if record else '""' }};
+const INITIAL_COURSE = {{ (record.courses_name or '')|tojson if record else ""|tojson }};
 
 function filterCoursesByProvider() {
     const provider = document.getElementById('courseProvider').value;
