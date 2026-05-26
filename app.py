@@ -14080,7 +14080,7 @@ def ops_vendors_providers():
                          countries=VENDOR_COUNTRIES,
                          categories=VENDOR_CATEGORIES,
                          deliverables=deliverables,
-                         active_ops_page='settings')
+                         active_ops_page='vendors-providers')
 
 
 @app.route('/operations/vendors-providers/add', methods=['POST'])
