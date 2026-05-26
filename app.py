@@ -13796,11 +13796,12 @@ def sync_vendors_to_lookup_options(conn=None):
                     ORDER BY vp.sort_order, vp.name
                 """, (vlink['service'], vlink.get('country', 'UK Pathway'))).fetchall()
             else:
+                cat_pattern = '%' + vlink['category'] + '%'
                 vendor_rows = conn.execute("""
                     SELECT name FROM vendors_providers
-                    WHERE category = ? AND country = ? AND is_active = TRUE
+                    WHERE category LIKE ? AND country = ? AND is_active = TRUE
                     ORDER BY sort_order, name
-                """, (vlink['category'], vlink.get('country', 'UK Pathway'))).fetchall()
+                """, (cat_pattern, vlink.get('country', 'UK Pathway'))).fetchall()
 
             vendor_names = [r['name'] for r in vendor_rows]
 
@@ -13903,20 +13904,21 @@ def get_vendors_for_service(service_name, country=None):
 
 
 def get_vendors_by_category(category, country=None):
-    """Return active vendors for a category (Training Programs / Online Courses / Research & Publications)."""
+    """Return active vendors for a category (supports multi-category comma-separated values)."""
     conn = get_db()
+    cat_pattern = '%' + category + '%'
     if country:
         rows = conn.execute("""
             SELECT id, name FROM vendors_providers
-            WHERE category = ? AND country = ? AND is_active = TRUE
+            WHERE category LIKE ? AND country = ? AND is_active = TRUE
             ORDER BY sort_order, name
-        """, (category, country)).fetchall()
+        """, (cat_pattern, country)).fetchall()
     else:
         rows = conn.execute("""
             SELECT id, name FROM vendors_providers
-            WHERE category = ? AND is_active = TRUE
+            WHERE category LIKE ? AND is_active = TRUE
             ORDER BY sort_order, name
-        """, (category,)).fetchall()
+        """, (cat_pattern,)).fetchall()
     conn.close()
     return [dict(r) for r in rows]
 
@@ -13961,16 +13963,38 @@ def ops_vendors_providers():
         GROUP BY vp.id
         ORDER BY vp.country, vp.category, vp.sort_order, vp.name
     """).fetchall()
-    # Get all training programs from lookup_options for the service assignment dropdown
-    training_names = get_lookup_options('training_program')
-    course_names = get_lookup_options('course_name')
     conn.close()
+
+    # Section grouping
+    VP_SECTION_CATS = ['Training Programs', 'Online Courses', 'Online Subscriptions', 'Research & Publications', 'NGO Activities']
+    CB_SECTION_CATS = ['Certification Bodies']
+
+    vendors_list = []
+    for v in vendors:
+        vd = dict(v)
+        cats = [c.strip() for c in (vd.get('category') or '').split(',')]
+        # Determine section: if any category is in CB_SECTION_CATS and none in VP_SECTION_CATS → certification
+        is_cb = any(c in CB_SECTION_CATS for c in cats)
+        is_vp = any(c in VP_SECTION_CATS for c in cats)
+        vd['section'] = 'both' if (is_cb and is_vp) else ('certification' if is_cb else 'vendors')
+        vd['categories_list'] = cats
+        vendors_list.append(vd)
+
+    # Deliverables per category for the multi-select in the modal
+    deliverables = {
+        'Training Programs': ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1'],
+        'Online Courses': [],
+        'Online Subscriptions': [],
+        'Certification Bodies': [],
+        'Research & Publications': [],
+        'NGO Activities': [],
+    }
+
     return render_template('ops_vendors_providers.html',
-                         vendors=[dict(v) for v in vendors],
+                         vendors=vendors_list,
                          countries=VENDOR_COUNTRIES,
                          categories=VENDOR_CATEGORIES,
-                         training_names=training_names,
-                         course_names=course_names,
+                         deliverables=deliverables,
                          active_ops_page='settings')
 
 
@@ -13982,22 +14006,29 @@ def ops_vendor_add():
         data = request.json
         name = data.get('name', '').strip()
         country = data.get('country', '').strip()
-        category = data.get('category', '').strip()
+        # Support categories as array (multi-select) or single string
+        categories_raw = data.get('categories', data.get('category', ''))
+        if isinstance(categories_raw, list):
+            category = ', '.join(c.strip() for c in categories_raw if c.strip())
+        else:
+            category = categories_raw.strip() if categories_raw else ''
         services = data.get('services', [])
+        if isinstance(services, str):
+            services = [s.strip() for s in services.split(',') if s.strip()]
 
         if not name or not country or not category:
             return jsonify({'error': 'Name, country and category are required'}), 400
 
         conn = get_db()
-        max_order = conn.execute("SELECT MAX(sort_order) as m FROM vendors_providers WHERE country = ? AND category = ?", (country, category)).fetchone()['m']
+        max_order = conn.execute("SELECT MAX(sort_order) as m FROM vendors_providers WHERE country = ?", (country,)).fetchone()['m']
         max_order = (max_order or 0) + 1
         conn.execute("INSERT INTO vendors_providers (name, country, category, is_active, sort_order) VALUES (?, ?, ?, TRUE, ?)",
                     (name, country, category, max_order))
         conn.commit()
-        vid = conn.execute("SELECT id FROM vendors_providers WHERE name = ? AND country = ? AND category = ? ORDER BY id DESC LIMIT 1",
-                          (name, country, category)).fetchone()['id']
+        vid = conn.execute("SELECT id FROM vendors_providers WHERE name = ? AND country = ? ORDER BY id DESC LIMIT 1",
+                          (name, country)).fetchone()['id']
         for svc in services:
-            if svc.strip():
+            if isinstance(svc, str) and svc.strip():
                 conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
         conn.commit()
         sync_vendors_to_lookup_options(conn)
@@ -14016,8 +14047,14 @@ def ops_vendor_edit(vid):
         data = request.json
         name = data.get('name', '').strip()
         country = data.get('country', '').strip()
-        category = data.get('category', '').strip()
+        categories_raw = data.get('categories', data.get('category', ''))
+        if isinstance(categories_raw, list):
+            category = ', '.join(c.strip() for c in categories_raw if c.strip())
+        else:
+            category = categories_raw.strip() if categories_raw else ''
         services = data.get('services', [])
+        if isinstance(services, str):
+            services = [s.strip() for s in services.split(',') if s.strip()]
 
         if not name:
             return jsonify({'error': 'Name is required'}), 400
@@ -14028,7 +14065,7 @@ def ops_vendor_edit(vid):
         # Replace services
         conn.execute("DELETE FROM vendor_service_map WHERE vendor_id = ?", (vid,))
         for svc in services:
-            if svc.strip():
+            if isinstance(svc, str) and svc.strip():
                 conn.execute("INSERT INTO vendor_service_map (vendor_id, service_name) VALUES (?, ?)", (vid, svc.strip()))
         conn.commit()
         sync_vendors_to_lookup_options(conn)

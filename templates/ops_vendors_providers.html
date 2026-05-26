@@ -5,165 +5,291 @@
 {% block ops_extra_css %}
 <style>
     .vp-container { max-width:100%; margin:0 auto; padding:1.5rem; }
-    .vp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.5rem; flex-wrap:wrap; gap:1rem; }
+
+    /* Header */
+    .vp-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:1.25rem; flex-wrap:wrap; gap:1rem; }
     .vp-header h1 { font-size:1.75rem; font-weight:800; color:var(--navy); margin:0; }
-    .vp-add-btn { padding:0.6rem 1.4rem; background:var(--orange); color:white; border:none; border-radius:0.5rem; font-size:0.9rem; font-weight:700; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:0.4rem; transition:background 0.2s; }
+    .vp-header-actions { display:flex; gap:0.75rem; align-items:center; }
+    .vp-add-btn { padding:0.55rem 1.3rem; background:var(--orange); color:white; border:none; border-radius:0.5rem; font-size:0.85rem; font-weight:700; cursor:pointer; display:inline-flex; align-items:center; gap:0.4rem; transition:background 0.2s; }
     .vp-add-btn:hover { background:var(--orange-dark, #e07020); }
 
-    /* Filter bar */
-    .vp-filters { background:white; border-radius:0.75rem; border:1px solid var(--gray-200); padding:1rem 1.25rem; margin-bottom:1.5rem; display:flex; gap:1rem; align-items:flex-end; flex-wrap:wrap; }
-    .vp-filter-group { display:flex; flex-direction:column; gap:0.3rem; }
-    .vp-filter-group label { font-size:0.75rem; font-weight:700; color:var(--gray-600); text-transform:uppercase; letter-spacing:0.3px; }
-    .vp-filter-group select { padding:0.5rem 0.75rem; border:1px solid var(--gray-300); border-radius:0.4rem; font-size:0.85rem; background:white; min-width:180px; }
+    /* Search */
+    .vp-search { position:relative; }
+    .vp-search input { padding:0.5rem 0.85rem 0.5rem 2.2rem; border:1px solid var(--gray-300); border-radius:0.5rem; font-size:0.85rem; width:240px; background:white; }
+    .vp-search input:focus { outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(255,138,0,0.1); }
+    .vp-search-icon { position:absolute; left:0.7rem; top:50%; transform:translateY(-50%); color:var(--gray-400); font-size:0.9rem; pointer-events:none; }
 
-    /* Vendor cards */
-    .vp-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(340px, 1fr)); gap:1rem; }
-    .vp-card { background:white; border-radius:0.75rem; border:1px solid var(--gray-200); padding:1.25rem; transition:border-color 0.2s, box-shadow 0.2s; }
-    .vp-card:hover { border-color:var(--orange); box-shadow:0 2px 8px rgba(0,0,0,0.06); }
-    .vp-card.inactive { opacity:0.55; }
-    .vp-card-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:0.75rem; }
-    .vp-card-name { font-size:1rem; font-weight:700; color:var(--navy); }
-    .vp-card-badges { display:flex; gap:0.4rem; flex-wrap:wrap; }
-    .vp-badge { display:inline-block; padding:0.2rem 0.6rem; border-radius:999px; font-size:0.7rem; font-weight:700; text-transform:uppercase; letter-spacing:0.3px; }
-    .vp-badge-country { background:#EFF6FF; color:#1E40AF; }
-    .vp-badge-category { background:#F0FDF4; color:#166534; }
-    .vp-badge-inactive { background:#FEF2F2; color:#991B1B; }
-    .vp-badge-active { background:#ECFDF5; color:#065F46; }
-    .vp-card-services { margin-top:0.6rem; }
-    .vp-card-services-label { font-size:0.72rem; font-weight:600; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.3px; margin-bottom:0.35rem; }
-    .vp-service-tags { display:flex; flex-wrap:wrap; gap:0.3rem; }
-    .vp-service-tag { display:inline-block; padding:0.2rem 0.55rem; background:var(--gray-100); color:var(--gray-700); border-radius:0.3rem; font-size:0.75rem; font-weight:500; }
-    .vp-card-actions { display:flex; gap:0.5rem; margin-top:1rem; padding-top:0.75rem; border-top:1px solid var(--gray-100); }
-    .vp-btn { padding:0.4rem 0.85rem; border:1px solid var(--gray-300); border-radius:0.4rem; background:white; color:var(--gray-600); cursor:pointer; font-size:0.78rem; font-weight:600; transition:all 0.2s; }
-    .vp-btn:hover { border-color:var(--navy); color:var(--navy); background:var(--gray-50); }
-    .vp-btn-toggle:hover { border-color:var(--orange); color:var(--orange); }
+    /* Tabs */
+    .vp-tabs { display:flex; gap:0; border-bottom:2px solid var(--gray-200); margin-bottom:1.25rem; }
+    .vp-tab { padding:0.7rem 1.4rem; border:none; background:none; font-size:0.88rem; font-weight:600; color:var(--gray-500); cursor:pointer; border-bottom:2px solid transparent; margin-bottom:-2px; transition:all 0.2s; position:relative; }
+    .vp-tab:hover { color:var(--navy); }
+    .vp-tab.active { color:var(--navy); border-bottom-color:var(--orange); }
+    .vp-tab-count { display:inline-block; background:var(--gray-200); color:var(--gray-600); font-size:0.72rem; font-weight:700; padding:0.1rem 0.5rem; border-radius:999px; margin-left:0.4rem; }
+    .vp-tab.active .vp-tab-count { background:var(--orange); color:white; }
+
+    /* Table */
+    .vp-table-wrap { background:white; border-radius:0.75rem; border:1px solid var(--gray-200); overflow:hidden; }
+    .vp-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+    .vp-table thead { background:var(--gray-50); }
+    .vp-table th { padding:0.7rem 1rem; text-align:left; font-size:0.72rem; font-weight:700; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.4px; border-bottom:1px solid var(--gray-200); white-space:nowrap; }
+    .vp-table td { padding:0.65rem 1rem; border-bottom:1px solid var(--gray-100); vertical-align:middle; }
+    .vp-table tbody tr { transition:background 0.15s; }
+    .vp-table tbody tr:hover { background:var(--gray-50); }
+    .vp-table tbody tr.inactive-row { opacity:0.5; }
+    .vp-table tbody tr:last-child td { border-bottom:none; }
+
+    /* Name cell */
+    .vp-name { font-weight:700; color:var(--navy); }
+    .vp-country-label { font-size:0.72rem; color:var(--gray-500); margin-top:0.15rem; }
+
+    /* Category & Deliverable badges */
+    .vp-badges { display:flex; flex-wrap:wrap; gap:0.3rem; }
+    .vp-badge { display:inline-block; padding:0.18rem 0.55rem; border-radius:999px; font-size:0.7rem; font-weight:600; letter-spacing:0.2px; white-space:nowrap; }
+    .vp-badge-cat { background:#EFF6FF; color:#1E40AF; }
+    .vp-badge-svc { background:#FFF7ED; color:#9A3412; }
+    .vp-badge-none { color:var(--gray-400); font-style:italic; font-size:0.78rem; }
+
+    /* Status toggle */
+    .vp-status-toggle { position:relative; display:inline-block; width:36px; height:20px; }
+    .vp-status-toggle input { opacity:0; width:0; height:0; }
+    .vp-status-slider { position:absolute; cursor:pointer; top:0; left:0; right:0; bottom:0; background:var(--gray-300); border-radius:20px; transition:0.3s; }
+    .vp-status-slider:before { position:absolute; content:""; height:14px; width:14px; left:3px; bottom:3px; background:white; border-radius:50%; transition:0.3s; }
+    .vp-status-toggle input:checked + .vp-status-slider { background:#22C55E; }
+    .vp-status-toggle input:checked + .vp-status-slider:before { transform:translateX(16px); }
+
+    /* Action buttons */
+    .vp-actions { display:flex; gap:0.4rem; }
+    .vp-act-btn { padding:0.3rem 0.65rem; border:1px solid var(--gray-300); border-radius:0.35rem; background:white; color:var(--gray-600); cursor:pointer; font-size:0.75rem; font-weight:600; transition:all 0.2s; }
+    .vp-act-btn:hover { border-color:var(--navy); color:var(--navy); background:var(--gray-50); }
+    .vp-act-btn.delete:hover { border-color:#DC2626; color:#DC2626; background:#FEF2F2; }
 
     /* Modal */
-    .vp-modal-backdrop { position:fixed; inset:0; background:rgba(15,27,51,0.4); z-index:1000; display:none; align-items:center; justify-content:center; }
-    .vp-modal-backdrop.open { display:flex; }
-    .vp-modal { background:white; border-radius:0.85rem; width:540px; max-width:95vw; max-height:90vh; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.2); }
-    .vp-modal-head { padding:1.25rem 1.5rem; border-bottom:1px solid var(--gray-200); display:flex; align-items:center; justify-content:space-between; }
+    .vp-modal-bg { position:fixed; inset:0; background:rgba(15,27,51,0.45); z-index:1000; display:none; align-items:center; justify-content:center; }
+    .vp-modal-bg.open { display:flex; }
+    .vp-modal { background:white; border-radius:0.85rem; width:580px; max-width:95vw; max-height:90vh; overflow-y:auto; box-shadow:0 12px 40px rgba(0,0,0,0.2); }
+    .vp-modal-head { padding:1.1rem 1.5rem; border-bottom:1px solid var(--gray-200); display:flex; align-items:center; justify-content:space-between; }
     .vp-modal-head h3 { margin:0; font-size:1.1rem; font-weight:700; color:var(--navy); }
-    .vp-modal-close { background:none; border:none; font-size:1.5rem; color:var(--gray-500); cursor:pointer; line-height:1; padding:0; }
-    .vp-modal-close:hover { color:var(--navy); }
-    .vp-modal-body { padding:1.5rem; }
-    .vp-form-group { margin-bottom:1.1rem; }
-    .vp-form-group label { display:block; font-weight:600; font-size:0.8rem; color:var(--gray-600); margin-bottom:0.4rem; }
-    .vp-form-group input, .vp-form-group select { width:100%; padding:0.6rem 0.8rem; border:1px solid var(--gray-300); border-radius:8px; font-size:0.88rem; box-sizing:border-box; background:white; }
-    .vp-services-checklist { max-height:200px; overflow-y:auto; border:1px solid var(--gray-200); border-radius:8px; padding:0.5rem; }
-    .vp-services-checklist label { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0.5rem; font-size:0.85rem; font-weight:500; color:var(--gray-700); cursor:pointer; border-radius:4px; }
-    .vp-services-checklist label:hover { background:var(--gray-50); }
-    .vp-services-checklist input[type="checkbox"] { width:16px; height:16px; accent-color:var(--orange); }
-    .vp-modal-footer { padding:1rem 1.5rem; border-top:1px solid var(--gray-200); display:flex; gap:0.75rem; justify-content:flex-end; }
-    .vp-modal-save { padding:0.6rem 1.5rem; background:var(--orange); color:white; border:none; border-radius:0.5rem; font-size:0.9rem; font-weight:700; cursor:pointer; }
+    .vp-modal-x { background:none; border:none; font-size:1.5rem; color:var(--gray-400); cursor:pointer; line-height:1; padding:0; }
+    .vp-modal-x:hover { color:var(--navy); }
+    .vp-modal-body { padding:1.25rem 1.5rem; }
+    .vp-fg { margin-bottom:1rem; }
+    .vp-fg label { display:block; font-weight:600; font-size:0.78rem; color:var(--gray-600); margin-bottom:0.35rem; text-transform:uppercase; letter-spacing:0.3px; }
+    .vp-fg input[type="text"], .vp-fg select { width:100%; padding:0.55rem 0.8rem; border:1px solid var(--gray-300); border-radius:0.5rem; font-size:0.88rem; box-sizing:border-box; background:white; }
+    .vp-fg input:focus, .vp-fg select:focus { outline:none; border-color:var(--orange); box-shadow:0 0 0 3px rgba(255,138,0,0.1); }
+
+    /* Multi-select checklist */
+    .vp-checklist { border:1px solid var(--gray-200); border-radius:0.5rem; max-height:160px; overflow-y:auto; padding:0.4rem; }
+    .vp-checklist label { display:flex; align-items:center; gap:0.5rem; padding:0.35rem 0.55rem; font-size:0.84rem; font-weight:500; color:var(--gray-700); cursor:pointer; border-radius:0.3rem; }
+    .vp-checklist label:hover { background:var(--gray-50); }
+    .vp-checklist input[type="checkbox"] { width:16px; height:16px; accent-color:var(--orange); flex-shrink:0; }
+    .vp-checklist-empty { font-size:0.82rem; color:var(--gray-400); padding:0.5rem; font-style:italic; }
+
+    /* Selected category pills (in modal) */
+    .vp-selected-pills { display:flex; flex-wrap:wrap; gap:0.3rem; margin-top:0.4rem; min-height:24px; }
+    .vp-pill { display:inline-flex; align-items:center; gap:0.3rem; padding:0.18rem 0.55rem; background:#EFF6FF; color:#1E40AF; border-radius:999px; font-size:0.72rem; font-weight:600; }
+    .vp-pill-x { cursor:pointer; font-weight:700; font-size:0.8rem; color:#1E40AF; opacity:0.6; }
+    .vp-pill-x:hover { opacity:1; }
+
+    .vp-modal-foot { padding:1rem 1.5rem; border-top:1px solid var(--gray-200); display:flex; gap:0.75rem; justify-content:flex-end; }
+    .vp-modal-save { padding:0.55rem 1.4rem; background:var(--orange); color:white; border:none; border-radius:0.5rem; font-size:0.88rem; font-weight:700; cursor:pointer; }
     .vp-modal-save:hover { background:var(--orange-dark, #e07020); }
-    .vp-modal-cancel { padding:0.6rem 1.5rem; background:var(--gray-100); color:var(--gray-700); border:none; border-radius:0.5rem; font-size:0.9rem; font-weight:600; cursor:pointer; }
+    .vp-modal-cancel { padding:0.55rem 1.4rem; background:var(--gray-100); color:var(--gray-700); border:none; border-radius:0.5rem; font-size:0.88rem; font-weight:600; cursor:pointer; }
     .vp-modal-cancel:hover { background:var(--gray-200); }
-    .vp-no-service-msg { font-size:0.82rem; color:var(--gray-500); padding:0.5rem; font-style:italic; }
 
-    .vp-empty { text-align:center; padding:3rem 1rem; color:var(--gray-500); }
-    .vp-empty p { margin:0 0 0.5rem; font-size:1rem; }
+    /* Empty state */
+    .vp-empty { text-align:center; padding:2.5rem 1rem; color:var(--gray-500); }
+    .vp-empty p { margin:0 0 0.5rem; font-size:0.95rem; }
 
-    @media (max-width:640px) {
-        .vp-grid { grid-template-columns:1fr; }
-        .vp-filters { flex-direction:column; }
-        .vp-filter-group select { min-width:100%; }
+    @media (max-width:768px) {
+        .vp-header { flex-direction:column; align-items:flex-start; }
+        .vp-search input { width:100%; }
+        .vp-table-wrap { overflow-x:auto; }
+        .vp-table { min-width:700px; }
     }
 </style>
 {% endblock %}
 
 {% block ops_content %}
 <div class="vp-container">
+    <!-- Header -->
     <div class="vp-header">
         <div>
             <h1>Vendors & <span style="color:var(--orange);">Providers</span></h1>
-            <p style="margin:0.3rem 0 0;font-size:0.85rem;color:var(--gray-500);">Manage training vendors, course providers, and research partners</p>
+            <p style="margin:0.3rem 0 0;font-size:0.82rem;color:var(--gray-500);">Manage vendors, providers, and certification bodies — categories &amp; deliverables are editable</p>
         </div>
-        <button class="vp-add-btn" onclick="openVendorModal()">+ Add Vendor</button>
-    </div>
-
-    <!-- Filter bar -->
-    <div class="vp-filters">
-        <div class="vp-filter-group">
-            <label>Country</label>
-            <select id="filterCountry" onchange="applyFilters()">
-                <option value="">All Countries</option>
-                {% for c in countries %}
-                <option value="{{ c }}">{{ c }}</option>
-                {% endfor %}
-            </select>
-        </div>
-        <div class="vp-filter-group">
-            <label>Category</label>
-            <select id="filterCategory" onchange="applyFilters()">
-                <option value="">All Categories</option>
-                {% for cat in categories %}
-                <option value="{{ cat }}">{{ cat }}</option>
-                {% endfor %}
-            </select>
-        </div>
-    </div>
-
-    <!-- Vendor cards -->
-    <div class="vp-grid" id="vendorGrid">
-        {% for v in vendors %}
-        <div class="vp-card {% if not v.is_active %}inactive{% endif %}" data-id="{{ v.id }}" data-country="{{ v.country }}" data-category="{{ v.category }}" data-active="{{ v.is_active }}">
-            <div class="vp-card-head">
-                <span class="vp-card-name">{{ v.name }}</span>
-                <div class="vp-card-badges">
-                    <span class="vp-badge vp-badge-country">{{ v.country }}</span>
-                    <span class="vp-badge vp-badge-category">{{ v.category }}</span>
-                    {% if not v.is_active %}<span class="vp-badge vp-badge-inactive">Inactive</span>{% else %}<span class="vp-badge vp-badge-active">Active</span>{% endif %}
-                </div>
+        <div class="vp-header-actions">
+            <div class="vp-search">
+                <span class="vp-search-icon">&#128269;</span>
+                <input type="text" id="vpSearch" placeholder="Search vendors..." oninput="filterRows()">
             </div>
-            {% if v.services %}
-            <div class="vp-card-services">
-                <div class="vp-card-services-label">Services</div>
-                <div class="vp-service-tags">
-                    {% for svc in v.services.split(',') %}
-                    {% if svc.strip() %}
-                    <span class="vp-service-tag">{{ svc.strip() }}</span>
+            <button class="vp-add-btn" onclick="openModal()">+ Add Vendor</button>
+        </div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="vp-tabs">
+        <button class="vp-tab active" id="tabVP" onclick="switchTab('vendors')">
+            Vendors &amp; Providers <span class="vp-tab-count" id="countVP">0</span>
+        </button>
+        <button class="vp-tab" id="tabCB" onclick="switchTab('certification')">
+            Certification Bodies <span class="vp-tab-count" id="countCB">0</span>
+        </button>
+    </div>
+
+    <!-- Vendors & Providers Section -->
+    <div class="vp-section" id="sectionVP">
+        <div class="vp-table-wrap">
+            <table class="vp-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th>Vendor / Provider</th>
+                        <th>Categories</th>
+                        <th>Deliverables</th>
+                        <th style="width:70px;">Active</th>
+                        <th style="width:110px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyVP">
+                    {% set vp_cats = ['Training Programs', 'Online Courses', 'Online Subscriptions', 'Research & Publications', 'NGO Activities'] %}
+                    {% set ns = namespace(idx=0) %}
+                    {% for v in vendors %}
+                    {% if v.section == 'vendors' or v.section == 'both' %}
+                    {% set ns.idx = ns.idx + 1 %}
+                    <tr class="vp-row {% if not v.is_active %}inactive-row{% endif %}"
+                        data-id="{{ v.id }}" data-section="vendors"
+                        data-search="{{ v.name|lower }} {{ v.category|lower }} {{ (v.services or '')|lower }}">
+                        <td style="color:var(--gray-400);font-weight:600;">{{ ns.idx }}</td>
+                        <td>
+                            <div class="vp-name">{{ v.name }}</div>
+                            <div class="vp-country-label">{{ v.country }}</div>
+                        </td>
+                        <td>
+                            <div class="vp-badges">
+                                {% for cat in v.categories_list %}
+                                <span class="vp-badge vp-badge-cat">{{ cat }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if v.services %}
+                            <div class="vp-badges">
+                                {% for svc in v.services.split(',') %}
+                                {% if svc.strip() %}
+                                <span class="vp-badge vp-badge-svc">{{ svc.strip() }}</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="vp-badge-none">&#8212;</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <label class="vp-status-toggle">
+                                <input type="checkbox" {% if v.is_active %}checked{% endif %} onchange="toggleVendor({{ v.id }}, this)">
+                                <span class="vp-status-slider"></span>
+                            </label>
+                        </td>
+                        <td>
+                            <div class="vp-actions">
+                                <button class="vp-act-btn" onclick="openEditModal({{ v.id }})">Edit</button>
+                                <button class="vp-act-btn delete" onclick="deleteVendor({{ v.id }}, '{{ v.name|e }}')">Del</button>
+                            </div>
+                        </td>
+                    </tr>
                     {% endif %}
                     {% endfor %}
-                </div>
-            </div>
-            {% endif %}
-            <div class="vp-card-actions">
-                <button class="vp-btn" onclick="openEditModal({{ v.id }})">Edit</button>
-                <button class="vp-btn vp-btn-toggle" onclick="toggleVendor({{ v.id }}, this)">
-                    {% if v.is_active %}Deactivate{% else %}Activate{% endif %}
-                </button>
-            </div>
+                </tbody>
+            </table>
         </div>
-        {% endfor %}
     </div>
 
-    {% if not vendors %}
-    <div class="vp-empty">
-        <p>No vendors or providers configured yet.</p>
-        <button class="vp-add-btn" onclick="openVendorModal()">+ Add Your First Vendor</button>
+    <!-- Certification Bodies Section -->
+    <div class="vp-section" id="sectionCB" style="display:none;">
+        <div class="vp-table-wrap">
+            <table class="vp-table">
+                <thead>
+                    <tr>
+                        <th style="width:40px;">#</th>
+                        <th>Certification Body</th>
+                        <th>Categories</th>
+                        <th>Deliverables</th>
+                        <th style="width:70px;">Active</th>
+                        <th style="width:110px;">Actions</th>
+                    </tr>
+                </thead>
+                <tbody id="tbodyCB">
+                    {% set ns2 = namespace(idx=0) %}
+                    {% for v in vendors %}
+                    {% if v.section == 'certification' or v.section == 'both' %}
+                    {% set ns2.idx = ns2.idx + 1 %}
+                    <tr class="vp-row {% if not v.is_active %}inactive-row{% endif %}"
+                        data-id="{{ v.id }}" data-section="certification"
+                        data-search="{{ v.name|lower }} {{ v.category|lower }} {{ (v.services or '')|lower }}">
+                        <td style="color:var(--gray-400);font-weight:600;">{{ ns2.idx }}</td>
+                        <td>
+                            <div class="vp-name">{{ v.name }}</div>
+                            <div class="vp-country-label">{{ v.country }}</div>
+                        </td>
+                        <td>
+                            <div class="vp-badges">
+                                {% for cat in v.categories_list %}
+                                <span class="vp-badge vp-badge-cat">{{ cat }}</span>
+                                {% endfor %}
+                            </div>
+                        </td>
+                        <td>
+                            {% if v.services %}
+                            <div class="vp-badges">
+                                {% for svc in v.services.split(',') %}
+                                {% if svc.strip() %}
+                                <span class="vp-badge vp-badge-svc">{{ svc.strip() }}</span>
+                                {% endif %}
+                                {% endfor %}
+                            </div>
+                            {% else %}
+                            <span class="vp-badge-none">&#8212;</span>
+                            {% endif %}
+                        </td>
+                        <td>
+                            <label class="vp-status-toggle">
+                                <input type="checkbox" {% if v.is_active %}checked{% endif %} onchange="toggleVendor({{ v.id }}, this)">
+                                <span class="vp-status-slider"></span>
+                            </label>
+                        </td>
+                        <td>
+                            <div class="vp-actions">
+                                <button class="vp-act-btn" onclick="openEditModal({{ v.id }})">Edit</button>
+                                <button class="vp-act-btn delete" onclick="deleteVendor({{ v.id }}, '{{ v.name|e }}')">Del</button>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endif %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
     </div>
-    {% endif %}
 </div>
 
 <!-- Add / Edit Modal -->
-<div class="vp-modal-backdrop" id="vendorModalBackdrop" onclick="if(event.target===this)closeVendorModal()">
+<div class="vp-modal-bg" id="modalBg" onclick="if(event.target===this)closeModal()">
     <div class="vp-modal">
         <div class="vp-modal-head">
-            <h3 id="vendorModalTitle">Add Vendor</h3>
-            <button class="vp-modal-close" onclick="closeVendorModal()">&times;</button>
+            <h3 id="modalTitle">Add Vendor</h3>
+            <button class="vp-modal-x" onclick="closeModal()">&times;</button>
         </div>
         <div class="vp-modal-body">
-            <input type="hidden" id="vendorEditId" value="" />
+            <input type="hidden" id="editId" value="">
 
-            <div class="vp-form-group">
+            <div class="vp-fg">
                 <label>Vendor / Provider Name *</label>
-                <input type="text" id="vendorName" placeholder="Enter vendor name" />
+                <input type="text" id="fName" placeholder="Enter vendor or provider name">
             </div>
 
-            <div class="vp-form-group">
+            <div class="vp-fg">
                 <label>Country *</label>
-                <select id="vendorCountry">
+                <select id="fCountry">
                     <option value="">Select Country</option>
                     {% for c in countries %}
                     <option value="{{ c }}">{{ c }}</option>
@@ -171,138 +297,193 @@
                 </select>
             </div>
 
-            <div class="vp-form-group">
-                <label>Category *</label>
-                <select id="vendorCategory" onchange="updateServicesList()">
-                    <option value="">Select Category</option>
+            <div class="vp-fg">
+                <label>Categories * <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(select one or more)</span></label>
+                <div class="vp-checklist" id="catChecklist">
                     {% for cat in categories %}
-                    <option value="{{ cat }}">{{ cat }}</option>
+                    <label>
+                        <input type="checkbox" name="vp_cat" value="{{ cat }}" onchange="onCatChange()"> {{ cat }}
+                    </label>
                     {% endfor %}
-                </select>
+                </div>
+                <div class="vp-selected-pills" id="catPills"></div>
             </div>
 
-            <div class="vp-form-group" id="servicesGroup">
-                <label>Linked Services</label>
-                <div class="vp-services-checklist" id="servicesChecklist">
-                    <p class="vp-no-service-msg">Select a category first</p>
+            <div class="vp-fg" id="svcGroup">
+                <label>Deliverables <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(select services this vendor provides)</span></label>
+                <div class="vp-checklist" id="svcChecklist">
+                    <p class="vp-checklist-empty">Select a category first</p>
                 </div>
             </div>
         </div>
-        <div class="vp-modal-footer">
-            <button class="vp-modal-cancel" onclick="closeVendorModal()">Cancel</button>
-            <button class="vp-modal-save" onclick="saveVendor()">Save Vendor</button>
+        <div class="vp-modal-foot">
+            <button class="vp-modal-cancel" onclick="closeModal()">Cancel</button>
+            <button class="vp-modal-save" onclick="saveVendor()">Save</button>
         </div>
     </div>
 </div>
 
 <script>
-const ALL_TRAINING_NAMES = {{ training_names|tojson }};
-const ALL_COURSE_NAMES = {{ course_names|tojson }};
+// ── Data ──
+const VENDORS = {{ vendors|tojson }};
+const DELIVERABLES = {{ deliverables|tojson }};
+const ALL_CATEGORIES = {{ categories|tojson }};
+const VP_CATS = ['Training Programs', 'Online Courses', 'Online Subscriptions', 'Research & Publications', 'NGO Activities'];
+const CB_CATS = ['Certification Bodies'];
 
-const VENDORS_DATA = {
-    {% for v in vendors %}
-    {{ v.id }}: {
-        id: {{ v.id }},
-        name: {{ v.name|tojson }},
-        country: {{ v.country|tojson }},
-        category: {{ v.category|tojson }},
-        is_active: {{ v.is_active|tojson }},
-        services: {{ v.services|tojson }}
-    },
-    {% endfor %}
-};
+let activeTab = 'vendors';
 
-function applyFilters() {
-    const country = document.getElementById('filterCountry').value;
-    const category = document.getElementById('filterCategory').value;
-    document.querySelectorAll('.vp-card').forEach(card => {
-        let show = true;
-        if (country && card.dataset.country !== country) show = false;
-        if (category && card.dataset.category !== category) show = false;
-        card.style.display = show ? '' : 'none';
+// ── Init ──
+document.addEventListener('DOMContentLoaded', function() {
+    updateCounts();
+});
+
+function updateCounts() {
+    const vpCount = document.querySelectorAll('#tbodyVP .vp-row').length;
+    const cbCount = document.querySelectorAll('#tbodyCB .vp-row').length;
+    document.getElementById('countVP').textContent = vpCount;
+    document.getElementById('countCB').textContent = cbCount;
+}
+
+// ── Tabs ──
+function switchTab(tab) {
+    activeTab = tab;
+    document.getElementById('tabVP').classList.toggle('active', tab === 'vendors');
+    document.getElementById('tabCB').classList.toggle('active', tab === 'certification');
+    document.getElementById('sectionVP').style.display = tab === 'vendors' ? '' : 'none';
+    document.getElementById('sectionCB').style.display = tab === 'certification' ? '' : 'none';
+    filterRows();
+}
+
+// ── Search ──
+function filterRows() {
+    const q = document.getElementById('vpSearch').value.toLowerCase().trim();
+    const tbodyId = activeTab === 'vendors' ? 'tbodyVP' : 'tbodyCB';
+    document.querySelectorAll('#' + tbodyId + ' .vp-row').forEach(row => {
+        if (!q) { row.style.display = ''; return; }
+        row.style.display = (row.dataset.search || '').includes(q) ? '' : 'none';
     });
 }
 
-function updateServicesList() {
-    const cat = document.getElementById('vendorCategory').value;
-    const container = document.getElementById('servicesChecklist');
-    const group = document.getElementById('servicesGroup');
-
-    if (cat === 'Training Programs') {
-        group.style.display = '';
-        container.innerHTML = ALL_TRAINING_NAMES.map(name =>
-            '<label><input type="checkbox" name="vendor_service" value="' + escHtml(name) + '"> ' + escHtml(name) + '</label>'
-        ).join('');
-    } else if (cat === 'Online Courses') {
-        group.style.display = '';
-        container.innerHTML = '<p class="vp-no-service-msg">All courses apply to this vendor — no individual linking needed.</p>';
-    } else if (cat === 'Research & Publications') {
-        group.style.display = '';
-        container.innerHTML = '<p class="vp-no-service-msg">No individual service linking needed for this category.</p>';
-    } else {
-        group.style.display = '';
-        container.innerHTML = '<p class="vp-no-service-msg">Select a category first</p>';
-    }
-}
-
-function openVendorModal() {
-    document.getElementById('vendorEditId').value = '';
-    document.getElementById('vendorModalTitle').textContent = 'Add Vendor';
-    document.getElementById('vendorName').value = '';
-    document.getElementById('vendorCountry').value = '';
-    document.getElementById('vendorCategory').value = '';
-    updateServicesList();
-    document.getElementById('vendorModalBackdrop').classList.add('open');
+// ── Modal ──
+function openModal() {
+    document.getElementById('editId').value = '';
+    document.getElementById('modalTitle').textContent = 'Add Vendor';
+    document.getElementById('fName').value = '';
+    document.getElementById('fCountry').value = '';
+    clearCheckboxes('catChecklist');
+    updateCatPills();
+    updateSvcChecklist();
+    document.getElementById('modalBg').classList.add('open');
 }
 
 function openEditModal(id) {
-    const v = VENDORS_DATA[id];
+    const v = VENDORS.find(x => x.id === id);
     if (!v) return;
-    document.getElementById('vendorEditId').value = v.id;
-    document.getElementById('vendorModalTitle').textContent = 'Edit Vendor';
-    document.getElementById('vendorName').value = v.name;
-    document.getElementById('vendorCountry').value = v.country;
-    document.getElementById('vendorCategory').value = v.category;
-    updateServicesList();
+    document.getElementById('editId').value = v.id;
+    document.getElementById('modalTitle').textContent = 'Edit Vendor';
+    document.getElementById('fName').value = v.name;
+    document.getElementById('fCountry').value = v.country;
+
+    // Set category checkboxes
+    clearCheckboxes('catChecklist');
+    const cats = (v.category || '').split(',').map(c => c.trim());
+    document.querySelectorAll('#catChecklist input[type="checkbox"]').forEach(cb => {
+        if (cats.includes(cb.value)) cb.checked = true;
+    });
+    updateCatPills();
+    updateSvcChecklist();
 
     // Pre-check services
     if (v.services) {
         const svcs = v.services.split(',').map(s => s.trim());
-        document.querySelectorAll('#servicesChecklist input[type="checkbox"]').forEach(cb => {
-            if (svcs.includes(cb.value)) cb.checked = true;
-        });
+        setTimeout(() => {
+            document.querySelectorAll('#svcChecklist input[type="checkbox"]').forEach(cb => {
+                if (svcs.includes(cb.value)) cb.checked = true;
+            });
+        }, 50);
     }
 
-    document.getElementById('vendorModalBackdrop').classList.add('open');
+    document.getElementById('modalBg').classList.add('open');
 }
 
-function closeVendorModal() {
-    document.getElementById('vendorModalBackdrop').classList.remove('open');
+function closeModal() {
+    document.getElementById('modalBg').classList.remove('open');
 }
 
-function saveVendor() {
-    const editId = document.getElementById('vendorEditId').value;
-    const name = document.getElementById('vendorName').value.trim();
-    const country = document.getElementById('vendorCountry').value;
-    const category = document.getElementById('vendorCategory').value;
+function clearCheckboxes(containerId) {
+    document.querySelectorAll('#' + containerId + ' input[type="checkbox"]').forEach(cb => cb.checked = false);
+}
 
-    if (!name || !country || !category) {
-        alert('Please fill in Name, Country, and Category.');
+// ── Category multi-select ──
+function onCatChange() {
+    updateCatPills();
+    updateSvcChecklist();
+}
+
+function updateCatPills() {
+    const pills = document.getElementById('catPills');
+    const selected = getCheckedValues('catChecklist');
+    if (selected.length === 0) {
+        pills.innerHTML = '';
+        return;
+    }
+    pills.innerHTML = selected.map(cat =>
+        '<span class="vp-pill">' + escHtml(cat) +
+        ' <span class="vp-pill-x" onclick="uncheckCat(\'' + escHtml(cat) + '\')">&times;</span></span>'
+    ).join('');
+}
+
+function uncheckCat(cat) {
+    document.querySelectorAll('#catChecklist input[type="checkbox"]').forEach(cb => {
+        if (cb.value === cat) cb.checked = false;
+    });
+    onCatChange();
+}
+
+// ── Deliverables multi-select ──
+function updateSvcChecklist() {
+    const selectedCats = getCheckedValues('catChecklist');
+    const container = document.getElementById('svcChecklist');
+
+    if (selectedCats.length === 0) {
+        container.innerHTML = '<p class="vp-checklist-empty">Select a category first</p>';
         return;
     }
 
-    const checkedServices = [];
-    document.querySelectorAll('#servicesChecklist input[type="checkbox"]:checked').forEach(cb => {
-        checkedServices.push(cb.value);
+    // Collect all deliverables from selected categories
+    let allDeliverables = [];
+    selectedCats.forEach(cat => {
+        const items = DELIVERABLES[cat] || [];
+        items.forEach(item => {
+            if (!allDeliverables.includes(item)) allDeliverables.push(item);
+        });
     });
 
-    const payload = {
-        name: name,
-        country: country,
-        category: category,
-        services: checkedServices.join(', ')
-    };
+    if (allDeliverables.length === 0) {
+        container.innerHTML = '<p class="vp-checklist-empty">No specific deliverables for selected categories. The vendor name will appear directly in dropdown menus.</p>';
+        return;
+    }
 
+    container.innerHTML = allDeliverables.map(svc =>
+        '<label><input type="checkbox" name="vp_svc" value="' + escHtml(svc) + '"> ' + escHtml(svc) + '</label>'
+    ).join('');
+}
+
+// ── Save ──
+function saveVendor() {
+    const editId = document.getElementById('editId').value;
+    const name = document.getElementById('fName').value.trim();
+    const country = document.getElementById('fCountry').value;
+    const categories = getCheckedValues('catChecklist');
+    const services = getCheckedValues('svcChecklist');
+
+    if (!name || !country || categories.length === 0) {
+        alert('Please fill in Name, Country, and select at least one Category.');
+        return;
+    }
+
+    const payload = { name, country, categories, services };
     const url = editId
         ? '/operations/vendors-providers/' + editId + '/edit'
         : '/operations/vendors-providers/add';
@@ -315,41 +496,46 @@ function saveVendor() {
     .then(r => r.json())
     .then(data => {
         if (data.error) { alert('Error: ' + data.error); return; }
-        // Reload page to show updated list
         window.location.reload();
     })
     .catch(e => alert('Error: ' + e));
 }
 
-function toggleVendor(id, btn) {
+// ── Toggle ──
+function toggleVendor(id, cb) {
     fetch('/operations/vendors-providers/' + id + '/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' }
     })
     .then(r => r.json())
     .then(data => {
+        if (data.error) { alert('Error: ' + data.error); cb.checked = !cb.checked; return; }
+        const row = document.querySelector('tr.vp-row[data-id="' + id + '"]');
+        if (row) row.classList.toggle('inactive-row', !data.is_active);
+    })
+    .catch(e => { alert('Error: ' + e); cb.checked = !cb.checked; });
+}
+
+// ── Delete ──
+function deleteVendor(id, name) {
+    if (!confirm('Delete "' + name + '"? This cannot be undone.')) return;
+    fetch('/operations/vendors-providers/' + id + '/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' }
+    })
+    .then(r => r.json())
+    .then(data => {
         if (data.error) { alert('Error: ' + data.error); return; }
-        const card = document.querySelector('.vp-card[data-id="' + id + '"]');
-        if (!card) return;
-        const isActive = data.is_active;
-        card.dataset.active = isActive;
-        card.classList.toggle('inactive', !isActive);
-
-        // Update badge
-        const badges = card.querySelector('.vp-card-badges');
-        const statusBadge = badges.querySelector('.vp-badge-inactive, .vp-badge-active');
-        if (statusBadge) statusBadge.remove();
-        const newBadge = document.createElement('span');
-        newBadge.className = 'vp-badge ' + (isActive ? 'vp-badge-active' : 'vp-badge-inactive');
-        newBadge.textContent = isActive ? 'Active' : 'Inactive';
-        badges.appendChild(newBadge);
-
-        btn.textContent = isActive ? 'Deactivate' : 'Activate';
-
-        // Update local data
-        if (VENDORS_DATA[id]) VENDORS_DATA[id].is_active = isActive;
+        window.location.reload();
     })
     .catch(e => alert('Error: ' + e));
+}
+
+// ── Helpers ──
+function getCheckedValues(containerId) {
+    const vals = [];
+    document.querySelectorAll('#' + containerId + ' input[type="checkbox"]:checked').forEach(cb => vals.push(cb.value));
+    return vals;
 }
 
 function escHtml(s) {
@@ -358,7 +544,6 @@ function escHtml(s) {
     return d.innerHTML;
 }
 
-// Close modal on Escape
-document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeVendorModal(); });
+document.addEventListener('keydown', e => { if (e.key === 'Escape') closeModal(); });
 </script>
 {% endblock %}
