@@ -15570,6 +15570,118 @@ def ops_plab_verify_doc(doc_id):
     return jsonify({'success': True, 'status': 'verified' if action == 'verify' else 'rejected'})
 
 
+@app.route('/api/plab-client-ids')
+@admin_required
+def api_plab_client_ids():
+    """Return mapping of registration_number → client_id for all PLAB clients."""
+    conn = get_db()
+    rows = conn.execute("SELECT id, registration_number FROM plab_clients").fetchall()
+    conn.close()
+    return jsonify({r['registration_number']: r['id'] for r in rows})
+
+
+@app.route('/operations/plab/import-documents', methods=['POST'])
+@admin_required
+def ops_plab_import_documents():
+    """Bulk import client documents from a folder. Files must be named: REGNUM_DocType.ext"""
+    import os, shutil, uuid
+    source_dir = request.form.get('source_dir', '')
+    if not source_dir or not os.path.isdir(source_dir):
+        flash('Source directory not found', 'error')
+        return redirect(url_for('ops_documents_list'))
+
+    # Mapping from filename doc type to DB doc type + category
+    DOC_TYPE_MAP = {
+        'Photograph': ('Photograph', 'personal'),
+        'Passport_size_Photograph': ('Passport size Photograph', 'personal'),
+        'Pasport': ('Passport Copy (Front)', 'personal'),
+        'Passport_Copy_Back': ('Passport Copy (Back)', 'personal'),
+        'Aadhar_Copy_Optional': ('Aadhar Copy (Optional)', 'personal'),
+        'MBBS_Final_Certificate': ('MBBS Final Certificate', 'academic'),
+        'MBBS_Course_Completion_Certificate': ('MBBS Course Completion Certificate', 'academic'),
+        'Internship_Certificate1': ('Internship Certificate', 'academic'),
+        'State_Registration_Certificate': ('State Registration Certificate', 'academic'),
+    }
+
+    conn = get_db()
+    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+
+    imported = 0
+    skipped = 0
+    errors = []
+
+    for fname in os.listdir(source_dir):
+        fpath = os.path.join(source_dir, fname)
+        if not os.path.isfile(fpath):
+            continue
+
+        # Parse: GCUKIP-XX-XX-NNN_DocType.ext
+        # Split at first underscore after reg number
+        parts = fname.split('_', 1)
+        if len(parts) < 2:
+            errors.append(f"Cannot parse: {fname}")
+            continue
+
+        reg_num = parts[0]  # e.g. GCUKIP-24-25-003
+        doc_part = parts[1].rsplit('.', 1)[0]  # e.g. Photograph or MBBS_Final_Certificate
+        # Remove trailing " (1)" duplicates
+        doc_part = doc_part.rstrip()
+        if doc_part.endswith(')'):
+            import re
+            doc_part = re.sub(r'\s*\(\d+\)$', '', doc_part)
+
+        ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else 'bin'
+
+        # Map doc type
+        mapped = DOC_TYPE_MAP.get(doc_part)
+        if not mapped:
+            errors.append(f"Unknown doc type '{doc_part}' in: {fname}")
+            skipped += 1
+            continue
+
+        doc_type, doc_category = mapped
+
+        # Find client by registration_number
+        client = conn.execute("SELECT id FROM plab_clients WHERE registration_number = ?", (reg_num,)).fetchone()
+        if not client:
+            errors.append(f"Client not found for reg: {reg_num} ({fname})")
+            skipped += 1
+            continue
+
+        client_id = client['id']
+
+        # Check if same doc_type already exists for this client (skip duplicates)
+        existing = conn.execute(
+            "SELECT id FROM plab_client_documents WHERE client_id = ? AND doc_type = ?",
+            (client_id, doc_type)
+        ).fetchone()
+        if existing:
+            skipped += 1
+            continue
+
+        # Copy file to upload dir
+        dest_name = f"plab_{client_id}_{uuid.uuid4().hex[:8]}.{ext}"
+        dest_path = os.path.join(upload_dir, dest_name)
+        shutil.copy2(fpath, dest_path)
+        file_size = os.path.getsize(dest_path)
+
+        # Insert DB record
+        conn.execute(
+            "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (client_id, doc_type, doc_category, fname, f'/static/uploads/plab_docs/{dest_name}', file_size, 'bulk_import')
+        )
+        imported += 1
+
+    conn.commit()
+    conn.close()
+    flash(f'Import complete: {imported} documents imported, {skipped} skipped. {len(errors)} errors.', 'success' if imported > 0 else 'warning')
+    if errors:
+        for e in errors[:10]:
+            flash(e, 'warning')
+    return redirect(url_for('ops_documents_list'))
+
+
 @app.route('/operations/plab/import', methods=['GET', 'POST'])
 @admin_required
 def ops_plab_import():

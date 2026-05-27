@@ -20,6 +20,12 @@
             <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Documents</h1>
             <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Track client document uploads and verification status</p>
         </div>
+        <form method="POST" action="/operations/plab/import-documents" id="importDocsForm" style="display:flex;gap:10px;align-items:center;">
+            <input type="text" name="source_dir" placeholder="Folder path on server..." style="padding:10px 14px;border:1px solid var(--gray-300);border-radius:6px;font-size:13px;width:280px;" id="importDirInput">
+            <button type="submit" style="padding:10px 20px;background:var(--navy);color:white;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;white-space:nowrap;">
+                Import Documents
+            </button>
+        </form>
     </div>
 
     <!-- Summary Cards -->
