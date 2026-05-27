@@ -2,6 +2,12 @@ import os
 import re
 import hashlib
 import logging
+import sys
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s [%(levelname)s] %(message)s',
+    stream=sys.stdout
+)
 import secrets
 import random
 from datetime import datetime, timedelta
@@ -27442,10 +27448,11 @@ def neetpg_wa_notify_leads(pdf_title, pdf_state):
     def _send():
         try:
             import requests as http_requests
+            print(f"[WA_NOTIFY] Starting WhatsApp notification for PDF: {pdf_title}", flush=True)
             infobip_key = os.environ.get('INFOBIP_API_KEY', '')
             infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
             if not infobip_key or not infobip_base:
-                logging.warning("neetpg_wa_notify: Infobip credentials not configured, skipping")
+                print(f"[WA_NOTIFY] ERROR: Infobip credentials not configured — key={bool(infobip_key)}, base={bool(infobip_base)}", flush=True)
                 return
 
             wa_headers = {
@@ -27461,9 +27468,10 @@ def neetpg_wa_notify_leads(pdf_title, pdf_state):
             conn.close()
 
             if not leads:
-                logging.info("neetpg_wa_notify: No leads with WhatsApp numbers, skipping")
+                print("[WA_NOTIFY] No leads with WhatsApp numbers found, skipping", flush=True)
                 return
 
+            print(f"[WA_NOTIFY] Found {len(leads)} leads to notify", flush=True)
             pdf_label = f"{pdf_title}" if pdf_title else pdf_state
             access_link = "https://goocampus.org/neet-pg-2025"
             sent_count = 0
@@ -27499,14 +27507,16 @@ def neetpg_wa_notify_leads(pdf_title, pdf_state):
                         sent_count += 1
                     else:
                         fail_count += 1
-                        logging.warning(f"neetpg_wa_notify: Failed to send to {phone_clean}: {resp.status_code} {resp.text[:200]}")
+                        print(f"[WA_NOTIFY] FAIL {phone_clean}: HTTP {resp.status_code} — {resp.text[:300]}", flush=True)
                 except Exception as e:
                     fail_count += 1
-                    logging.error(f"neetpg_wa_notify: Error sending to {phone_clean}: {e}")
+                    print(f"[WA_NOTIFY] ERR {phone_clean}: {e}", flush=True)
 
-            logging.info(f"neetpg_wa_notify: PDF '{pdf_label}' — sent={sent_count}, failed={fail_count}, total_leads={len(leads)}")
+            print(f"[WA_NOTIFY] DONE PDF '{pdf_label}' — sent={sent_count}, failed={fail_count}, total_leads={len(leads)}", flush=True)
         except Exception as e:
-            logging.error(f"neetpg_wa_notify error: {e}")
+            print(f"[WA_NOTIFY] CRITICAL ERROR: {e}", flush=True)
+            import traceback
+            traceback.print_exc()
 
     thread = threading.Thread(target=_send, daemon=True)
     thread.start()
@@ -27524,9 +27534,11 @@ def neetpg_publish(pdf_id):
         if pdf['is_published']:
             # Unpublish
             conn.execute("UPDATE neetpg_pdfs SET is_published = 0, published_at = NULL WHERE id = ?", (pdf_id,))
+            print(f"[PUBLISH] Unpublished PDF id={pdf_id}", flush=True)
         else:
             # Publish now
             conn.execute("UPDATE neetpg_pdfs SET is_published = 1, published_at = CURRENT_TIMESTAMP, is_active = 1 WHERE id = ?", (pdf_id,))
+            print(f"[PUBLISH] Published PDF id={pdf_id} title='{pdf['title']}' — triggering WA notify", flush=True)
             # Send WhatsApp notification to all leads
             neetpg_wa_notify_leads(pdf['title'], pdf.get('state', ''))
         conn.commit()
@@ -27666,9 +27678,11 @@ def neetpg_auto_publish():
                 (draft['id'],)
             )
             conn.commit()
-            logging.info(f"Auto-published NEET PG PDF id={draft['id']} title={draft['title']}")
+            print(f"[AUTO_PUBLISH] Published PDF id={draft['id']} title='{draft['title']}' — triggering WA notify", flush=True)
             # Send WhatsApp notification to all leads
             neetpg_wa_notify_leads(draft['title'], draft.get('state', ''))
+        else:
+            print("[AUTO_PUBLISH] No drafts to publish", flush=True)
         conn.close()
     except Exception as e:
         logging.error(f"neetpg_auto_publish error: {e}")
