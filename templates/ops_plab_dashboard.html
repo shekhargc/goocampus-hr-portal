@@ -551,7 +551,7 @@
             <div style="font-size:10px;color:var(--gray-500);margin-top:2px;font-style:italic;">{{ doc.notes }}</div>
             {% endif %}
           </td>
-          <td style="padding:8px;text-align:center;font-size:12px;color:var(--gray-600);">{{ doc.uploaded_at[:10] if doc.uploaded_at else '—' }}</td>
+          <td style="padding:8px;text-align:center;font-size:12px;color:var(--gray-600);">{{ doc.uploaded_at|string|truncate(10, True, '') if doc.uploaded_at else '—' }}</td>
           <td style="padding:8px;text-align:center;">
             <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
               {% if doc.status != 'verified' %}

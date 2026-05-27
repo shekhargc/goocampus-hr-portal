@@ -15144,8 +15144,9 @@ def ops_plab_dashboard(client_id):
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     try:
-        documents = conn.execute("SELECT d.*, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
-    except Exception:
+        documents = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+    except Exception as e:
+        logging.error(f"Documents query error for client {client_id}: {e}")
         documents = []
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
@@ -15385,8 +15386,9 @@ def ops_plab_edit(client_id):
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
     try:
-        documents = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
-    except Exception:
+        documents = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, verified_by, verified_at, notes, uploaded_by, uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+    except Exception as e:
+        logging.error(f"Documents query error (edit) for client {client_id}: {e}")
         documents = []
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
@@ -15523,6 +15525,20 @@ def ops_plab_upload_doc(client_id):
     doc_id = conn.execute("SELECT id FROM plab_client_documents WHERE file_path = ?", (f'/static/uploads/plab_docs/{fname}',)).fetchone()['id']
     conn.close()
     return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+
+
+@app.route('/api/plab-client-docs/<int:client_id>')
+@admin_required
+def api_plab_client_docs(client_id):
+    """Diagnostic: return documents for a client as JSON."""
+    conn = get_db()
+    try:
+        rows = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+        docs = [dict(r) for r in rows]
+    except Exception as e:
+        docs = {'error': str(e)}
+    conn.close()
+    return jsonify({'client_id': client_id, 'count': len(docs) if isinstance(docs, list) else 0, 'docs': docs})
 
 
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
