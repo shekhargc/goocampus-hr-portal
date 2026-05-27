@@ -337,7 +337,7 @@ function openDrawer(clientId) {
                     const icon = isImage ? '🖼️' : (isPdf ? '📄' : '📎');
                     const statusColor = doc.status === 'verified' ? '#065f46' : (doc.status === 'rejected' ? '#991b1b' : '#92400e');
                     const statusBg = doc.status === 'verified' ? '#d1fae5' : (doc.status === 'rejected' ? '#fee2e2' : '#fef3c7');
-                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--gray-100);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s;" onclick="openDocViewer('${doc.file_path}','${doc.doc_type}','${ext}')" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
+                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--gray-100);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
                         <span style="font-size:20px;">${icon}</span>
                         <div style="flex:1;min-width:0;">
                             <div style="font-weight:600;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.doc_type}</div>
@@ -374,26 +374,28 @@ function closeDrawer() {
 }
 
 // ===== Document Viewer =====
-function openDocViewer(filePath, docType, ext) {
+function openDocViewer(docId, docType, ext) {
     const overlay = document.getElementById('docViewerOverlay');
     const body = document.getElementById('docViewerBody');
     const titleEl = document.getElementById('docViewerTitle');
     const dlBtn = document.getElementById('docViewerDownload');
 
+    const fileUrl = '/operations/plab/doc/' + docId + '/file';
+    const downloadUrl = '/operations/plab/doc/' + docId + '/download';
     titleEl.textContent = docType;
-    dlBtn.href = '/' + filePath.replace(/^\//, '');
+    dlBtn.href = downloadUrl;
 
     const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
     const isPdf = ext === 'pdf';
 
     if (isImage) {
-        body.innerHTML = `<img src="/${filePath.replace(/^\//, '')}" alt="${docType}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+        body.innerHTML = `<img src="${fileUrl}" alt="${docType}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
     } else if (isPdf) {
-        body.innerHTML = `<iframe src="/${filePath.replace(/^\//, '')}" style="width:100%;height:100%;border:none;"></iframe>`;
+        body.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
     } else {
         body.innerHTML = `<div style="text-align:center;padding:40px;">
             <p style="font-size:16px;color:var(--gray-500);margin-bottom:16px;">Preview not available for this file type</p>
-            <a href="/${filePath.replace(/^\//, '')}" download style="padding:10px 24px;background:var(--orange);color:white;border-radius:8px;font-weight:600;text-decoration:none;">Download File</a>
+            <a href="${downloadUrl}" style="padding:10px 24px;background:var(--orange);color:white;border-radius:8px;font-weight:600;text-decoration:none;">Download File</a>
         </div>`;
     }
     overlay.classList.add('visible');

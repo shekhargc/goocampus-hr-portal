@@ -11517,6 +11517,8 @@ def ensure_ops_tables():
             file_name TEXT NOT NULL,
             file_path TEXT NOT NULL,
             file_size INTEGER DEFAULT 0,
+            file_data BYTEA,
+            content_type TEXT DEFAULT 'application/octet-stream',
             status TEXT DEFAULT 'uploaded',
             verified_by INTEGER REFERENCES employees(id),
             verified_at TIMESTAMP,
@@ -11524,6 +11526,12 @@ def ensure_ops_tables():
             uploaded_by TEXT DEFAULT 'ops_team',
             uploaded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Migration: add file_data and content_type if missing
+        try:
+            conn.execute("ALTER TABLE plab_client_documents ADD COLUMN IF NOT EXISTS file_data BYTEA")
+            conn.execute("ALTER TABLE plab_client_documents ADD COLUMN IF NOT EXISTS content_type TEXT DEFAULT 'application/octet-stream'")
+        except Exception:
+            pass
         # ── Coaching / Training ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_coaching (
             id SERIAL PRIMARY KEY,
@@ -15519,18 +15527,19 @@ def ops_plab_upload_doc(client_id):
         return jsonify({'error': 'No file selected'}), 400
     import os, uuid
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    # Detect content type from extension
+    ct_map = {'pdf': 'application/pdf', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+    content_type = ct_map.get(ext, 'application/octet-stream')
+    # Read file binary for DB storage
+    file_bytes = file.read()
+    file_size = len(file_bytes)
     fname = f"plab_{client_id}_{uuid.uuid4().hex[:8]}.{ext}"
-    upload_dir = os.path.join(app.root_path, 'static', 'uploads', 'plab_docs')
-    os.makedirs(upload_dir, exist_ok=True)
-    fpath = os.path.join(upload_dir, fname)
-    file.save(fpath)
-    file_size = os.path.getsize(fpath)
     conn.execute(
-        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (client_id, doc_type, doc_category, file.filename, f'/static/uploads/plab_docs/{fname}', file_size, 'ops_team')
+        "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by, file_data, content_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (client_id, doc_type, doc_category, file.filename, f'db://{fname}', file_size, 'ops_team', file_bytes, content_type)
     )
     conn.commit()
-    doc_id = conn.execute("SELECT id FROM plab_client_documents WHERE file_path = ?", (f'/static/uploads/plab_docs/{fname}',)).fetchone()['id']
+    doc_id = conn.execute("SELECT id FROM plab_client_documents WHERE file_path = ?", (f'db://{fname}',)).fetchone()['id']
     conn.close()
     return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
 
@@ -15580,6 +15589,38 @@ def api_plab_client_docs(client_id):
         return jsonify({'error': str(e)}), 500
     conn.close()
     return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs, 'missing': missing, 'total_required': len(all_required)})
+
+
+@app.route('/operations/plab/doc/<int:doc_id>/file')
+@admin_required
+def ops_plab_serve_doc(doc_id):
+    """Serve a PLAB client document file from DB (BYTEA)."""
+    conn = get_db()
+    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    conn.close()
+    if not doc or not doc['file_data']:
+        return "Document not found", 404
+    file_data = doc['file_data']
+    if isinstance(file_data, memoryview):
+        file_data = bytes(file_data)
+    ct = doc['content_type'] or 'application/octet-stream'
+    return send_file(BytesIO(file_data), download_name=doc['file_name'], as_attachment=False, mimetype=ct)
+
+
+@app.route('/operations/plab/doc/<int:doc_id>/download')
+@admin_required
+def ops_plab_download_doc(doc_id):
+    """Download a PLAB client document file from DB."""
+    conn = get_db()
+    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    conn.close()
+    if not doc or not doc['file_data']:
+        return "Document not found", 404
+    file_data = doc['file_data']
+    if isinstance(file_data, memoryview):
+        file_data = bytes(file_data)
+    ct = doc['content_type'] or 'application/octet-stream'
+    return send_file(BytesIO(file_data), download_name=doc['file_name'], as_attachment=True, mimetype=ct)
 
 
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
