@@ -15532,13 +15532,24 @@ def ops_plab_upload_doc(client_id):
 def api_plab_client_docs(client_id):
     """Diagnostic: return documents for a client as JSON."""
     conn = get_db()
+    results = {}
+    # Test 1: simple query (known working)
     try:
         rows = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
         docs = [dict(r) for r in rows]
+        results['simple_query'] = {'count': len(docs), 'ok': True}
     except Exception as e:
-        docs = {'error': str(e)}
+        docs = []
+        results['simple_query'] = {'error': str(e)}
+    # Test 2: exact profile query (the one that might fail)
+    try:
+        rows2 = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+        docs2 = [dict(r) for r in rows2]
+        results['profile_query'] = {'count': len(docs2), 'ok': True}
+    except Exception as e:
+        results['profile_query'] = {'error': str(e), 'type': type(e).__name__}
     conn.close()
-    return jsonify({'client_id': client_id, 'count': len(docs) if isinstance(docs, list) else 0, 'docs': docs})
+    return jsonify({'client_id': client_id, 'count': len(docs), 'docs': docs, 'tests': results})
 
 
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
