@@ -15444,9 +15444,11 @@ def ops_documents_list():
     conn = get_db()
     search = request.args.get('search', '').strip()
     status_filter = request.args.get('status', '')
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 50
     try:
         q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
-                      c.account_status, c.current_stage,
+                      c.account_status, c.current_stage, c.created_at,
                       COUNT(d.id) as doc_count,
                       SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
                FROM plab_clients c
@@ -15456,19 +15458,13 @@ def ops_documents_list():
         if search:
             wheres.append("(c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)")
             params += [f'%{search}%', f'%{search}%', f'%{search}%']
-        if status_filter == 'complete':
-            pass  # filter after grouping
-        elif status_filter == 'incomplete':
-            pass
-        elif status_filter == 'none':
-            pass
         if wheres:
             q += " WHERE " + " AND ".join(wheres)
-        q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage"
-        q += " ORDER BY c.first_name, c.last_name"
+        q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
+        q += " ORDER BY c.id DESC"
         rows = conn.execute(q, params).fetchall()
         total_required = len(PLAB_ALL_REQUIRED_DOCS)
-        clients = []
+        all_clients = []
         for r in rows:
             rd = dict(r)
             rd['total_required'] = total_required
@@ -15479,18 +15475,30 @@ def ops_documents_list():
                 continue
             if status_filter == 'none' and rd['doc_count'] > 0:
                 continue
-            clients.append(rd)
+            all_clients.append(rd)
+        # Stats before pagination
+        total_filtered = len(all_clients)
+        complete_count = sum(1 for c in all_clients if c.get('doc_count', 0) >= total_required)
+        total_documents = sum(c.get('doc_count', 0) for c in all_clients)
+        # Pagination
+        total_pages = max(1, (total_filtered + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        start = (page - 1) * per_page
+        clients = all_clients[start:start + per_page]
     except Exception as e:
         logging.error(f"ops_documents_list error: {e}")
         clients = []
+        total_filtered = complete_count = total_documents = 0
+        total_pages = 1
     conn.close()
-    total_clients = len(clients)
-    complete_count = sum(1 for c in clients if c.get('doc_count', 0) >= len(PLAB_ALL_REQUIRED_DOCS))
     return render_template('ops_documents_list.html',
                            clients=clients, search=search, status_filter=status_filter,
-                           total_clients=total_clients, complete_count=complete_count,
+                           total_clients=total_filtered, complete_count=complete_count,
+                           total_documents=total_documents,
                            total_required=len(PLAB_ALL_REQUIRED_DOCS),
                            plab_doc_types=PLAB_DOC_TYPES,
+                           page=page, total_pages=total_pages, per_page=per_page,
+                           start_index=start if clients else 0,
                            active_ops_page='documents')
 
 
@@ -15527,29 +15535,51 @@ def ops_plab_upload_doc(client_id):
     return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
 
 
+@app.route('/api/plab-search')
+@admin_required
+def api_plab_search():
+    """Search PLAB clients by name or registration number (autocomplete)."""
+    q = request.args.get('q', '').strip()
+    if len(q) < 2:
+        return jsonify([])
+    conn = get_db()
+    rows = conn.execute(
+        """SELECT id, registration_number, prefix, first_name, last_name
+           FROM plab_clients
+           WHERE first_name ILIKE ? OR last_name ILIKE ? OR registration_number ILIKE ?
+           ORDER BY first_name, last_name LIMIT 15""",
+        (f'%{q}%', f'%{q}%', f'%{q}%')
+    ).fetchall()
+    conn.close()
+    results = []
+    for r in rows:
+        name = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+        results.append({'id': r['id'], 'name': name, 'reg': r['registration_number']})
+    return jsonify(results)
+
+
 @app.route('/api/plab-client-docs/<int:client_id>')
 @admin_required
 def api_plab_client_docs(client_id):
-    """Diagnostic: return documents for a client as JSON."""
+    """Return documents for a client as JSON (used by drawer UI)."""
     conn = get_db()
-    results = {}
-    # Test 1: simple query (known working)
     try:
-        rows = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+        client = conn.execute("SELECT id, registration_number, prefix, first_name, last_name, account_status, current_stage FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        if not client:
+            conn.close()
+            return jsonify({'error': 'Client not found'}), 404
+        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
         docs = [dict(r) for r in rows]
-        results['simple_query'] = {'count': len(docs), 'ok': True}
+        client_dict = dict(client)
+        client_dict['name'] = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
+        all_required = PLAB_ALL_REQUIRED_DOCS
+        uploaded_types = [d['doc_type'] for d in docs]
+        missing = [dt for dt in all_required if dt not in uploaded_types]
     except Exception as e:
-        docs = []
-        results['simple_query'] = {'error': str(e)}
-    # Test 2: exact profile query (the one that might fail)
-    try:
-        rows2 = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
-        docs2 = [dict(r) for r in rows2]
-        results['profile_query'] = {'count': len(docs2), 'ok': True}
-    except Exception as e:
-        results['profile_query'] = {'error': str(e), 'type': type(e).__name__}
+        conn.close()
+        return jsonify({'error': str(e)}), 500
     conn.close()
-    return jsonify({'client_id': client_id, 'count': len(docs), 'docs': docs, 'tests': results})
+    return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs, 'missing': missing, 'total_required': len(all_required)})
 
 
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])

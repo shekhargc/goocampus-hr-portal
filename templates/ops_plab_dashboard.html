@@ -531,9 +531,10 @@
       </thead>
       <tbody>
         {% for doc in documents %}
+        {% set doc_ext = doc.file_name.rsplit('.', 1)[-1]|lower if '.' in (doc.file_name or '') else '' %}
         <tr style="border-bottom:1px solid var(--gray-100);" id="doc-row-{{ doc.id }}">
           <td style="padding:8px;">
-            <a href="/{{ doc.file_path }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ doc.doc_type }}</a>
+            <a href="javascript:void(0)" onclick="openProfileDocViewer('/{{ doc.file_path }}','{{ doc.doc_type }}','{{ doc_ext }}')" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ doc.doc_type }}</a>
             <div style="font-size:11px;color:var(--gray-500);">{{ doc.file_name }}</div>
           </td>
           <td style="padding:8px;text-align:center;">
@@ -554,6 +555,7 @@
           <td style="padding:8px;text-align:center;font-size:12px;color:var(--gray-600);">{{ doc.uploaded_at|string|truncate(10, True, '') if doc.uploaded_at else '—' }}</td>
           <td style="padding:8px;text-align:center;">
             <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+              <a href="/{{ doc.file_path }}" download style="padding:3px 8px;background:var(--gray-100);color:var(--navy);border:none;border-radius:4px;font-size:11px;font-weight:600;text-decoration:none;cursor:pointer;">Download</a>
               {% if doc.status != 'verified' %}
               <button onclick="verifyPlabDoc({{ doc.id }}, 'verified')" style="padding:3px 8px;background:#d1fae5;color:#065f46;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Verify</button>
               {% endif %}
@@ -974,6 +976,48 @@ function rejectPlabDoc(docId) {
     else alert(data.error || 'Failed');
   });
 }
+
+// Document viewer modal
+function openProfileDocViewer(filePath, docType, ext) {
+  var overlay = document.getElementById('profileDocOverlay');
+  var body = document.getElementById('profileDocBody');
+  var titleEl = document.getElementById('profileDocTitle');
+  var dlBtn = document.getElementById('profileDocDownload');
+  titleEl.textContent = docType;
+  var url = '/' + filePath.replace(/^\//, '');
+  dlBtn.href = url;
+  var isImage = ['jpg','jpeg','png','gif','webp'].indexOf(ext) >= 0;
+  var isPdf = ext === 'pdf';
+  if (isImage) {
+    body.innerHTML = '<img src="' + url + '" alt="' + docType + '" style="max-width:100%;max-height:100%;object-fit:contain;">';
+  } else if (isPdf) {
+    body.innerHTML = '<iframe src="' + url + '" style="width:100%;height:100%;border:none;"></iframe>';
+  } else {
+    body.innerHTML = '<div style="text-align:center;padding:40px;"><p style="font-size:16px;color:var(--gray-500);margin-bottom:16px;">Preview not available for this file type</p><a href="' + url + '" download style="padding:10px 24px;background:var(--orange);color:white;border-radius:8px;font-weight:600;text-decoration:none;">Download File</a></div>';
+  }
+  overlay.style.display = 'flex';
+}
+function closeProfileDocViewer() {
+  document.getElementById('profileDocOverlay').style.display = 'none';
+  document.getElementById('profileDocBody').innerHTML = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('profileDocOverlay').style.display === 'flex') closeProfileDocViewer();
+});
 </script>
+
+<!-- Document Viewer Modal -->
+<div id="profileDocOverlay" onclick="if(event.target===this)closeProfileDocViewer()" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1100;display:none;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;width:90vw;max-width:1000px;height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+      <h4 id="profileDocTitle" style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Document</h4>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <a href="#" id="profileDocDownload" download style="padding:6px 14px;background:var(--navy);color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Download</a>
+        <button onclick="closeProfileDocViewer()" style="background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;line-height:1;">&times;</button>
+      </div>
+    </div>
+    <div id="profileDocBody" style="flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8f8f8;"></div>
+  </div>
+</div>
 
 {% endblock %}
