@@ -27185,7 +27185,10 @@ def neetpg_complete_request(req_id):
                                     "templateData": {
                                         "body": {
                                             "placeholders": [req['name'], pdf_line, "https://goocampus.org/neet-pg-2025"]
-                                        }
+                                        },
+                                        "buttons": [
+                                            {"type": "URL", "parameter": "https://goocampus.org/neet-pg-2025"}
+                                        ]
                                     },
                                     "language": "en_IN"
                                 }
