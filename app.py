@@ -15144,7 +15144,7 @@ def ops_plab_dashboard(client_id):
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     try:
-        documents = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+        documents = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
     except Exception as e:
         logging.error(f"Documents query error for client {client_id}: {e}")
         documents = []
@@ -15543,7 +15543,7 @@ def api_plab_client_docs(client_id):
         results['simple_query'] = {'error': str(e)}
     # Test 2: exact profile query (the one that might fail)
     try:
-        rows2 = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+        rows2 = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
         docs2 = [dict(r) for r in rows2]
         results['profile_query'] = {'count': len(docs2), 'ok': True}
     except Exception as e:
