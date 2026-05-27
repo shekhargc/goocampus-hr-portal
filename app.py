@@ -15143,7 +15143,10 @@ def ops_plab_dashboard(client_id):
     payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
-    documents = conn.execute("SELECT d.*, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+    try:
+        documents = conn.execute("SELECT d.*, e.first_name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
+    except Exception:
+        documents = []
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
                            amount_paid=amount_paid, gst_paid=gst_paid,
@@ -15381,7 +15384,10 @@ def ops_plab_edit(client_id):
         conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
-    documents = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+    try:
+        documents = conn.execute("SELECT * FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+    except Exception:
+        documents = []
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
                            plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
@@ -15425,6 +15431,66 @@ PLAB_DOC_TYPES = {
         'Internship Certificate', 'State Registration Certificate'
     ]
 }
+
+PLAB_ALL_REQUIRED_DOCS = PLAB_DOC_TYPES.get('personal', []) + PLAB_DOC_TYPES.get('academic', [])
+
+
+@app.route('/operations/documents')
+@admin_required
+def ops_documents_list():
+    """Documents overview — all clients with document upload status."""
+    conn = get_db()
+    search = request.args.get('search', '').strip()
+    status_filter = request.args.get('status', '')
+    try:
+        q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                      c.account_status, c.current_stage,
+                      COUNT(d.id) as doc_count,
+                      SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
+               FROM plab_clients c
+               LEFT JOIN plab_client_documents d ON d.client_id = c.id"""
+        params = []
+        wheres = []
+        if search:
+            wheres.append("(c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)")
+            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        if status_filter == 'complete':
+            pass  # filter after grouping
+        elif status_filter == 'incomplete':
+            pass
+        elif status_filter == 'none':
+            pass
+        if wheres:
+            q += " WHERE " + " AND ".join(wheres)
+        q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage"
+        q += " ORDER BY c.first_name, c.last_name"
+        rows = conn.execute(q, params).fetchall()
+        total_required = len(PLAB_ALL_REQUIRED_DOCS)
+        clients = []
+        for r in rows:
+            rd = dict(r)
+            rd['total_required'] = total_required
+            rd['name'] = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            if status_filter == 'complete' and rd['doc_count'] < total_required:
+                continue
+            if status_filter == 'incomplete' and rd['doc_count'] >= total_required:
+                continue
+            if status_filter == 'none' and rd['doc_count'] > 0:
+                continue
+            clients.append(rd)
+    except Exception as e:
+        logging.error(f"ops_documents_list error: {e}")
+        clients = []
+    conn.close()
+    total_clients = len(clients)
+    complete_count = sum(1 for c in clients if c.get('doc_count', 0) >= len(PLAB_ALL_REQUIRED_DOCS))
+    return render_template('ops_documents_list.html',
+                           clients=clients, search=search, status_filter=status_filter,
+                           total_clients=total_clients, complete_count=complete_count,
+                           total_required=len(PLAB_ALL_REQUIRED_DOCS),
+                           plab_doc_types=PLAB_DOC_TYPES,
+                           active_ops_page='documents')
+
 
 @app.route('/operations/plab/<int:client_id>/upload-doc', methods=['POST'])
 @admin_required
