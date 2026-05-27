@@ -5,7 +5,7 @@ import logging
 import sys
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s [%(levelname)s] %(message)s',
+    format='%(asctime)s [%(levelname)s] %(essage)s',
     stream=sys.stdout
 )
 import secrets
@@ -27494,7 +27494,10 @@ def neetpg_wa_notify_leads(pdf_title, pdf_state):
                             "templateData": {
                                 "body": {
                                     "placeholders": [doctor_name, pdf_label, access_link]
-                                }
+                                },
+                                "buttons": [
+                                    {"type": "URL", "parameter": access_link}
+                                ]
                             },
                             "language": "en_IN"
                         }
@@ -27503,8 +27506,10 @@ def neetpg_wa_notify_leads(pdf_title, pdf_state):
 
                 try:
                     resp = http_requests.post(tmpl_url, json=payload, headers=wa_headers, timeout=15)
+                    resp_body = resp.text[:500] if resp.text else ''
                     if resp.status_code < 400:
                         sent_count += 1
+                        print(f"[WA_NOTIFY] OK {phone_clean}: {resp.status_code} — {resp_body[:200]}", flush=True)
                     else:
                         fail_count += 1
                         print(f"[WA_NOTIFY] FAIL {phone_clean}: HTTP {resp.status_code} — {resp.text[:300]}", flush=True)
