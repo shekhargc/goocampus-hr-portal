@@ -84,13 +84,10 @@ def format_reg_filter(value):
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
-
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# Shared helpers extracted to core/helpers.py during refactor.
+# Re-exported here so existing code keeps working unchanged.
+from core.helpers import ALLOWED_EXTENSIONS, allowed_file, hash_password
 
 def login_required(f):
     @wraps(f)
