@@ -13328,13 +13328,10 @@ def ops_uk_pathway():
     return redirect(url_for('ops_plab_pathway_dashboard'))
 
 
-@app.route('/operations/australia-pathway')
-@admin_required
-def ops_australia_pathway():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='Australia Pathway',
-                         pathway_desc='Australia medical pathway operations will be configured here.')
+
+
+# /operations/australia-pathway is now served by routes/operations/australia.py
+# (registered via register_operations_modules(app) at app boot).
 
 
 @app.route('/operations/uae-pathway')

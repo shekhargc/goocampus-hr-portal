@@ -37,3 +37,7 @@ def register_operations_modules(app):
     # NGO Activities — first sub-area migrated (4 routes /operations/ngo-activities/*)
     from . import ngo
     ngo.register_routes(app)
+
+    # Australia Pathway — v2 client management dashboard (/operations/australia-pathway)
+    from . import australia
+    australia.register_routes(app)
