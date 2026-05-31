@@ -1,12 +1,12 @@
 {% extends "ops_sidebar_base.html" %}
 {% block title %}{{ pathway_name }} &mdash; GooCampus CRM{% endblock %}
 
-{% block section_extra_css %}
+{% block ops_extra_css %}
 <style>
     .pathway-hero {
         background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
         border-radius: 1rem;
-        padding: 2.5rem;
+        padding: 2.25rem 2.5rem;
         color: white;
         margin-bottom: 2rem;
         position: relative;
@@ -15,32 +15,23 @@
     .pathway-hero::before {
         content: '';
         position: absolute;
-        top: -40%;
-        right: -10%;
-        width: 400px;
-        height: 400px;
+        top: -40%; right: -10%;
+        width: 400px; height: 400px;
         border-radius: 50%;
         background: radial-gradient(circle, rgba(245,130,32,0.12) 0%, transparent 70%);
     }
     .pathway-hero h1 {
-        font-size: 1.75rem;
-        font-weight: 700;
-        position: relative;
-        z-index: 1;
-        margin: 0;
+        font-size: 1.75rem; font-weight: 700; margin: 0;
+        position: relative; z-index: 1;
     }
     .pathway-hero h1 span { color: var(--orange); }
     .pathway-hero p {
-        color: rgba(255,255,255,0.7);
-        font-size: 0.95rem;
-        position: relative;
-        z-index: 1;
-        margin-top: 0.5rem;
-        margin-bottom: 0;
+        color: rgba(255,255,255,0.7); font-size: 0.95rem;
+        margin: 0.5rem 0 0; position: relative; z-index: 1;
     }
     .stat-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         gap: 1rem;
         margin-bottom: 1.5rem;
     }
@@ -48,226 +39,252 @@
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        padding: 1.25rem 1.5rem;
-        position: relative;
+        padding: 1.15rem 1.4rem;
     }
     .stat-card .stat-label {
-        font-size: 0.78rem;
-        color: var(--gray-500);
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        margin-bottom: 0.35rem;
+        font-size: 0.75rem; color: var(--gray-500); font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.3rem;
     }
     .stat-card .stat-value {
-        font-size: 1.85rem;
-        font-weight: 700;
-        color: var(--navy);
-        line-height: 1.1;
+        font-size: 1.85rem; font-weight: 700; color: var(--navy); line-height: 1.1;
     }
     .stat-card .stat-sub {
-        font-size: 0.8rem;
-        color: var(--gray-500);
-        margin-top: 0.25rem;
+        font-size: 0.78rem; color: var(--gray-500); margin-top: 0.25rem;
     }
     .stat-card.accent-orange { border-top: 3px solid var(--orange); }
-    .stat-card.accent-blue { border-top: 3px solid #3B82F6; }
-    .stat-card.accent-green { border-top: 3px solid #22C55E; }
+    .stat-card.accent-blue   { border-top: 3px solid #3B82F6; }
+    .stat-card.accent-green  { border-top: 3px solid #22C55E; }
+    .stat-card.accent-yellow { border-top: 3px solid #F59E0B; }
+    .stat-card.accent-red    { border-top: 3px solid #EF4444; }
     .stat-card.accent-purple { border-top: 3px solid #8B5CF6; }
+
+    .grid-2 {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
+        gap: 1.5rem;
+        margin-bottom: 1.5rem;
+    }
 
     .panel {
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        margin-bottom: 1.5rem;
         overflow: hidden;
     }
     .panel-header {
-        padding: 1rem 1.25rem;
+        padding: 0.9rem 1.25rem;
         border-bottom: 1px solid var(--gray-200);
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
+        display: flex; justify-content: space-between; align-items: center;
     }
     .panel-header h3 {
-        margin: 0;
-        font-size: 0.95rem;
-        font-weight: 700;
-        color: var(--navy);
+        margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--navy);
     }
-    .panel-body { padding: 1rem 1.25rem; }
+    .panel-body { padding: 0.5rem 1.25rem; }
     .panel-body table { width: 100%; border-collapse: collapse; }
     .panel-body th, .panel-body td {
-        text-align: left;
-        padding: 0.6rem 0.5rem;
-        font-size: 0.88rem;
+        text-align: left; padding: 0.55rem 0.4rem; font-size: 0.88rem;
         border-bottom: 1px solid var(--gray-100);
     }
     .panel-body th {
-        font-size: 0.75rem;
-        color: var(--gray-500);
-        text-transform: uppercase;
-        letter-spacing: 0.02em;
-        font-weight: 600;
+        font-size: 0.74rem; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600;
     }
     .panel-body tr:last-child td { border-bottom: none; }
     .empty-state {
-        text-align: center;
-        padding: 2rem 1rem;
-        color: var(--gray-500);
-        font-size: 0.9rem;
+        text-align: center; padding: 2rem 1rem;
+        color: var(--gray-500); font-size: 0.9rem;
     }
     .status-pill {
         display: inline-block;
         padding: 0.18rem 0.55rem;
         border-radius: 999px;
-        font-size: 0.72rem;
+        font-size: 0.7rem;
         font-weight: 600;
         text-transform: uppercase;
         letter-spacing: 0.03em;
     }
-    .status-draft   { background: #FEF3C7; color: #92400E; }
-    .status-submitted { background: #DBEAFE; color: #1D4ED8; }
-    .status-pending { background: #F3F4F6; color: #4B5563; }
-    .status-verified { background: #D1FAE5; color: #065F46; }
-    .status-confirmed { background: #DCFCE7; color: #166534; }
+    .pill-in-process { background: #DBEAFE; color: #1D4ED8; }
+    .pill-on-hold    { background: #FEF3C7; color: #92400E; }
+    .pill-dropped    { background: #FEE2E2; color: #B91C1C; }
+    .pill-completed  { background: #D1FAE5; color: #065F46; }
+    .pill-unknown    { background: #F3F4F6; color: #4B5563; }
 
-    .setup-notice {
-        background: #FEF3C7;
-        border: 1px solid #FCD34D;
-        color: #92400E;
-        padding: 1rem 1.25rem;
-        border-radius: 0.5rem;
-        margin-bottom: 1.5rem;
-        font-size: 0.9rem;
-    }
-    .setup-notice strong { color: #78350F; }
-    .setup-notice a { color: #92400E; text-decoration: underline; font-weight: 600; }
+    .reg-link { color: var(--navy); text-decoration: none; font-weight: 600; }
+    .reg-link:hover { color: var(--orange); }
 </style>
 {% endblock %}
 
-{% block section_content %}
+{% block ops_content %}
 <div class="pathway-hero">
     <h1><span>{{ pathway_name }}</span></h1>
-    <p>Australia medical pathway — v2 client management. All client invitations, registrations, and stage tracking flow through the unified system.</p>
+    <p>AMC (Australian Medical Council) pathway. Clients, training, EPIC, online courses, payments, call notes &amp; more — all filtered to <code style="color:#fff">pathway = australia</code>.</p>
 </div>
-
-{% if not stats.product_configured %}
-<div class="setup-notice">
-    <strong>Setup needed:</strong> No "Australia" product is configured yet.
-    Go to <a href="{{ url_for('products_list') }}">Products &amp; Services</a> and add a product with "Australia" in its name (e.g. "Australia AMC Pathway").
-    Once added, sales can send invitations and Australia clients will appear on this dashboard automatically.
-</div>
-{% endif %}
 
 <div class="stat-grid">
     <div class="stat-card accent-orange">
         <div class="stat-label">Total clients</div>
         <div class="stat-value">{{ stats.total_clients }}</div>
-        <div class="stat-sub">{% if stats.product_names %}across {{ stats.product_names|join(', ') }}{% else %}awaiting product setup{% endif %}</div>
+        <div class="stat-sub">all-time imported &amp; new</div>
     </div>
     <div class="stat-card accent-blue">
-        <div class="stat-label">Invitations sent</div>
-        <div class="stat-value">{{ stats.invitations_total }}</div>
-        <div class="stat-sub">{{ stats.invitations_pending }} still pending</div>
+        <div class="stat-label">In Process</div>
+        <div class="stat-value">{{ stats.active_clients }}</div>
+        <div class="stat-sub">actively progressing</div>
     </div>
-    <div class="stat-card accent-purple">
-        <div class="stat-label">Awaiting Ops verification</div>
-        <div class="stat-value">{{ stats.pending_ops_verifications|length }}</div>
-        <div class="stat-sub">submitted but not yet verified</div>
+    <div class="stat-card accent-yellow">
+        <div class="stat-label">On Hold</div>
+        <div class="stat-value">{{ stats.on_hold_clients }}</div>
+        <div class="stat-sub">paused, may resume</div>
+    </div>
+    <div class="stat-card accent-red">
+        <div class="stat-label">Dropped</div>
+        <div class="stat-value">{{ stats.dropped_clients }}</div>
+        <div class="stat-sub">discontinued service</div>
     </div>
     <div class="stat-card accent-green">
-        <div class="stat-label">Confirmed onboarded</div>
-        <div class="stat-value">{{ stats.onboarding_status.get('confirmed', 0) }}</div>
-        <div class="stat-sub">{{ stats.onboarding_status.get('pending', 0) }} pending</div>
+        <div class="stat-label">Completed</div>
+        <div class="stat-value">{{ stats.completed_clients }}</div>
+        <div class="stat-sub">finished pathway</div>
+    </div>
+    <div class="stat-card accent-purple">
+        <div class="stat-label">FY new signups</div>
+        <div class="stat-value">{{ stats.this_fy_new }}</div>
+        <div class="stat-sub">current Indian FY</div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="panel">
+        <div class="panel-header"><h3>Account status breakdown</h3></div>
+        <div class="panel-body">
+            {% if stats.account_status %}
+            <table>
+                <thead><tr><th>Status</th><th style="text-align:right">Count</th></tr></thead>
+                <tbody>
+                    {% for status, count in stats.account_status.items() %}
+                    <tr>
+                        <td>
+                            {% set pill_class = 'pill-unknown' %}
+                            {% if status == 'In Process' %}{% set pill_class = 'pill-in-process' %}
+                            {% elif status == 'On Hold' %}{% set pill_class = 'pill-on-hold' %}
+                            {% elif status == 'Dropped' %}{% set pill_class = 'pill-dropped' %}
+                            {% elif status == 'Completed' %}{% set pill_class = 'pill-completed' %}
+                            {% endif %}
+                            <span class="status-pill {{ pill_class }}">{{ status }}</span>
+                        </td>
+                        <td style="text-align:right; font-weight:600">{{ count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No clients yet for Australia Pathway.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header"><h3>Current stage (active only)</h3></div>
+        <div class="panel-body">
+            {% if stats.current_stage %}
+            <table>
+                <thead><tr><th>Stage</th><th style="text-align:right">Count</th></tr></thead>
+                <tbody>
+                    {% for stage, count in stats.current_stage.items() %}
+                    <tr>
+                        <td>{{ stage }}</td>
+                        <td style="text-align:right; font-weight:600">{{ count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No active clients to break down by stage.</div>
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<div class="grid-2">
+    <div class="panel">
+        <div class="panel-header"><h3>Top counsellors (active)</h3></div>
+        <div class="panel-body">
+            {% if stats.counsellor_breakdown %}
+            <table>
+                <thead><tr><th>Counsellor</th><th style="text-align:right">Clients</th></tr></thead>
+                <tbody>
+                    {% for counsellor, count in stats.counsellor_breakdown %}
+                    <tr>
+                        <td>{{ counsellor }}</td>
+                        <td style="text-align:right; font-weight:600">{{ count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+            {% else %}
+            <div class="empty-state">No counsellor assignments yet.</div>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="panel">
+        <div class="panel-header"><h3>Active package value</h3></div>
+        <div class="panel-body">
+            <div style="padding: 1.2rem 0.5rem;">
+                <div style="font-size: 0.78rem; color: var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing: 0.03em;">Sum of final package, active clients</div>
+                <div style="font-size: 2rem; font-weight:700; color: var(--navy); margin: 0.3rem 0;">
+                    &#8377;{{ '{:,.0f}'.format(stats.package_total) }}
+                </div>
+                <div style="font-size: 0.85rem; color: var(--gray-500);">{{ stats.active_clients }} active clients</div>
+            </div>
+        </div>
     </div>
 </div>
 
 <div class="panel">
-    <div class="panel-header"><h3>Form status breakdown</h3></div>
-    <div class="panel-body">
-        {% if stats.form_status %}
-        <table>
-            <thead><tr><th>Status</th><th style="text-align:right">Count</th></tr></thead>
-            <tbody>
-                {% for status, count in stats.form_status.items() %}
-                <tr>
-                    <td><span class="status-pill status-{{ status }}">{{ status }}</span></td>
-                    <td style="text-align:right; font-weight:600">{{ count }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">No client registrations yet for Australia Pathway.</div>
-        {% endif %}
+    <div class="panel-header">
+        <h3>Recent registrations</h3>
     </div>
-</div>
-
-<div class="panel">
-    <div class="panel-header"><h3>Awaiting Ops verification ({{ stats.pending_ops_verifications|length }})</h3></div>
     <div class="panel-body">
-        {% if stats.pending_ops_verifications %}
+        {% if stats.recent_registrations %}
         <table>
             <thead>
                 <tr>
                     <th>Reg. No.</th>
-                    <th>Client</th>
-                    <th>Submitted</th>
-                    <th>Sales done</th>
-                    <th></th>
+                    <th>Candidate</th>
+                    <th>Mobile</th>
+                    <th>Counsellor</th>
+                    <th>Status</th>
+                    <th>Stage</th>
+                    <th style="text-align:right">Package</th>
                 </tr>
             </thead>
             <tbody>
-                {% for r in stats.pending_ops_verifications %}
+                {% for r in stats.recent_registrations %}
                 <tr>
-                    <td>{{ r.registration_number or '—' }}</td>
+                    <td><span class="reg-link">{{ r.registration_number or '—' }}</span></td>
                     <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
-                    <td>{{ r.client_submitted_at or '—' }}</td>
-                    <td>{% if r.sales_completed %}<span class="status-pill status-verified">Yes</span>{% else %}<span class="status-pill status-pending">Pending</span>{% endif %}</td>
-                    <td style="text-align:right">
-                        <a href="{{ url_for('admin_client_detail', reg_id=r.id) }}">Open &rarr;</a>
+                    <td>{{ r.mobile or '—' }}</td>
+                    <td>{{ r.counsellor or '—' }}</td>
+                    <td>
+                        {% set pill_class = 'pill-unknown' %}
+                        {% if r.account_status == 'In Process' %}{% set pill_class = 'pill-in-process' %}
+                        {% elif r.account_status == 'On Hold' %}{% set pill_class = 'pill-on-hold' %}
+                        {% elif r.account_status == 'Dropped' %}{% set pill_class = 'pill-dropped' %}
+                        {% elif r.account_status == 'Completed' %}{% set pill_class = 'pill-completed' %}
+                        {% endif %}
+                        <span class="status-pill {{ pill_class }}">{{ r.account_status or 'Unknown' }}</span>
+                    </td>
+                    <td>{{ r.current_stage or '—' }}</td>
+                    <td style="text-align:right; font-weight:600">
+                        {% if r.final_package %}&#8377;{{ '{:,.0f}'.format(r.final_package) }}{% else %}—{% endif %}
                     </td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
         {% else %}
-        <div class="empty-state">Nothing in the Ops verification queue right now.</div>
-        {% endif %}
-    </div>
-</div>
-
-<div class="panel">
-    <div class="panel-header"><h3>Recent submissions</h3></div>
-    <div class="panel-body">
-        {% if stats.recent_submissions %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Reg. No.</th>
-                    <th>Client</th>
-                    <th>Form</th>
-                    <th>Ops</th>
-                    <th>Onboarding</th>
-                    <th>Updated</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in stats.recent_submissions %}
-                <tr>
-                    <td>{{ r.registration_number or '—' }}</td>
-                    <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
-                    <td><span class="status-pill status-{{ r.form_status }}">{{ r.form_status }}</span></td>
-                    <td><span class="status-pill status-{{ r.ops_status or 'pending' }}">{{ r.ops_status or 'pending' }}</span></td>
-                    <td><span class="status-pill status-{{ r.onboarding_status or 'pending' }}">{{ r.onboarding_status or 'pending' }}</span></td>
-                    <td>{{ r.client_submitted_at or r.created_at }}</td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">No submissions yet.</div>
+        <div class="empty-state">No registrations yet.</div>
         {% endif %}
     </div>
 </div>

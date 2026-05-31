@@ -1,21 +1,16 @@
 """
-routes/operations/australia.py — Operations: Australia Pathway sub-area.
+routes/operations/australia.py — Operations: Australia Pathway dashboard.
 
-Replaces the placeholder /operations/australia-pathway route from app.py.
+Surfaces Australia client stats from plab_clients WHERE pathway='australia'
+(the storage decision locked 2026-05-31). The 228 historical Australia
+clients were imported from GC_AUS_Registration_Report.xlsx by
+import_australia_clients.run_import_australia_clients_once() at app boot.
 
-Australia Pathway uses the v2 client management architecture (the same flow
-used by all new pathways under Operations):
-  - clients live in `client_registrations` filtered by product_id
-  - the registration / form / sales / ops verification flow is shared
-  - per-pathway customisation lives in `client_form_configs` (per product)
+The Australia Excel and the import script are committed alongside this
+file so the same data shows up identically on every fresh environment.
 
-This dashboard surfaces Australia-specific stats by filtering
-`client_registrations` to products whose name matches 'Australia' (case
-insensitive) — so as soon as the admin adds an "Australia Pathway" product
-via /products UI, those clients start showing up here automatically.
-
-Endpoint name preserved: ops_australia_pathway (matches existing url_for
-calls and sidebar links — no app.py call-site changes needed).
+Endpoint name preserved: ops_australia_pathway. Sidebar pathway switcher
+links to /operations/australia-pathway.
 """
 
 import logging
@@ -26,121 +21,103 @@ from core.users import get_user
 from db import get_db
 
 
-def _australia_product_ids(conn):
-    """Return product ids whose name includes 'Australia' (case-insensitive).
-
-    Returns [] if no such product exists yet (e.g. admin hasn't added the
-    'Australia Pathway' product through the UI yet). The dashboard renders
-    zeros in that case.
-    """
-    rows = conn.execute(
-        "SELECT id FROM products_services WHERE LOWER(name) LIKE ?",
-        ('%australia%',),
-    ).fetchall()
-    return [r['id'] for r in rows]
-
-
 @admin_required
 def ops_australia_pathway():
-    """Australia Pathway dashboard — v2 client stats filtered to Australia products."""
+    """Australia Pathway dashboard — stats from plab_clients where pathway='australia'."""
     user = get_user()
     conn = get_db()
 
-    # Default empty state — keeps the page renderable if the products table
-    # or v2 tables aren't fully set up on this environment.
     stats = {
-        'total_clients': 0,
-        'product_configured': False,
-        'product_names': [],
-        'form_status': {},     # {status: count}  draft / submitted
-        'ops_status': {},      # {status: count}  pending / verified / etc
-        'onboarding_status': {},  # {status: count} pending / confirmed
-        'recent_submissions': [],
-        'pending_ops_verifications': [],
-        'invitations_total': 0,
-        'invitations_pending': 0,
+        'total_clients':        0,
+        'active_clients':       0,
+        'on_hold_clients':      0,
+        'dropped_clients':      0,
+        'completed_clients':    0,
+        'account_status':       {},   # {status: count}
+        'current_stage':        {},   # {stage: count}
+        'counsellor_breakdown': [],   # top 5 [(counsellor, count)]
+        'package_total':        0.0,  # sum of final_package across active
+        'recent_registrations': [],   # last 5 rows
+        'this_fy_new':          0,    # signups in current Indian FY
     }
 
     try:
-        prod_ids = _australia_product_ids(conn)
-        product_rows = conn.execute(
-            "SELECT id, name FROM products_services WHERE LOWER(name) LIKE ?",
-            ('%australia%',),
+        # ── Totals + status buckets ──────────────────────────────────────
+        total = conn.execute(
+            "SELECT COUNT(*) AS c FROM plab_clients WHERE pathway = 'australia'"
+        ).fetchone()['c']
+        stats['total_clients'] = total
+
+        # Per-status counts (single grouped query, then map keys onto buckets)
+        for row in conn.execute(
+            """SELECT COALESCE(NULLIF(TRIM(account_status), ''), 'Unknown') AS s,
+                      COUNT(*) AS c
+               FROM plab_clients WHERE pathway = 'australia'
+               GROUP BY account_status"""
+        ).fetchall():
+            stats['account_status'][row['s']] = row['c']
+
+        # Convenience: surface the four most common buckets at the top
+        stats['active_clients']    = stats['account_status'].get('In Process', 0)
+        stats['on_hold_clients']   = stats['account_status'].get('On Hold', 0)
+        stats['dropped_clients']   = stats['account_status'].get('Dropped', 0)
+        stats['completed_clients'] = stats['account_status'].get('Completed', 0)
+
+        # ── Current stage breakdown (active clients only) ────────────────
+        for row in conn.execute(
+            """SELECT COALESCE(NULLIF(TRIM(current_stage), ''), 'Not Set') AS stg,
+                      COUNT(*) AS c
+               FROM plab_clients
+               WHERE pathway = 'australia' AND account_status = 'In Process'
+               GROUP BY current_stage
+               ORDER BY c DESC"""
+        ).fetchall():
+            stats['current_stage'][row['stg']] = row['c']
+
+        # ── Counsellor distribution (top 5) ─────────────────────────────
+        stats['counsellor_breakdown'] = [
+            (r['counsellor'] or 'Unassigned', r['c'])
+            for r in conn.execute(
+                """SELECT COALESCE(NULLIF(TRIM(counsellor), ''), 'Unassigned') AS counsellor,
+                          COUNT(*) AS c
+                   FROM plab_clients
+                   WHERE pathway = 'australia' AND account_status = 'In Process'
+                   GROUP BY counsellor
+                   ORDER BY c DESC
+                   LIMIT 5"""
+            ).fetchall()
+        ]
+
+        # ── Package value (active clients) ──────────────────────────────
+        pkg_row = conn.execute(
+            """SELECT COALESCE(SUM(final_package), 0) AS s
+               FROM plab_clients
+               WHERE pathway = 'australia' AND account_status = 'In Process'"""
+        ).fetchone()
+        stats['package_total'] = float(pkg_row['s'] or 0)
+
+        # ── This-FY new registrations ───────────────────────────────────
+        # Indian FY runs Apr-Mar. We could compute via SQL but the count is
+        # cheap to do in Python with the registration_number prefix.
+        from core.registration import indian_financial_year
+        fy = indian_financial_year()
+        fy_count = conn.execute(
+            "SELECT COUNT(*) AS c FROM plab_clients "
+            "WHERE pathway = 'australia' AND registration_number LIKE ?",
+            (f'GCAUSIP/{fy}/%',),
+        ).fetchone()['c']
+        stats['this_fy_new'] = fy_count
+
+        # ── Recent registrations (last 5 by id, which == reg order) ─────
+        stats['recent_registrations'] = conn.execute(
+            """SELECT id, registration_number, prefix, first_name, last_name,
+                      mobile, email, account_status, current_stage,
+                      counsellor, final_package, registration_date
+               FROM plab_clients
+               WHERE pathway = 'australia'
+               ORDER BY id DESC
+               LIMIT 5"""
         ).fetchall()
-        stats['product_configured'] = bool(prod_ids)
-        stats['product_names'] = [r['name'] for r in product_rows]
-
-        if prod_ids:
-            placeholders = ','.join(['?'] * len(prod_ids))
-
-            # ── Totals ──
-            stats['total_clients'] = conn.execute(
-                f"SELECT COUNT(*) AS c FROM client_registrations WHERE product_id IN ({placeholders})",
-                prod_ids,
-            ).fetchone()['c']
-
-            # ── Form status breakdown (draft / submitted) ──
-            for row in conn.execute(
-                f"""SELECT COALESCE(form_status, 'unknown') AS s, COUNT(*) AS c
-                    FROM client_registrations WHERE product_id IN ({placeholders})
-                    GROUP BY form_status""",
-                prod_ids,
-            ).fetchall():
-                stats['form_status'][row['s']] = row['c']
-
-            # ── Ops status breakdown ──
-            for row in conn.execute(
-                f"""SELECT COALESCE(ops_status, 'pending') AS s, COUNT(*) AS c
-                    FROM client_registrations WHERE product_id IN ({placeholders})
-                    GROUP BY ops_status""",
-                prod_ids,
-            ).fetchall():
-                stats['ops_status'][row['s']] = row['c']
-
-            # ── Onboarding status breakdown ──
-            for row in conn.execute(
-                f"""SELECT COALESCE(onboarding_status, 'pending') AS s, COUNT(*) AS c
-                    FROM client_registrations WHERE product_id IN ({placeholders})
-                    GROUP BY onboarding_status""",
-                prod_ids,
-            ).fetchall():
-                stats['onboarding_status'][row['s']] = row['c']
-
-            # ── Recent submissions (last 5) ──
-            stats['recent_submissions'] = conn.execute(
-                f"""SELECT id, registration_number, prefix, first_name, last_name,
-                           form_status, ops_status, onboarding_status,
-                           client_submitted_at, created_at
-                    FROM client_registrations
-                    WHERE product_id IN ({placeholders})
-                    ORDER BY COALESCE(client_submitted_at, created_at) DESC
-                    LIMIT 5""",
-                prod_ids,
-            ).fetchall()
-
-            # ── Pending ops verifications (submitted but not verified) ──
-            stats['pending_ops_verifications'] = conn.execute(
-                f"""SELECT id, registration_number, prefix, first_name, last_name,
-                           client_submitted_at, sales_completed, sales_completed_at
-                    FROM client_registrations
-                    WHERE product_id IN ({placeholders})
-                      AND form_status = 'submitted'
-                      AND (ops_status IS NULL OR ops_status = 'pending')
-                    ORDER BY client_submitted_at ASC
-                    LIMIT 10""",
-                prod_ids,
-            ).fetchall()
-
-            # ── Invitations stats ──
-            stats['invitations_total'] = conn.execute(
-                f"SELECT COUNT(*) AS c FROM client_invitations WHERE product_id IN ({placeholders})",
-                prod_ids,
-            ).fetchone()['c']
-            stats['invitations_pending'] = conn.execute(
-                f"""SELECT COUNT(*) AS c FROM client_invitations
-                    WHERE product_id IN ({placeholders}) AND status = 'pending'""",
-                prod_ids,
-            ).fetchone()['c']
 
     except Exception as e:
         logging.error(f"ops_australia_pathway: {e}")
