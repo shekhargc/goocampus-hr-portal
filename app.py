@@ -22023,6 +22023,75 @@ def ensure_leave_group_column():
         logging.error(f"ensure_leave_group_column: {e}")
 
 
+# Multi-pathway migration (added 2026-05-31)
+# Adds `pathway` column to every ops_* table so the same tables can serve
+# PLAB, Australia, UAE, Consulting, etc. without mixing data.
+# Existing rows are backfilled to pathway='plab' (current default).
+OPS_PATHWAY_TABLES = [
+    'ops_academic_details',
+    'ops_call_notes',
+    'ops_coaching',
+    'ops_english_logins',
+    'ops_epic_registration',
+    'ops_gmc_registration',
+    'ops_mentorship',
+    'ops_ngo_activities',
+    'ops_online_courses',
+    'ops_online_subscriptions',
+    'ops_payments',
+    'ops_research_publication',
+    'ops_test_bookings',
+    'ops_uk_cab_bookings',
+    'ops_uk_observerships',
+    'ops_uk_visa_travel',
+    'ops_webinars_conferences',
+]
+
+
+def ensure_pathway_columns_on_ops_tables():
+    """Migration: add `pathway` TEXT column to every ops_* table.
+
+    Idempotent — safe to run on every boot:
+      1. Try ALTER TABLE x ADD COLUMN pathway TEXT (no-op if column exists).
+      2. Backfill existing rows: UPDATE x SET pathway='plab' WHERE pathway IS NULL.
+
+    Why on every boot: matches the existing pattern (ensure_leave_group_column,
+    ensure_section_permissions_table, etc.). Survives DB resets and zero-downtime
+    deploys without needing a separate migration runner.
+    """
+    for table in OPS_PATHWAY_TABLES:
+        conn = get_db()
+        try:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN pathway TEXT")
+                conn.commit()
+                logging.info(f"Migration: added pathway column to {table}")
+            except Exception:
+                # Column already exists, or table missing — both are fine on a fresh boot.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+            # Backfill existing rows (no-op once everything has a value).
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET pathway = 'plab' WHERE pathway IS NULL"
+                )
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"Migration backfill skipped for {table}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_sales_crm_tables()
@@ -22030,6 +22099,7 @@ ensure_kra_tables()
 ensure_notification_tables()
 ensure_budget_tables()
 ensure_ops_tables()
+ensure_pathway_columns_on_ops_tables()
 
 # One-time Excel import: load latest PLAB client data from Excel if available
 def _import_excel_clients_once():
