@@ -18649,87 +18649,8 @@ def ops_observerships_delete(rid):
 
 # ─────────────────────────────────────────────────────────
 #  OPERATIONS – NGO Activities
+#  Migrated to routes/operations/ngo.py (see register_operations_modules at end of file).
 # ─────────────────────────────────────────────────────────
-
-@app.route('/operations/ngo-activities')
-@admin_required
-def ops_ngo_list():
-    conn = get_db()
-    search = request.args.get('q', '')
-    try:
-        sql = '''SELECT n.*, p.first_name, p.last_name, p.prefix
-                 FROM ops_ngo_activities n
-                 LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
-                 WHERE 1=1'''
-        params = []
-        if search:
-            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.ngo_vendor_name ILIKE ?
-                OR p.registration_number ILIKE ?
-                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
-            params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY n.created_at DESC'
-        records = conn.execute(sql, params).fetchall()
-    except Exception as e:
-        logging.error(f"ops_ngo_list: {e}")
-        records = []
-    conn.close()
-    return render_template('ops_ngo_list.html', records=records, search=search,
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/add', methods=['GET', 'POST'])
-@admin_required
-def ops_ngo_add():
-    conn = get_db()
-    if request.method == 'POST':
-        f = request.form
-        conn.execute('''INSERT INTO ops_ngo_activities (
-            registration_number, ngo_vendor_name, activity_type,
-            batch_name_no, activity_start_date, created_by
-        ) VALUES (?,?,?,?,?,?)''', (
-            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
-            f.get('batch_name_no'), f.get('activity_start_date'), session.get('user_id', 0)
-        ))
-        conn.commit(); conn.close()
-        flash('NGO Activity record added', 'success')
-        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
-    conn.close()
-    pre_reg = request.args.get('client', '')
-    return render_template('ops_ngo_form.html', record=None,
-                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg=pre_reg,
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/<int:rid>/edit', methods=['GET', 'POST'])
-@admin_required
-def ops_ngo_edit(rid):
-    conn = get_db()
-    record = conn.execute("SELECT n.*, p.first_name, p.last_name, p.prefix FROM ops_ngo_activities n LEFT JOIN plab_clients p ON n.registration_number=p.registration_number WHERE n.id=?", (rid,)).fetchone()
-    if not record:
-        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_ngo_list'))
-    if request.method == 'POST':
-        f = request.form
-        conn.execute('''UPDATE ops_ngo_activities SET
-            registration_number=?, ngo_vendor_name=?, activity_type=?,
-            batch_name_no=?, activity_start_date=? WHERE id=?''', (
-            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
-            f.get('batch_name_no'), f.get('activity_start_date'), rid
-        ))
-        conn.commit(); conn.close()
-        flash('NGO Activity record updated', 'success')
-        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
-    conn.close()
-    return render_template('ops_ngo_form.html', record=record,
-                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg='',
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/<int:rid>/delete', methods=['POST'])
-@admin_required
-def ops_ngo_delete(rid):
-    conn = get_db(); conn.execute("DELETE FROM ops_ngo_activities WHERE id=?", (rid,)); conn.commit(); conn.close()
-    flash('NGO Activity record deleted', 'success')
-    return redirect(request.args.get('next') or url_for('ops_ngo_list'))
 
 
 # ─────────────────────────────────────────────────────────
@@ -28707,6 +28628,14 @@ def wa_webhook():
 @login_required
 def landing_pages():
     return render_template('landing_pages.html', active_section='company')
+
+
+# ─────────────────────────────────────────────────────────
+#  Register migrated Operations sub-area modules
+#  Each module owns a slice of /operations/* (see routes/operations/__init__.py).
+# ─────────────────────────────────────────────────────────
+from routes.operations import register_operations_modules
+register_operations_modules(app)
 
 
 if __name__ == '__main__':
