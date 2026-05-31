@@ -22085,6 +22085,42 @@ OPS_PATHWAY_TABLES = [
 ]
 
 
+def ensure_pathway_column_on_plab_clients():
+    """Migration: add `pathway` TEXT column to plab_clients + backfill.
+
+    User locked decision 2026-05-31: Australia clients live in plab_clients
+    with pathway='australia' (legacy PLAB model extended with a pathway
+    column). The Excel schema matches plab_clients almost 1:1 (50 columns).
+
+    Existing PLAB rows backfilled to pathway='plab'. Idempotent on reboot.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN pathway TEXT")
+            conn.commit()
+            logging.info("Migration: added pathway column to plab_clients")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        try:
+            conn.execute("UPDATE plab_clients SET pathway = 'plab' WHERE pathway IS NULL")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"Migration backfill skipped for plab_clients: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 def ensure_pathway_columns_on_ops_tables():
     """Migration: add `pathway` TEXT column to every ops_* table.
 
@@ -22138,6 +22174,7 @@ ensure_budget_tables()
 ensure_ops_tables()
 ensure_pathway_columns_on_ops_tables()
 ensure_pathway_column_on_lookup_options()
+ensure_pathway_column_on_plab_clients()
 
 # One-time Excel import: load latest PLAB client data from Excel if available
 def _import_excel_clients_once():
@@ -22331,6 +22368,15 @@ if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
     shutil.copy2(_excel_src, _excel_dst)
 
 _import_excel_clients_once()
+
+# ── One-time import: Australia clients from GC_AUS_Registration_Report.xlsx ──
+# Same upsert-by-reg-number pattern as PLAB. Sets pathway='australia' on every
+# row. Skips silently if Excel file or marker says we're already up to date.
+try:
+    from import_australia_clients import run_import_australia_clients_once
+    run_import_australia_clients_once(get_db)
+except Exception as _au_err:
+    logging.error(f"Australia client import failed: {_au_err}")
 
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():
