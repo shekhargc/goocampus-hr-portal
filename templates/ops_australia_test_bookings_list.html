@@ -1,0 +1,185 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Australia Test Bookings &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .page-head {
+        display: flex; justify-content: space-between; align-items: end;
+        flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .page-head h1 {
+        margin: 0; font-size: 1.5rem; color: var(--navy); font-weight: 700;
+    }
+    .page-head .sub {
+        font-size: 0.85rem; color: var(--gray-500); margin-top: 0.25rem;
+    }
+    .page-head .badge {
+        display: inline-block; background: var(--orange); color: white;
+        padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem;
+        font-weight: 700; margin-left: 0.5rem; vertical-align: middle;
+    }
+
+    .filter-bar {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; padding: 0.9rem 1rem;
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+        margin-bottom: 1.25rem;
+    }
+    .filter-bar input, .filter-bar select {
+        padding: 0.5rem 0.65rem; font-size: 0.88rem;
+        border: 1px solid var(--gray-300); border-radius: 0.4rem;
+        background: white; color: var(--navy);
+    }
+    .filter-bar input[type=search] { flex: 1 1 240px; }
+    .filter-bar select { min-width: 150px; }
+    .filter-bar button {
+        padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600;
+        border-radius: 0.4rem; border: none; cursor: pointer;
+        background: var(--orange); color: white;
+    }
+    .filter-bar a.clear {
+        font-size: 0.82rem; color: var(--gray-500); text-decoration: none;
+    }
+
+    .table-card {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td {
+        text-align: left; padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    th {
+        background: var(--gray-50); font-size: 0.72rem; color: var(--gray-500);
+        font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+        position: sticky; top: 0; z-index: 2;
+    }
+    tbody tr:hover { background: var(--gray-50); }
+    .reg { font-family: ui-monospace, Menlo, Monaco, monospace; font-size: 0.78rem; color: var(--navy); font-weight: 600; }
+    .badge-pill {
+        display: inline-block; padding: 0.15rem 0.55rem;
+        border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .b-booked { background: #DBEAFE; color: #1D4ED8; }
+    .b-attended { background: #D1FAE5; color: #065F46; }
+    .b-rescheduled { background: #FEF3C7; color: #92400E; }
+    .b-cancelled { background: #FEE2E2; color: #B91C1C; }
+    .b-passed { background: #DCFCE7; color: #166534; }
+    .b-failed { background: #FEE2E2; color: #B91C1C; }
+    .b-default { background: #F3F4F6; color: #4B5563; }
+
+    .empty {
+        text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.95rem;
+    }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+    <div>
+        <h1>Test Bookings <span class="badge">AMC</span></h1>
+        <div class="sub">{{ total }} booking{{ '' if total == 1 else 's' }} for Australia Pathway clients</div>
+    </div>
+    <div>
+        <a href="{{ url_for('ops_australia_pathway') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none">
+            &larr; Back to dashboard
+        </a>
+    </div>
+</div>
+
+<form class="filter-bar" method="get" action="{{ url_for('ops_australia_test_bookings_list') }}">
+    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, or test centre…">
+    <select name="exam">
+        <option value="">All exams</option>
+        {% for e in exams %}
+            <option value="{{ e }}" {% if e == exam_filter %}selected{% endif %}>{{ e }}</option>
+        {% endfor %}
+    </select>
+    <select name="status">
+        <option value="">All statuses</option>
+        {% for s in statuses %}
+            <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+    {% if search or exam_filter or status_filter or client_reg %}
+    <a href="{{ url_for('ops_australia_test_bookings_list') }}" class="clear">Clear</a>
+    {% endif %}
+</form>
+
+<div class="table-card">
+    {% if records %}
+    <table>
+        <thead>
+            <tr>
+                <th>Reg. No.</th>
+                <th>Candidate</th>
+                <th>Exam</th>
+                <th>Method</th>
+                <th>Booking</th>
+                <th>Exam Date</th>
+                <th>Status</th>
+                <th>Result</th>
+                <th>Score</th>
+                <th>City / State</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in records %}
+            <tr>
+                <td><span class="reg">{{ r.registration_number or '—' }}</span></td>
+                <td>
+                    {% if r.first_name or r.last_name %}
+                        {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                    {% else %}
+                        <span style="color:var(--gray-400)">(client missing)</span>
+                    {% endif %}
+                </td>
+                <td>{{ r.exam or '—' }}</td>
+                <td>{{ r.exam_type or '—' }}</td>
+                <td>{{ r.booking_date or '—' }}</td>
+                <td>{{ r.exam_date or '—' }}</td>
+                <td>
+                    {% set s = (r.exam_status or '')|lower %}
+                    {% set cls = 'b-default' %}
+                    {% if 'booked' in s %}{% set cls = 'b-booked' %}
+                    {% elif 'attended' in s %}{% set cls = 'b-attended' %}
+                    {% elif 'reschedul' in s %}{% set cls = 'b-rescheduled' %}
+                    {% elif 'cancel' in s %}{% set cls = 'b-cancelled' %}
+                    {% endif %}
+                    {% if r.exam_status %}
+                        <span class="badge-pill {{ cls }}">{{ r.exam_status }}</span>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>
+                    {% set r2 = (r.exam_result or '')|lower %}
+                    {% set cls2 = 'b-default' %}
+                    {% if 'pass' in r2 %}{% set cls2 = 'b-passed' %}
+                    {% elif 'fail' in r2 %}{% set cls2 = 'b-failed' %}
+                    {% endif %}
+                    {% if r.exam_result %}
+                        <span class="badge-pill {{ cls2 }}">{{ r.exam_result }}</span>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+                <td>{{ r.score or '—' }}</td>
+                <td>{{ r.city_state or '—' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="empty">
+            No test bookings match the current filter.
+            {% if search or exam_filter or status_filter or client_reg %}
+                <br><a href="{{ url_for('ops_australia_test_bookings_list') }}" style="color:var(--orange)">Clear filters</a> to see all.
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

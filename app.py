@@ -16351,10 +16351,12 @@ def ops_test_bookings_list():
     exam_filter = request.args.get('exam', '')
     status_filter = request.args.get('status', '')
     try:
+        # Scope to PLAB only. Australia (and any future pathway) lives in the
+        # same table but is read via /operations/australia/test-bookings etc.
         sql = '''SELECT t.*, p.first_name, p.last_name, p.prefix
                  FROM ops_test_bookings t
                  LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(t.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql += ' AND t.registration_number = ?'
@@ -22377,6 +22379,13 @@ try:
     run_import_australia_clients_once(get_db)
 except Exception as _au_err:
     logging.error(f"Australia client import failed: {_au_err}")
+
+# ── One-time import: Australia test bookings (links to plab_clients by reg num) ──
+try:
+    from import_australia_test_bookings import run_import_australia_test_bookings_once
+    run_import_australia_test_bookings_once(get_db)
+except Exception as _au_tb_err:
+    logging.error(f"Australia test-bookings import failed: {_au_tb_err}")
 
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():

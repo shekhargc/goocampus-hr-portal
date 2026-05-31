@@ -111,6 +111,41 @@
 
     .reg-link { color: var(--navy); text-decoration: none; font-weight: 600; }
     .reg-link:hover { color: var(--orange); }
+
+    .section-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+        gap: 0.85rem;
+        margin: 1.5rem 0;
+    }
+    .section-tile {
+        display: block;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1rem 1.1rem;
+        text-decoration: none;
+        color: var(--navy);
+        transition: border-color 0.15s, transform 0.15s;
+    }
+    .section-tile:hover {
+        border-color: var(--orange);
+        transform: translateY(-1px);
+    }
+    .section-tile .stl {
+        font-size: 0.72rem; color: var(--gray-500); font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .section-tile .stn {
+        font-size: 1rem; font-weight: 700; margin-top: 0.2rem;
+    }
+    .section-tile .stc {
+        font-size: 0.78rem; color: var(--gray-500); margin-top: 0.15rem;
+    }
+    .section-tile.disabled {
+        opacity: 0.5; pointer-events: none; cursor: not-allowed;
+    }
+    .section-tile.disabled:hover { transform: none; border-color: var(--gray-200); }
 </style>
 {% endblock %}
 
@@ -118,6 +153,47 @@
 <div class="pathway-hero">
     <h1><span>{{ pathway_name }}</span></h1>
     <p>AMC (Australian Medical Council) pathway. Clients, training, EPIC, online courses, payments, call notes &amp; more — all filtered to <code style="color:#fff">pathway = australia</code>.</p>
+</div>
+
+<h2 style="margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;">Sections</h2>
+<div class="section-grid">
+    <a class="section-tile" href="{{ url_for('ops_australia_test_bookings_list') }}">
+        <div class="stl">Test Bookings</div>
+        <div class="stn">AMC exams &amp; English</div>
+        <div class="stc">Click to view all &rarr;</div>
+    </a>
+    <span class="section-tile disabled">
+        <div class="stl">Academic Details</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">EPIC Registration</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Training</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Online Courses</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Payments</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Call Notes</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Research &amp; Publication</div>
+        <div class="stn">Coming soon</div>
+    </span>
+    <span class="section-tile disabled">
+        <div class="stl">Webinars &amp; Conferences</div>
+        <div class="stn">Coming soon</div>
+    </span>
 </div>
 
 <div class="stat-grid">
