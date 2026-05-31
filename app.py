@@ -13375,65 +13375,68 @@ def ops_plab_pathway_dashboard():
         from datetime import date, timedelta
         today = date.today().isoformat()
 
+        # Every count below is now scoped to pathway='plab' so Australia rows
+        # never leak into the PLAB dashboard. COALESCE handles the rare row
+        # whose backfill missed.
+        PLAB = "COALESCE(pathway, 'plab') = 'plab'"
+
         # ── Total clients ──
-        total_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
-        active_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process'").fetchone()['c']
+        total_clients = conn.execute(f"SELECT COUNT(*) as c FROM plab_clients WHERE {PLAB}").fetchone()['c']
+        active_clients = conn.execute(f"SELECT COUNT(*) as c FROM plab_clients WHERE {PLAB} AND account_status = 'In Process'").fetchone()['c']
 
         # ── Account status breakdown (matches client profile on PLAB Pathway page) ──
-        status_rows = conn.execute("SELECT account_status, COUNT(*) as c FROM plab_clients GROUP BY account_status").fetchall()
+        status_rows = conn.execute(f"SELECT account_status, COUNT(*) as c FROM plab_clients WHERE {PLAB} GROUP BY account_status").fetchall()
         status_counts = {r['account_status']: r['c'] for r in status_rows}
 
         # ── Current stage breakdown (active / In Process clients only) ──
-        stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process' GROUP BY current_stage").fetchall()
+        stage_rows = conn.execute(f"SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE {PLAB} AND account_status = 'In Process' GROUP BY current_stage").fetchall()
         stage_counts = {r['current_stage']: r['c'] for r in stage_rows}
 
         # ── Coaching ──
-        coaching_total = conn.execute("SELECT COUNT(*) as c FROM ops_coaching").fetchone()['c']
-        coaching_ongoing = conn.execute("SELECT COUNT(*) as c FROM ops_coaching WHERE coaching_status = 'On Going'").fetchone()['c']
+        coaching_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_coaching WHERE {PLAB}").fetchone()['c']
+        coaching_ongoing = conn.execute(f"SELECT COUNT(*) as c FROM ops_coaching WHERE {PLAB} AND coaching_status = 'On Going'").fetchone()['c']
 
         # ── Test Bookings ──
-        test_total = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings").fetchone()['c']
-        upcoming_tests = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked'", (today,)).fetchone()['c']
-        # PLAB 1 upcoming
-        plab1_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 1'", (today,)).fetchone()['c']
-        # PLAB 2 upcoming
-        plab2_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 2'", (today,)).fetchone()['c']
-        # Awaiting results (attended but no result)
-        awaiting_results = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')").fetchone()['c']
-        # Recent passes (last 30 days)
+        test_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB}").fetchone()['c']
+        upcoming_tests = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked'", (today,)).fetchone()['c']
+        plab1_upcoming = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 1'", (today,)).fetchone()['c']
+        plab2_upcoming = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 2'", (today,)).fetchone()['c']
+        awaiting_results = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')").fetchone()['c']
         thirty_ago = (date.today() - timedelta(days=30)).isoformat()
-        recent_passes = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_result = 'Passed' AND exam_result_date >= ?", (thirty_ago,)).fetchone()['c']
+        recent_passes = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_result = 'Passed' AND exam_result_date >= ?", (thirty_ago,)).fetchone()['c']
 
         # ── EPIC Registration ──
-        epic_total = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration").fetchone()['c']
-        epic_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'In Process'").fetchone()['c']
-        epic_sent_gmc = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'Sent to GMC'").fetchone()['c']
+        epic_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB}").fetchone()['c']
+        epic_in_process = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB} AND epic_status = 'In Process'").fetchone()['c']
+        epic_sent_gmc = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB} AND epic_status = 'Sent to GMC'").fetchone()['c']
 
         # ── GMC Registration ──
-        gmc_total = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration").fetchone()['c']
-        gmc_completed = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE gmc_setup = 'Completed'").fetchone()['c']
-        gmc_license_received = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE license = 'Received'").fetchone()['c']
+        gmc_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB}").fetchone()['c']
+        gmc_completed = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB} AND gmc_setup = 'Completed'").fetchone()['c']
+        gmc_license_received = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB} AND license = 'Received'").fetchone()['c']
 
         # ── Research & Publication ──
-        research_total = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication").fetchone()['c']
-        research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Published'").fetchone()['c']
-        research_completed = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Completed'").fetchone()['c']
-        research_started = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Started'").fetchone()['c']
+        research_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB}").fetchone()['c']
+        research_published = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Research Published'").fetchone()['c']
+        research_completed = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Research Completed'").fetchone()['c']
+        research_started = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Started'").fetchone()['c']
 
         # ── UK Visa & Travel ──
-        visa_total = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel").fetchone()['c']
-        visa_accepted = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'Accepted'").fetchone()['c']
-        visa_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'In Process'").fetchone()['c']
+        visa_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB}").fetchone()['c']
+        visa_accepted = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB} AND visa_status = 'Accepted'").fetchone()['c']
+        visa_in_process = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB} AND visa_status = 'In Process'").fetchone()['c']
 
         # ── Academic Details ──
-        academic_total = conn.execute("SELECT COUNT(*) as c FROM ops_academic_details").fetchone()['c']
+        academic_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_academic_details WHERE {PLAB}").fetchone()['c']
 
         # ── Upcoming exams list (next 5) ──
         upcoming_exams = conn.execute("""
             SELECT t.*, p.prefix, p.first_name, p.last_name
             FROM ops_test_bookings t
             JOIN plab_clients p ON p.registration_number = t.registration_number
-            WHERE t.exam_date >= ? AND t.exam_status = 'Booked'
+            WHERE COALESCE(t.pathway, 'plab') = 'plab'
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+              AND t.exam_date >= ? AND t.exam_status = 'Booked'
             ORDER BY t.exam_date ASC LIMIT 5
         """, (today,)).fetchall()
 
@@ -14327,7 +14330,7 @@ def ops_onboarding_list():
                     o.id as onboarding_id
              FROM plab_clients p
              LEFT JOIN client_onboarding o ON o.client_id = p.id
-             WHERE 1=1"""
+             WHERE COALESCE(p.pathway, 'plab') = 'plab' """
     params = []
     if status_filter:
         if status_filter == 'Pending':
@@ -14340,7 +14343,7 @@ def ops_onboarding_list():
         params.extend([f'%{search}%'] * 4)
 
     # Count
-    count_sql = "SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE 1=1"
+    count_sql = "SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE COALESCE(p.pathway, 'plab') = 'plab'"
     count_params = []
     if status_filter:
         if status_filter == 'Pending':
@@ -14367,7 +14370,7 @@ def ops_onboarding_list():
     kanban_counts = {}
     for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
         if st == 'Pending':
-            c = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE o.onboarding_status IS NULL OR o.onboarding_status = 'Pending'").fetchone()['cnt']
+            c = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE COALESCE(p.pathway, 'plab') = 'plab' AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')").fetchone()['cnt']
         else:
             c = conn.execute("SELECT COUNT(*) as cnt FROM client_onboarding WHERE onboarding_status = ?", (st,)).fetchone()['cnt']
         kanban_counts[st] = c
@@ -15027,7 +15030,9 @@ def ops_plab_list():
         status_filter = request.args.get('status_filter', '') or request.args.get('status', '')
         stage_filter = request.args.get('stage_filter', '') or request.args.get('stage', '')
 
-        sql = "SELECT * FROM plab_clients WHERE 1=1"
+        # PLAB Registration list — strictly scoped to pathway='plab' so
+        # Australia rows never appear here.
+        sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway, 'plab') = 'plab'"
         params = []
         if search:
             sql += """ AND (
@@ -15048,12 +15053,15 @@ def ops_plab_list():
         sql += " ORDER BY id DESC"
         clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
-        # Get actual payment totals per client from ops_payments
+        # Payment totals scoped to PLAB too so the Total Paid card on this
+        # page doesn't include Australia payments.
         payment_totals = {}
         pay_rows = conn.execute("""SELECT registration_number,
             COALESCE(SUM(amount_paid), 0) as paid,
             COALESCE(SUM(gst_paid), 0) as gst
-            FROM ops_payments GROUP BY registration_number""").fetchall()
+            FROM ops_payments
+            WHERE COALESCE(pathway, 'plab') = 'plab'
+            GROUP BY registration_number""").fetchall()
         for pr in pay_rows:
             payment_totals[pr['registration_number']] = {
                 'paid': float(pr['paid'] or 0),
@@ -16111,7 +16119,7 @@ def ops_coaching_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_coaching c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql += ' AND c.registration_number = ?'
@@ -16344,7 +16352,7 @@ def ops_english_logins_list():
         sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
                  FROM ops_english_logins e
                  LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(e.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
@@ -16696,7 +16704,7 @@ def ops_call_notes_list():
         sql_base = '''SELECT n.*, p.first_name, p.last_name, p.prefix
                       FROM ops_call_notes n
                       LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
-                      WHERE 1=1'''
+                      WHERE COALESCE(n.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql_base += ' AND n.registration_number ILIKE ?'
@@ -16800,7 +16808,8 @@ def ops_call_notes_tracker():
                    MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.contact_type END) as last_contact_type
             FROM plab_clients p
             LEFT JOIN ops_call_notes n ON p.registration_number = n.registration_number
-            WHERE p.account_status = 'In Process'
+            WHERE COALESCE(p.pathway, 'plab') = 'plab'
+              AND p.account_status = 'In Process'
         '''
         params = []
 
@@ -16931,7 +16940,8 @@ def ops_call_notes_not_contacted():
                    COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) as contacted_count
             FROM plab_clients p
             INNER JOIN ops_call_notes n ON p.registration_number = n.registration_number
-            WHERE p.account_status = 'In Process'
+            WHERE COALESCE(p.pathway, 'plab') = 'plab'
+              AND p.account_status = 'In Process'
               AND EXISTS (SELECT 1 FROM ops_call_notes n2 WHERE n2.registration_number = p.registration_number AND n2.contacted_status = 'No')
         '''
         params = []
@@ -17193,7 +17203,7 @@ def ops_payments_list():
         sql_base = '''SELECT p.*, c.first_name, c.last_name, c.prefix
                       FROM ops_payments p
                       LEFT JOIN plab_clients c ON p.registration_number = c.registration_number
-                      WHERE 1=1'''
+                      WHERE COALESCE(p.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql_base += ' AND p.registration_number ILIKE ?'
@@ -17374,7 +17384,7 @@ def ops_epic_list():
         sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
                  FROM ops_epic_registration e
                  LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(e.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND e.epic_registration = ?'
@@ -17508,7 +17518,7 @@ def ops_gmc_list():
         sql = '''SELECT g.*, p.first_name, p.last_name, p.prefix
                  FROM ops_gmc_registration g
                  LEFT JOIN plab_clients p ON g.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(g.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND g.gmc_setup = ?'
@@ -17632,7 +17642,7 @@ def ops_research_list():
         sql = '''SELECT r.*, p.first_name, p.last_name, p.prefix
                  FROM ops_research_publication r
                  LEFT JOIN plab_clients p ON r.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(r.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND r.research_status = ?'
@@ -17822,7 +17832,7 @@ def ops_subscriptions_list():
         sql = '''SELECT s.*, p.first_name, p.last_name, p.prefix
                  FROM ops_online_subscriptions s
                  LEFT JOIN plab_clients p ON s.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(s.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR s.online_subscription ILIKE ?
@@ -17997,7 +18007,7 @@ def ops_webinars_list():
         sql = '''SELECT w.*, p.first_name, p.last_name, p.prefix
                  FROM ops_webinars_conferences w
                  LEFT JOIN plab_clients p ON w.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(w.pathway, 'plab') = 'plab' '''
         params = []
         if type_filter:
             sql += ' AND w.event_type = ?'
@@ -18189,7 +18199,7 @@ def ops_visa_list():
         sql = '''SELECT v.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_visa_travel v
                  LEFT JOIN plab_clients p ON v.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(v.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND v.visa_application_status = ?'
@@ -18432,7 +18442,7 @@ def ops_academic_list():
         sql = '''SELECT a.*, p.first_name, p.last_name, p.prefix
                  FROM ops_academic_details a
                  LEFT JOIN plab_clients p ON a.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(a.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR a.img_medical_college ILIKE ?
@@ -18548,7 +18558,7 @@ def ops_courses_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_online_courses c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND c.course_status = ?'
@@ -18660,7 +18670,7 @@ def ops_observerships_list():
         sql = '''SELECT o.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_observerships o
                  LEFT JOIN plab_clients p ON o.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(o.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR o.hospital_name ILIKE ?
@@ -18755,7 +18765,7 @@ def ops_mentorship_list():
         sql = '''SELECT m.*, p.first_name, p.last_name, p.prefix
                  FROM ops_mentorship m
                  LEFT JOIN plab_clients p ON m.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(m.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR m.program_provider ILIKE ?
@@ -18858,7 +18868,7 @@ def ops_cab_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_cab_bookings c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.vendor ILIKE ?
