@@ -923,16 +923,13 @@ def client_register(token):
             conn.commit()
             acct_id = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()['id']
 
-        # Generate registration number: GC-{PRODUCT_CODE}-{YYYYMM}-{SEQ}
-        prod_code = (product['name'][:3] if product else 'GEN').upper()
-        from datetime import datetime
-        ym = datetime.now().strftime('%Y%m')
-        seq_row = conn.execute(
-            "SELECT COUNT(*) as c FROM client_registrations WHERE registration_number LIKE ?",
-            (f'GC-{prod_code}-{ym}-%',)
-        ).fetchone()
-        seq = (seq_row['c'] if seq_row else 0) + 1
-        reg_num = f"GC-{prod_code}-{ym}-{seq:04d}"
+        # Generate registration number using per-pathway format.
+        # PLAB / UK   -> GCUKIP/<FY>/<NNN>
+        # Australia   -> GCAUSIP/<FY>/<NNN>
+        # UAE         -> GCUAEIP/<FY>/<NNN>
+        # Consulting  -> GCCONS/<FY>/<NNN>
+        from core.registration import next_registration_number
+        reg_num = next_registration_number(conn, product['name'] if product else None)
 
         conn.execute('''INSERT INTO client_registrations
             (account_id, invitation_id, product_id, registration_number, first_name, last_name, mobile, email, form_status, current_step)
