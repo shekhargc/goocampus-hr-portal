@@ -482,11 +482,29 @@
     <div class="settings-header">
         <div>
             <h1>Field <span style="color: var(--orange);">Manager</span></h1>
+            <div style="font-size:0.82rem;color:var(--gray-500);margin-top:0.2rem;">
+                Manage dropdown options for the <strong>{{ (pathway_tabs|selectattr('slug','equalto',selected_pathway)|first).label }}</strong>.
+                Each pathway has its own set of values — they never mix.
+            </div>
         </div>
-        <a href="/operations/plab-dashboard" class="settings-header-back">
+        <a href="/operations/{% if selected_pathway == 'australia' %}australia-pathway{% else %}plab-dashboard{% endif %}" class="settings-header-back">
             <span>&larr;</span> Back to Dashboard
         </a>
     </div>
+
+    <!-- ── Pathway tabs ── -->
+    <div style="display:flex;gap:0.4rem;margin-bottom:1.25rem;flex-wrap:wrap;background:white;border:1px solid var(--gray-200);border-radius:0.6rem;padding:0.35rem;">
+        {% for tab in pathway_tabs %}
+        <a href="?pathway={{ tab.slug }}"
+           data-pathway="{{ tab.slug }}"
+           style="text-decoration:none;padding:0.45rem 0.85rem;border-radius:0.4rem;font-size:0.85rem;font-weight:600;
+                  {% if tab.slug == selected_pathway %}background:var(--orange);color:white;{% else %}color:var(--gray-600);background:transparent;{% endif %}">
+            <span style="margin-right:4px">{{ tab.flag }}</span>{{ tab.label }}
+        </a>
+        {% endfor %}
+    </div>
+    <!-- Selected pathway exposed for the add-option AJAX call -->
+    <input type="hidden" id="fm-selected-pathway" value="{{ selected_pathway }}">
 
     <div class="settings-layout">
         <!-- ── Sidebar ── -->
@@ -732,10 +750,15 @@
         const category = inputElement.dataset.category;
         if (!value) { alert('Please enter a value'); return; }
 
+        // Pathway scope so PLAB and Australia dropdowns never mix.
+        // The selected pathway is the orange tab at the top of the page.
+        const pathwayInput = document.getElementById('fm-selected-pathway');
+        const pathway = pathwayInput ? pathwayInput.value : 'plab';
+
         fetch('/operations/plab-settings/add', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ category, value })
+            body: JSON.stringify({ category, value, pathway })
         })
         .then(r => r.json())
         .then(data => {

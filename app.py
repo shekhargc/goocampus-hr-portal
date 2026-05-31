@@ -13561,7 +13561,23 @@ def ops_plab_settings():
 @app.route('/operations/field-manager')
 @login_required
 def ops_field_manager():
-    """Unified Field Manager — manage all lookup fields and options."""
+    """Unified Field Manager — manage all lookup fields and options.
+
+    Pathway-aware: the ?pathway= query param scopes the lookup options
+    shown so PLAB and Australia (and future pathways) never mix. Default
+    is 'plab' for back-compat with existing bookmarks / shortcuts.
+    """
+    # Pathway selector. Only show known pathways in the picker.
+    PATHWAY_TABS = [
+        {'slug': 'plab',       'label': 'UK / PLAB Pathway', 'flag': '\U0001f1ec\U0001f1e7'},
+        {'slug': 'australia',  'label': 'Australia Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
+        {'slug': 'uae',        'label': 'UAE Pathway',       'flag': '\U0001f1e6\U0001f1ea'},
+        {'slug': 'consulting', 'label': 'Standard Consulting','flag': '\U0001f9ed'},
+    ]
+    selected_pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if selected_pathway not in {t['slug'] for t in PATHWAY_TABS}:
+        selected_pathway = 'plab'
+
     conn = get_db()
     try:
         # Fetch all field_registry rows
@@ -13569,9 +13585,13 @@ def ops_field_manager():
             "SELECT * FROM field_registry ORDER BY section, display_order, id"
         ).fetchall()
 
-        # Fetch ALL lookup_options in one query
+        # Fetch lookup_options scoped to the selected pathway.
+        # Existing rows backfilled to pathway='plab' in Phase 1 migration, so
+        # the default selection keeps showing the same data PLAB admins always saw.
         all_options = conn.execute(
-            "SELECT * FROM lookup_options ORDER BY category, sort_order, id"
+            "SELECT * FROM lookup_options WHERE COALESCE(pathway, 'plab') = ? "
+            "ORDER BY category, sort_order, id",
+            (selected_pathway,),
         ).fetchall()
 
         # Group options by category
@@ -13617,7 +13637,10 @@ def ops_field_manager():
                              vendor_linked_categories=list(VENDOR_LOOKUP_MAP.keys()),
                              kit_items=kit_items,
                              email_template=email_tpl,
-                             active_ops_page='settings')
+                             pathway_tabs=PATHWAY_TABS,
+                             selected_pathway=selected_pathway,
+                             active_ops_page='settings',
+                             active_pathway=selected_pathway)
     except Exception as e:
         logging.error(f"ops_field_manager error: {e}")
         logging.exception("Full traceback for ops_field_manager:")
@@ -13629,29 +13652,42 @@ def ops_field_manager():
 @app.route('/operations/plab-settings/add', methods=['POST'])
 @login_required
 def ops_plab_settings_add():
-    """Add a new lookup option."""
+    """Add a new lookup option. Scoped to the requested pathway."""
     try:
         category = request.json.get('category', '').strip()
         value = request.json.get('value', '').strip()
+        # Pathway scope — default 'plab' for back-compat with callers that
+        # don't pass the new field. Frontend will pass the currently-selected
+        # pathway tab so PLAB and Australia dropdowns stay isolated.
+        pathway = (request.json.get('pathway') or 'plab').strip().lower()
+        if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+            pathway = 'plab'
 
         if not category or not value:
             return jsonify({'error': 'Category and value required'}), 400
 
         conn = get_db()
-        # Get max sort_order for this category
+        # Max sort_order WITHIN THIS PATHWAY ONLY — so adding to Australia
+        # doesn't depend on PLAB's counter.
         max_order = conn.execute(
-            "SELECT MAX(sort_order) as m FROM lookup_options WHERE category = ?",
-            (category,)
+            "SELECT MAX(sort_order) as m FROM lookup_options "
+            "WHERE category = ? AND COALESCE(pathway, 'plab') = ?",
+            (category, pathway),
         ).fetchone()['m']
         max_order = (max_order or 0) + 1
 
         conn.execute(
-            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
-            (category, value, value, max_order)
+            "INSERT INTO lookup_options (category, label, value, sort_order, is_active, pathway) "
+            "VALUES (?, ?, ?, ?, TRUE, ?)",
+            (category, value, value, max_order, pathway),
         )
         conn.commit()
         # Get the new ID
-        result = conn.execute("SELECT id FROM lookup_options WHERE category = ? AND value = ? ORDER BY id DESC LIMIT 1", (category, value))
+        result = conn.execute(
+            "SELECT id FROM lookup_options WHERE category = ? AND value = ? AND COALESCE(pathway, 'plab') = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (category, value, pathway),
+        )
         row = result.fetchone()
         new_id = row['id'] if row else None
         conn.close()
@@ -13659,7 +13695,8 @@ def ops_plab_settings_add():
         return jsonify({
             'success': True,
             'id': new_id,
-            'message': f'Added {value} to {category}'
+            'pathway': pathway,
+            'message': f'Added {value} to {category} ({pathway})'
         })
     except Exception as e:
         logging.error(f"ops_plab_settings_add error: {e}")
