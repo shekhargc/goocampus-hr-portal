@@ -241,6 +241,104 @@ def ops_australia_test_bookings_list():
     )
 
 
+@admin_required
+def ops_australia_clients_list():
+    """Australia Registration — list plab_clients WHERE pathway='australia'.
+
+    This is what the Registration sidebar item links to when on Australia
+    Pathway. Mirrors the PLAB client list but filtered to the Australia
+    pathway and using the agent-built table template style.
+    """
+    user = get_user()
+    conn = get_db()
+
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    counsellor_filter = (request.args.get('counsellor', '') or '').strip()
+
+    records = []
+    statuses = []
+    stages = []
+    counsellors = []
+    total = 0
+
+    try:
+        sql = '''SELECT id, registration_number, registration_date,
+                        prefix, first_name, last_name, mobile, whatsapp1, email,
+                        city, state, account_status, current_stage,
+                        counsellor, plan_type, final_package, total_paid,
+                        lead_source, dob
+                   FROM plab_clients
+                  WHERE pathway = 'australia' '''
+        params = []
+        if status_filter:
+            sql += " AND account_status = ? "
+            params.append(status_filter)
+        if stage_filter:
+            sql += " AND current_stage = ? "
+            params.append(stage_filter)
+        if counsellor_filter:
+            sql += " AND counsellor = ? "
+            params.append(counsellor_filter)
+        if search:
+            sql += """ AND (
+                first_name LIKE ? OR last_name LIKE ? OR
+                registration_number LIKE ? OR mobile LIKE ? OR email LIKE ?
+            ) """
+            params.extend([f'%{search}%'] * 5)
+        sql += " ORDER BY id DESC "
+        records = conn.execute(sql, params).fetchall()
+        total = len(records)
+
+        statuses = [
+            r['account_status'] for r in conn.execute(
+                """SELECT DISTINCT account_status FROM plab_clients
+                    WHERE pathway = 'australia'
+                      AND account_status IS NOT NULL AND account_status != ''
+                    ORDER BY account_status"""
+            ).fetchall()
+        ]
+        stages = [
+            r['current_stage'] for r in conn.execute(
+                """SELECT DISTINCT current_stage FROM plab_clients
+                    WHERE pathway = 'australia'
+                      AND current_stage IS NOT NULL AND current_stage != ''
+                    ORDER BY current_stage"""
+            ).fetchall()
+        ]
+        counsellors = [
+            r['counsellor'] for r in conn.execute(
+                """SELECT DISTINCT counsellor FROM plab_clients
+                    WHERE pathway = 'australia'
+                      AND counsellor IS NOT NULL AND counsellor != ''
+                    ORDER BY counsellor"""
+            ).fetchall()
+        ]
+    except Exception as e:
+        logging.error(f"ops_australia_clients_list: {e}")
+        flash(f'Error loading Australia client list: {e}', 'error')
+    finally:
+        conn.close()
+
+    return render_template(
+        'ops_australia_clients_list.html',
+        user=user,
+        records=records,
+        total=total,
+        search=search,
+        status_filter=status_filter,
+        stage_filter=stage_filter,
+        counsellor_filter=counsellor_filter,
+        statuses=statuses,
+        stages=stages,
+        counsellors=counsellors,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-clients',
+        active_pathway='australia',
+    )
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app.
 
@@ -257,5 +355,11 @@ def register_routes(app):
         '/operations/australia/test-bookings',
         endpoint='ops_australia_test_bookings_list',
         view_func=ops_australia_test_bookings_list,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/clients',
+        endpoint='ops_australia_clients_list',
+        view_func=ops_australia_clients_list,
         methods=['GET'],
     )

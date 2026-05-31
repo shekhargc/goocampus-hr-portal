@@ -1,0 +1,179 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Australia Registration &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .page-head {
+        display: flex; justify-content: space-between; align-items: end;
+        flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .page-head h1 {
+        margin: 0; font-size: 1.5rem; color: var(--navy); font-weight: 700;
+    }
+    .page-head .sub {
+        font-size: 0.85rem; color: var(--gray-500); margin-top: 0.25rem;
+    }
+    .page-head .badge {
+        display: inline-block; background: var(--orange); color: white;
+        padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem;
+        font-weight: 700; margin-left: 0.5rem; vertical-align: middle;
+    }
+    .filter-bar {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; padding: 0.9rem 1rem;
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+        margin-bottom: 1.25rem;
+    }
+    .filter-bar input, .filter-bar select {
+        padding: 0.5rem 0.65rem; font-size: 0.88rem;
+        border: 1px solid var(--gray-300); border-radius: 0.4rem;
+        background: white; color: var(--navy);
+    }
+    .filter-bar input[type=search] { flex: 1 1 240px; }
+    .filter-bar select { min-width: 150px; }
+    .filter-bar button {
+        padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600;
+        border-radius: 0.4rem; border: none; cursor: pointer;
+        background: var(--orange); color: white;
+    }
+    .filter-bar a.clear {
+        font-size: 0.82rem; color: var(--gray-500); text-decoration: none;
+    }
+    .table-card {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td {
+        text-align: left; padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    th {
+        background: var(--gray-50); font-size: 0.72rem; color: var(--gray-500);
+        font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+        position: sticky; top: 0; z-index: 2;
+    }
+    tbody tr:hover { background: var(--gray-50); }
+    .reg { font-family: ui-monospace, Menlo, Monaco, monospace; font-size: 0.78rem; color: var(--navy); font-weight: 600; }
+    .badge-pill {
+        display: inline-block; padding: 0.15rem 0.55rem;
+        border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .b-in-process { background: #DBEAFE; color: #1D4ED8; }
+    .b-on-hold    { background: #FEF3C7; color: #92400E; }
+    .b-dropped    { background: #FEE2E2; color: #B91C1C; }
+    .b-completed  { background: #D1FAE5; color: #065F46; }
+    .b-default    { background: #F3F4F6; color: #4B5563; }
+    .pkg { font-weight: 600; color: var(--navy); }
+    .muted { color: var(--gray-400); }
+    .empty {
+        text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.95rem;
+    }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+    <div>
+        <h1>Registration <span class="badge">AMC</span></h1>
+        <div class="sub">{{ total }} Australia Pathway client{{ '' if total == 1 else 's' }}</div>
+    </div>
+    <div>
+        <a href="{{ url_for('ops_australia_pathway') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none">
+            &larr; Back to dashboard
+        </a>
+    </div>
+</div>
+
+<form class="filter-bar" method="get" action="{{ url_for('ops_australia_clients_list') }}">
+    <input type="search" name="q" value="{{ search }}" placeholder="Search name, reg no, mobile, email…">
+    <select name="status">
+        <option value="">All statuses</option>
+        {% for s in statuses %}
+            <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <select name="stage">
+        <option value="">All stages</option>
+        {% for s in stages %}
+            <option value="{{ s }}" {% if s == stage_filter %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <select name="counsellor">
+        <option value="">All counsellors</option>
+        {% for c in counsellors %}
+            <option value="{{ c }}" {% if c == counsellor_filter %}selected{% endif %}>{{ c }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+    {% if search or status_filter or stage_filter or counsellor_filter %}
+    <a href="{{ url_for('ops_australia_clients_list') }}" class="clear">Clear</a>
+    {% endif %}
+</form>
+
+<div class="table-card">
+    {% if records %}
+    <table>
+        <thead>
+            <tr>
+                <th>Reg. No.</th>
+                <th>Candidate</th>
+                <th>Mobile</th>
+                <th>City / State</th>
+                <th>Status</th>
+                <th>Stage</th>
+                <th>Counsellor</th>
+                <th style="text-align:right">Package</th>
+                <th style="text-align:right">Paid</th>
+                <th>Reg. Date</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in records %}
+            <tr>
+                <td><span class="reg">{{ r.registration_number or '—' }}</span></td>
+                <td>
+                    {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                    {% if r.email %}<div style="font-size:0.74rem;color:var(--gray-500)">{{ r.email }}</div>{% endif %}
+                </td>
+                <td>{{ r.mobile or r.whatsapp1 or '—' }}</td>
+                <td>
+                    {% if r.city or r.state %}
+                        {{ r.city or '' }}{% if r.city and r.state %}, {% endif %}{{ r.state or '' }}
+                    {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                <td>
+                    {% set cls = 'b-default' %}
+                    {% if r.account_status == 'In Process' %}{% set cls = 'b-in-process' %}
+                    {% elif r.account_status == 'On Hold' %}{% set cls = 'b-on-hold' %}
+                    {% elif 'Dropped' in (r.account_status or '') %}{% set cls = 'b-dropped' %}
+                    {% elif r.account_status == 'Completed' %}{% set cls = 'b-completed' %}
+                    {% endif %}
+                    {% if r.account_status %}
+                        <span class="badge-pill {{ cls }}">{{ r.account_status }}</span>
+                    {% else %}<span class="muted">—</span>{% endif %}
+                </td>
+                <td>{{ r.current_stage or '—' }}</td>
+                <td>{{ r.counsellor or '—' }}</td>
+                <td style="text-align:right" class="pkg">
+                    {% if r.final_package %}&#8377;{{ '{:,.0f}'.format(r.final_package) }}{% else %}—{% endif %}
+                </td>
+                <td style="text-align:right">
+                    {% if r.total_paid %}&#8377;{{ '{:,.0f}'.format(r.total_paid) }}{% else %}—{% endif %}
+                </td>
+                <td>{{ r.registration_date or '—' }}</td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="empty">
+            No Australia clients match the current filter.
+            {% if search or status_filter or stage_filter or counsellor_filter %}
+                <br><a href="{{ url_for('ops_australia_clients_list') }}" style="color:var(--orange)">Clear filters</a> to see all.
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

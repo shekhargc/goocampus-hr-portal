@@ -338,6 +338,76 @@
             </button>
         </div>
         <nav class="ops-sidebar-nav">
+            {% if active_pathway == 'australia' %}
+            {# ─── AUSTRALIA PATHWAY SIDEBAR (10 items, AMC-specific) ─── #}
+            <!-- Overview -->
+            <div class="ops-nav-group-label">Overview</div>
+            <a href="/operations/australia-pathway" class="ops-nav-item {% if active_ops_page == 'australia' %}active{% endif %}" data-tooltip="Dashboard">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
+                <span class="ops-nav-text">Pathway Dashboard</span>
+            </a>
+
+            <!-- Client Management -->
+            <div class="ops-nav-group-label">Client Management</div>
+            <a href="/operations/australia/clients" class="ops-nav-item {% if active_ops_page == 'australia-clients' %}active{% endif %}" data-tooltip="Registration">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <span class="ops-nav-text">Registration</span>
+            </a>
+            <a href="/operations/australia/call-notes" class="ops-nav-item {% if active_ops_page == 'australia-call-notes' %}active{% endif %}" data-tooltip="Call Notes">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg></span>
+                <span class="ops-nav-text">Call Notes</span>
+            </a>
+            <a href="/operations/australia/payments" class="ops-nav-item {% if active_ops_page == 'australia-payments' %}active{% endif %}" data-tooltip="Payments">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+                <span class="ops-nav-text">Payments</span>
+            </a>
+
+            <!-- Training & Exams -->
+            <div class="ops-nav-group-label">Training &amp; Exams</div>
+            <a href="/operations/australia/training" class="ops-nav-item {% if active_ops_page == 'australia-training' %}active{% endif %}" data-tooltip="Training">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></span>
+                <span class="ops-nav-text">Training</span>
+            </a>
+            <a href="/operations/australia/test-bookings" class="ops-nav-item {% if active_ops_page == 'australia-test-bookings' %}active{% endif %}" data-tooltip="Test Bookings">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
+                <span class="ops-nav-text">Test Bookings</span>
+            </a>
+            <a href="/operations/australia/online-courses" class="ops-nav-item {% if active_ops_page == 'australia-online-courses' %}active{% endif %}" data-tooltip="Online Courses">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg></span>
+                <span class="ops-nav-text">Online Courses</span>
+            </a>
+
+            <!-- Registration -->
+            <div class="ops-nav-group-label">Registration</div>
+            <a href="/operations/australia/epic" class="ops-nav-item {% if active_ops_page == 'australia-epic' %}active{% endif %}" data-tooltip="EPIC Registration">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
+                <span class="ops-nav-text">EPIC Registration</span>
+            </a>
+
+            <!-- Academic & Research -->
+            <div class="ops-nav-group-label">Academic &amp; Research</div>
+            <a href="/operations/australia/academic-details" class="ops-nav-item {% if active_ops_page == 'australia-academic' %}active{% endif %}" data-tooltip="Academic Details">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg></span>
+                <span class="ops-nav-text">Academic Details</span>
+            </a>
+            <a href="/operations/australia/research" class="ops-nav-item {% if active_ops_page == 'australia-research' %}active{% endif %}" data-tooltip="Research & Publication">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg></span>
+                <span class="ops-nav-text">Research &amp; Publication</span>
+            </a>
+            <a href="/operations/australia/webinars" class="ops-nav-item {% if active_ops_page == 'australia-webinars' %}active{% endif %}" data-tooltip="Webinars & Conferences">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
+                <span class="ops-nav-text">Webinars &amp; Conferences</span>
+            </a>
+
+            <!-- Admin (shared — Settings governs lookup_options used by ALL pathways) -->
+            <div class="ops-nav-group-label">Admin</div>
+            <a href="/operations/field-manager" class="ops-nav-item {% if active_ops_page == 'settings' %}active{% endif %}" data-tooltip="Settings (Field Manager)">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v6m0 6v6M4.22 4.22l4.24 4.24m2.98 2.98l4.24 4.24M1 12h6m6 0h6M4.22 19.78l4.24-4.24m2.98-2.98l4.24-4.24"/></svg></span>
+                <span class="ops-nav-text">Settings</span>
+            </a>
+
+            {% else %}
+            {# ─── PLAB / UK PATHWAY SIDEBAR (existing items, PLAB Pathway renamed → Registration) ─── #}
             <!-- Overview -->
             <div class="ops-nav-group-label">Overview</div>
             <a href="/operations/uk-pathway" class="ops-nav-item {% if active_ops_page == 'dashboard' %}active{% endif %}" data-tooltip="Dashboard">
@@ -347,9 +417,9 @@
 
             <!-- Client Management -->
             <div class="ops-nav-group-label">Client Management</div>
-            <a href="/operations/plab" class="ops-nav-item {% if active_ops_page == 'plab' %}active{% endif %}" data-tooltip="PLAB Pathway">
+            <a href="/operations/plab" class="ops-nav-item {% if active_ops_page == 'plab' %}active{% endif %}" data-tooltip="Registration">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
-                <span class="ops-nav-text">PLAB Pathway</span>
+                <span class="ops-nav-text">Registration</span>
             </a>
             <a href="/operations/onboarding" class="ops-nav-item {% if active_ops_page == 'onboarding' %}active{% endif %}" data-tooltip="Onboarding">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
@@ -461,6 +531,7 @@
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="8.5" cy="7" r="4"/><path d="M20 8v6"/><path d="M23 11h-6"/></svg></span>
                 <span class="ops-nav-text">Vendors & Providers</span>
             </a>
+            {% endif %}
         </nav>
     </aside>
 
