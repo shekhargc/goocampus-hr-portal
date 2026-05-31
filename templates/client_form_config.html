@@ -82,7 +82,21 @@
           </select>
         </div>
         <div>
-          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Options <span style="color:#9ca3af;">(comma-separated for dropdowns)</span></label>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Lookup Category <span style="color:#9ca3af;">(preferred for select)</span></label>
+          <select name="lookup_category"
+            style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; background: #fff; box-sizing: border-box;">
+            <option value="">&mdash; none (use comma-separated options below) &mdash;</option>
+            {% for cat in lookup_categories %}
+              <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+          <div style="font-size:0.7rem;color:#9ca3af;margin-top:3px;">
+            Picks values from <a href="/operations/field-manager" target="_blank" style="color:var(--orange);">Settings &rarr; Field Manager</a>.
+            Values shown to clients are scoped to the product&rsquo;s pathway (PLAB vs Australia).
+          </div>
+        </div>
+        <div>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: var(--gray-500, #6b7280); margin-bottom: 4px;">Options <span style="color:#9ca3af;">(fallback: comma-separated)</span></label>
           <input type="text" name="field_options" placeholder="e.g. Option A, Option B, Option C"
             style="width: 100%; padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; box-sizing: border-box;">
         </div>
@@ -177,7 +191,7 @@
           <td style="padding: 10px 14px; text-align: center; color: #6b7280;">{{ c.display_order }}</td>
           <td style="padding: 10px 14px; text-align: center;">
             <div style="display: flex; gap: 6px; justify-content: center;">
-              <button onclick="editConfig({{ c.id }}, {{ c.product_id }}, {{ c.step_number }}, '{{ c.step_name }}', '{{ c.field_name }}', '{{ c.field_label }}', '{{ c.field_type }}', '{{ c.field_options or '' }}', '{{ c.role }}', {{ c.is_required }}, {{ c.is_visible }}, {{ c.display_order }}, '{{ c.placeholder or '' }}', '{{ c.hint_text or '' }}')"
+              <button onclick="editConfig({{ c.id }}, {{ c.product_id }}, {{ c.step_number }}, '{{ c.step_name }}', '{{ c.field_name }}', '{{ c.field_label }}', '{{ c.field_type }}', '{{ c.field_options or '' }}', '{{ c.role }}', {{ c.is_required }}, {{ c.is_visible }}, {{ c.display_order }}, '{{ c.placeholder or '' }}', '{{ c.hint_text or '' }}', '{{ c.lookup_category or '' }}')"
                 style="background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: var(--navy);">Edit</button>
               <form method="POST" action="/admin/client-form-config/delete/{{ c.id }}" style="display: inline;" onsubmit="return confirm('Delete this field config?')">
                 <button type="submit" style="background: none; border: 1px solid #fca5a5; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: #ef4444;">Del</button>
@@ -239,7 +253,17 @@
           </select>
         </div>
         <div style="grid-column: span 2;">
-          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Options (comma-separated)</label>
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Lookup Category <span style="color:#9ca3af;">(preferred for select)</span></label>
+          <select name="lookup_category" id="edit_lookup_category" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; background:#fff; box-sizing:border-box;">
+            <option value="">&mdash; none (use options below) &mdash;</option>
+            {% for cat in lookup_categories %}
+              <option value="{{ cat }}">{{ cat }}</option>
+            {% endfor %}
+          </select>
+          <div style="font-size:0.7rem;color:#9ca3af;margin-top:3px;">Values come from Settings &rarr; Field Manager, scoped to the product&rsquo;s pathway.</div>
+        </div>
+        <div style="grid-column: span 2;">
+          <label style="display: block; font-size: 0.8rem; font-weight: 500; color: #6b7280; margin-bottom: 4px;">Options <span style="color:#9ca3af;">(fallback: comma-separated)</span></label>
           <input type="text" name="field_options" id="edit_field_options" style="width:100%; padding:8px 12px; border:1px solid #d1d5db; border-radius:6px; font-size:0.875rem; box-sizing:border-box;">
         </div>
         <div>
@@ -288,9 +312,11 @@ function filterByProduct() {
   window.location.href = url;
 }
 
-function editConfig(id, pid, step, stepName, fname, flabel, ftype, foptions, role, req, vis, order, placeholder, hint) {
+function editConfig(id, pid, step, stepName, fname, flabel, ftype, foptions, role, req, vis, order, placeholder, hint, lookup_category) {
   document.getElementById('editForm').action = '/admin/client-form-config/edit/' + id;
   document.getElementById('edit_product_id').value = pid;
+  var sel = document.getElementById('edit_lookup_category');
+  if (sel) sel.value = lookup_category || '';
   document.getElementById('edit_step_number').value = step;
   document.getElementById('edit_step_name').value = stepName;
   document.getElementById('edit_field_name').value = fname;

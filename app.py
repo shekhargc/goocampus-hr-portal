@@ -1361,9 +1361,23 @@ def client_form_config_page():
             LEFT JOIN products_services ps ON ps.id = cfc.product_id
             ORDER BY cfc.product_id, cfc.step_number, cfc.display_order
         ''').fetchall()
+
+    # Available lookup categories — both pathways merged for the picker.
+    # When admin picks "exam_name" here, the client form will look up the
+    # values from lookup_options scoped to the matching product's pathway.
+    try:
+        lookup_categories = [
+            r['category'] for r in conn.execute(
+                "SELECT DISTINCT category FROM lookup_options ORDER BY category"
+            ).fetchall()
+        ]
+    except Exception:
+        lookup_categories = []
     conn.close()
     return render_template('client_form_config.html', configs=configs, products=products,
-                         selected_product=selected_product, user=user, active_section='clients')
+                         selected_product=selected_product, user=user,
+                         lookup_categories=lookup_categories,
+                         active_section='clients')
 
 
 @app.route('/admin/client-form-config/add', methods=['POST'])
@@ -1372,12 +1386,14 @@ def client_form_config_add():
     conn = get_db()
     try:
         conn.execute('''INSERT INTO client_form_configs
-            (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, is_visible, display_order, placeholder, hint_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (product_id, step_number, step_name, field_name, field_label, field_type, field_options, lookup_category, role, is_required, is_visible, display_order, placeholder, hint_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (request.form.get('product_id'), int(request.form.get('step_number', 1)),
              request.form.get('step_name', ''), request.form.get('field_name', ''),
              request.form.get('field_label', ''), request.form.get('field_type', 'text'),
-             request.form.get('field_options', ''), request.form.get('role', 'client'),
+             request.form.get('field_options', ''),
+             (request.form.get('lookup_category') or None),
+             request.form.get('role', 'client'),
              1 if request.form.get('is_required') else 0,
              1 if request.form.get('is_visible', 'on') else 0,
              int(request.form.get('display_order', 0)),
@@ -1399,12 +1415,13 @@ def client_form_config_edit(config_id):
     try:
         conn.execute('''UPDATE client_form_configs SET
             step_number = ?, step_name = ?, field_name = ?, field_label = ?, field_type = ?,
-            field_options = ?, role = ?, is_required = ?, is_visible = ?, display_order = ?,
+            field_options = ?, lookup_category = ?, role = ?, is_required = ?, is_visible = ?, display_order = ?,
             placeholder = ?, hint_text = ?
             WHERE id = ?''',
             (int(request.form.get('step_number', 1)), request.form.get('step_name', ''),
              request.form.get('field_name', ''), request.form.get('field_label', ''),
              request.form.get('field_type', 'text'), request.form.get('field_options', ''),
+             (request.form.get('lookup_category') or None),
              request.form.get('role', 'client'),
              1 if request.form.get('is_required') else 0,
              1 if request.form.get('is_visible') else 0,
@@ -14067,15 +14084,40 @@ def api_vendors_by_category():
 @app.route('/operations/vendors-providers')
 @login_required
 def ops_vendors_providers():
-    """Vendors & Providers management page."""
+    """Vendors & Providers management page.
+
+    Pathway-aware via ?pathway= query param. Vendors are already scoped by
+    the legacy `country` column (values like 'UK Pathway', 'Australia
+    Pathway') — we just translate the pathway slug to the matching country
+    label and filter. Default (no param) shows ALL vendors.
+    """
+    pathway = (request.args.get('pathway') or '').strip().lower()
+    PATHWAY_TO_COUNTRY = {
+        'plab':       'UK Pathway',
+        'australia':  'Australia Pathway',
+        'usmle':      'USMLE Pathway',
+        'germany':    'Germany Pathway',
+    }
+    country_filter = PATHWAY_TO_COUNTRY.get(pathway)
+
     conn = get_db()
-    vendors = conn.execute("""
-        SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
-        FROM vendors_providers vp
-        LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
-        GROUP BY vp.id
-        ORDER BY vp.country, vp.category, vp.sort_order, vp.name
-    """).fetchall()
+    if country_filter:
+        vendors = conn.execute("""
+            SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
+            FROM vendors_providers vp
+            LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            WHERE vp.country = ?
+            GROUP BY vp.id
+            ORDER BY vp.category, vp.sort_order, vp.name
+        """, (country_filter,)).fetchall()
+    else:
+        vendors = conn.execute("""
+            SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
+            FROM vendors_providers vp
+            LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            GROUP BY vp.id
+            ORDER BY vp.country, vp.category, vp.sort_order, vp.name
+        """).fetchall()
     conn.close()
 
     # Section grouping
@@ -14108,7 +14150,8 @@ def ops_vendors_providers():
                          countries=VENDOR_COUNTRIES,
                          categories=VENDOR_CATEGORIES,
                          deliverables=deliverables,
-                         active_ops_page='vendors-providers')
+                         active_ops_page='vendors-providers',
+                         active_pathway=(pathway if pathway else 'plab'))
 
 
 @app.route('/operations/vendors-providers/add', methods=['POST'])
@@ -14670,7 +14713,19 @@ REPORT_FIELD_DEFS = {
 @app.route('/operations/reports')
 @admin_required
 def ops_reports():
-    """Reports page with template management and quick download."""
+    """Reports page with template management and quick download.
+
+    Pathway-aware: ?pathway=australia keeps the Australia sidebar active.
+    Report templates are pathway-agnostic for now (admin can scope each
+    template manually) — adding a `pathway` column to report_templates
+    would let us filter the list, but the user said "look into Reports
+    for Australia" without specifying separate report sets, so we keep
+    the list shared and just route the sidebar correctly.
+    """
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+        pathway = 'plab'
+
     conn = get_db()
     try:
         templates = conn.execute(
@@ -14684,7 +14739,8 @@ def ops_reports():
         templates=templates,
         field_defs=REPORT_FIELD_DEFS,
         active_ops_page='reports',
-        active_section='operations')
+        active_section='operations',
+        active_pathway=pathway)
 
 
 @app.route('/operations/reports/template', methods=['POST'])
@@ -22214,6 +22270,39 @@ ensure_ops_tables()
 ensure_pathway_columns_on_ops_tables()
 ensure_pathway_column_on_lookup_options()
 ensure_pathway_column_on_plab_clients()
+
+
+def ensure_lookup_category_on_form_configs():
+    """Migration: client_form_configs gets a `lookup_category` column.
+
+    Lets admin pick (in the form-config UI) which lookup_options category
+    drives a select field instead of typing comma-separated options into
+    field_options. The dropdown values then come from lookup_options
+    scoped to the product's pathway, so the same form-config entry
+    surfaces PLAB values for PLAB clients and Australia values for
+    Australia clients.
+
+    Idempotent on every boot.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE client_form_configs ADD COLUMN lookup_category TEXT")
+            conn.commit()
+            logging.info("Migration: added lookup_category column to client_form_configs")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+ensure_lookup_category_on_form_configs()
 
 # One-time Excel import: load latest PLAB client data from Excel if available
 def _import_excel_clients_once():
