@@ -22444,6 +22444,14 @@ for _slug, _mod_name, _fn_name in _AU_PHASE3_IMPORTERS:
     except Exception as _au_err:
         logging.error(f"Australia {_slug} import failed: {_au_err}")
 
+# ── Auto-seed Australia dropdowns (lookup_options) from the imported data ──
+# Runs AFTER all Phase 2/3 ops_* imports so the source rows exist.
+try:
+    from seed_australia_lookups import run_seed_australia_lookups_once
+    run_seed_australia_lookups_once(get_db)
+except Exception as _au_lk_err:
+    logging.error(f"Australia lookups seed failed: {_au_lk_err}")
+
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():
     """Import call notes from call_notes_import_data.py (8423 rows, upsert by reg+date+note)."""
