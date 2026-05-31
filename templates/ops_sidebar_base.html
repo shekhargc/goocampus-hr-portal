@@ -48,6 +48,81 @@
     }
     .ops-sidebar.collapsed .ops-sidebar-title { opacity: 0; width: 0; }
 
+    /* ── Pathway switcher (native <details> disclosure) ── */
+    .ops-pathway-switcher {
+        flex: 1;
+        min-width: 0;
+    }
+    .ops-pathway-switcher summary {
+        list-style: none;
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.2rem 0;
+        color: var(--orange);
+        font-size: 0.95rem;
+        font-weight: 700;
+        outline: none;
+        user-select: none;
+    }
+    .ops-pathway-switcher summary::-webkit-details-marker { display: none; }
+    .ops-pathway-switcher summary::marker { content: ""; }
+    .ops-pathway-switcher summary .ops-pathway-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+        flex: 1;
+    }
+    .ops-pathway-switcher summary .ops-pathway-chev {
+        width: 14px;
+        height: 14px;
+        opacity: 0.6;
+        transition: transform 0.2s;
+        flex-shrink: 0;
+    }
+    .ops-pathway-switcher[open] summary .ops-pathway-chev { transform: rotate(180deg); }
+    .ops-pathway-menu {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        top: 64px;
+        background: #1d2747;
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 0.5rem;
+        box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+        padding: 0.4rem;
+        z-index: 50;
+    }
+    .ops-pathway-option {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.35rem;
+        color: rgba(255,255,255,0.78);
+        text-decoration: none;
+        font-size: 0.88rem;
+        font-weight: 500;
+    }
+    .ops-pathway-option:hover {
+        background: rgba(255,255,255,0.08);
+        color: white;
+    }
+    .ops-pathway-option.active {
+        background: rgba(245,130,32,0.12);
+        color: var(--orange);
+        font-weight: 600;
+    }
+    .ops-pathway-option .ops-pathway-flag {
+        font-size: 1rem;
+        line-height: 1;
+        width: 18px;
+        text-align: center;
+    }
+    .ops-sidebar.collapsed .ops-pathway-switcher { opacity: 0; width: 0; pointer-events: none; }
+
     .ops-sidebar-toggle {
         background: rgba(255,255,255,0.08);
         border: none;
@@ -234,7 +309,30 @@
     <!-- Sidebar -->
     <aside class="ops-sidebar" id="opsSidebar">
         <div class="ops-sidebar-header">
-            <span class="ops-sidebar-title">{{ pathway_name|default('UK Pathway') }}</span>
+            <details class="ops-pathway-switcher">
+                <summary title="Switch pathway">
+                    <span class="ops-pathway-name">{{ pathway_name|default('UK / PLAB Pathway') }}</span>
+                    <svg class="ops-pathway-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
+                </summary>
+                <div class="ops-pathway-menu">
+                    <a href="/operations/uk-pathway" class="ops-pathway-option {% if active_pathway|default('plab') == 'plab' %}active{% endif %}">
+                        <span class="ops-pathway-flag">&#127468;&#127463;</span>
+                        <span>UK / PLAB Pathway</span>
+                    </a>
+                    <a href="/operations/australia-pathway" class="ops-pathway-option {% if active_pathway == 'australia' %}active{% endif %}">
+                        <span class="ops-pathway-flag">&#127462;&#127482;</span>
+                        <span>Australia Pathway</span>
+                    </a>
+                    <a href="/operations/uae-pathway" class="ops-pathway-option {% if active_pathway == 'uae' %}active{% endif %}">
+                        <span class="ops-pathway-flag">&#127462;&#127466;</span>
+                        <span>UAE Pathway</span>
+                    </a>
+                    <a href="/operations/consulting" class="ops-pathway-option {% if active_pathway == 'consulting' %}active{% endif %}">
+                        <span class="ops-pathway-flag">&#129517;</span>
+                        <span>Standard Consulting</span>
+                    </a>
+                </div>
+            </details>
             <button class="ops-sidebar-toggle" onclick="toggleOpsSidebar()" title="Toggle sidebar">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
             </button>

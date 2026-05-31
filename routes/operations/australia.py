@@ -154,6 +154,7 @@ def ops_australia_pathway():
         pathway_name='Australia Pathway',
         stats=stats,
         active_ops_page='australia',
+        active_pathway='australia',
     )
 
 
