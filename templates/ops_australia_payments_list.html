@@ -1,0 +1,197 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Australia Payments &mdash; GooCampus CRM{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .page-head {
+        display: flex; justify-content: space-between; align-items: end;
+        flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
+    }
+    .page-head h1 {
+        margin: 0; font-size: 1.5rem; color: var(--navy); font-weight: 700;
+    }
+    .page-head .sub {
+        font-size: 0.85rem; color: var(--gray-500); margin-top: 0.25rem;
+    }
+    .page-head .badge {
+        display: inline-block; background: var(--orange); color: white;
+        padding: 0.2rem 0.55rem; border-radius: 999px; font-size: 0.7rem;
+        font-weight: 700; margin-left: 0.5rem; vertical-align: middle;
+    }
+
+    .summary-strip {
+        display: flex; gap: 1rem; margin-bottom: 1.25rem; flex-wrap: wrap;
+    }
+    .summary-card {
+        flex: 1 1 180px; background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; padding: 0.9rem 1rem;
+    }
+    .summary-card .lbl {
+        font-size: 0.7rem; color: var(--gray-500); text-transform: uppercase;
+        letter-spacing: 0.04em; font-weight: 600;
+    }
+    .summary-card .val {
+        font-size: 1.25rem; color: var(--navy); font-weight: 700; margin-top: 0.25rem;
+    }
+
+    .filter-bar {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; padding: 0.9rem 1rem;
+        display: flex; flex-wrap: wrap; gap: 0.6rem; align-items: center;
+        margin-bottom: 1.25rem;
+    }
+    .filter-bar input, .filter-bar select {
+        padding: 0.5rem 0.65rem; font-size: 0.88rem;
+        border: 1px solid var(--gray-300); border-radius: 0.4rem;
+        background: white; color: var(--navy);
+    }
+    .filter-bar input[type=search] { flex: 1 1 240px; }
+    .filter-bar select { min-width: 150px; }
+    .filter-bar button {
+        padding: 0.5rem 1rem; font-size: 0.85rem; font-weight: 600;
+        border-radius: 0.4rem; border: none; cursor: pointer;
+        background: var(--orange); color: white;
+    }
+    .filter-bar a.clear {
+        font-size: 0.82rem; color: var(--gray-500); text-decoration: none;
+    }
+
+    .table-card {
+        background: white; border: 1px solid var(--gray-200);
+        border-radius: 0.75rem; overflow: hidden;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 0.86rem; }
+    th, td {
+        text-align: left; padding: 0.55rem 0.6rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    th {
+        background: var(--gray-50); font-size: 0.72rem; color: var(--gray-500);
+        font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+        position: sticky; top: 0; z-index: 2;
+    }
+    tbody tr:hover { background: var(--gray-50); }
+    .reg { font-family: ui-monospace, Menlo, Monaco, monospace; font-size: 0.78rem; color: var(--navy); font-weight: 600; }
+    .amt { font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+    .badge-pill {
+        display: inline-block; padding: 0.15rem 0.55rem;
+        border-radius: 999px; font-size: 0.7rem; font-weight: 600;
+        text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .b-bank { background: #DBEAFE; color: #1D4ED8; }
+    .b-cash { background: #FEF3C7; color: #92400E; }
+    .b-upi { background: #DCFCE7; color: #166534; }
+    .b-card { background: #EDE9FE; color: #6D28D9; }
+    .b-default { background: #F3F4F6; color: #4B5563; }
+
+    .empty {
+        text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.95rem;
+    }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="page-head">
+    <div>
+        <h1>Payments <span class="badge">AUS</span></h1>
+        <div class="sub">{{ total }} payment{{ '' if total == 1 else 's' }} for Australia Pathway clients</div>
+    </div>
+    <div>
+        <a href="{{ url_for('ops_australia_pathway') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none">
+            &larr; Back to dashboard
+        </a>
+    </div>
+</div>
+
+<div class="summary-strip">
+    <div class="summary-card">
+        <div class="lbl">Total Payments</div>
+        <div class="val">{{ total }}</div>
+    </div>
+    <div class="summary-card">
+        <div class="lbl">Total Amount (incl. GST)</div>
+        <div class="val">&#8377; {{ '{:,.0f}'.format(total_amount) }}</div>
+    </div>
+</div>
+
+<form class="filter-bar" method="get" action="{{ url_for('ops_australia_payments_list') }}">
+    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, or notes…">
+    <select name="instalment">
+        <option value="">All instalments</option>
+        {% for i in instalments %}
+            <option value="{{ i }}" {% if i == instalment_filter %}selected{% endif %}>{{ i }}</option>
+        {% endfor %}
+    </select>
+    <select name="method">
+        <option value="">All methods</option>
+        {% for m in methods %}
+            <option value="{{ m }}" {% if m == method_filter %}selected{% endif %}>{{ m }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit">Filter</button>
+    {% if search or instalment_filter or method_filter or client_reg %}
+    <a href="{{ url_for('ops_australia_payments_list') }}" class="clear">Clear</a>
+    {% endif %}
+</form>
+
+<div class="table-card">
+    {% if records %}
+    <table>
+        <thead>
+            <tr>
+                <th>Reg. No.</th>
+                <th>Candidate</th>
+                <th>Payment Date</th>
+                <th>Instalment</th>
+                <th class="amt">Amount</th>
+                <th class="amt">GST</th>
+                <th class="amt">Total Paid</th>
+                <th class="amt">Total Package</th>
+                <th>Method</th>
+            </tr>
+        </thead>
+        <tbody>
+        {% for r in records %}
+            <tr>
+                <td><span class="reg">{{ r.registration_number or '—' }}</span></td>
+                <td>
+                    {% if r.first_name or r.last_name %}
+                        {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}
+                    {% else %}
+                        <span style="color:var(--gray-400)">(client missing)</span>
+                    {% endif %}
+                </td>
+                <td>{{ r.payment_date or '—' }}</td>
+                <td>{{ r.instalment or '—' }}</td>
+                <td class="amt">{% if r.amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.amount_paid|float) }}{% else %}—{% endif %}</td>
+                <td class="amt">{% if r.gst_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
+                <td class="amt">{% if r.total_amount_paid is not none %}&#8377; {{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
+                <td class="amt">{% if r.total_package is not none %}&#8377; {{ '{:,.0f}'.format(r.total_package|float) }}{% else %}—{% endif %}</td>
+                <td>
+                    {% set pm = (r.payment_method or '')|lower %}
+                    {% set cls = 'b-default' %}
+                    {% if 'bank' in pm %}{% set cls = 'b-bank' %}
+                    {% elif 'cash' in pm %}{% set cls = 'b-cash' %}
+                    {% elif 'upi' in pm %}{% set cls = 'b-upi' %}
+                    {% elif 'card' in pm %}{% set cls = 'b-card' %}
+                    {% endif %}
+                    {% if r.payment_method %}
+                        <span class="badge-pill {{ cls }}">{{ r.payment_method }}</span>
+                    {% else %}
+                        —
+                    {% endif %}
+                </td>
+            </tr>
+        {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+        <div class="empty">
+            No payments match the current filter.
+            {% if search or instalment_filter or method_filter or client_reg %}
+                <br><a href="{{ url_for('ops_australia_payments_list') }}" style="color:var(--orange)">Clear filters</a> to see all.
+            {% endif %}
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

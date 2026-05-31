@@ -39,5 +39,19 @@ def register_operations_modules(app):
     ngo.register_routes(app)
 
     # Australia Pathway — v2 client management dashboard (/operations/australia-pathway)
+    # AND Australia Test Bookings list (/operations/australia/test-bookings).
     from . import australia
     australia.register_routes(app)
+
+    # Australia Operations sub-sections (Phase 3 — 8 sections in parallel).
+    # Each module owns one /operations/australia/<section> list view.
+    from . import au_academic, au_epic, au_training, au_online_courses
+    from . import au_payments, au_call_notes, au_research, au_webinars
+    au_academic.register_routes(app)
+    au_epic.register_routes(app)
+    au_training.register_routes(app)
+    au_online_courses.register_routes(app)
+    au_payments.register_routes(app)
+    au_call_notes.register_routes(app)
+    au_research.register_routes(app)
+    au_webinars.register_routes(app)

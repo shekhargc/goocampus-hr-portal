@@ -39,6 +39,8 @@ def ops_australia_pathway():
         'package_total':        0.0,  # sum of final_package across active
         'recent_registrations': [],   # last 5 rows
         'this_fy_new':          0,    # signups in current Indian FY
+        # Section counts shown on the dashboard tile grid.
+        'section_counts':       {},   # {slug: count}
     }
 
     try:
@@ -118,6 +120,27 @@ def ops_australia_pathway():
                ORDER BY id DESC
                LIMIT 5"""
         ).fetchall()
+
+        # ── Section row counts for the dashboard tile grid ──────────────
+        # Each tile shows a live count of Australia rows in the section's table.
+        section_tables = {
+            'test_bookings':   'ops_test_bookings',
+            'academic':        'ops_academic_details',
+            'epic':            'ops_epic_registration',
+            'training':        'ops_coaching',
+            'online_courses':  'ops_online_subscriptions',
+            'payments':        'ops_payments',
+            'call_notes':      'ops_call_notes',
+            'research':        'ops_research_publication',
+            'webinars':        'ops_webinars_conferences',
+        }
+        for slug, table in section_tables.items():
+            try:
+                stats['section_counts'][slug] = conn.execute(
+                    f"SELECT COUNT(*) AS c FROM {table} WHERE pathway = 'australia'"
+                ).fetchone()['c']
+            except Exception:
+                stats['section_counts'][slug] = 0
 
     except Exception as e:
         logging.error(f"ops_australia_pathway: {e}")

@@ -22387,6 +22387,26 @@ try:
 except Exception as _au_tb_err:
     logging.error(f"Australia test-bookings import failed: {_au_tb_err}")
 
+# ── One-time import: 8 additional Australia operations sections (Phase 3 batch) ──
+# Each importer is idempotent (marker key). Boot order doesn't matter — they
+# write to disjoint ops_* rows scoped to pathway='australia'.
+_AU_PHASE3_IMPORTERS = [
+    ('academic',      'import_australia_academic',      'run_import_australia_academic_once'),
+    ('epic',          'import_australia_epic',          'run_import_australia_epic_once'),
+    ('training',      'import_australia_training',      'run_import_australia_training_once'),
+    ('online_courses','import_australia_online_courses','run_import_australia_online_courses_once'),
+    ('payments',      'import_australia_payments',      'run_import_australia_payments_once'),
+    ('call_notes',    'import_australia_call_notes',    'run_import_australia_call_notes_once'),
+    ('research',      'import_australia_research',      'run_import_australia_research_once'),
+    ('webinars',      'import_australia_webinars',      'run_import_australia_webinars_once'),
+]
+for _slug, _mod_name, _fn_name in _AU_PHASE3_IMPORTERS:
+    try:
+        _mod = __import__(_mod_name)
+        getattr(_mod, _fn_name)(get_db)
+    except Exception as _au_err:
+        logging.error(f"Australia {_slug} import failed: {_au_err}")
+
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():
     """Import call notes from call_notes_import_data.py (8423 rows, upsert by reg+date+note)."""

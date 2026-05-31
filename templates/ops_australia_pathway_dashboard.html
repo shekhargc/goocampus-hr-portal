@@ -159,41 +159,49 @@
 <div class="section-grid">
     <a class="section-tile" href="{{ url_for('ops_australia_test_bookings_list') }}">
         <div class="stl">Test Bookings</div>
-        <div class="stn">AMC exams &amp; English</div>
-        <div class="stc">Click to view all &rarr;</div>
+        <div class="stn">{{ stats.section_counts.get('test_bookings', 0) }} records</div>
+        <div class="stc">AMC, OET, PTE, IELTS &rarr;</div>
     </a>
-    <span class="section-tile disabled">
+    <a class="section-tile" href="{{ url_for('ops_australia_academic_list') }}">
         <div class="stl">Academic Details</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('academic', 0) }} records</div>
+        <div class="stc">MBBS, internship, speciality &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_epic_list') }}">
         <div class="stl">EPIC Registration</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('epic', 0) }} records</div>
+        <div class="stc">EPIC + Notary Cam workflow &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_training_list') }}">
         <div class="stl">Training</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
-        <div class="stl">Online Courses</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('training', 0) }} records</div>
+        <div class="stc">AMC MCQ Mock &amp; more &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_online_courses_list') }}">
+        <div class="stl">Online Courses &amp; Subs</div>
+        <div class="stn">{{ stats.section_counts.get('online_courses', 0) }} records</div>
+        <div class="stc">eMedici &amp; other access &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_payments_list') }}">
         <div class="stl">Payments</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('payments', 0) }} records</div>
+        <div class="stc">Installments &amp; receipts &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_call_notes_list') }}">
         <div class="stl">Call Notes</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('call_notes', 0) }} records</div>
+        <div class="stc">Per-client call log &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_research_list') }}">
         <div class="stl">Research &amp; Publication</div>
-        <div class="stn">Coming soon</div>
-    </span>
-    <span class="section-tile disabled">
+        <div class="stn">{{ stats.section_counts.get('research', 0) }} records</div>
+        <div class="stc">Topics, journals &amp; status &rarr;</div>
+    </a>
+    <a class="section-tile" href="{{ url_for('ops_australia_webinars_list') }}">
         <div class="stl">Webinars &amp; Conferences</div>
-        <div class="stn">Coming soon</div>
-    </span>
+        <div class="stn">{{ stats.section_counts.get('webinars', 0) }} records</div>
+        <div class="stc">Events, providers &amp; points &rarr;</div>
+    </a>
 </div>
 
 <div class="stat-grid">
