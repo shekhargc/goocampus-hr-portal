@@ -22021,9 +22021,49 @@ def ensure_leave_group_column():
 
 
 # Multi-pathway migration (added 2026-05-31)
-# Adds `pathway` column to every ops_* table so the same tables can serve
-# PLAB, Australia, UAE, Consulting, etc. without mixing data.
-# Existing rows are backfilled to pathway='plab' (current default).
+# Adds `pathway` column to every ops_* table AND to lookup_options so the
+# same tables can serve PLAB, Australia, UAE, Consulting, etc. without
+# mixing data. Existing rows backfilled to pathway='plab' (current default).
+def ensure_pathway_column_on_lookup_options():
+    """Migration: add `pathway` TEXT column to lookup_options + backfill.
+
+    Strict per-pathway isolation: dropdowns shown on the PLAB Test Bookings
+    page must only contain PLAB exam values; dropdowns on Australia Test
+    Bookings must only contain AMC values. Filtering happens via this column.
+
+    Callers should use core.lookups.get_options_for_pathway(...) for the
+    pathway-aware read. Direct queries on lookup_options without a pathway
+    filter will return PLAB data only as long as no other pathway rows exist
+    — but should be migrated to the helper for safety once Australia
+    lookups are seeded.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE lookup_options ADD COLUMN pathway TEXT")
+            conn.commit()
+            logging.info("Migration: added pathway column to lookup_options")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        try:
+            conn.execute("UPDATE lookup_options SET pathway = 'plab' WHERE pathway IS NULL")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"Migration backfill skipped for lookup_options: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
 OPS_PATHWAY_TABLES = [
     'ops_academic_details',
     'ops_call_notes',
@@ -22097,6 +22137,7 @@ ensure_notification_tables()
 ensure_budget_tables()
 ensure_ops_tables()
 ensure_pathway_columns_on_ops_tables()
+ensure_pathway_column_on_lookup_options()
 
 # One-time Excel import: load latest PLAB client data from Excel if available
 def _import_excel_clients_once():
