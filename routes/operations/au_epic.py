@@ -1,17 +1,47 @@
 """
-routes/operations/au_epic.py — Operations: Australia Pathway → EPIC Registration list.
+routes/operations/au_epic.py — Operations: Australia Pathway → EPIC Registration.
 
-Mirrors the structure of routes/operations/australia.py::ops_australia_test_bookings_list.
-Shows ops_epic_registration rows where pathway='australia', joined with
-plab_clients on registration_number for candidate name display.
+Mirrors the standardized Australia Registration pattern:
+  - List view  (/operations/australia/epic)
+  - Detail     (/operations/australia/epic/<id>)
+  - Edit form  (/operations/australia/epic/<id>/edit) GET + POST
+
+Filters every query by pathway='australia' so PLAB data never leaks in.
 """
 
 import logging
-from flask import render_template, flash, request
+from flask import render_template, flash, request, redirect, url_for
 
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+
+
+# Allowlist of columns that the edit form is permitted to write to.
+# Pathway is NEVER updated through this endpoint.
+AU_EPIC_EDITABLE_COLUMNS = [
+    'epic_registration',
+    'epic_status',
+    'notary_camp',
+    'registration_date',
+    'documents_stage',
+    'document_stage_status',
+    'notary_camp_login',
+    'login_id',
+    'login_pwd',
+    'notary_camp_password',
+    'secret_question_1', 'secret_answer_1',
+    'secret_question_2', 'secret_answer_2',
+    'secret_question_3', 'secret_answer_3',
+    'secret_question_4', 'secret_answer_4',
+    'epic_id_number',
+]
+
+# Columns that should be coerced to numeric on save.
+_NUMERIC_COLS = {
+    'amount', 'score', 'points', 'duration',
+    'package_amount', 'discount_allowed', 'final_package',
+}
 
 
 @admin_required
@@ -41,7 +71,8 @@ def ops_australia_epic_list():
                    FROM ops_epic_registration e
                    LEFT JOIN plab_clients p
                           ON e.registration_number = p.registration_number
-                  WHERE e.pathway = 'australia' '''
+                         AND COALESCE(p.pathway, 'plab') = 'australia'
+                  WHERE COALESCE(e.pathway, 'plab') = 'australia' '''
         params = []
         if reg:
             sql += " AND e.registration_number = ? "
@@ -62,6 +93,7 @@ def ops_australia_epic_list():
                 e.epic_id_number LIKE ?
             ) """
             params.extend([f'%{search}%'] * 5)
+        # Recent-first: most recently registered EPIC entries first.
         sql += " ORDER BY COALESCE(e.registration_date, '') DESC, e.id DESC "
         records = conn.execute(sql, params).fetchall()
         total = len(records)
@@ -69,21 +101,24 @@ def ops_australia_epic_list():
         epic_statuses = [
             r['epic_status'] for r in conn.execute(
                 """SELECT DISTINCT epic_status FROM ops_epic_registration
-                    WHERE pathway = 'australia' AND epic_status IS NOT NULL AND epic_status != ''
+                    WHERE COALESCE(pathway, 'plab') = 'australia'
+                      AND epic_status IS NOT NULL AND epic_status != ''
                     ORDER BY epic_status"""
             ).fetchall()
         ]
         epic_registrations = [
             r['epic_registration'] for r in conn.execute(
                 """SELECT DISTINCT epic_registration FROM ops_epic_registration
-                    WHERE pathway = 'australia' AND epic_registration IS NOT NULL AND epic_registration != ''
+                    WHERE COALESCE(pathway, 'plab') = 'australia'
+                      AND epic_registration IS NOT NULL AND epic_registration != ''
                     ORDER BY epic_registration"""
             ).fetchall()
         ]
         documents_stages = [
             r['documents_stage'] for r in conn.execute(
                 """SELECT DISTINCT documents_stage FROM ops_epic_registration
-                    WHERE pathway = 'australia' AND documents_stage IS NOT NULL AND documents_stage != ''
+                    WHERE COALESCE(pathway, 'plab') = 'australia'
+                      AND documents_stage IS NOT NULL AND documents_stage != ''
                     ORDER BY documents_stage"""
             ).fetchall()
         ]
@@ -112,6 +147,134 @@ def ops_australia_epic_list():
     )
 
 
+@admin_required
+def ops_australia_epic_detail(rid):
+    """Read-only detail page for a single Australia EPIC registration row."""
+    user = get_user()
+    conn = get_db()
+    try:
+        record = conn.execute(
+            """SELECT e.*,
+                      p.first_name, p.last_name, p.prefix
+                 FROM ops_epic_registration e
+                 LEFT JOIN plab_clients p
+                        ON e.registration_number = p.registration_number
+                       AND COALESCE(p.pathway, 'plab') = 'australia'
+                WHERE e.id = ?
+                  AND COALESCE(e.pathway, 'plab') = 'australia'""",
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_australia_epic_detail: {e}")
+        record = None
+    finally:
+        conn.close()
+
+    if not record:
+        flash('Australia EPIC registration not found.', 'error')
+        return redirect(url_for('ops_australia_epic_list'))
+
+    return render_template(
+        'ops_australia_epic_detail.html',
+        user=user,
+        record=record,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-epic',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_epic_edit_page(rid):
+    """GET — render the edit form for an Australia EPIC registration row."""
+    user = get_user()
+    conn = get_db()
+    try:
+        record = conn.execute(
+            """SELECT e.*,
+                      p.first_name, p.last_name, p.prefix
+                 FROM ops_epic_registration e
+                 LEFT JOIN plab_clients p
+                        ON e.registration_number = p.registration_number
+                       AND COALESCE(p.pathway, 'plab') = 'australia'
+                WHERE e.id = ?
+                  AND COALESCE(e.pathway, 'plab') = 'australia'""",
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_australia_epic_edit_page: {e}")
+        record = None
+    finally:
+        conn.close()
+
+    if not record:
+        flash('Australia EPIC registration not found.', 'error')
+        return redirect(url_for('ops_australia_epic_list'))
+
+    return render_template(
+        'ops_australia_epic_edit.html',
+        user=user,
+        record=record,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-epic',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_epic_edit_save(rid):
+    """POST handler: save changes to an Australia EPIC registration row.
+
+    Strict allowlist (AU_EPIC_EDITABLE_COLUMNS) — anything else in the form
+    is silently ignored. Pathway is NEVER updated through this endpoint.
+    """
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            """SELECT id FROM ops_epic_registration
+                WHERE id = ?
+                  AND COALESCE(pathway, 'plab') = 'australia'""",
+            (rid,),
+        ).fetchone()
+        if not existing:
+            flash('Australia EPIC registration not found.', 'error')
+            return redirect(url_for('ops_australia_epic_list'))
+
+        sets = []
+        params = []
+        for col in AU_EPIC_EDITABLE_COLUMNS:
+            if col in request.form:
+                val = request.form.get(col, '').strip()
+                # Numeric coercion for amount/score/points/duration columns.
+                if col in _NUMERIC_COLS:
+                    try:
+                        val = float(val) if val else 0
+                    except ValueError:
+                        val = 0
+                sets.append(f"{col} = ?")
+                params.append(val if val != '' else None)
+        if sets:
+            params.append(rid)
+            conn.execute(
+                f"UPDATE ops_epic_registration SET {', '.join(sets)} "
+                f" WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+                params,
+            )
+            conn.commit()
+            flash('EPIC registration saved.', 'success')
+        else:
+            flash('No changes to save.', 'info')
+    except Exception as e:
+        logging.error(f"ops_australia_epic_edit_save: {e}")
+        flash(f'Error saving EPIC registration: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+
+    return redirect(url_for('ops_australia_epic_detail', rid=rid))
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app."""
     app.add_url_rule(
@@ -119,4 +282,22 @@ def register_routes(app):
         endpoint='ops_australia_epic_list',
         view_func=ops_australia_epic_list,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/epic/<int:rid>',
+        endpoint='ops_australia_epic_detail',
+        view_func=ops_australia_epic_detail,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/epic/<int:rid>/edit',
+        endpoint='ops_australia_epic_edit_page',
+        view_func=ops_australia_epic_edit_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/epic/<int:rid>/edit',
+        endpoint='ops_australia_epic_edit_save',
+        view_func=ops_australia_epic_edit_save,
+        methods=['POST'],
     )

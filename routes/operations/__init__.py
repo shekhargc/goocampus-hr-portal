@@ -39,14 +39,17 @@ def register_operations_modules(app):
     ngo.register_routes(app)
 
     # Australia Pathway — v2 client management dashboard (/operations/australia-pathway)
-    # AND Australia Test Bookings list (/operations/australia/test-bookings).
+    # and the Australia client list (/operations/australia/clients) live in australia.py.
+    # Test bookings now lives in its own au_test_bookings module (drawer/detail/edit).
     from . import australia
     australia.register_routes(app)
 
-    # Australia Operations sub-sections (Phase 3 — 8 sections in parallel).
-    # Each module owns one /operations/australia/<section> list view.
-    from . import au_academic, au_epic, au_training, au_online_courses
-    from . import au_payments, au_call_notes, au_research, au_webinars
+    # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
+    # Each module owns one /operations/australia/<section>/* slice:
+    #   list (with drawer), detail page, edit form GET, edit save POST.
+    from . import au_test_bookings, au_academic, au_epic, au_training
+    from . import au_online_courses, au_payments, au_call_notes, au_research, au_webinars
+    au_test_bookings.register_routes(app)
     au_academic.register_routes(app)
     au_epic.register_routes(app)
     au_training.register_routes(app)

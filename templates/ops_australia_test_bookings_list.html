@@ -73,6 +73,65 @@
     .empty {
         text-align: center; padding: 3rem 1rem; color: var(--gray-500); font-size: 0.95rem;
     }
+
+    /* ── Drawer (click-to-view, mirrors Registration list) ── */
+    .drawer-backdrop {
+        position: fixed; inset: 0; background: rgba(15,27,51,0.35);
+        opacity: 0; visibility: hidden; transition: opacity .25s, visibility .25s; z-index: 900;
+    }
+    .drawer-backdrop.open { opacity: 1; visibility: visible; }
+    .drawer {
+        position: fixed; top: 0; right: 0; bottom: 0; width: 520px; max-width: 100%;
+        background: white; box-shadow: -8px 0 30px rgba(15,27,51,0.15);
+        transform: translateX(100%); transition: transform .3s ease;
+        z-index: 950; display: flex; flex-direction: column; overflow: hidden;
+    }
+    .drawer.open { transform: translateX(0); }
+    .drawer-head {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 20px 24px; border-bottom: 1px solid var(--gray-200); background: var(--gray-50);
+    }
+    .drawer-head h3 { margin: 0; font-size: 18px; font-weight: 700; color: var(--navy); }
+    .drawer-close {
+        background: none; border: none; font-size: 28px; color: var(--gray-500);
+        cursor: pointer; padding: 0; line-height: 1;
+    }
+    .drawer-close:hover { color: var(--navy); }
+    .drawer-body { flex: 1; overflow-y: auto; padding: 24px; }
+    .drawer-emp {
+        display: flex; align-items: center; gap: 14px; margin-bottom: 24px;
+        padding-bottom: 20px; border-bottom: 1px solid var(--gray-200);
+    }
+    .emp-avatar-lg-ph {
+        width: 56px; height: 56px; border-radius: 50%; background: var(--orange);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-size: 20px; font-weight: 700; flex-shrink: 0;
+    }
+    .drawer-emp .name { font-size: 16px; font-weight: 700; color: var(--navy); margin: 0; }
+    .drawer-emp .meta { font-size: 13px; color: var(--gray-500); margin-top: 2px; font-family: ui-monospace, Menlo, monospace; }
+    .drawer-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px 24px; }
+    .drawer-field .label { font-size: 13px; font-weight: 600; color: var(--gray-500); margin-bottom: 5px; }
+    .drawer-field .value {
+        font-size: 14px; color: var(--navy); font-weight: 600;
+        padding: 6px 8px; background: var(--gray-50); border-radius: 6px; border: 1px solid var(--gray-100);
+    }
+    .drawer-field.full { grid-column: 1 / -1; }
+    .drawer-section { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--gray-200); }
+    .drawer-section h4 {
+        font-size: 13px; font-weight: 700; text-transform: uppercase;
+        letter-spacing: 0.5px; color: var(--gray-500); margin: 0 0 14px 0;
+    }
+    .drawer-actions {
+        padding: 16px 24px; border-top: 1px solid var(--gray-200);
+        display: flex; gap: 10px;
+    }
+    .drawer-actions a {
+        flex: 1; text-align: center; padding: 10px; border-radius: 6px;
+        font-weight: 600; font-size: 14px; text-decoration: none;
+    }
+    tr.clickable-row { cursor: pointer; transition: background 0.15s; }
+    tr.clickable-row:hover { background: var(--gray-50) !important; }
+    tr.clickable-row.active-row { background: #FFF7ED !important; }
 </style>
 {% endblock %}
 
@@ -128,7 +187,7 @@
         </thead>
         <tbody>
         {% for r in records %}
-            <tr>
+            <tr class="clickable-row" id="row-{{ r.id }}" onclick="openAuDetail({{ r.id }})">
                 <td><span class="reg">{{ r.registration_number or '—' }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}
@@ -182,4 +241,119 @@
         </div>
     {% endif %}
 </div>
+
+<!-- ── Drawer (click any row above to view summary; "View Full Profile" → /operations/australia/test-bookings/<id>) ── -->
+<div class="drawer-backdrop" id="auBackdrop" onclick="closeAuDetail()"></div>
+<aside class="drawer" id="auDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3>Test Booking Summary</h3>
+        <button class="drawer-close" type="button" onclick="closeAuDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="auDrawerBody"></div>
+    <div class="drawer-actions" id="auDrawerActions"></div>
+</aside>
+
+<script>
+  const AU_RECORDS = {
+      {% for r in records %}
+      {{ r.id }}: {
+          id: {{ r.id }},
+          name: {{ (((r.prefix or '') ~ ' ' ~ (r.first_name or '') ~ ' ' ~ (r.last_name or ''))|trim)|tojson }},
+          registration_number: {{ (r.registration_number or '')|tojson }},
+          exam: {{ (r.exam or '')|tojson }},
+          booking_date: {{ (r.booking_date or '')|tojson }},
+          exam_date: {{ (r.exam_date or '')|tojson }},
+          exam_status: {{ (r.exam_status or '')|tojson }},
+          exam_result: {{ (r.exam_result or '')|tojson }},
+          score: {{ (r.score or '')|tojson }},
+          country: {{ (r.country or '')|tojson }}
+      },
+      {% endfor %}
+  };
+
+  let activeAuRowId = null;
+
+  function field(label, value) {
+      return '<div class="drawer-field"><div class="label">' + label
+           + '</div><div class="value">'
+           + (value || '<span style="color:var(--gray-400);">—</span>')
+           + '</div></div>';
+  }
+
+  function statusBadge(val) {
+      if (!val) return '—';
+      const v = String(val).toLowerCase();
+      let cls = 'b-default';
+      if (v.indexOf('booked') >= 0) cls = 'b-booked';
+      else if (v.indexOf('attended') >= 0) cls = 'b-attended';
+      else if (v.indexOf('reschedul') >= 0) cls = 'b-rescheduled';
+      else if (v.indexOf('cancel') >= 0) cls = 'b-cancelled';
+      return '<span class="badge-pill ' + cls + '">' + val + '</span>';
+  }
+
+  function resultBadge(val) {
+      if (!val) return '—';
+      const v = String(val).toLowerCase();
+      let cls = 'b-default';
+      if (v.indexOf('pass') >= 0) cls = 'b-passed';
+      else if (v.indexOf('fail') >= 0) cls = 'b-failed';
+      return '<span class="badge-pill ' + cls + '">' + val + '</span>';
+  }
+
+  function openAuDetail(id) {
+      const r = AU_RECORDS[id];
+      if (!r) return;
+      if (activeAuRowId) {
+          const prev = document.getElementById('row-' + activeAuRowId);
+          if (prev) prev.classList.remove('active-row');
+      }
+      activeAuRowId = id;
+      const row = document.getElementById('row-' + id);
+      if (row) row.classList.add('active-row');
+
+      const initials = (r.name || '').trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+      let html = '<div class="drawer-emp">'
+          + '<div class="emp-avatar-lg-ph">' + (initials || '?') + '</div>'
+          + '<div><p class="name">' + (r.name || '—') + '</p>'
+          + '<div class="meta">' + (r.registration_number || '') + '</div></div></div>'
+          + '<div class="drawer-grid">'
+          + field('Exam', r.exam)
+          + field('Status', statusBadge(r.exam_status))
+          + field('Booking Date', r.booking_date)
+          + field('Exam Date', r.exam_date)
+          + field('Result', resultBadge(r.exam_result))
+          + field('Score', r.score)
+          + '</div>'
+          + '<div class="drawer-section"><h4>Location</h4><div class="drawer-grid">'
+          + field('Country', r.country)
+          + '</div></div>';
+
+      document.getElementById('auDrawerBody').innerHTML = html;
+      document.getElementById('auDrawerActions').innerHTML =
+          '<a href="/operations/australia/test-bookings/' + r.id + '" style="background:var(--orange);color:white;">View Full Profile</a>'
+        + '<a href="/operations/australia/test-bookings/' + r.id + '/edit" style="background:white;color:var(--navy);border:1px solid var(--gray-300);">Edit</a>';
+
+      document.getElementById('auDrawer').classList.add('open');
+      document.getElementById('auDrawer').setAttribute('aria-hidden', 'false');
+      document.getElementById('auBackdrop').classList.add('open');
+      document.body.style.overflow = 'hidden';
+  }
+
+  function closeAuDetail() {
+      document.getElementById('auDrawer').classList.remove('open');
+      document.getElementById('auDrawer').setAttribute('aria-hidden', 'true');
+      document.getElementById('auBackdrop').classList.remove('open');
+      document.body.style.overflow = '';
+      if (activeAuRowId) {
+          const row = document.getElementById('row-' + activeAuRowId);
+          if (row) row.classList.remove('active-row');
+          activeAuRowId = null;
+      }
+  }
+
+  document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeAuDetail();
+  });
+</script>
 {% endblock %}

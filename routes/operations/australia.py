@@ -230,87 +230,11 @@ def ops_australia_pathway():
     )
 
 
-@admin_required
-def ops_australia_test_bookings_list():
-    """Australia test bookings list — ops_test_bookings WHERE pathway='australia'."""
-    user = get_user()
-    conn = get_db()
-
-    search = (request.args.get('q', '') or '').strip()
-    exam_filter = (request.args.get('exam', '') or '').strip()
-    status_filter = (request.args.get('status', '') or '').strip()
-    reg = (request.args.get('client', '') or '').strip()
-
-    records = []
-    exams = []
-    statuses = []
-    total = 0
-
-    try:
-        sql = '''SELECT t.id, t.registration_number, t.exam, t.exam_type,
-                        t.booking_date, t.exam_date, t.exam_status,
-                        t.exam_result, t.exam_result_date, t.score,
-                        t.city_state, t.country, t.booked_by,
-                        p.first_name, p.last_name, p.prefix
-                   FROM ops_test_bookings t
-                   LEFT JOIN plab_clients p
-                          ON t.registration_number = p.registration_number
-                  WHERE t.pathway = 'australia' '''
-        params = []
-        if reg:
-            sql += " AND t.registration_number = ? "
-            params.append(reg)
-        if exam_filter:
-            sql += " AND t.exam = ? "
-            params.append(exam_filter)
-        if status_filter:
-            sql += " AND t.exam_status = ? "
-            params.append(status_filter)
-        if search:
-            sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                t.test_center LIKE ? OR t.registration_number LIKE ?
-            ) """
-            params.extend([f'%{search}%'] * 4)
-        sql += " ORDER BY COALESCE(t.exam_date, t.booking_date) DESC NULLS LAST, t.id DESC "
-        records = conn.execute(sql, params).fetchall()
-        total = len(records)
-
-        exams = [
-            r['exam'] for r in conn.execute(
-                """SELECT DISTINCT exam FROM ops_test_bookings
-                    WHERE pathway = 'australia' AND exam IS NOT NULL AND exam != ''
-                    ORDER BY exam"""
-            ).fetchall()
-        ]
-        statuses = [
-            r['exam_status'] for r in conn.execute(
-                """SELECT DISTINCT exam_status FROM ops_test_bookings
-                    WHERE pathway = 'australia' AND exam_status IS NOT NULL AND exam_status != ''
-                    ORDER BY exam_status"""
-            ).fetchall()
-        ]
-    except Exception as e:
-        logging.error(f"ops_australia_test_bookings_list: {e}")
-        flash(f'Error loading Australia test bookings: {e}', 'error')
-    finally:
-        conn.close()
-
-    return render_template(
-        'ops_australia_test_bookings_list.html',
-        user=user,
-        records=records,
-        total=total,
-        search=search,
-        exam_filter=exam_filter,
-        status_filter=status_filter,
-        client_reg=reg,
-        exams=exams,
-        statuses=statuses,
-        pathway_name='Australia Pathway',
-        active_ops_page='australia-test-bookings',
-        active_pathway='australia',
-    )
+# NOTE: ops_australia_test_bookings_list was removed from this module.
+# Australia Test Bookings (including the new drawer/detail/edit work
+# from Phase 4 standardization) now lives entirely in
+# routes/operations/au_test_bookings.py. Registration is wired in
+# routes/operations/__init__.py.
 
 
 @admin_required
@@ -612,12 +536,7 @@ def register_routes(app):
         view_func=ops_australia_pathway,
         methods=['GET'],
     )
-    app.add_url_rule(
-        '/operations/australia/test-bookings',
-        endpoint='ops_australia_test_bookings_list',
-        view_func=ops_australia_test_bookings_list,
-        methods=['GET'],
-    )
+    # Australia Test Bookings registration moved to routes/operations/au_test_bookings.py.
     app.add_url_rule(
         '/operations/australia/clients',
         endpoint='ops_australia_clients_list',

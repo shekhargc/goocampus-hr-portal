@@ -1,17 +1,40 @@
 """
-routes/operations/au_research.py — Operations: Australia Research & Publication list.
+routes/operations/au_research.py — Operations: Australia Research & Publication.
 
 Surfaces ops_research_publication rows WHERE pathway='australia'. LEFT JOINs
 plab_clients on registration_number so the candidate name displays even when
 records came in from the bulk Excel import (import_australia_research.py).
+
+Also exposes detail + edit pages so the section mirrors the Registration list
+pattern (drawer on the list, full detail page, edit form). Same UI as PLAB.
 """
 
 import logging
-from flask import render_template, flash, request
+from flask import render_template, flash, request, redirect, url_for
 
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+
+
+# Columns on ops_research_publication that the edit form can write to.
+# id / registration_number / pathway are NOT editable through the UI.
+AU_RESEARCH_EDITABLE_COLUMNS = [
+    'research_status',
+    'research_start_date',
+    'research_topic',
+    'research_batch',
+    'research_end_date',
+    'research_provider',
+    'published_journal_name',
+    'author_position',
+    'upload_published_copy',
+]
+
+# Coerce these to float on save (others stay as strings).
+AU_RESEARCH_NUMERIC_COLUMNS = {
+    'amount', 'score', 'points', 'duration',
+}
 
 
 @admin_required
@@ -63,7 +86,9 @@ def ops_australia_research_list():
                 r.published_journal_name LIKE ?
             ) """
             params.extend([f'%{search}%'] * 5)
-        sql += " ORDER BY COALESCE(r.research_start_date, '') DESC NULLS LAST, r.id DESC "
+        # Recent-first: newest research_start_date on top, NULLs at the bottom,
+        # then id DESC as a tiebreaker (user request 2026-06-01).
+        sql += " ORDER BY r.research_start_date DESC NULLS LAST, r.id DESC "
         records = conn.execute(sql, params).fetchall()
         total = len(records)
 
@@ -116,6 +141,155 @@ def ops_australia_research_list():
     )
 
 
+@admin_required
+def ops_australia_research_detail(rid):
+    """Read-only Australia research record detail.
+
+    Mirrors the PLAB client detail layout: header card + Edit button on top,
+    two-column grid of read-only fields below. LEFT JOIN plab_clients on
+    registration_number (pathway='australia' scope) so the candidate name
+    is shown even when the research row came in from the bulk import.
+    """
+    user = get_user()
+    conn = get_db()
+    record = None
+    try:
+        record = conn.execute(
+            """SELECT r.*,
+                      p.first_name, p.last_name, p.prefix,
+                      p.mobile, p.email
+                 FROM ops_research_publication r
+            LEFT JOIN plab_clients p
+                   ON r.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'australia'
+                WHERE r.id = ?
+                  AND COALESCE(r.pathway, 'plab') = 'australia' """,
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_australia_research_detail: {e}")
+    finally:
+        conn.close()
+
+    if not record:
+        flash('Australia research record not found.', 'error')
+        return redirect(url_for('ops_australia_research_list'))
+
+    return render_template(
+        'ops_australia_research_detail.html',
+        user=user,
+        record=record,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-research',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_research_edit_page(rid):
+    """GET — render the edit form for an Australia research record."""
+    user = get_user()
+    conn = get_db()
+    record = None
+    try:
+        record = conn.execute(
+            """SELECT r.*,
+                      p.first_name, p.last_name, p.prefix
+                 FROM ops_research_publication r
+            LEFT JOIN plab_clients p
+                   ON r.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'australia'
+                WHERE r.id = ?
+                  AND COALESCE(r.pathway, 'plab') = 'australia' """,
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_australia_research_edit_page: {e}")
+    finally:
+        conn.close()
+
+    if not record:
+        flash('Australia research record not found.', 'error')
+        return redirect(url_for('ops_australia_research_list'))
+
+    return render_template(
+        'ops_australia_research_edit.html',
+        user=user,
+        record=record,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-research',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_research_edit_save(rid):
+    """POST handler: save edits to an Australia research record.
+
+    Strict allowlist (AU_RESEARCH_EDITABLE_COLUMNS). pathway is never
+    updated. Numeric columns get float-coerced (bad input becomes 0).
+    """
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM ops_research_publication "
+            "WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+            (rid,),
+        ).fetchone()
+        if not existing:
+            flash('Australia research record not found.', 'error')
+            return redirect(url_for('ops_australia_research_list'))
+
+        # Discover which columns actually exist on this DB — guards against
+        # older schemas missing optional columns (e.g. upload_published_copy).
+        try:
+            db_cols = {
+                row['name'] for row in conn.execute(
+                    "PRAGMA table_info(ops_research_publication)"
+                ).fetchall()
+            }
+        except Exception:
+            db_cols = set(AU_RESEARCH_EDITABLE_COLUMNS)
+
+        sets, params = [], []
+        for col in AU_RESEARCH_EDITABLE_COLUMNS:
+            if col not in request.form:
+                continue
+            if db_cols and col not in db_cols:
+                # Skip silently — column not present in this environment.
+                continue
+            val = request.form.get(col, '').strip()
+            if col in AU_RESEARCH_NUMERIC_COLUMNS:
+                try:
+                    val = float(val) if val else 0
+                except ValueError:
+                    val = 0
+            sets.append(f"{col} = ?")
+            params.append(val)
+
+        if sets:
+            params.append(rid)
+            conn.execute(
+                "UPDATE ops_research_publication SET "
+                + ', '.join(sets)
+                + " WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+                params,
+            )
+            conn.commit()
+            flash('Research record saved.', 'success')
+        else:
+            flash('No changes to save.', 'info')
+    except Exception as e:
+        logging.error(f"ops_australia_research_edit_save: {e}")
+        flash(f'Error saving research record: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+
+    return redirect(url_for('ops_australia_research_detail', rid=rid))
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app."""
     app.add_url_rule(
@@ -123,4 +297,24 @@ def register_routes(app):
         endpoint='ops_australia_research_list',
         view_func=ops_australia_research_list,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/research/<int:rid>',
+        endpoint='ops_australia_research_detail',
+        view_func=ops_australia_research_detail,
+        methods=['GET'],
+    )
+    # Edit page (GET) — renders the form
+    app.add_url_rule(
+        '/operations/australia/research/<int:rid>/edit',
+        endpoint='ops_australia_research_edit_page',
+        view_func=ops_australia_research_edit_page,
+        methods=['GET'],
+    )
+    # Save (POST) — same URL, different method, separate endpoint
+    app.add_url_rule(
+        '/operations/australia/research/<int:rid>/edit',
+        endpoint='ops_australia_research_edit_save',
+        view_func=ops_australia_research_edit_save,
+        methods=['POST'],
     )

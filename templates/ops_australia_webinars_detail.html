@@ -1,0 +1,120 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Australia Webinar / Conference - {{ record.event_name or record.event_type or 'Record' }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_australia_webinars_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to Webinars &amp; Conferences
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
+          {{ record.event_name or record.event_type or 'Webinar / Conference' }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ record.registration_number or '—' }}
+          {% if record.first_name or record.last_name %}
+            &middot; Candidate: {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+          {% endif %}
+        </p>
+        {% if record.start_date or record.end_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          {% if record.start_date %}Start: {{ record.start_date }}{% endif %}
+          {% if record.start_date and record.end_date %} &middot; {% endif %}
+          {% if record.end_date %}End: {{ record.end_date }}{% endif %}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        {% set et = (record.event_type or '')|lower %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if 'webinar' in et %}
+            background:#DBEAFE;color:#1D4ED8;
+          {% elif 'conference' in et %}
+            background:#EDE9FE;color:#5B21B6;
+          {% else %}
+            background:#F3F4F6;color:#4B5563;
+          {% endif %}
+        ">
+          {{ record.event_type or 'Unknown' }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_australia_webinars_edit_page', rid=record.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Record
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Event Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Event Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Event Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.event_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Webinar / Conference Name:</span><span style="color:var(--navy);font-weight:600;">{{ record.event_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Participation Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.participation_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Event Value:</span><span style="color:var(--navy);font-weight:600;">{{ record.event_value or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">CPD Points:</span><span style="color:var(--navy);font-weight:600;">{{ record.cpd_points or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Notes</h3>
+        <div style="font-size:14px;color:var(--navy);white-space:pre-wrap;">
+          {{ record.notes or '—' }}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Schedule Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Schedule</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Start Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.start_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">End Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.end_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Duration (days):</span><span style="color:var(--navy);font-weight:600;">{{ record.duration_days or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Candidate Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Name:</span><span style="color:var(--navy);font-weight:600;">
+            {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+          </span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if record.email %}<a href="mailto:{{ record.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}
