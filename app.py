@@ -25763,6 +25763,128 @@ ACCESS_SECTION_CATALOG = [
             ('settings',         'Sales Settings',       'Sales-team-specific settings'),
         ],
     },
+    # ── HR (employee-facing + admin tools) ────────────────────────────────
+    {
+        'key': 'hr',
+        'label': 'HR',
+        'description': 'Leave, attendance, employee management, time logs.',
+        'sub_sections': [
+            ('leave_management', 'Leave Management',    'Apply / approve leave, balances'),
+            ('late_leave',       'Late Leave',          'Backdated leave applications (45 days)'),
+            ('bulk_leave',       'Bulk Leave Entry',    'Admin bulk leave entry'),
+            ('attendance',       'Attendance / Time Log','Check-in / check-out records'),
+            ('wfh',              'Work From Home',      'WFH applications + approvals'),
+            ('employees',        'Employee Directory',  'Active employee list + profiles'),
+            ('id_cards',         'ID Cards',            'ID card requests + generation'),
+            ('letters',          'Letters',             'HR letter templates + generation'),
+        ],
+    },
+    # ── KRA ────────────────────────────────────────────────────────────────
+    {
+        'key': 'kra',
+        'label': 'KRA',
+        'description': 'Goals, performance reviews, KRA tracking.',
+        'sub_sections': [
+            ('dashboard', 'KRA Dashboard', 'Overview + my goals'),
+            ('goals',     'Goals',         'Goal setting + tracking'),
+            ('reviews',   'Reviews',       'Performance reviews'),
+            ('approvals', 'Approvals',     'Manager approval queue'),
+        ],
+    },
+    # ── Finance (admin-heavy) ──────────────────────────────────────────────
+    {
+        'key': 'finance',
+        'label': 'Finance',
+        'description': 'Budget, revenue, expenses, finance admin.',
+        'sub_sections': [
+            ('budget',       'Budget',         'Budget allocation + tracking'),
+            ('revenue',      'Revenue',        'Revenue streams + reports'),
+            ('expenses',     'Expenses',       'Expense claims + approvals'),
+            ('salary',       'Salary',         'Salary structure + deductions'),
+            ('reports',      'Finance Reports','Finance analytics'),
+            ('settings',     'Finance Settings','Finance-team-specific settings'),
+        ],
+    },
+    # ── Company (admin tools, holidays, calendar, etc.) ────────────────────
+    {
+        'key': 'company',
+        'label': 'Company',
+        'description': 'Company-wide admin: holidays, calendar, org chart, system settings.',
+        'sub_sections': [
+            ('org_chart',         'Org Chart',           'Company hierarchy view'),
+            ('holidays',          'Holidays',            'Holiday calendar + management'),
+            ('calendar',          'Calendar',            'Company-wide events calendar'),
+            ('announcements',     'Announcements',       'Internal announcements feed'),
+            ('state_city',        'State & City Settings','Location lookup management'),
+            ('reset_passwords',   'Reset Passwords',     'Admin password reset tool'),
+            ('access_master',     'Access Master',       'Manage section permissions (this page)'),
+            ('section_visibility','Section Visibility',  'Legacy visibility editor'),
+        ],
+    },
+    # ── Colleges ───────────────────────────────────────────────────────────
+    {
+        'key': 'colleges',
+        'label': 'Colleges',
+        'description': 'College portal + predictor tools.',
+        'sub_sections': [
+            ('college_portal',  'College Portal',   'College directory + details'),
+            ('mbbs_predictor',  'MBBS Predictor',   'Indian MBBS rank/college predictor'),
+            ('russian',         'Russian Colleges', 'Russian college seed + admin'),
+            ('country_list',    'Country List',     'Country / pathway list'),
+            ('fees',            'Fee Structures',   'Fee structure admin'),
+        ],
+    },
+    # ── WhatsApp ───────────────────────────────────────────────────────────
+    {
+        'key': 'whatsapp',
+        'label': 'WhatsApp',
+        'description': 'WhatsApp messaging + templates + auto-trigger setup.',
+        'sub_sections': [
+            ('messages',  'Messages',  'WhatsApp message log'),
+            ('templates', 'Templates', 'WhatsApp template management'),
+            ('triggers',  'Auto Triggers', 'Automated WhatsApp triggers + rules'),
+            ('settings',  'WhatsApp Settings', 'Infobip / provider configuration'),
+        ],
+    },
+    # ── Clients (v2 unified client management) ─────────────────────────────
+    {
+        'key': 'clients',
+        'label': 'Clients (v2)',
+        'description': 'v2 unified client management — invitations, registrations, form config.',
+        'sub_sections': [
+            ('invitations',     'Client Invitations',  'Generate + send client portal invites'),
+            ('registrations',   'Client Registrations','v2 client registration list'),
+            ('form_config',     'Form Configuration',  'Centralised client form field config'),
+            ('doc_requests',    'Document Requests',   'Ops doc request queue'),
+            ('notifications',   'Notification Log',    'Client notification log'),
+        ],
+    },
+    # ── Dashboard (landing pages) ──────────────────────────────────────────
+    {
+        'key': 'dashboard',
+        'label': 'Dashboard',
+        'description': 'Landing pages each user sees on login.',
+        'sub_sections': [
+            ('personal', 'Personal Dashboard', 'Employee landing page'),
+            ('admin',    'Admin Dashboard',    'Admin landing page'),
+        ],
+    },
+    # ── Partner Portal (for partners — subject_type='partner') ─────────────
+    # Partners only have these sections; team grants here are valid but
+    # functionally unused.
+    {
+        'key': 'partner_portal',
+        'label': 'Partner Portal',
+        'description': 'Sections visible inside the partner-facing portal.',
+        'sub_sections': [
+            ('dashboard',     'Partner Dashboard',  'Partner landing page'),
+            ('clients',       'My Clients',         'Clients referred by this partner'),
+            ('documents',     'Documents',          'Shared document workspace'),
+            ('commissions',   'Commissions',        'Commission tracking + payouts'),
+            ('reports',       'Reports',            'Partner-side analytics'),
+            ('profile',       'Profile Settings',   'Partner profile + bank details'),
+        ],
+    },
 ]
 
 
@@ -25820,15 +25942,23 @@ cleanup_orphan_access_permissions()
 def ensure_user_section_permissions_table():
     """Create user_section_permissions table on boot. Idempotent.
 
-    Three flags per row so view / edit / add can be granted independently.
-    UNIQUE(employee_id, main_section, sub_section) enforces one row per
-    sub-section per employee — the UI upserts in place.
+    Unified for team members AND partners (Phase 1 of full Access Master
+    rollout, 2026-06-01). The `subject_type` + `subject_id` columns let one
+    row describe permissions for either an employee (subject_type='employee',
+    subject_id=employees.id) or a partner (subject_type='partner',
+    subject_id=partners.id).
+
+    Legacy back-compat: `employee_id` is kept and synchronised with
+    subject_id (when subject_type='employee') so older code reading the
+    column keeps working until Phase 6 cleanup retires it.
     """
     try:
         conn = get_db()
         conn.execute('''CREATE TABLE IF NOT EXISTS user_section_permissions (
             id SERIAL PRIMARY KEY,
-            employee_id    INTEGER NOT NULL REFERENCES employees(id),
+            employee_id    INTEGER REFERENCES employees(id),
+            subject_type   TEXT    NOT NULL DEFAULT 'employee',
+            subject_id     INTEGER NOT NULL,
             main_section   TEXT    NOT NULL,
             sub_section    TEXT    NOT NULL,
             can_view       INTEGER NOT NULL DEFAULT 0,
@@ -25840,6 +25970,29 @@ def ensure_user_section_permissions_table():
             UNIQUE(employee_id, main_section, sub_section)
         )''')
         conn.commit()
+        # Migration: add subject_type / subject_id on existing dev DBs.
+        for ddl in [
+            "ALTER TABLE user_section_permissions ADD COLUMN subject_type TEXT DEFAULT 'employee'",
+            "ALTER TABLE user_section_permissions ADD COLUMN subject_id INTEGER",
+        ]:
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        # Backfill: any rows missing subject_id get it from employee_id.
+        try:
+            conn.execute(
+                "UPDATE user_section_permissions "
+                "SET subject_type = COALESCE(subject_type, 'employee'), "
+                "    subject_id = COALESCE(subject_id, employee_id) "
+                "WHERE subject_id IS NULL"
+            )
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
     except Exception as e:
         logging.error(f"ensure_user_section_permissions_table: {e}")
         try: conn.rollback()
@@ -25852,38 +26005,78 @@ def ensure_user_section_permissions_table():
 ensure_user_section_permissions_table()
 
 
-def has_section_permission(user, main_section, sub_section, action='view'):
-    """Return True if `user` may perform `action` on (main_section, sub_section).
+def has_section_permission(subject, main_section, sub_section, action='view', subject_type=None):
+    """Return True if `subject` may perform `action` on (main_section, sub_section).
+
+    Accepts either a team-member row (from get_user) or a partner row.
+    Auto-detects subject_type by checking common columns:
+      - employees have 'is_admin' + 'emp_code'
+      - partners have 'company_name' or similar
+    Caller can pass explicit subject_type='employee' or 'partner' to skip
+    detection.
 
     Rules:
-      - Admins ALWAYS bypass (per user decision 2026-06-01).
+      - Admin employees ALWAYS bypass (per user decision 2026-06-01).
       - action must be one of 'view' | 'edit' | 'add'.
-      - Looks up user_section_permissions for the (employee, main, sub) row.
-      - If the row is missing or the matching flag is 0 → returns False.
+      - Looks up user_section_permissions for the (subject_type, subject_id,
+        main, sub) row.
+      - Returns False if the row is missing or the matching flag is 0.
 
-    Note: this is the NEW granular helper. The older has_module_access()
+    Note: this is the new granular helper. The older has_module_access()
     + section_permissions table-based checks are NOT consulted here so
     they don't override an explicit deny; callers needing legacy fallback
-    should check both.
+    should check both during the transition.
     """
-    if not user:
+    if not subject:
         return False
-    try:
-        if user['is_admin']:
-            return True
-    except (KeyError, IndexError):
-        return False
+
+    # Detect subject_type if not given.
+    if subject_type is None:
+        try:
+            keys = set(subject.keys()) if hasattr(subject, 'keys') else set(subject)
+        except Exception:
+            keys = set()
+        subject_type = 'partner' if ('company_name' in keys or 'partner_type' in keys) else 'employee'
+
+    # Admin employees always bypass.
+    if subject_type == 'employee':
+        try:
+            if subject['is_admin']:
+                return True
+        except (KeyError, IndexError, TypeError):
+            pass
+
     if action not in ('view', 'edit', 'add'):
         return False
     column = {'view': 'can_view', 'edit': 'can_edit', 'add': 'can_add'}[action]
+
+    try:
+        subject_id = subject['id']
+    except (KeyError, IndexError, TypeError):
+        return False
+
     conn = get_db()
     try:
+        # Primary lookup: subject_type + subject_id.
         row = conn.execute(
             f"SELECT {column} AS flag FROM user_section_permissions "
-            "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
-            (user['id'], main_section, sub_section),
+            "WHERE subject_type = ? AND subject_id = ? "
+            "  AND main_section = ? AND sub_section = ?",
+            (subject_type, subject_id, main_section, sub_section),
         ).fetchone()
-        return bool(row and row['flag'])
+        if row:
+            return bool(row['flag'])
+        # Back-compat: pre-Phase-1 rows used employee_id only. Honour those
+        # when subject is an employee.
+        if subject_type == 'employee':
+            row = conn.execute(
+                f"SELECT {column} AS flag FROM user_section_permissions "
+                "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
+                (subject_id, main_section, sub_section),
+            ).fetchone()
+            if row:
+                return bool(row['flag'])
+        return False
     except Exception as e:
         logging.error(f"has_section_permission: {e}")
         return False
@@ -26232,17 +26425,21 @@ def access_master_save():
                 conn.execute(
                     "UPDATE user_section_permissions "
                     "SET can_view = ?, can_edit = ?, can_add = ?, "
+                    "    subject_type = COALESCE(subject_type, 'employee'), "
+                    "    subject_id   = COALESCE(subject_id, ?), "
                     "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
                     "WHERE id = ?",
-                    (view, edit, add, actor['id'], existing['id']),
+                    (view, edit, add, employee_id, actor['id'], existing['id']),
                 )
                 updated += 1
             else:
+                # New rows write both old and new columns so back-compat reads keep working.
                 conn.execute(
                     "INSERT INTO user_section_permissions "
-                    "(employee_id, main_section, sub_section, can_view, can_edit, can_add, granted_by) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (employee_id, main, sub, view, edit, add, actor['id']),
+                    "(employee_id, subject_type, subject_id, main_section, sub_section, "
+                    " can_view, can_edit, can_add, granted_by) "
+                    "VALUES (?, 'employee', ?, ?, ?, ?, ?, ?, ?)",
+                    (employee_id, employee_id, main, sub, view, edit, add, actor['id']),
                 )
                 inserted += 1
         conn.commit()
@@ -26360,17 +26557,20 @@ def access_master_save_bulk():
                     conn.execute(
                         "UPDATE user_section_permissions "
                         "SET can_view = ?, can_edit = ?, can_add = ?, "
+                        "    subject_type = COALESCE(subject_type, 'employee'), "
+                        "    subject_id   = COALESCE(subject_id, ?), "
                         "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
                         "WHERE id = ?",
-                        (view, edit, add, actor['id'], existing['id']),
+                        (view, edit, add, emp_id, actor['id'], existing['id']),
                     )
                     totals['updated'] += 1
                 else:
                     conn.execute(
                         "INSERT INTO user_section_permissions "
-                        "(employee_id, main_section, sub_section, can_view, can_edit, can_add, granted_by) "
-                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                        (emp_id, main, sub, view, edit, add, actor['id']),
+                        "(employee_id, subject_type, subject_id, main_section, sub_section, "
+                        " can_view, can_edit, can_add, granted_by) "
+                        "VALUES (?, 'employee', ?, ?, ?, ?, ?, ?, ?)",
+                        (emp_id, emp_id, main, sub, view, edit, add, actor['id']),
                     )
                     totals['inserted'] += 1
                 touched = True
