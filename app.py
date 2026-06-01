@@ -22551,6 +22551,16 @@ try:
 except Exception as _au_lk_err:
     logging.error(f"Australia lookups seed failed: {_au_lk_err}")
 
+# ── Auto-seed Australia vendors + vendor_service_map from imported ops_* data ──
+# User insight: the historical Excel imports already contain every training
+# vendor, online subscription, and research provider for Australia. Extract
+# those distinct names and populate the centralised vendors_providers table.
+try:
+    from seed_australia_vendors import run_seed_australia_vendors_once
+    run_seed_australia_vendors_once(get_db)
+except Exception as _au_vp_err:
+    logging.error(f"Australia vendors seed failed: {_au_vp_err}")
+
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():
     """Import call notes from call_notes_import_data.py (8423 rows, upsert by reg+date+note)."""
