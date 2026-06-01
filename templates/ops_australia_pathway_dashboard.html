@@ -1,375 +1,571 @@
 {% extends "ops_sidebar_base.html" %}
-{% block title %}{{ pathway_name }} &mdash; GooCampus CRM{% endblock %}
+
+{% block title %}Australia Pathway Dashboard - GooCampus HR Portal{% endblock %}
 
 {% block ops_extra_css %}
 <style>
-    .pathway-hero {
-        background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
-        border-radius: 1rem;
-        padding: 2.25rem 2.5rem;
-        color: white;
+    /* ── Page header ── */
+    .dash-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
         margin-bottom: 2rem;
+    }
+    .dash-header h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: var(--navy);
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+    .dash-header h1 span { color: var(--orange); }
+    .dash-header-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .dash-header-actions a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        background: var(--navy);
+        color: white;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    .dash-header-actions a:hover { background: var(--navy-light); }
+    .dash-header-actions a.btn-orange { background: var(--orange); }
+    .dash-header-actions a.btn-orange:hover { background: var(--orange-dark); }
+
+    /* ── Hero stat row ── */
+    .hero-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .hero-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
         position: relative;
         overflow: hidden;
     }
-    .pathway-hero::before {
+    .hero-card::before {
         content: '';
         position: absolute;
-        top: -40%; right: -10%;
-        width: 400px; height: 400px;
-        border-radius: 50%;
-        background: radial-gradient(circle, rgba(245,130,32,0.12) 0%, transparent 70%);
+        top: 0; left: 0;
+        width: 4px; height: 100%;
     }
-    .pathway-hero h1 {
-        font-size: 1.75rem; font-weight: 700; margin: 0;
-        position: relative; z-index: 1;
-    }
-    .pathway-hero h1 span { color: var(--orange); }
-    .pathway-hero p {
-        color: rgba(255,255,255,0.7); font-size: 0.95rem;
-        margin: 0.5rem 0 0; position: relative; z-index: 1;
-    }
-    .stat-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-        gap: 1rem;
-        margin-bottom: 1.5rem;
-    }
-    .stat-card {
+    .hero-card.orange::before { background: var(--orange); }
+    .hero-card.green::before  { background: #10B981; }
+    .hero-card.navy::before   { background: var(--navy); }
+    .hero-card.yellow::before { background: #F59E0B; }
+    .hero-label { font-size: 0.75rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .hero-value { font-size: 2.25rem; font-weight: 800; color: var(--navy); line-height: 1; margin: 0.4rem 0 0.2rem; }
+    .hero-sub   { font-size: 0.75rem; color: var(--gray-500); }
+
+    /* ── Pipeline strips ── */
+    .pipeline-strip {
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        padding: 1.15rem 1.4rem;
-    }
-    .stat-card .stat-label {
-        font-size: 0.75rem; color: var(--gray-500); font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.3rem;
-    }
-    .stat-card .stat-value {
-        font-size: 1.85rem; font-weight: 700; color: var(--navy); line-height: 1.1;
-    }
-    .stat-card .stat-sub {
-        font-size: 0.78rem; color: var(--gray-500); margin-top: 0.25rem;
-    }
-    .stat-card.accent-orange { border-top: 3px solid var(--orange); }
-    .stat-card.accent-blue   { border-top: 3px solid #3B82F6; }
-    .stat-card.accent-green  { border-top: 3px solid #22C55E; }
-    .stat-card.accent-yellow { border-top: 3px solid #F59E0B; }
-    .stat-card.accent-red    { border-top: 3px solid #EF4444; }
-    .stat-card.accent-purple { border-top: 3px solid #8B5CF6; }
-
-    .grid-2 {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(360px, 1fr));
-        gap: 1.5rem;
+        padding: 1.25rem 1.5rem;
         margin-bottom: 1.5rem;
     }
+    .pipeline-strip h3 {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .pipeline-bar {
+        display: flex;
+        height: 28px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--gray-100);
+    }
+    .pipeline-seg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.78rem;
+        font-weight: 700;
+        min-width: 30px;
+    }
+    .seg-english { background: #6366F1; }
+    .seg-plab1   { background: var(--orange); }
+    .seg-plab2   { background: #F97316; }
+    .seg-job     { background: #0EA5E9; }
+    .seg-gmc     { background: #10B981; }
+    .seg-done    { background: var(--navy); }
+    .stg-english { background: #8B5CF6; }
+    .stg-plab1   { background: #EC4899; }
+    .stg-plab2   { background: #F59E0B; }
+    .stg-job     { background: #3B82F6; }
+    .stg-jobgc   { background: #0D9488; }
+    .stg-jobown  { background: #7C3AED; }
+    .pipeline-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 0.85rem;
+        font-size: 0.75rem;
+        color: var(--gray-600);
+    }
+    .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-    .panel {
+    /* ── Section grid cards ── */
+    .section-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .sec-card {
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
     }
-    .panel-header {
-        padding: 0.9rem 1.25rem;
-        border-bottom: 1px solid var(--gray-200);
-        display: flex; justify-content: space-between; align-items: center;
-    }
-    .panel-header h3 {
-        margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--navy);
-    }
-    .panel-body { padding: 0.5rem 1.25rem; }
-    .panel-body table { width: 100%; border-collapse: collapse; }
-    .panel-body th, .panel-body td {
-        text-align: left; padding: 0.55rem 0.4rem; font-size: 0.88rem;
+    .sec-card-head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem 0.85rem;
         border-bottom: 1px solid var(--gray-100);
     }
-    .panel-body th {
-        font-size: 0.74rem; color: var(--gray-500);
-        text-transform: uppercase; letter-spacing: 0.03em; font-weight: 600;
+    .sec-icon {
+        width: 36px; height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
     }
-    .panel-body tr:last-child td { border-bottom: none; }
-    .empty-state {
-        text-align: center; padding: 2rem 1rem;
-        color: var(--gray-500); font-size: 0.9rem;
+    .sec-card-head h3 {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+        flex: 1;
     }
-    .status-pill {
-        display: inline-block;
-        padding: 0.18rem 0.55rem;
-        border-radius: 999px;
-        font-size: 0.7rem;
-        font-weight: 600;
-        text-transform: uppercase;
-        letter-spacing: 0.03em;
+    .sec-total {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: var(--navy);
     }
-    .pill-in-process { background: #DBEAFE; color: #1D4ED8; }
-    .pill-on-hold    { background: #FEF3C7; color: #92400E; }
-    .pill-dropped    { background: #FEE2E2; color: #B91C1C; }
-    .pill-completed  { background: #D1FAE5; color: #065F46; }
-    .pill-unknown    { background: #F3F4F6; color: #4B5563; }
-
-    .reg-link { color: var(--navy); text-decoration: none; font-weight: 600; }
-    .reg-link:hover { color: var(--orange); }
-
-    .section-grid {
+    .sec-card-body { padding: 1rem 1.25rem; flex: 1; }
+    .sec-stats {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.85rem;
-        margin: 1.5rem 0;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.6rem 0.85rem;
     }
-    .section-tile {
-        display: block;
+    .sec-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.78rem;
+    }
+    .sec-stat .num {
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .sec-stat .lbl { color: var(--gray-500); }
+    .dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .dot-orange { background: var(--orange); }
+    .dot-green  { background: #10B981; }
+    .dot-blue   { background: #3B82F6; }
+    .dot-yellow { background: #F59E0B; }
+    .dot-navy   { background: var(--navy); }
+    .dot-red    { background: #EF4444; }
+    .sec-card-foot {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        border-top: 1px solid var(--gray-100);
+        background: var(--gray-50);
+    }
+    .sec-card-foot a {
+        flex: 1;
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--navy);
+        padding: 0.4rem 0;
+        border-radius: 0.35rem;
+        background: white;
+        border: 1px solid var(--gray-200);
+    }
+    .sec-card-foot a:hover { background: var(--orange); color: white; border-color: var(--orange); }
+
+    /* ── Upcoming exams ── */
+    .upcoming-section {
         background: white;
         border: 1px solid var(--gray-200);
         border-radius: 0.75rem;
-        padding: 1rem 1.1rem;
-        text-decoration: none;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .upcoming-section h3 {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+        font-weight: 700;
         color: var(--navy);
-        transition: border-color 0.15s, transform 0.15s;
     }
-    .section-tile:hover {
-        border-color: var(--orange);
-        transform: translateY(-1px);
+    .upcoming-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
     }
-    .section-tile .stl {
-        font-size: 0.72rem; color: var(--gray-500); font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.03em;
+    .upcoming-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        padding: 0.5rem 0.65rem;
+        border-bottom: 1px solid var(--gray-200);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
     }
-    .section-tile .stn {
-        font-size: 1rem; font-weight: 700; margin-top: 0.2rem;
+    .upcoming-table td {
+        padding: 0.55rem 0.65rem;
+        color: var(--navy);
+        border-bottom: 1px solid var(--gray-100);
     }
-    .section-tile .stc {
-        font-size: 0.78rem; color: var(--gray-500); margin-top: 0.15rem;
+    .upcoming-empty { padding: 1.5rem; text-align: center; color: var(--gray-500); font-size: 0.85rem; }
+
+    /* ── Quick links ── */
+    .quick-links-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
     }
-    .section-tile.disabled {
-        opacity: 0.5; pointer-events: none; cursor: not-allowed;
+    .quick-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
     }
-    .section-tile.disabled:hover { transform: none; border-color: var(--gray-200); }
+    .quick-grid a {
+        padding: 0.6rem 0.85rem;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--navy);
+        text-decoration: none;
+        text-align: center;
+    }
+    .quick-grid a:hover { background: var(--orange); color: white; border-color: var(--orange); }
 </style>
 {% endblock %}
 
 {% block ops_content %}
-<div class="pathway-hero">
-    <h1><span>{{ pathway_name }}</span></h1>
-    <p>AMC (Australian Medical Council) pathway. Clients, training, EPIC, online courses, payments, call notes &amp; more — all filtered to <code style="color:#fff">pathway = australia</code>.</p>
+<div class="dash-header">
+    <h1><span>Australia</span> Pathway Dashboard</h1>
+    <div class="dash-header-actions">
+        <a href="{{ url_for('ops_australia_clients_list') }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            All Clients
+        </a>
+    </div>
 </div>
 
-<h2 style="margin: 0 0 0.6rem; font-size: 0.85rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: 0.04em; font-weight: 700;">Sections</h2>
+<!-- ── Hero stats ── -->
+<div class="hero-stats">
+    <div class="hero-card orange">
+        <div class="hero-label">Total Clients</div>
+        <div class="hero-value">{{ stats.total_clients }}</div>
+        <div class="hero-sub">All registered</div>
+    </div>
+    <div class="hero-card green">
+        <div class="hero-label">Active Clients</div>
+        <div class="hero-value">{{ stats.active_clients }}</div>
+        <div class="hero-sub">In Process</div>
+    </div>
+    <div class="hero-card navy">
+        <div class="hero-label">Upcoming Tests</div>
+        <div class="hero-value">{{ stats.upcoming_tests }}</div>
+        <div class="hero-sub">AMC MCQ: {{ stats.amc_mcq_upcoming }} &middot; AMC Clinical: {{ stats.amc_clin_upcoming }}</div>
+    </div>
+    <div class="hero-card yellow">
+        <div class="hero-label">Awaiting Results</div>
+        <div class="hero-value">{{ stats.awaiting_results }}</div>
+        <div class="hero-sub">{{ stats.recent_passes }} passed (30 days)</div>
+    </div>
+</div>
+
+<!-- ── Client Status Pipeline ── -->
+{% set status_counts = stats.account_status %}
+<div class="pipeline-strip">
+    <h3>Client Status Overview</h3>
+    <div class="pipeline-bar">
+        {% set statuses = [
+            ('In Process', 'seg-english', status_counts.get('In Process', 0)),
+            ('Switched Program', 'seg-plab1', status_counts.get('Switched Program', 0)),
+            ('On Hold', 'seg-plab2', status_counts.get('On Hold', 0)),
+            ('Dropped and Refunded', 'seg-job', status_counts.get('Dropped and Refunded', 0)),
+            ('Dropped Out', 'seg-gmc', status_counts.get('Dropped Out', 0)),
+            ('Completed', 'seg-done', status_counts.get('Completed', 0))
+        ] %}
+        {% for label, cls, count in statuses %}
+            {% if count > 0 %}
+            <div class="pipeline-seg {{ cls }}" style="flex: {{ count }}" title="{{ label }}: {{ count }}">{{ count }}</div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <div class="pipeline-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#6366F1"></span> In Process ({{ status_counts.get('In Process', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> Switched Program ({{ status_counts.get('Switched Program', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#F97316"></span> On Hold ({{ status_counts.get('On Hold', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#0EA5E9"></span> Dropped &amp; Refunded ({{ status_counts.get('Dropped and Refunded', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#10B981"></span> Dropped Out ({{ status_counts.get('Dropped Out', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--navy)"></span> Completed ({{ status_counts.get('Completed', 0) }})</span>
+    </div>
+</div>
+
+<!-- ── Active Client Stage Breakdown ── -->
+{% set stage_counts = stats.current_stage %}
+<div class="pipeline-strip">
+    <h3>Active Clients &mdash; Current Stage</h3>
+    <div class="pipeline-bar">
+        {% for stage_name, count in stage_counts.items() %}
+            {% if count > 0 %}
+            <div class="pipeline-seg stg-english" style="flex: {{ count }}; background: hsl({{ loop.index * 47 % 360 }}, 65%, 50%);" title="{{ stage_name }}: {{ count }}">{{ count }}</div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <div class="pipeline-legend">
+        {% for stage_name, count in stage_counts.items() %}
+        <span class="legend-item"><span class="legend-dot" style="background: hsl({{ loop.index * 47 % 360 }}, 65%, 50%);"></span> {{ stage_name }} ({{ count }})</span>
+        {% endfor %}
+        {% if not stage_counts %}<span style="color: var(--gray-500); font-style: italic;">No active clients yet.</span>{% endif %}
+    </div>
+</div>
+
+<!-- ── Section cards ── -->
 <div class="section-grid">
-    <a class="section-tile" href="{{ url_for('ops_australia_test_bookings_list') }}">
-        <div class="stl">Test Bookings</div>
-        <div class="stn">{{ stats.section_counts.get('test_bookings', 0) }} records</div>
-        <div class="stc">AMC, OET, PTE, IELTS &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_academic_list') }}">
-        <div class="stl">Academic Details</div>
-        <div class="stn">{{ stats.section_counts.get('academic', 0) }} records</div>
-        <div class="stc">MBBS, internship, speciality &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_epic_list') }}">
-        <div class="stl">EPIC Registration</div>
-        <div class="stn">{{ stats.section_counts.get('epic', 0) }} records</div>
-        <div class="stc">EPIC + Notary Cam workflow &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_training_list') }}">
-        <div class="stl">Training</div>
-        <div class="stn">{{ stats.section_counts.get('training', 0) }} records</div>
-        <div class="stc">AMC MCQ Mock &amp; more &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_online_courses_list') }}">
-        <div class="stl">Online Courses &amp; Subs</div>
-        <div class="stn">{{ stats.section_counts.get('online_courses', 0) }} records</div>
-        <div class="stc">eMedici &amp; other access &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_payments_list') }}">
-        <div class="stl">Payments</div>
-        <div class="stn">{{ stats.section_counts.get('payments', 0) }} records</div>
-        <div class="stc">Installments &amp; receipts &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_call_notes_list') }}">
-        <div class="stl">Call Notes</div>
-        <div class="stn">{{ stats.section_counts.get('call_notes', 0) }} records</div>
-        <div class="stc">Per-client call log &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_research_list') }}">
-        <div class="stl">Research &amp; Publication</div>
-        <div class="stn">{{ stats.section_counts.get('research', 0) }} records</div>
-        <div class="stc">Topics, journals &amp; status &rarr;</div>
-    </a>
-    <a class="section-tile" href="{{ url_for('ops_australia_webinars_list') }}">
-        <div class="stl">Webinars &amp; Conferences</div>
-        <div class="stn">{{ stats.section_counts.get('webinars', 0) }} records</div>
-        <div class="stc">Events, providers &amp; points &rarr;</div>
-    </a>
-</div>
 
-<div class="stat-grid">
-    <div class="stat-card accent-orange">
-        <div class="stat-label">Total clients</div>
-        <div class="stat-value">{{ stats.total_clients }}</div>
-        <div class="stat-sub">all-time imported &amp; new</div>
-    </div>
-    <div class="stat-card accent-blue">
-        <div class="stat-label">In Process</div>
-        <div class="stat-value">{{ stats.active_clients }}</div>
-        <div class="stat-sub">actively progressing</div>
-    </div>
-    <div class="stat-card accent-yellow">
-        <div class="stat-label">On Hold</div>
-        <div class="stat-value">{{ stats.on_hold_clients }}</div>
-        <div class="stat-sub">paused, may resume</div>
-    </div>
-    <div class="stat-card accent-red">
-        <div class="stat-label">Dropped</div>
-        <div class="stat-value">{{ stats.dropped_clients }}</div>
-        <div class="stat-sub">discontinued service</div>
-    </div>
-    <div class="stat-card accent-green">
-        <div class="stat-label">Completed</div>
-        <div class="stat-value">{{ stats.completed_clients }}</div>
-        <div class="stat-sub">finished pathway</div>
-    </div>
-    <div class="stat-card accent-purple">
-        <div class="stat-label">FY new signups</div>
-        <div class="stat-value">{{ stats.this_fy_new }}</div>
-        <div class="stat-sub">current Indian FY</div>
-    </div>
-</div>
-
-<div class="grid-2">
-    <div class="panel">
-        <div class="panel-header"><h3>Account status breakdown</h3></div>
-        <div class="panel-body">
-            {% if stats.account_status %}
-            <table>
-                <thead><tr><th>Status</th><th style="text-align:right">Count</th></tr></thead>
-                <tbody>
-                    {% for status, count in stats.account_status.items() %}
-                    <tr>
-                        <td>
-                            {% set pill_class = 'pill-unknown' %}
-                            {% if status == 'In Process' %}{% set pill_class = 'pill-in-process' %}
-                            {% elif status == 'On Hold' %}{% set pill_class = 'pill-on-hold' %}
-                            {% elif status == 'Dropped' %}{% set pill_class = 'pill-dropped' %}
-                            {% elif status == 'Completed' %}{% set pill_class = 'pill-completed' %}
-                            {% endif %}
-                            <span class="status-pill {{ pill_class }}">{{ status }}</span>
-                        </td>
-                        <td style="text-align:right; font-weight:600">{{ count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">No clients yet for Australia Pathway.</div>
-            {% endif %}
+    <!-- Training (Coaching) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <h3>Training</h3>
+            <div class="sec-total">{{ stats.coaching_total }}</div>
         </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-header"><h3>Current stage (active only)</h3></div>
-        <div class="panel-body">
-            {% if stats.current_stage %}
-            <table>
-                <thead><tr><th>Stage</th><th style="text-align:right">Count</th></tr></thead>
-                <tbody>
-                    {% for stage, count in stats.current_stage.items() %}
-                    <tr>
-                        <td>{{ stage }}</td>
-                        <td style="text-align:right; font-weight:600">{{ count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">No active clients to break down by stage.</div>
-            {% endif %}
-        </div>
-    </div>
-</div>
-
-<div class="grid-2">
-    <div class="panel">
-        <div class="panel-header"><h3>Top counsellors (active)</h3></div>
-        <div class="panel-body">
-            {% if stats.counsellor_breakdown %}
-            <table>
-                <thead><tr><th>Counsellor</th><th style="text-align:right">Clients</th></tr></thead>
-                <tbody>
-                    {% for counsellor, count in stats.counsellor_breakdown %}
-                    <tr>
-                        <td>{{ counsellor }}</td>
-                        <td style="text-align:right; font-weight:600">{{ count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-            {% else %}
-            <div class="empty-state">No counsellor assignments yet.</div>
-            {% endif %}
-        </div>
-    </div>
-
-    <div class="panel">
-        <div class="panel-header"><h3>Active package value</h3></div>
-        <div class="panel-body">
-            <div style="padding: 1.2rem 0.5rem;">
-                <div style="font-size: 0.78rem; color: var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing: 0.03em;">Sum of final package, active clients</div>
-                <div style="font-size: 2rem; font-weight:700; color: var(--navy); margin: 0.3rem 0;">
-                    &#8377;{{ '{:,.0f}'.format(stats.package_total) }}
-                </div>
-                <div style="font-size: 0.85rem; color: var(--gray-500);">{{ stats.active_clients }} active clients</div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.coaching_ongoing }}</span><span class="lbl">Ongoing</span></div>
+                <div class="sec-stat"><div class="dot dot-navy"></div><span class="num">{{ stats.coaching_total - stats.coaching_ongoing }}</span><span class="lbl">Completed</span></div>
             </div>
         </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_training_list') }}">View All</a>
+        </div>
     </div>
+
+    <!-- Test Bookings -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFF7ED;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            </div>
+            <h3>Test Bookings</h3>
+            <div class="sec-total">{{ stats.test_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.amc_mcq_upcoming }}</span><span class="lbl">AMC MCQ upcoming</span></div>
+                <div class="sec-stat"><div class="dot dot-yellow"></div><span class="num">{{ stats.amc_clin_upcoming }}</span><span class="lbl">AMC Clinical</span></div>
+                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.awaiting_results }}</span><span class="lbl">Awaiting results</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.recent_passes }}</span><span class="lbl">Passed (30d)</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_test_bookings_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- EPIC Registration -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #F0FDF4;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <h3>EPIC Registration</h3>
+            <div class="sec-total">{{ stats.epic_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.epic_in_process }}</span><span class="lbl">In Process</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.epic_completed }}</span><span class="lbl">Completed</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_epic_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Research & Publication -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF3C7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <h3>Research &amp; Publication</h3>
+            <div class="sec-total">{{ stats.research_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.research_started }}</span><span class="lbl">Started</span></div>
+                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.research_completed }}</span><span class="lbl">Completed</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.research_published }}</span><span class="lbl">Published</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_research_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Academic Details -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FCE7F3;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DB2777" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
+            </div>
+            <h3>Academic Details</h3>
+            <div class="sec-total">{{ stats.academic_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.academic_total }}</span><span class="lbl">Records on file</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_academic_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Online Courses & Subscriptions -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EDE9FE;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            </div>
+            <h3>Online Courses</h3>
+            <div class="sec-total">{{ stats.oc_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.oc_total }}</span><span class="lbl">Subscriptions</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_online_courses_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Payments -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #DCFCE7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <h3>Payments</h3>
+            <div class="sec-total">{{ stats.payments_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">&#8377;{{ '{:,.0f}'.format(stats.payments_sum) }}</span><span class="lbl">Total collected</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_payments_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Webinars & Conferences -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFE4E6;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <h3>Webinars &amp; Conferences</h3>
+            <div class="sec-total">{{ stats.webinars_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.webinars_total }}</span><span class="lbl">Recorded events</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_webinars_list') }}">View All</a>
+        </div>
+    </div>
+
 </div>
 
-<div class="panel">
-    <div class="panel-header">
-        <h3>Recent registrations</h3>
-    </div>
-    <div class="panel-body">
-        {% if stats.recent_registrations %}
-        <table>
-            <thead>
-                <tr>
-                    <th>Reg. No.</th>
-                    <th>Candidate</th>
-                    <th>Mobile</th>
-                    <th>Counsellor</th>
-                    <th>Status</th>
-                    <th>Stage</th>
-                    <th style="text-align:right">Package</th>
-                </tr>
-            </thead>
-            <tbody>
-                {% for r in stats.recent_registrations %}
-                <tr>
-                    <td><span class="reg-link">{{ r.registration_number or '—' }}</span></td>
-                    <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
-                    <td>{{ r.mobile or '—' }}</td>
-                    <td>{{ r.counsellor or '—' }}</td>
-                    <td>
-                        {% set pill_class = 'pill-unknown' %}
-                        {% if r.account_status == 'In Process' %}{% set pill_class = 'pill-in-process' %}
-                        {% elif r.account_status == 'On Hold' %}{% set pill_class = 'pill-on-hold' %}
-                        {% elif r.account_status == 'Dropped' %}{% set pill_class = 'pill-dropped' %}
-                        {% elif r.account_status == 'Completed' %}{% set pill_class = 'pill-completed' %}
-                        {% endif %}
-                        <span class="status-pill {{ pill_class }}">{{ r.account_status or 'Unknown' }}</span>
-                    </td>
-                    <td>{{ r.current_stage or '—' }}</td>
-                    <td style="text-align:right; font-weight:600">
-                        {% if r.final_package %}&#8377;{{ '{:,.0f}'.format(r.final_package) }}{% else %}—{% endif %}
-                    </td>
-                </tr>
-                {% endfor %}
-            </tbody>
-        </table>
-        {% else %}
-        <div class="empty-state">No registrations yet.</div>
-        {% endif %}
-    </div>
+<!-- ── Upcoming Exams ── -->
+<div class="upcoming-section">
+    <h3>Upcoming Exams (next 5)</h3>
+    {% if stats.upcoming_exams %}
+    <table class="upcoming-table">
+        <thead>
+            <tr>
+                <th>Candidate</th>
+                <th>Exam</th>
+                <th>Exam Date</th>
+                <th>Country</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in stats.upcoming_exams %}
+            <tr>
+                <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
+                <td>{{ r.exam or '—' }}</td>
+                <td>{{ r.exam_date or '—' }}</td>
+                <td>{{ r.country or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="upcoming-empty">No upcoming exams booked.</div>
+    {% endif %}
 </div>
+
+<!-- ── Quick Links ── -->
+<div class="quick-links-title">Quick Links — All Australia Operations</div>
+<div class="quick-grid">
+    <a href="{{ url_for('ops_australia_clients_list') }}">Registration</a>
+    <a href="{{ url_for('ops_australia_test_bookings_list') }}">Test Bookings</a>
+    <a href="{{ url_for('ops_australia_training_list') }}">Training</a>
+    <a href="{{ url_for('ops_australia_academic_list') }}">Academic Details</a>
+    <a href="{{ url_for('ops_australia_epic_list') }}">EPIC Registration</a>
+    <a href="{{ url_for('ops_australia_online_courses_list') }}">Online Courses</a>
+    <a href="{{ url_for('ops_australia_payments_list') }}">Payments</a>
+    <a href="{{ url_for('ops_australia_call_notes_list') }}">Call Notes</a>
+    <a href="{{ url_for('ops_australia_research_list') }}">Research</a>
+    <a href="{{ url_for('ops_australia_webinars_list') }}">Webinars</a>
+</div>
+
 {% endblock %}

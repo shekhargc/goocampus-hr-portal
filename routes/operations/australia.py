@@ -122,7 +122,6 @@ def ops_australia_pathway():
         ).fetchall()
 
         # ── Section row counts for the dashboard tile grid ──────────────
-        # Each tile shows a live count of Australia rows in the section's table.
         section_tables = {
             'test_bookings':   'ops_test_bookings',
             'academic':        'ops_academic_details',
@@ -141,6 +140,79 @@ def ops_australia_pathway():
                 ).fetchone()['c']
             except Exception:
                 stats['section_counts'][slug] = 0
+
+        # ── Detailed per-section stats (matches PLAB Pathway Dashboard) ──
+        # All scoped to pathway='australia' so PLAB rows can't leak.
+        from datetime import date, timedelta
+        today = date.today().isoformat()
+        thirty_ago = (date.today() - timedelta(days=30)).isoformat()
+        AU = "pathway = 'australia'"
+
+        def cnt(sql, *params):
+            try:
+                return conn.execute(sql, params).fetchone()['c']
+            except Exception:
+                return 0
+
+        # Coaching / Training
+        stats['coaching_total']   = cnt(f"SELECT COUNT(*) AS c FROM ops_coaching WHERE {AU}")
+        stats['coaching_ongoing'] = cnt(f"SELECT COUNT(*) AS c FROM ops_coaching WHERE {AU} AND coaching_status = 'On Going'")
+
+        # Test Bookings
+        stats['test_total']       = stats['section_counts']['test_bookings']
+        stats['upcoming_tests']   = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked'", today)
+        # AMC 1 / AMC 2 are Australia's PLAB 1 / PLAB 2 equivalents
+        stats['amc1_upcoming']    = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC 1%'", today)
+        stats['amc2_upcoming']    = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC 2%'", today)
+        stats['amc_mcq_upcoming'] = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC MCQ%'", today)
+        stats['amc_clin_upcoming']= cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC Clinical%'", today)
+        stats['awaiting_results'] = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')")
+        stats['recent_passes']    = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_result = 'Passed' AND exam_result_date >= ?", thirty_ago)
+
+        # EPIC
+        stats['epic_total']       = stats['section_counts']['epic']
+        stats['epic_in_process']  = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {AU} AND epic_status = 'In Process'")
+        stats['epic_completed']   = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {AU} AND epic_registration_status = 'Completed'")
+
+        # Academic
+        stats['academic_total']   = stats['section_counts']['academic']
+
+        # Research
+        stats['research_total']     = stats['section_counts']['research']
+        stats['research_started']   = cnt(f"SELECT COUNT(*) AS c FROM ops_research_publication WHERE {AU} AND research_status = 'Started'")
+        stats['research_completed'] = cnt(f"SELECT COUNT(*) AS c FROM ops_research_publication WHERE {AU} AND research_status = 'Research Completed'")
+        stats['research_published'] = cnt(f"SELECT COUNT(*) AS c FROM ops_research_publication WHERE {AU} AND research_status = 'Research Published'")
+
+        # Online Courses
+        stats['oc_total']         = stats['section_counts']['online_courses']
+
+        # Payments
+        stats['payments_total']   = stats['section_counts']['payments']
+        try:
+            stats['payments_sum'] = float(conn.execute(
+                f"SELECT COALESCE(SUM(total_amount_paid), 0) AS s FROM ops_payments WHERE {AU}"
+            ).fetchone()['s'] or 0)
+        except Exception:
+            stats['payments_sum'] = 0.0
+
+        # Webinars
+        stats['webinars_total']   = stats['section_counts']['webinars']
+
+        # ── Upcoming exams list (next 5 by exam_date) ──
+        try:
+            stats['upcoming_exams'] = conn.execute(
+                f"""SELECT t.*, p.prefix, p.first_name, p.last_name
+                      FROM ops_test_bookings t
+                 LEFT JOIN plab_clients p ON p.registration_number = t.registration_number
+                                          AND COALESCE(p.pathway, 'plab') = 'australia'
+                     WHERE COALESCE(t.pathway, 'plab') = 'australia'
+                       AND t.exam_date >= ?
+                       AND t.exam_status = 'Booked'
+                  ORDER BY t.exam_date ASC LIMIT 5""",
+                (today,),
+            ).fetchall()
+        except Exception:
+            stats['upcoming_exams'] = []
 
     except Exception as e:
         logging.error(f"ops_australia_pathway: {e}")
