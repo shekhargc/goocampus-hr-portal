@@ -25994,57 +25994,74 @@ seed_client_form_configs()
 @app.route('/admin/access-master')
 @login_required
 def access_master():
-    """New per-user access setup. Companion to (not replacement for) the
-    older /admin/section-visibility page.
+    """Two flows on the same page (toggle via ?mode=):
 
-    Flow: admin picks one team member from the dropdown -> the page reloads
-    with that employee's current permissions overlaid on the section
-    catalog -> admin ticks View/Edit/Add per sub-section -> POST to
-    /api/access-master/save persists.
+      mode=by-person (default) -- pick one team member, walk through every
+        section + sub-section, tick View/Edit/Add. Granular, one user at
+        a time.
+
+      mode=by-section -- pick one main section, choose which sub-sections
+        to grant (all pre-checked, uncheck what you don't want), set
+        View/Edit/Add, then pick the team members who should get the
+        grant. Bulk grant for many users at once.
+
+    Companion to (not replacement for) the older /admin/section-visibility
+    page.
     """
     user = get_user()
     if not (user and user['is_admin']):
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
-    selected_emp_id = request.args.get('emp_id', type=int)
+    mode = (request.args.get('mode') or 'by-person').strip()
+    if mode not in ('by-person', 'by-section'):
+        mode = 'by-person'
+
     conn = get_db()
     try:
         employees = [dict(r) for r in conn.execute(
             "SELECT id, emp_code, name, department, designation "
             "FROM employees WHERE is_active = 1 ORDER BY name"
         ).fetchall()]
+
         selected_employee = None
-        permissions_map = {}  # {(main, sub): {'view':1,'edit':0,'add':0}}
-        if selected_emp_id:
-            sel = conn.execute(
-                "SELECT id, emp_code, name, department, designation "
-                "FROM employees WHERE id = ?", (selected_emp_id,)
-            ).fetchone()
-            if sel:
-                selected_employee = dict(sel)
-                rows = conn.execute(
-                    "SELECT main_section, sub_section, can_view, can_edit, can_add "
-                    "FROM user_section_permissions WHERE employee_id = ?",
-                    (selected_emp_id,),
-                ).fetchall()
-                for r in rows:
-                    permissions_map[(r['main_section'], r['sub_section'])] = {
-                        'view': bool(r['can_view']),
-                        'edit': bool(r['can_edit']),
-                        'add':  bool(r['can_add']),
-                    }
+        permissions_map = {}
+        if mode == 'by-person':
+            selected_emp_id = request.args.get('emp_id', type=int)
+            if selected_emp_id:
+                sel = conn.execute(
+                    "SELECT id, emp_code, name, department, designation "
+                    "FROM employees WHERE id = ?", (selected_emp_id,)
+                ).fetchone()
+                if sel:
+                    selected_employee = dict(sel)
+                    rows = conn.execute(
+                        "SELECT main_section, sub_section, can_view, can_edit, can_add "
+                        "FROM user_section_permissions WHERE employee_id = ?",
+                        (selected_emp_id,),
+                    ).fetchall()
+                    for r in rows:
+                        permissions_map[(r['main_section'], r['sub_section'])] = {
+                            'view': bool(r['can_view']),
+                            'edit': bool(r['can_edit']),
+                            'add':  bool(r['can_add']),
+                        }
     finally:
         try: conn.close()
         except Exception: pass
 
+    # Catalog as {main_key: [(sub_key, label, desc), ...]} for the JS in by-section mode.
+    catalog_by_main = {sec['key']: sec['sub_sections'] for sec in ACCESS_SECTION_CATALOG}
+
     return render_template(
         'access_master.html',
         user=user,
+        mode=mode,
         employees=employees,
         selected_employee=selected_employee,
         permissions_map=permissions_map,
         catalog=ACCESS_SECTION_CATALOG,
+        catalog_by_main=catalog_by_main,
         active_section='company',
     )
 
@@ -26162,6 +26179,135 @@ def access_master_save():
         'updated': updated,
         'deleted': deleted,
         'skipped': skipped,
+    })
+
+
+@app.route('/api/access-master/save-bulk', methods=['POST'])
+@login_required
+def access_master_save_bulk():
+    """Bulk grant the same permissions to many employees at once.
+
+    Used by the "By Section" flow: admin picks a main section, picks the
+    sub-sections to grant, sets View/Edit/Add once, then selects N team
+    members. We apply the same permission set to each of them in a
+    single atomic transaction.
+
+    Request JSON:
+      {
+        "employee_ids": [7, 12, 18],
+        "permissions": [
+          {"main":"operations","sub":"call_notes","view":1,"edit":1,"add":0},
+          ...
+        ]
+      }
+    """
+    actor = get_user()
+    if not (actor and actor['is_admin']):
+        return jsonify({'error': 'Admin access required'}), 403
+    payload = request.get_json(silent=True) or {}
+
+    raw_ids = payload.get('employee_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'employee_ids required (non-empty list)'}), 400
+    employee_ids = []
+    for eid in raw_ids:
+        try:
+            employee_ids.append(int(eid))
+        except (TypeError, ValueError):
+            continue
+    if not employee_ids:
+        return jsonify({'error': 'No valid employee_ids'}), 400
+
+    perms = payload.get('permissions') or []
+    if not isinstance(perms, list):
+        return jsonify({'error': 'permissions must be a list'}), 400
+
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+
+    totals = {'inserted': 0, 'updated': 0, 'deleted': 0, 'skipped': 0}
+    affected_employees = 0
+    conn = get_db()
+    try:
+        # Confirm all employees exist (fail fast on a bad id).
+        placeholders = ','.join(['?'] * len(employee_ids))
+        existing_ids = {
+            r['id'] for r in conn.execute(
+                f"SELECT id FROM employees WHERE id IN ({placeholders})",
+                tuple(employee_ids),
+            ).fetchall()
+        }
+        valid_employee_ids = [e for e in employee_ids if e in existing_ids]
+        if not valid_employee_ids:
+            return jsonify({'error': 'None of the supplied employee_ids exist'}), 404
+
+        for emp_id in valid_employee_ids:
+            touched = False
+            for entry in perms:
+                main = (entry.get('main') or '').strip()
+                sub  = (entry.get('sub') or '').strip()
+                if (main, sub) not in valid_keys:
+                    totals['skipped'] += 1
+                    continue
+                view = 1 if entry.get('view') else 0
+                edit = 1 if entry.get('edit') else 0
+                add  = 1 if entry.get('add')  else 0
+                # Enforce: edit/add requires view.
+                if edit or add:
+                    view = 1
+
+                existing = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
+                    (emp_id, main, sub),
+                ).fetchone()
+
+                if not view and not edit and not add:
+                    if existing:
+                        conn.execute(
+                            "DELETE FROM user_section_permissions WHERE id = ?",
+                            (existing['id'],),
+                        )
+                        totals['deleted'] += 1
+                        touched = True
+                    continue
+
+                if existing:
+                    conn.execute(
+                        "UPDATE user_section_permissions "
+                        "SET can_view = ?, can_edit = ?, can_add = ?, "
+                        "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
+                        "WHERE id = ?",
+                        (view, edit, add, actor['id'], existing['id']),
+                    )
+                    totals['updated'] += 1
+                else:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, main_section, sub_section, can_view, can_edit, can_add, granted_by) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                        (emp_id, main, sub, view, edit, add, actor['id']),
+                    )
+                    totals['inserted'] += 1
+                touched = True
+            if touched:
+                affected_employees += 1
+        conn.commit()
+    except Exception as e:
+        logging.error(f"access_master_save_bulk: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return jsonify({
+        'success': True,
+        'affected_employees': affected_employees,
+        **totals,
     })
 
 
