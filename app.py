@@ -25683,40 +25683,71 @@ ensure_section_permissions_table()
 
 
 # Catalog: which main sections + sub-sections show in the Access Master UI.
-# Operations first (priority per user 2026-06-01), then Sales.
+# Restructured 2026-06-01 per user feedback: Operations is split per pathway
+# (PLAB, Australia) plus a Shared bucket for cross-pathway admin tools.
+# This way an admin granting "Payments" access knows exactly which pathway
+# it covers — and can grant the two independently if needed.
 ACCESS_SECTION_CATALOG = [
+    # ── Operations: PLAB Pathway ──────────────────────────────────────────
     {
-        'key': 'operations',
-        'label': 'Operations',
-        'description': 'PLAB, Australia, and all operational sub-areas.',
+        'key': 'plab_pathway',
+        'label': 'Operations · PLAB Pathway',
+        'description': 'PLAB / UK Pathway operational sub-areas. Grant these to staff supporting PLAB clients.',
         'sub_sections': [
-            ('pathway_dashboard',  'Pathway Dashboard',     'PLAB / Australia / UAE pathway dashboards'),
-            ('registration_plab',  'PLAB Registration',     'PLAB client registration list'),
-            ('registration_au',    'Australia Registration','Australia client registration list'),
-            ('onboarding',         'Onboarding',            'Client onboarding workflow + kanban'),
-            ('call_notes',         'Call Notes',            'Call notes + follow-up tracker'),
-            ('payments',           'Payments',              'Per-client payment records'),
-            ('documents',          'Documents',             'Client document tracking + upload'),
-            ('coaching',           'Coaching & Training',   'Training enrolment + status'),
-            ('test_bookings',      'Test Bookings',         'AMC / PLAB / English exam bookings'),
-            ('english_logins',     'English Logins',        'IELTS/OET portal credentials'),
-            ('online_courses',     'Online Courses',        'Online course tracking'),
-            ('epic',               'EPIC Registration',     'EPIC + Notary Cam workflow'),
-            ('gmc',                'GMC Registration',      'GMC registration tracking (UK only)'),
-            ('uk_visa',            'UK Visa & Travel',      'UK visa + travel logistics (UK only)'),
-            ('uk_cab',             'UK Cab Bookings',       'UK cab bookings (UK only)'),
-            ('uk_observerships',   'UK Observerships',      'UK observership tracking (UK only)'),
-            ('academic',           'Academic Details',      'Client academic / medical college records'),
-            ('research',           'Research & Publication','Research project tracking'),
-            ('subscriptions',      'Online Subscriptions',  'Resource subscriptions (Plabable, Pastest, etc.)'),
-            ('webinars',           'Webinars & Conferences','Event attendance log'),
-            ('ngo',                'NGO Activities',        'NGO volunteer activities'),
-            ('mentorship',         'Mentorship',            'Mentorship sessions'),
-            ('reports',            'Reports',               'Operations reports'),
-            ('field_manager',      'Settings (Field Manager)','Lookup options + form config'),
-            ('vendors_providers',  'Vendors & Providers',   'Vendor / partner directory'),
+            ('dashboard',         'Pathway Dashboard',       'Overview stats for PLAB clients'),
+            ('registration',      'Registration',            'PLAB client registration list + full profile'),
+            ('onboarding',        'Onboarding',              'Welcome kit + onboarding workflow'),
+            ('call_notes',        'Call Notes',              'PLAB call notes + follow-up tracker'),
+            ('payments',          'Payments',                'PLAB payment records (installments, receipts)'),
+            ('documents',         'Documents',               'PLAB document upload + verification'),
+            ('coaching',          'Coaching & Training',     'PLAB training enrolment + status'),
+            ('test_bookings',     'Test Bookings',           'PLAB 1 / PLAB 2 / OET / IELTS bookings'),
+            ('english_logins',    'English Logins',          'IELTS / OET portal credentials'),
+            ('online_courses',    'Online Courses',          'PLAB online courses'),
+            ('epic',              'EPIC Registration',       'EPIC + Notary Cam workflow'),
+            ('gmc',               'GMC Registration',        'UK GMC registration tracking'),
+            ('uk_visa',           'UK Visa & Travel',        'UK visa + travel logistics'),
+            ('uk_cab',            'UK Cab Bookings',         'UK cab bookings'),
+            ('uk_observerships',  'UK Observerships',        'UK observership tracking'),
+            ('academic',          'Academic Details',        'PLAB academic / medical college records'),
+            ('research',          'Research & Publication',  'PLAB research project tracking'),
+            ('subscriptions',     'Online Subscriptions',    'PLAB resource subscriptions (Plabable, Pastest, etc.)'),
+            ('webinars',          'Webinars & Conferences',  'PLAB event attendance log'),
+            ('ngo',               'NGO Activities',          'NGO volunteer activities for PLAB clients'),
+            ('mentorship',        'Mentorship',              'Mentorship sessions for PLAB clients'),
         ],
     },
+    # ── Operations: Australia Pathway ─────────────────────────────────────
+    {
+        'key': 'australia_pathway',
+        'label': 'Operations · Australia Pathway',
+        'description': 'Australia (AMC) Pathway operational sub-areas. Grant these to staff supporting Australia clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
+            ('registration',  'Registration',            'Australia client registration list + full profile'),
+            ('call_notes',    'Call Notes',              'Australia call notes + tracker + not-contacted view'),
+            ('payments',      'Payments',                'Australia payment records'),
+            ('training',      'Training',                'Australia training (AMC MCQ Mock, English, etc.)'),
+            ('test_bookings', 'Test Bookings',           'AMC MCQ / AMC Clinical / OET bookings'),
+            ('online_courses','Online Courses',          'Australia online courses (MplusX, eMedici, etc.)'),
+            ('epic',          'EPIC Registration',       'Australia EPIC tracking'),
+            ('academic',      'Academic Details',        'Australia academic records'),
+            ('research',      'Research & Publication',  'Australia research project tracking'),
+            ('webinars',      'Webinars & Conferences',  'Australia event attendance log'),
+        ],
+    },
+    # ── Operations: Shared / cross-pathway ────────────────────────────────
+    {
+        'key': 'operations_shared',
+        'label': 'Operations · Shared',
+        'description': 'Cross-pathway operations admin tools. Grant separately from individual pathway access.',
+        'sub_sections': [
+            ('reports',           'Reports',                  'Operations reports'),
+            ('field_manager',     'Settings (Field Manager)', 'Lookup options + form config (pathway-aware)'),
+            ('vendors_providers', 'Vendors & Providers',      'Vendor / partner directory (pathway-aware)'),
+        ],
+    },
+    # ── Sales (kept as one section per user feedback) ─────────────────────
     {
         'key': 'sales',
         'label': 'Sales',
@@ -25733,6 +25764,57 @@ ACCESS_SECTION_CATALOG = [
         ],
     },
 ]
+
+
+def cleanup_orphan_access_permissions():
+    """One-shot helper: delete user_section_permissions rows whose
+    (main_section, sub_section) is no longer in ACCESS_SECTION_CATALOG.
+
+    Runs on every boot. After the 2026-06-01 restructure (Operations split
+    per pathway) any rows from the old flat 'operations' catalog become
+    orphans — clean them up so the UI doesn't render stale info.
+    """
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+    try:
+        conn = get_db()
+        # Distinct (main, sub) pairs in the table — find orphans by content,
+        # not by id (SQLite SERIAL doesn't auto-populate, so id can be NULL
+        # on dev DBs; matching by content also lets us clean multi-employee
+        # orphans in a single pass).
+        pairs = conn.execute(
+            "SELECT DISTINCT main_section, sub_section FROM user_section_permissions"
+        ).fetchall()
+        orphans = [(p['main_section'], p['sub_section'])
+                   for p in pairs
+                   if (p['main_section'], p['sub_section']) not in valid_keys]
+        deleted = 0
+        for main, sub in orphans:
+            result = conn.execute(
+                "DELETE FROM user_section_permissions "
+                "WHERE main_section = ? AND sub_section = ?",
+                (main, sub),
+            )
+            # rowcount may be -1 on some drivers; treat any non-zero as success
+            deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+        if orphans:
+            conn.commit()
+            logging.info(
+                f"Access Master: cleaned {len(orphans)} orphan key(s) "
+                f"({deleted} row(s) deleted)"
+            )
+    except Exception as e:
+        logging.warning(f"cleanup_orphan_access_permissions: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+cleanup_orphan_access_permissions()
 
 
 def ensure_user_section_permissions_table():
