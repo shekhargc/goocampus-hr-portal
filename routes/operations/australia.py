@@ -14,7 +14,7 @@ links to /operations/australia-pathway.
 """
 
 import logging
-from flask import render_template, flash, request
+from flask import render_template, flash, request, redirect, url_for
 
 from core.auth import admin_required
 from core.users import get_user
@@ -339,6 +339,167 @@ def ops_australia_clients_list():
     )
 
 
+# ── Editable columns on plab_clients (pathway='australia' scope) ────────────
+# Only columns that are safe to edit through the UI live here. id /
+# registration_number / pathway are NOT editable.
+AU_EDITABLE_COLUMNS = [
+    # Personal
+    'prefix', 'first_name', 'last_name', 'mobile', 'whatsapp1', 'whatsapp2',
+    'email', 'dob', 'city', 'state',
+    'instagram', 'facebook', 'linkedin',
+    'father_name', 'father_phone', 'mother_name', 'mother_phone', 'parents_email',
+    # Service
+    'plan_type', 'account_status', 'current_stage', 'switched_program',
+    'counsellor', 'counsellor_email', 'counsellor_number',
+    'lead_source', 'registration_date',
+    # Financials
+    'package_amount', 'discount_allowed', 'final_package',
+    'inst1_amount', 'inst1_date', 'inst1_note',
+    'inst2_amount', 'inst2_date', 'inst2_note',
+    'inst3_amount', 'inst3_date', 'inst3_note',
+    'inst4_amount', 'inst4_date', 'inst4_note',
+]
+
+
+def _payment_totals_for(conn, reg_num):
+    """Return (amount_paid, gst_paid, total_paid) summed from ops_payments
+    for one Australia client. Pathway-scoped so PLAB payments can't leak."""
+    row = conn.execute(
+        """SELECT COALESCE(SUM(amount_paid), 0)        AS amt,
+                  COALESCE(SUM(gst_paid), 0)           AS gst,
+                  COALESCE(SUM(total_amount_paid), 0)  AS tot
+             FROM ops_payments
+            WHERE registration_number = ?
+              AND COALESCE(pathway, 'plab') = 'australia' """,
+        (reg_num,),
+    ).fetchone()
+    return float(row['amt'] or 0), float(row['gst'] or 0), float(row['tot'] or 0)
+
+
+@admin_required
+def ops_australia_client_detail(client_id):
+    """Full Australia client profile — view + edit form + linked sections.
+
+    Mirrors PLAB's /operations/plab/<id> structure: client info, payment
+    breakdown, and tables of related ops_* records (test bookings, payments,
+    academic, EPIC, training, etc.) all scoped to pathway='australia'.
+    """
+    user = get_user()
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('Australia client not found.', 'error')
+        return redirect(url_for('ops_australia_clients_list'))
+
+    reg = client['registration_number']
+    amount_paid, gst_paid, total_paid = _payment_totals_for(conn, reg)
+    final_pkg = float(client['final_package'] or 0) or (
+        float(client['package_amount'] or 0) - float(client['discount_allowed'] or 0)
+    )
+    balance = final_pkg - amount_paid
+    pct = (amount_paid / final_pkg * 100) if final_pkg > 0 else 0
+
+    # Related sections — only pull pathway='australia' rows for safety.
+    def fetch(table, order=None):
+        try:
+            sql = (
+                f"SELECT * FROM {table} "
+                f"WHERE registration_number = ? "
+                f"  AND COALESCE(pathway, 'plab') = 'australia' "
+            )
+            if order:
+                sql += f" ORDER BY {order} "
+            return conn.execute(sql, (reg,)).fetchall()
+        except Exception:
+            return []
+
+    sections = {
+        'test_bookings': fetch('ops_test_bookings', 'exam_date DESC NULLS LAST'),
+        'academic':      fetch('ops_academic_details', 'created_at DESC'),
+        'epic':          fetch('ops_epic_registration', 'created_at DESC'),
+        'training':      fetch('ops_coaching', 'created_at DESC'),
+        'online_courses': fetch('ops_online_subscriptions', 'created_at DESC'),
+        'payments':      fetch('ops_payments', 'payment_date DESC NULLS LAST'),
+        'call_notes':    fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'research':      fetch('ops_research_publication', 'created_at DESC'),
+        'webinars':      fetch('ops_webinars_conferences', 'created_at DESC'),
+    }
+    conn.close()
+
+    return render_template(
+        'ops_australia_client_detail.html',
+        user=user,
+        client=client,
+        sections=sections,
+        amount_paid=amount_paid,
+        gst_paid=gst_paid,
+        total_paid=total_paid,
+        final_pkg=final_pkg,
+        balance=balance,
+        payment_pct=pct,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-clients',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_client_edit(client_id):
+    """POST handler: save changes to an Australia client's editable fields.
+
+    Strict allowlist (AU_EDITABLE_COLUMNS) — anything else in the form is
+    silently ignored. Pathway is NEVER updated through this endpoint.
+    """
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+            (client_id,),
+        ).fetchone()
+        if not existing:
+            flash('Australia client not found.', 'error')
+            return redirect(url_for('ops_australia_clients_list'))
+
+        # Build SET clause from the allowlist.
+        sets = []
+        params = []
+        for col in AU_EDITABLE_COLUMNS:
+            if col in request.form:
+                val = request.form.get(col, '').strip()
+                # Numeric columns get coerced; bad data -> 0.
+                if col in {'package_amount', 'discount_allowed', 'final_package',
+                           'inst1_amount', 'inst2_amount', 'inst3_amount', 'inst4_amount'}:
+                    try:
+                        val = float(val) if val else 0
+                    except ValueError:
+                        val = 0
+                sets.append(f"{col} = ?")
+                params.append(val)
+        if sets:
+            params.append(client_id)
+            conn.execute(
+                f"UPDATE plab_clients SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+            flash('Client details saved.', 'success')
+        else:
+            flash('No changes to save.', 'info')
+    except Exception as e:
+        logging.error(f"ops_australia_client_edit: {e}")
+        flash(f'Error saving client: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+
+    return redirect(url_for('ops_australia_client_detail', client_id=client_id))
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app.
 
@@ -362,4 +523,16 @@ def register_routes(app):
         endpoint='ops_australia_clients_list',
         view_func=ops_australia_clients_list,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/clients/<int:client_id>',
+        endpoint='ops_australia_client_detail',
+        view_func=ops_australia_client_detail,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/clients/<int:client_id>/edit',
+        endpoint='ops_australia_client_edit',
+        view_func=ops_australia_client_edit,
+        methods=['POST'],
     )
