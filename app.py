@@ -26315,6 +26315,164 @@ ensure_user_section_permissions_table()
 seed_access_master_baseline_once()
 
 
+def realign_access_master_baseline_once():
+    """Phase 5 follow-up (2026-06-01).
+
+    The blanket seed in seed_access_master_baseline_once() granted every
+    active non-admin employee VIEW + EDIT + ADD on every catalog entry --
+    safest possible baseline, but more permissive than what the legacy
+    system actually allowed.
+
+    This realignment narrows the baseline to match what each employee
+    could actually see yesterday, so an admin doesn't have to manually
+    untick 29-37 boxes per employee in the Access Master UI:
+
+    1. Always revoke (29 sub-sections) -- items wrapped in
+       `{% if session.get('is_admin') %}` in templates, so non-admins
+       never saw them. Covers HR admin tools, Finance, sensitive
+       Company admin tools, advanced Colleges admin, WhatsApp,
+       Clients (v2), Dashboard admin, KRA goals editor.
+
+    2. Conditionally revoke `sales/*` (8 sub-sections) if the employee
+       has no active row in legacy module_access for 'sales'. Mirrors
+       the existing has_module_access('sales') gate.
+
+    Idempotent via marker 'access_master_baseline_realigned' = 'phase5_align_v1'.
+    Bumping the value re-runs. Reversible by deleting the marker AND the
+    seed marker so the original blanket seed re-inserts everything.
+
+    Admins are skipped -- can_access() bypasses them anyway.
+    Partners are skipped -- partner_portal grants stay as Phase 5a set them.
+    """
+    MARKER_KEY = 'access_master_baseline_realigned'
+    MARKER_VAL = 'phase5_align_v1'
+
+    # Items wrapped in template-level admin checks -- non-admins never
+    # saw them in the sidebar even before Access Master existed.
+    ALWAYS_REVOKE = [
+        ('hr', 'bulk_leave'), ('hr', 'employees'),
+        ('hr', 'id_cards'), ('hr', 'letters'),
+        ('finance', 'budget'), ('finance', 'revenue'),
+        ('finance', 'expenses'), ('finance', 'salary'),
+        ('finance', 'reports'), ('finance', 'settings'),
+        ('company', 'state_city'), ('company', 'reset_passwords'),
+        ('company', 'section_visibility'), ('company', 'access_master'),
+        ('company', 'announcements'),
+        ('colleges', 'russian'), ('colleges', 'country_list'),
+        ('colleges', 'fees'),
+        ('whatsapp', 'messages'), ('whatsapp', 'templates'),
+        ('whatsapp', 'triggers'), ('whatsapp', 'settings'),
+        ('clients', 'invitations'), ('clients', 'registrations'),
+        ('clients', 'form_config'), ('clients', 'doc_requests'),
+        ('clients', 'notifications'),
+        ('dashboard', 'admin'),
+        ('kra', 'goals'),
+    ]
+    # Sales sub-sections gated by legacy has_module_access('sales').
+    SALES_SUBS = [
+        ('sales', 'meetings'), ('sales', 'projects'),
+        ('sales', 'products'), ('sales', 'partners'),
+        ('sales', 'news'), ('sales', 'clients_pipeline'),
+        ('sales', 'reports'), ('sales', 'settings'),
+    ]
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already realigned
+
+        # Active non-admins + their sales-gate flag in one shot.
+        try:
+            employees = conn.execute("""
+                SELECT e.id,
+                       CASE WHEN EXISTS (
+                         SELECT 1 FROM module_access m
+                         WHERE m.employee_id = e.id
+                           AND m.module = 'sales'
+                           AND m.is_active = 1
+                       ) THEN 1 ELSE 0 END AS has_sales
+                FROM employees e
+                WHERE e.is_active = 1
+                  AND (e.is_admin IS NULL OR e.is_admin = 0)
+            """).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+
+        revoked = 0
+        for emp in employees:
+            emp_id = emp['id']
+            has_sales = emp['has_sales']
+            revoke_list = list(ALWAYS_REVOKE)
+            if not has_sales:
+                revoke_list.extend(SALES_SUBS)
+            for main, sub in revoke_list:
+                try:
+                    result = conn.execute(
+                        "DELETE FROM user_section_permissions "
+                        "WHERE subject_type='employee' AND subject_id = ? "
+                        "  AND main_section = ? AND sub_section = ?",
+                        (emp_id, main, sub),
+                    )
+                    revoked += max(0, getattr(result, 'rowcount', 0) or 0)
+                except Exception as e:
+                    logging.warning(
+                        f"realign revoke skipped (emp={emp_id}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"realign marker write failed: {e}")
+
+        logging.info(
+            f"Access Master Phase 5 realignment: revoked "
+            f"{revoked} over-permissive grant row(s) from non-admin baseline"
+        )
+    except Exception as e:
+        logging.warning(f"realign_access_master_baseline_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+realign_access_master_baseline_once()
+
+
 # ─────────────────────────────────────────────────────────────────────────
 #  Access Master Phase 3: log-only enforcement
 #
