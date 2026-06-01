@@ -2546,7 +2546,7 @@ def apply_leave():
 @app.route('/apply-late-leave', methods=['GET', 'POST'])
 @login_required
 def apply_late_leave():
-    """Late leave application — for past dates up to 15 days ago"""
+    """Late leave application — for past dates up to 45 days ago"""
     user = get_user()
 
     if user['emp_code'] == 'admin':
@@ -2586,16 +2586,16 @@ def apply_late_leave():
         from_dt = datetime.strptime(from_date, '%Y-%m-%d')
         to_dt = datetime.strptime(to_date, '%Y-%m-%d')
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        min_date = today - timedelta(days=15)
+        min_date = today - timedelta(days=45)
 
         # Validate: dates must be in the past
         if from_dt >= today:
             flash('Late leave is for past dates only. Use regular leave application for today or future dates.', 'error')
             return redirect(url_for('apply_late_leave'))
 
-        # Validate: not older than 15 days
+        # Validate: not older than 45 days
         if from_dt < min_date:
-            flash('Cannot apply late leave for dates older than 15 days', 'error')
+            flash('Cannot apply late leave for dates older than 45 days', 'error')
             return redirect(url_for('apply_late_leave'))
 
         if to_dt < from_dt:
