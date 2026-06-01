@@ -26070,6 +26070,176 @@ def cleanup_orphan_access_permissions():
 cleanup_orphan_access_permissions()
 
 
+def seed_access_master_baseline_once():
+    """Phase 5 baseline (2026-06-01).
+
+    Before flipping ACCESS_MASTER_ENFORCE to True we MUST guarantee that
+    every active user has at least the access they had yesterday — else
+    enforce day = lockout day.
+
+    Strategy: for every active non-admin employee × every user-applicable
+    catalog entry (everything except partner_portal), insert a
+    (view + edit + add) grant. Mirrors prior behavior where the sidebar
+    showed every section to every employee and per-route gates handled
+    the few admin-only routes. Admins always bypass via can_access() so
+    they don't need rows here.
+
+    For partners: every active partner × every partner_portal sub_section
+    gets (view + edit + add). Combined with the Phase 2 legacy-partner
+    migration, this guarantees no partner loses portal access either.
+
+    Idempotent via the marker key 'access_master_baseline_seeded'. To
+    re-seed (e.g. after onboarding new users), bump MARKER_VAL.
+    """
+    MARKER_KEY = 'access_master_baseline_seeded'
+    MARKER_VAL = 'phase5_v1'
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already seeded
+
+        # Split catalog entries by who they belong to.
+        user_keys = []     # (main, sub) for team members
+        partner_keys = []  # (main, sub) for partners
+        for sec in ACCESS_SECTION_CATALOG:
+            if sec['key'] == 'partner_portal':
+                for sub_key, _l, _d in sec['sub_sections']:
+                    partner_keys.append((sec['key'], sub_key))
+            else:
+                for sub_key, _l, _d in sec['sub_sections']:
+                    user_keys.append((sec['key'], sub_key))
+
+        emp_granted = 0
+        partner_granted = 0
+
+        # ── Active non-admin employees ──
+        try:
+            employees = conn.execute(
+                "SELECT id FROM employees WHERE is_active = 1 "
+                "  AND (is_admin IS NULL OR is_admin = 0)"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+
+        for emp in employees:
+            emp_id = emp['id']
+            for main, sub in user_keys:
+                # Skip rows that already exist (someone may have set grants
+                # manually via the Access Master UI in log-only mode).
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='employee' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (emp_id, main, sub),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES (?, 'employee', ?, ?, ?, 1, 1, 1)",
+                        (emp_id, emp_id, main, sub),
+                    )
+                    emp_granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"baseline grant skipped (emp={emp_id}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # ── Active partners ──
+        try:
+            partners = conn.execute(
+                "SELECT id FROM partners WHERE status = 'Active'"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            partners = []
+
+        for prt in partners:
+            pid = prt['id']
+            for main, sub in partner_keys:
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='partner' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (pid, main, sub),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES ('partner', ?, ?, ?, 1, 1, 1)",
+                        (pid, main, sub),
+                    )
+                    partner_granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"baseline partner grant skipped (partner={pid}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"baseline seed marker write failed: {e}")
+
+        logging.info(
+            f"Access Master Phase 5 baseline: granted "
+            f"{emp_granted} employee row(s) + {partner_granted} partner row(s)"
+        )
+    except Exception as e:
+        logging.warning(f"seed_access_master_baseline_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
 def ensure_user_section_permissions_table():
     """Create user_section_permissions table on boot. Idempotent.
 
@@ -26141,6 +26311,10 @@ def ensure_user_section_permissions_table():
 ensure_user_section_permissions_table()
 
 
+# Phase 5 baseline must run AFTER the table is guaranteed to exist.
+seed_access_master_baseline_once()
+
+
 # ─────────────────────────────────────────────────────────────────────────
 #  Access Master Phase 3: log-only enforcement
 #
@@ -26158,7 +26332,7 @@ ensure_user_section_permissions_table()
 #  Going from log-only to enforce = flip ACCESS_MASTER_ENFORCE.
 # ─────────────────────────────────────────────────────────────────────────
 
-ACCESS_MASTER_ENFORCE = False  # Phase 5 will flip to True.
+ACCESS_MASTER_ENFORCE = False  # Phase 5a: seed baseline first; Phase 5b flips this.
 
 
 def _ap(main, sub, action='view'):
