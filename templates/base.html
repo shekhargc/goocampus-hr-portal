@@ -648,6 +648,59 @@
         });
     });
     </script>
+
+    <!-- ── Global profile-photo fallback (added 2026-06-01) ──────────────
+         If any team-member photo (img sourced from /static/photos/ or
+         /static/default-avatar.png) fails to load, automatically swap it
+         to the GooCampus logo. Catches errors during the capture phase so
+         it works on every image, including ones rendered by inline scripts.
+         The data-photo-fallback flag prevents an infinite loop if the
+         logo itself ever fails. -->
+    <script>
+    (function() {
+        var FALLBACK = "{{ url_for('static', filename='logo.png') }}";
+        function isProfilePhoto(img) {
+            if (!img || img.tagName !== 'IMG' || !img.src) return false;
+            var s = img.src;
+            return s.indexOf('/static/photos/') !== -1
+                || s.indexOf('/static/default-avatar') !== -1
+                || s.endsWith('/static/photos/')
+                || (img.classList && (
+                       img.classList.contains('emp-avatar')
+                    || img.classList.contains('emp-avatar-lg')
+                    || img.classList.contains('team-avatar')
+                    || img.classList.contains('org-photo')
+                    || img.classList.contains('dash-photo')
+                    || img.classList.contains('drawer-avatar')
+                    || img.classList.contains('profile-photo')
+                    ));
+        }
+        function applyFallback(img) {
+            if (img.dataset.photoFallback === '1') return;
+            img.dataset.photoFallback = '1';
+            img.src = FALLBACK;
+            // Keep the avatar circle shape clean — letterbox the logo, white bg.
+            img.style.objectFit = 'contain';
+            img.style.background = '#fff';
+            img.style.padding = '6%';
+            img.alt = 'GooCampus';
+        }
+        document.addEventListener('error', function(e) {
+            if (isProfilePhoto(e.target)) applyFallback(e.target);
+        }, true);  // capture-phase: error event doesn't bubble on <img>
+
+        // First pass on DOM-ready: catch images whose error already fired
+        // before this script ran (cached 404s, etc.).
+        document.addEventListener('DOMContentLoaded', function() {
+            document.querySelectorAll('img').forEach(function(img) {
+                if (!isProfilePhoto(img)) return;
+                // complete + naturalWidth==0 -> image failed to load
+                if (img.complete && img.naturalWidth === 0) applyFallback(img);
+            });
+        });
+    })();
+    </script>
+
     {% block extra_js %}{% endblock %}
 </body>
 </html>
