@@ -310,8 +310,21 @@
     <aside class="ops-sidebar" id="opsSidebar">
         <div class="ops-sidebar-header">
             <details class="ops-pathway-switcher">
+                {# Compute the visible pathway label from active_pathway so EVERY
+                   page (Vendors, Reports, Settings, etc.) shows the right name
+                   in the top selector — not just pages that explicitly pass
+                   pathway_name. Without this, navigating from Australia sidebar
+                   to a shared admin page made the selector flip back to PLAB. #}
+                {% set _pw = active_pathway|default('plab') %}
+                {% set _pathway_name_map = {
+                    'plab':       'UK / PLAB Pathway',
+                    'australia':  'Australia Pathway',
+                    'uae':        'UAE Pathway',
+                    'consulting': 'Standard Consulting'
+                } %}
+                {% set _pathway_label = pathway_name|default(_pathway_name_map.get(_pw, 'UK / PLAB Pathway')) %}
                 <summary title="Switch pathway">
-                    <span class="ops-pathway-name">{{ pathway_name|default('UK / PLAB Pathway') }}</span>
+                    <span class="ops-pathway-name">{{ _pathway_label }}</span>
                     <svg class="ops-pathway-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="6 9 12 15 18 9"/></svg>
                 </summary>
                 <div class="ops-pathway-menu">

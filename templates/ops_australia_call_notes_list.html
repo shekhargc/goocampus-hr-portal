@@ -142,9 +142,13 @@
         <h1>Call Notes <span class="badge">AUS</span></h1>
         <div class="sub">{{ total }} call note{{ '' if total == 1 else 's' }} logged for Australia Pathway clients</div>
     </div>
-    <div>
+    <div style="display:flex;gap:0.6rem;align-items:center;">
         <a href="{{ url_for('ops_australia_pathway') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none">
             &larr; Back to dashboard
+        </a>
+        <a href="{{ url_for('ops_australia_call_notes_add') }}"
+           style="padding:0.5rem 1rem;background:var(--orange);color:white;border-radius:0.5rem;font-size:0.82rem;font-weight:600;text-decoration:none;">
+            &#43; Add Call Note
         </a>
     </div>
 </div>

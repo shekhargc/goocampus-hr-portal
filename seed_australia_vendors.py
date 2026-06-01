@@ -34,7 +34,7 @@ imports so the source rows exist.
 import logging
 
 
-IMPORT_VERSION = 'au_vendors_v2_force_resync'
+IMPORT_VERSION = 'au_vendors_v3_postgres_safe'
 AU_COUNTRY = 'Australia Pathway'
 
 
@@ -143,6 +143,8 @@ def run_seed_australia_vendors_once(get_db_fn):
                 "  AND TRIM(vendor_provider) != ''"
             ).fetchall()
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             logging.warning(f"AU vendors: training extract failed: {e}")
             rows = []
 
@@ -167,6 +169,8 @@ def run_seed_australia_vendors_once(get_db_fn):
                 "  AND TRIM(online_subscription) != ''"
             ).fetchall()
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             logging.warning(f"AU vendors: online subs extract failed: {e}")
             rows = []
 
@@ -191,6 +195,8 @@ def run_seed_australia_vendors_once(get_db_fn):
                 "  AND TRIM(research_provider) != ''"
             ).fetchall()
         except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
             logging.warning(f"AU vendors: research extract failed: {e}")
             rows = []
 

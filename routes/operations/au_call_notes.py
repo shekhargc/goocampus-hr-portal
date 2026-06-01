@@ -215,6 +215,99 @@ def ops_australia_call_notes_edit_save(rid):
     return redirect(url_for('ops_australia_call_notes_detail', rid=rid))
 
 
+# ── ADD form (mirrors PLAB's /operations/call-notes/add) ────────────────
+@admin_required
+def ops_australia_call_notes_add():
+    """GET/POST: Create a new Australia call note.
+
+    Mirrors the PLAB call notes form structure: Client autocomplete (scoped
+    to pathway='australia'), Contacted Yes/No, Contact Type
+    (Call/WhatsApp/Email — hidden when Contacted=No), Date (defaults today),
+    Added By, Note. New row written with pathway='australia'.
+    """
+    user = get_user()
+    if request.method == 'POST':
+        registration_number = (request.form.get('registration_number') or '').strip()
+        call_date           = (request.form.get('call_date') or '').strip()
+        call_note           = (request.form.get('call_note') or '').strip()
+        contacted_status    = (request.form.get('contacted_status') or 'Yes').strip()
+        contact_type        = (request.form.get('contact_type') or 'Call').strip()
+        added_by            = (request.form.get('added_by') or '').strip()
+
+        if not registration_number:
+            flash('Please select a client from the suggestions.', 'error')
+            return redirect(url_for('ops_australia_call_notes_add'))
+        if not call_date:
+            flash('Date is required.', 'error')
+            return redirect(url_for('ops_australia_call_notes_add'))
+        if not call_note:
+            flash('Note is required.', 'error')
+            return redirect(url_for('ops_australia_call_notes_add'))
+        if contacted_status == 'No':
+            contact_type = ''  # PLAB JS hides the field — match server-side
+
+        conn = get_db()
+        try:
+            client = conn.execute(
+                "SELECT id FROM plab_clients "
+                "WHERE registration_number = ? AND COALESCE(pathway, 'plab') = 'australia'",
+                (registration_number,),
+            ).fetchone()
+            if not client:
+                flash('Selected client is not an Australia Pathway client.', 'error')
+                try: conn.rollback()
+                except Exception: pass
+                return redirect(url_for('ops_australia_call_notes_add'))
+
+            conn.execute(
+                "INSERT INTO ops_call_notes "
+                "(registration_number, call_date, call_note, contacted_status, "
+                " contact_type, added_by, created_by, pathway) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, 'australia')",
+                (registration_number, call_date, call_note, contacted_status,
+                 contact_type, added_by, (user.get('id') if user else None)),
+            )
+            conn.commit()
+            flash('Call note added.', 'success')
+        except Exception as e:
+            logging.error(f"ops_australia_call_notes_add: {e}")
+            try: conn.rollback()
+            except Exception: pass
+            flash(f'Error adding call note: {e}', 'error')
+            return redirect(url_for('ops_australia_call_notes_add'))
+        finally:
+            try: conn.close()
+            except Exception: pass
+
+        return redirect(url_for('ops_australia_call_notes_list'))
+
+    pre_reg = (request.args.get('reg') or '').strip()
+    pre_client = None
+    if pre_reg:
+        conn = get_db()
+        try:
+            pre_client = conn.execute(
+                "SELECT prefix, first_name, last_name FROM plab_clients "
+                "WHERE registration_number = ? AND COALESCE(pathway, 'plab') = 'australia'",
+                (pre_reg,),
+            ).fetchone()
+        finally:
+            try: conn.close()
+            except Exception: pass
+        if pre_client is None:
+            pre_reg = ''
+
+    return render_template(
+        'ops_australia_call_notes_add.html',
+        user=user,
+        pre_reg=pre_reg,
+        pre_client=pre_client,
+        pathway_name='Australia Pathway',
+        active_ops_page='australia-call-notes',
+        active_pathway='australia',
+    )
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app."""
     app.add_url_rule(
@@ -240,4 +333,11 @@ def register_routes(app):
         endpoint='ops_australia_call_notes_edit_save',
         view_func=ops_australia_call_notes_edit_save,
         methods=['POST'],
+    )
+    # Add form — mirrors PLAB /operations/call-notes/add structure.
+    app.add_url_rule(
+        '/operations/australia/call-notes/add',
+        endpoint='ops_australia_call_notes_add',
+        view_func=ops_australia_call_notes_add,
+        methods=['GET', 'POST'],
     )

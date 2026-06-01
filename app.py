@@ -16763,8 +16763,16 @@ def ops_call_notes_list():
 @app.route('/operations/api/client-search')
 @admin_required
 def ops_client_search_api():
-    """Return matching client names for autocomplete (JSON)."""
+    """Return matching client names for autocomplete (JSON).
+
+    Pathway-scoped via the ?pathway= query string. Defaults to PLAB so
+    existing call sites keep working. The Australia Call Notes "add" form
+    passes ?pathway=australia so only Australia clients are suggested.
+    """
     q = request.args.get('q', '').strip()
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+        pathway = 'plab'
     if len(q) < 2:
         return jsonify([])
     conn = get_db()
@@ -16772,12 +16780,13 @@ def ops_client_search_api():
         rows = conn.execute('''
             SELECT id, registration_number, prefix, first_name, last_name
             FROM plab_clients
-            WHERE first_name ILIKE ? OR last_name ILIKE ?
-               OR (first_name || ' ' || last_name) ILIKE ?
-               OR registration_number ILIKE ?
+            WHERE COALESCE(pathway, 'plab') = ?
+              AND (first_name ILIKE ? OR last_name ILIKE ?
+                OR (first_name || ' ' || last_name) ILIKE ?
+                OR registration_number ILIKE ?)
             ORDER BY first_name, last_name
             LIMIT 15
-        ''', (f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
+        ''', (pathway, f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
         results = []
         for r in rows:
             name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"

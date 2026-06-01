@@ -22,7 +22,7 @@ skipped so this works on fresh staging environments too.
 import logging
 
 
-IMPORT_VERSION = 'au_lookups_v3_force_resync'
+IMPORT_VERSION = 'au_lookups_v4_postgres_safe'
 
 
 # Each entry: (lookup_options.category, source_table, source_column).
@@ -53,11 +53,11 @@ LOOKUP_SOURCES = [
     ('payment_method', 'ops_payments', 'payment_method'),
     ('instalment',     'ops_payments', 'instalment'),
 
-    # ── EPIC ──
-    ('epic_reg_status',    'ops_epic_registration', 'epic_registration_status'),
+    # ── EPIC ── (column names follow live staging schema, verified 2026-06-01)
+    ('epic_reg_status',    'ops_epic_registration', 'epic_registration'),
     ('epic_status',        'ops_epic_registration', 'epic_status'),
     ('doc_stage',          'ops_epic_registration', 'documents_stage'),
-    ('notary_camp_status', 'ops_epic_registration', 'notary_cam'),
+    ('notary_camp_status', 'ops_epic_registration', 'notary_camp'),
 
     # ── Webinars & Conferences ──
     ('event_type',         'ops_webinars_conferences', 'event_type'),
@@ -85,12 +85,21 @@ LOOKUP_SOURCES = [
 
 
 def _table_has_column(conn, table, column):
-    """Defensive: skip mappings whose target column doesn't exist on this DB."""
+    """Defensive: skip mappings whose target column doesn't exist on this DB.
+
+    Two separate try/except blocks so a SQLite-PRAGMA error on Postgres
+    doesn't poison the Postgres information_schema fallback.
+    """
+    # SQLite path
     try:
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info({table})").fetchall()]
-        if cols:
-            return column in cols
-        # Postgres path — PRAGMA returns nothing
+        rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+        if rows:
+            return any(r[1] == column for r in rows)
+    except Exception:
+        try: conn.rollback()
+        except Exception: pass
+    # Postgres path
+    try:
         rows = conn.execute(
             "SELECT column_name FROM information_schema.columns "
             "WHERE table_name = ? AND column_name = ?",
@@ -98,6 +107,8 @@ def _table_has_column(conn, table, column):
         ).fetchall()
         return bool(rows)
     except Exception:
+        try: conn.rollback()
+        except Exception: pass
         return False
 
 
@@ -142,6 +153,11 @@ def run_seed_australia_lookups_once(get_db_fn):
                     f"ORDER BY v",
                 ).fetchall()
             except Exception as e:
+                # Critical on Postgres: must rollback the aborted transaction
+                # or every subsequent statement throws "current transaction is
+                # aborted, commands ignored until end of transaction block".
+                try: conn.rollback()
+                except Exception: pass
                 stats['skipped_categories'].append((category, table, column, str(e)))
                 continue
 
@@ -182,8 +198,16 @@ def run_seed_australia_lookups_once(get_db_fn):
                     )
                     inserted += 1
                 except Exception as e:
+                    # Roll back the aborted Postgres transaction so the loop
+                    # can continue with the next row.
+                    try: conn.rollback()
+                    except Exception: pass
                     logging.warning(f"AU lookup seed row failed ({category} / {value!r}): {e}")
-            conn.commit()
+            try:
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
             stats['per_category'][category] = inserted
 
         # Write the marker so subsequent boots are no-ops.
