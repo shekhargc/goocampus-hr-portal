@@ -26305,6 +26305,37 @@ def _record_access_audit(user, endpoint, main_section, sub_section, action, woul
     )
 
 
+def can_access(main_section, sub_section, action='view'):
+    """Template-friendly access check used by sidebar + button gating.
+
+    Two important UX rules baked in (Phase 4 design):
+      1. Admins always see everything (consistent with the route hook).
+      2. When ACCESS_MASTER_ENFORCE is False (current log-only mode),
+         this ALWAYS returns True so navigation stays intact while we
+         build up grants from the audit data. The route-level audit
+         keeps capturing would-be-denies regardless.
+
+    Registered as a Jinja global below so templates can write
+        {% if can_access('plab_pathway', 'payments', 'view') %}...{% endif %}
+    """
+    if not ACCESS_MASTER_ENFORCE:
+        return True
+    user = get_user()
+    if not user:
+        return False
+    try:
+        if user['is_admin']:
+            return True
+    except (KeyError, IndexError, TypeError):
+        return False
+    return has_section_permission(user, main_section, sub_section, action)
+
+
+# Expose to every template (no per-route render_template change needed).
+app.jinja_env.globals['can_access'] = can_access
+app.jinja_env.globals['ACCESS_MASTER_ENFORCE'] = lambda: ACCESS_MASTER_ENFORCE
+
+
 @app.before_request
 def access_master_request_audit():
     """Log-only access check on every request (Phase 3).

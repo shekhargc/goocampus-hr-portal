@@ -4,39 +4,54 @@
 
 {% block sidebar_nav %}
 {% if session.get('is_admin') %}
-    {# ── Admin View ── #}
+    {# ── Admin View (per-item gated via can_access) ── #}
+    {% if can_access('dashboard','admin','view') %}
     <a href="/hr-dashboard" class="sec-nav-item" data-tooltip="HR Dashboard">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg></span>
         <span class="sec-nav-text">HR Dashboard</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','employees','view') %}
     <a href="/admin/manage-employees" class="sec-nav-item" data-tooltip="Employees">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg></span>
         <span class="sec-nav-text">Employees</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','leave_management','view') %}
     <a href="/leave-info" class="sec-nav-item" data-tooltip="Leave Info">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
         <span class="sec-nav-text">Leave Info</span>
     </a>
+    {% endif %}
 
     <div class="sec-nav-group-label">Leave Management</div>
+    {% if can_access('hr','leave_management','add') %}
     <a href="/admin/add-leave" class="sec-nav-item" data-tooltip="Add Leave (Employee)">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="12" y1="9" x2="12" y2="15"/><line x1="9" y1="12" x2="15" y2="12"/></svg></span>
         <span class="sec-nav-text">Add Leave (Employee)</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','bulk_leave','add') %}
     <a href="/admin/bulk-leave" class="sec-nav-item" data-tooltip="Bulk Leave">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="12" x2="12" y2="18"/><line x1="9" y1="15" x2="15" y2="15"/></svg></span>
         <span class="sec-nav-text">Bulk Leave</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','leave_management','view') %}
     <a href="/admin/leave-applications" class="sec-nav-item" data-tooltip="All Leave Applications">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg></span>
         <span class="sec-nav-text">All Leave Applications</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','leave_management','edit') %}
     <a href="/admin/pending-approvals" class="sec-nav-item" data-tooltip="Pending Approvals">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
         <span class="sec-nav-text">Pending Approvals</span>
     </a>
+    {% endif %}
 
     <div class="sec-nav-group-label">Reports</div>
+    {% if can_access('hr','leave_management','view') %}
     <a href="/admin/employee-leave-report" class="sec-nav-item" data-tooltip="Employee Leave Report">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg></span>
         <span class="sec-nav-text">Employee Leave Report</span>
@@ -53,22 +68,29 @@
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg></span>
         <span class="sec-nav-text">Annual Report</span>
     </a>
+    {% endif %}
 
     <div class="sec-nav-group-label">Attendance</div>
+    {% if can_access('hr','attendance','view') %}
     <a href="/time-log" class="sec-nav-item" data-tooltip="Time Log">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
         <span class="sec-nav-text">Time Log</span>
     </a>
+    {% endif %}
+    {% if can_access('hr','attendance','add') %}
     <a href="/admin/upload-attendance" class="sec-nav-item" data-tooltip="Upload Attendance">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span>
         <span class="sec-nav-text">Upload Attendance</span>
     </a>
+    {% endif %}
 
     <div class="sec-nav-group-label">Work From Home</div>
+    {% if can_access('hr','wfh','edit') %}
     <a href="/wfh/approvals" class="sec-nav-item" data-tooltip="WFH Approvals">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg></span>
         <span class="sec-nav-text">WFH Approvals</span>
     </a>
+    {% endif %}
 
 {% else %}
     {# ── Employee View ── #}
