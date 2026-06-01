@@ -1,435 +1,473 @@
 {% extends "ops_sidebar_base.html" %}
-{% block title %}{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }} &mdash; Australia Pathway{% endblock %}
 
-{% block ops_extra_css %}
-<style>
-    .page-head {
-        display: flex; justify-content: space-between; align-items: flex-end;
-        flex-wrap: wrap; gap: 1rem; margin-bottom: 1.5rem;
-    }
-    .page-head h1 {
-        margin: 0; font-size: 1.5rem; color: var(--navy); font-weight: 700;
-    }
-    .page-head .sub {
-        font-size: 0.85rem; color: var(--gray-500); margin-top: 0.25rem;
-        font-family: ui-monospace, Menlo, Monaco, monospace;
-    }
-    .back-link { font-size: 0.85rem; color: var(--gray-500); text-decoration: none; }
-    .back-link:hover { color: var(--orange); }
-
-    .top-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-        gap: 0.9rem; margin-bottom: 1.5rem;
-    }
-    .top-card {
-        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
-        padding: 1rem 1.25rem;
-    }
-    .top-card .l { font-size: 0.72rem; color: var(--gray-500); font-weight: 600;
-                   text-transform: uppercase; letter-spacing: 0.03em; }
-    .top-card .v { font-size: 1.35rem; font-weight: 700; color: var(--navy); margin-top: 0.2rem; }
-    .top-card.pkg .v { font-size: 1.05rem; }
-    .top-card.bal .v.red { color: #EF4444; }
-    .top-card.bal .v.green { color: #16A34A; }
-    .progress-bar { background: var(--gray-200); border-radius: 4px; height: 8px; margin-top: 0.4rem; }
-    .progress-bar > div { background: var(--orange); border-radius: 4px; height: 100%; }
-    .pct-line { font-size: 0.7rem; color: var(--gray-500); margin-top: 0.2rem; }
-
-    .card {
-        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
-        margin-bottom: 1.5rem; overflow: hidden;
-    }
-    .card-head {
-        padding: 0.85rem 1.25rem; border-bottom: 1px solid var(--gray-200);
-        display: flex; justify-content: space-between; align-items: center;
-    }
-    .card-head h3 { margin: 0; font-size: 0.95rem; font-weight: 700; color: var(--navy); }
-    .card-body { padding: 1.25rem; }
-
-    .form-grid {
-        display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-        gap: 0.85rem;
-    }
-    .form-grid .full { grid-column: 1 / -1; }
-    .form-grid label {
-        display: block; font-size: 0.72rem; color: var(--gray-500); font-weight: 600;
-        text-transform: uppercase; letter-spacing: 0.03em; margin-bottom: 0.25rem;
-    }
-    .form-grid input, .form-grid select, .form-grid textarea {
-        width: 100%; padding: 0.5rem 0.65rem; font-size: 0.88rem;
-        border: 1px solid var(--gray-300); border-radius: 0.4rem;
-        background: white; color: var(--navy); box-sizing: border-box;
-    }
-    .form-grid input:read-only { background: var(--gray-50); color: var(--gray-500); }
-
-    .form-actions {
-        display: flex; gap: 0.6rem; justify-content: flex-end;
-        padding-top: 1rem; border-top: 1px solid var(--gray-100); margin-top: 1rem;
-    }
-    .btn-primary {
-        padding: 0.55rem 1.2rem; background: var(--orange); color: white;
-        border: none; border-radius: 0.4rem; font-weight: 600; font-size: 0.88rem; cursor: pointer;
-    }
-    .btn-secondary {
-        padding: 0.55rem 1.2rem; background: white; color: var(--navy);
-        border: 1px solid var(--gray-300); border-radius: 0.4rem; font-weight: 600; font-size: 0.88rem;
-        text-decoration: none; display: inline-block;
-    }
-
-    table.linked { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-    table.linked th, table.linked td {
-        text-align: left; padding: 0.45rem 0.55rem; border-bottom: 1px solid var(--gray-100);
-    }
-    table.linked th {
-        background: var(--gray-50); font-size: 0.7rem; color: var(--gray-500);
-        font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
-    }
-    .empty {
-        padding: 1.25rem; color: var(--gray-500); font-size: 0.88rem; text-align: center;
-    }
-
-    .section-tabs {
-        display: flex; flex-wrap: wrap; gap: 0.35rem;
-        margin-bottom: 1rem; padding: 0.35rem;
-        background: white; border: 1px solid var(--gray-200); border-radius: 0.6rem;
-    }
-    .section-tabs button {
-        padding: 0.45rem 0.8rem; font-size: 0.82rem; font-weight: 600;
-        background: transparent; color: var(--gray-600); border: none;
-        border-radius: 0.4rem; cursor: pointer;
-    }
-    .section-tabs button.active { background: var(--orange); color: white; }
-    .section-pane { display: none; }
-    .section-pane.active { display: block; }
-</style>
-{% endblock %}
+{% block title %}Australia Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 
 {% block ops_content %}
-<div class="page-head">
-    <div>
-        <h1>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}</h1>
-        <div class="sub">{{ client.registration_number }}</div>
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_australia_clients_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to Australia Registration
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
+          {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ client.registration_number or '—' }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
+        </p>
+        {% if client.registration_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Registered: {{ client.registration_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if client.account_status == 'In Process' %}
+            background:#ECFDF5;color:#065F46;
+          {% elif client.account_status == 'Switched Program' %}
+            background:#F3F4F6;color:#374151;
+          {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}
+            background:#FEF2F2;color:#991B1B;
+          {% elif client.account_status == 'On Hold' %}
+            background:#FFFBEB;color:#92400E;
+          {% elif client.account_status == 'Completed' %}
+            background:#EFF6FF;color:#1E40AF;
+          {% else %}
+            background:#F3F4F6;color:#374151;
+          {% endif %}
+        ">
+          {{ client.account_status or 'Unknown' }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_australia_client_edit_page', client_id=client.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Client
+        </a>
+      </div>
     </div>
-    <div>
-        <a href="{{ url_for('ops_australia_clients_list') }}" class="back-link">&larr; Back to Registration list</a>
+  </div>
+
+  <!-- ── Stat Cards Row ── -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Current Stage</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">{{ client.current_stage or 'Not Set' }}</p>
     </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Package Value</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">&#8377;{{ '{:,.0f}'.format(final_pkg or 0) }}</p>
+      {% if (client.discount_allowed or 0) > 0 %}
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
+        &#8377;{{ '{:,.0f}'.format(client.package_amount or 0) }} - &#8377;{{ '{:,.0f}'.format(client.discount_allowed or 0) }} discount
+      </p>
+      {% endif %}
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Total Paid</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:#059669;">&#8377;{{ '{:,.0f}'.format(amount_paid or 0) }}</p>
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">GST: &#8377;{{ '{:,.0f}'.format(gst_paid or 0) }}</p>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Balance Due</p>
+      <p style="margin:0;font-size:20px;font-weight:700;{% if balance > 0 %}color:#DC2626;{% else %}color:#059669;{% endif %}">&#8377;{{ '{:,.0f}'.format(balance or 0) }}</p>
+    </div>
+  </div>
+
+  <!-- ── Payment Progress Bar ── -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <p style="margin:0 0 12px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Payment Progress</p>
+    <div style="background:var(--gray-100);border-radius:999px;height:12px;overflow:hidden;margin-bottom:12px;">
+      <div style="background:var(--orange);height:100%;width:{{ payment_pct|default(0) }}%;border-radius:999px;transition:width 0.3s ease;"></div>
+    </div>
+    <p style="margin:0;font-size:14px;font-weight:600;color:var(--navy);">
+      &#8377;{{ '{:,.0f}'.format(amount_paid or 0) }} paid of &#8377;{{ '{:,.0f}'.format(final_pkg or 0) }} ({{ '{:.1f}'.format(payment_pct or 0) }}%)
+    </p>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Personal Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Personal Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 1:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 2:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if client.email %}<a href="mailto:{{ client.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">DOB:</span><span style="color:var(--navy);font-weight:600;">{{ client.dob or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">City:</span><span style="color:var(--navy);font-weight:600;">{{ client.city or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">State:</span><span style="color:var(--navy);font-weight:600;">{{ client.state or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Instagram:</span>
+            {% if client.instagram %}<a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.instagram }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Facebook:</span>
+            {% if client.facebook %}<a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.facebook }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">LinkedIn:</span>
+            {% if client.linkedin %}<a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.linkedin }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Parents Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Parents Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
+            {% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Plan & Stage Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Plan &amp; Stage</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Current Stage:</span><span style="color:var(--navy);font-weight:600;">{{ client.current_stage or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Plan Type:</span><span style="color:var(--navy);font-weight:600;">{{ client.plan_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
+              {% if client.account_status == 'In Process' %}background:#ECFDF5;color:#065F46;
+              {% elif client.account_status == 'Switched Program' %}background:#F3F4F6;color:#374151;
+              {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}background:#FEF2F2;color:#991B1B;
+              {% elif client.account_status == 'On Hold' %}background:#FFFBEB;color:#92400E;
+              {% elif client.account_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
+              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ client.account_status or 'Unknown' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Switched Program:</span><span style="color:{% if client.switched_program %}#6D28D9{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.switched_program or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Counsellor & Lead Status Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Counsellor &amp; Lead Status</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Counsellor Email:</span>
+            {% if client.counsellor_email %}<a href="mailto:{{ client.counsellor_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.counsellor_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Lead Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Lead Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Lead Source:</span><span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">UK Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.referral_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Portfolio Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.portfolio_referral or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Australia Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.australia_referral or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Operations Team Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Installment Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Installment Details</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Inst.</th>
+                <th style="padding:10px;text-align:right;font-weight:600;color:var(--navy);">Amount</th>
+                <th style="padding:10px;text-align:center;font-weight:600;color:var(--navy);">Date</th>
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in [1, 2, 3, 4] %}
+              <tr style="border-bottom:1px solid var(--gray-200);">
+                <td style="padding:10px;color:var(--gray-600);font-weight:500;">{{ i }}</td>
+                <td style="padding:10px;text-align:right;color:{% if client['inst'~i~'_amount'] %}#059669{% else %}var(--gray-400){% endif %};font-weight:600;">
+                  {% if client['inst'~i~'_amount'] %}&#8377;{{ '{:,.0f}'.format(client['inst'~i~'_amount']|float) }}{% else %}—{% endif %}
+                </td>
+                <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_date'] or '—' }}</td>
+                <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_note'] or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Additional Notes (full width) ── -->
+  {% if client.additional_notes %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Additional Notes</h3>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ═══════════ LINKED SECTIONS (same card layout as PLAB) ═══════════ -->
+
+  <!-- Test Bookings -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Test Bookings ({{ sections.test_bookings|length }})</h3>
+      <a href="{{ url_for('ops_australia_test_bookings_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.test_bookings %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Exam</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Booking Date</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Exam Date</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Status</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Result</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Score</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.test_bookings %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.exam or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.booking_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_status or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_result or '—' }}</td>
+          <td style="padding:10px;text-align:right;color:var(--gray-600);">{{ r.score or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No test bookings yet.</p>{% endif %}
+  </div>
+
+  <!-- Payments -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ sections.payments|length }})</h3>
+      <a href="{{ url_for('ops_australia_payments_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.payments %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Date</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Instalment</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Amount</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">GST</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Method</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.payments %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_date or '—' }}</td>
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.instalment or '—' }}</td>
+          <td style="padding:10px;text-align:right;color:#059669;font-weight:600;">{% if r.total_amount_paid %}&#8377;{{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;text-align:right;color:var(--gray-600);">{% if r.gst_paid %}&#8377;{{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_method or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
+  </div>
+
+  <!-- Training -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Training ({{ sections.training|length }})</h3>
+      <a href="{{ url_for('ops_australia_training_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.training %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Program</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Method</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Vendor</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Start</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">End</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Status</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.training %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.english_training or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.coaching_method or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.vendor_provider or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.start_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.end_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.coaching_status or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No training records.</p>{% endif %}
+  </div>
+
+  <!-- Academic Details -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Academic Details ({{ sections.academic|length }})</h3>
+      <a href="{{ url_for('ops_australia_academic_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.academic %}
+    {% for r in sections.academic %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">IMG / FMG:</span><span style="color:var(--navy);font-weight:600;">{{ r.img_fmg or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Medical College:</span><span style="color:var(--navy);font-weight:600;">{{ r.img_medical_college or r.fmg_medical_college or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">MBBS Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.mbbs_status or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Internship:</span><span style="color:var(--navy);font-weight:600;">{{ r.internship_status or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Working:</span><span style="color:var(--navy);font-weight:600;">{{ r.working_status or '—' }}</span></div>
+    </div>
+    {% endfor %}
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No academic details captured.</p>{% endif %}
+  </div>
+
+  <!-- EPIC Registration -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">EPIC Registration ({{ sections.epic|length }})</h3>
+      <a href="{{ url_for('ops_australia_epic_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.epic %}
+    {% for r in sections.epic %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">EPIC Reg:</span><span style="color:var(--navy);font-weight:600;">{{ r.epic_registration_status or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">EPIC Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.epic_status or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Notary Cam:</span><span style="color:var(--navy);font-weight:600;">{{ r.notary_cam or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Doc Stage:</span><span style="color:var(--navy);font-weight:600;">{{ r.documents_stage or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Reg Date:</span><span style="color:var(--navy);font-weight:600;">{{ r.registration_date or '—' }}</span></div>
+    </div>
+    {% endfor %}
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No EPIC record.</p>{% endif %}
+  </div>
+
+  <!-- Online Courses & Subscriptions -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Online Courses &amp; Subscriptions ({{ sections.online_courses|length }})</h3>
+      <a href="{{ url_for('ops_australia_online_courses_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.online_courses %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Subscription</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Activation</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Issued</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Booked By</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.online_courses %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.online_subscription or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.activation_type or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.issued_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.booked_by or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No online courses.</p>{% endif %}
+  </div>
+
+  <!-- Call Notes -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
+      <a href="{{ url_for('ops_australia_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.call_notes %}
+    <div style="max-height:400px;overflow-y:auto;">
+      {% for r in sections.call_notes[:20] %}
+      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
+          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
+        </div>
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
+  </div>
+
+  <!-- Research & Publication -->
+  {% if sections.research %}
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Research &amp; Publication ({{ sections.research|length }})</h3>
+      <a href="{{ url_for('ops_australia_research_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% for r in sections.research %}
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_status or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Provider:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_provider or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Topic:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_topic or '—' }}</span></div>
+      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Journal:</span><span style="color:var(--navy);font-weight:600;">{{ r.published_journal_name or '—' }}</span></div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- Webinars & Conferences -->
+  {% if sections.webinars %}
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Webinars &amp; Conferences ({{ sections.webinars|length }})</h3>
+      <a href="{{ url_for('ops_australia_webinars_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Type</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Event</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Participation</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Start</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">End</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.webinars %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.event_type or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.webinar_conference_name or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.participation_type or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.start_date or '—' }}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.end_date or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+  </div>
+  {% endif %}
+
 </div>
-
-<!-- ── Summary cards ── -->
-<div class="top-grid">
-    <div class="top-card">
-        <div class="l">Status</div>
-        <div class="v">{{ client.account_status or '—' }}</div>
-    </div>
-    <div class="top-card">
-        <div class="l">Current Stage</div>
-        <div class="v">{{ client.current_stage or '—' }}</div>
-    </div>
-    <div class="top-card">
-        <div class="l">Counsellor</div>
-        <div class="v">{{ client.counsellor or '—' }}</div>
-    </div>
-    <div class="top-card pkg">
-        <div class="l">Package</div>
-        <div class="v">&#8377;{{ '{:,.0f}'.format(final_pkg) }}</div>
-    </div>
-    <div class="top-card pkg">
-        <div class="l">Paid</div>
-        <div class="v">&#8377;{{ '{:,.0f}'.format(amount_paid) }}</div>
-        <div class="progress-bar"><div style="width: {{ payment_pct }}%"></div></div>
-        <div class="pct-line">{{ payment_pct|round(0) }}% paid</div>
-    </div>
-    <div class="top-card bal">
-        <div class="l">Balance</div>
-        <div class="v {{ 'red' if balance > 0 else 'green' }}">&#8377;{{ '{:,.0f}'.format(balance) }}</div>
-    </div>
-</div>
-
-<!-- ── Edit form ── -->
-<div class="card">
-    <div class="card-head">
-        <h3>Edit client details</h3>
-    </div>
-    <div class="card-body">
-        <form method="post" action="{{ url_for('ops_australia_client_edit', client_id=client.id) }}">
-            <!-- Personal -->
-            <div style="font-size:0.78rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.6rem;">Personal</div>
-            <div class="form-grid">
-                <div>
-                    <label>Reg. No. (locked)</label>
-                    <input type="text" value="{{ client.registration_number or '' }}" readonly>
-                </div>
-                <div>
-                    <label>Prefix</label>
-                    <input type="text" name="prefix" value="{{ client.prefix or '' }}">
-                </div>
-                <div>
-                    <label>First name</label>
-                    <input type="text" name="first_name" value="{{ client.first_name or '' }}">
-                </div>
-                <div>
-                    <label>Last name</label>
-                    <input type="text" name="last_name" value="{{ client.last_name or '' }}">
-                </div>
-                <div>
-                    <label>Mobile</label>
-                    <input type="text" name="mobile" value="{{ client.mobile or '' }}">
-                </div>
-                <div>
-                    <label>WhatsApp</label>
-                    <input type="text" name="whatsapp1" value="{{ client.whatsapp1 or '' }}">
-                </div>
-                <div>
-                    <label>Email</label>
-                    <input type="email" name="email" value="{{ client.email or '' }}">
-                </div>
-                <div>
-                    <label>DOB</label>
-                    <input type="text" name="dob" value="{{ client.dob or '' }}" placeholder="YYYY-MM-DD">
-                </div>
-                <div>
-                    <label>City</label>
-                    <input type="text" name="city" value="{{ client.city or '' }}">
-                </div>
-                <div>
-                    <label>State</label>
-                    <input type="text" name="state" value="{{ client.state or '' }}">
-                </div>
-                <div>
-                    <label>Instagram</label>
-                    <input type="text" name="instagram" value="{{ client.instagram or '' }}">
-                </div>
-                <div>
-                    <label>LinkedIn</label>
-                    <input type="text" name="linkedin" value="{{ client.linkedin or '' }}">
-                </div>
-            </div>
-
-            <!-- Family -->
-            <div style="font-size:0.78rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin:1.5rem 0 0.6rem;">Family</div>
-            <div class="form-grid">
-                <div><label>Father&rsquo;s name</label><input type="text" name="father_name" value="{{ client.father_name or '' }}"></div>
-                <div><label>Father&rsquo;s mobile</label><input type="text" name="father_phone" value="{{ client.father_phone or '' }}"></div>
-                <div><label>Mother&rsquo;s name</label><input type="text" name="mother_name" value="{{ client.mother_name or '' }}"></div>
-                <div><label>Mother&rsquo;s mobile</label><input type="text" name="mother_phone" value="{{ client.mother_phone or '' }}"></div>
-                <div class="full"><label>Parents email</label><input type="email" name="parents_email" value="{{ client.parents_email or '' }}"></div>
-            </div>
-
-            <!-- Service -->
-            <div style="font-size:0.78rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin:1.5rem 0 0.6rem;">Service &amp; Pathway</div>
-            <div class="form-grid">
-                <div><label>Plan type</label><input type="text" name="plan_type" value="{{ client.plan_type or '' }}"></div>
-                <div><label>Account status</label><input type="text" name="account_status" value="{{ client.account_status or '' }}"></div>
-                <div><label>Current stage</label><input type="text" name="current_stage" value="{{ client.current_stage or '' }}"></div>
-                <div><label>Switched program</label><input type="text" name="switched_program" value="{{ client.switched_program or '' }}"></div>
-                <div><label>Counsellor</label><input type="text" name="counsellor" value="{{ client.counsellor or '' }}"></div>
-                <div><label>Counsellor email</label><input type="email" name="counsellor_email" value="{{ client.counsellor_email or '' }}"></div>
-                <div><label>Counsellor number</label><input type="text" name="counsellor_number" value="{{ client.counsellor_number or '' }}"></div>
-                <div><label>Lead source</label><input type="text" name="lead_source" value="{{ client.lead_source or '' }}"></div>
-                <div><label>Registration date</label><input type="text" name="registration_date" value="{{ client.registration_date or '' }}" placeholder="YYYY-MM-DD"></div>
-            </div>
-
-            <!-- Financials -->
-            <div style="font-size:0.78rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin:1.5rem 0 0.6rem;">Financials</div>
-            <div class="form-grid">
-                <div><label>Package amount</label><input type="number" step="0.01" name="package_amount" value="{{ client.package_amount or 0 }}"></div>
-                <div><label>Discount allowed</label><input type="number" step="0.01" name="discount_allowed" value="{{ client.discount_allowed or 0 }}"></div>
-                <div><label>Final package</label><input type="number" step="0.01" name="final_package" value="{{ client.final_package or 0 }}"></div>
-            </div>
-
-            <!-- Installments -->
-            <div style="font-size:0.78rem;color:var(--gray-500);font-weight:700;text-transform:uppercase;letter-spacing:0.04em;margin:1.5rem 0 0.6rem;">Installments</div>
-            <div class="form-grid">
-                {% for i in [1, 2, 3, 4] %}
-                <div><label>Inst {{ i }} amount</label><input type="number" step="0.01" name="inst{{ i }}_amount" value="{{ client['inst'~i~'_amount'] or 0 }}"></div>
-                <div><label>Inst {{ i }} date</label><input type="text" name="inst{{ i }}_date" value="{{ client['inst'~i~'_date'] or '' }}" placeholder="YYYY-MM-DD"></div>
-                <div class="full"><label>Inst {{ i }} note</label><input type="text" name="inst{{ i }}_note" value="{{ client['inst'~i~'_note'] or '' }}"></div>
-                {% endfor %}
-            </div>
-
-            <div class="form-actions">
-                <a href="{{ url_for('ops_australia_clients_list') }}" class="btn-secondary">Cancel</a>
-                <button type="submit" class="btn-primary">Save changes</button>
-            </div>
-        </form>
-    </div>
-</div>
-
-<!-- ── Linked sections (read-only summaries; click section nav to drill in) ── -->
-<div class="card">
-    <div class="card-head">
-        <h3>Linked records for this client</h3>
-    </div>
-    <div class="card-body">
-        <div class="section-tabs">
-            <button class="active" data-pane="tb">Test Bookings ({{ sections.test_bookings|length }})</button>
-            <button data-pane="ac">Academic ({{ sections.academic|length }})</button>
-            <button data-pane="ep">EPIC ({{ sections.epic|length }})</button>
-            <button data-pane="tr">Training ({{ sections.training|length }})</button>
-            <button data-pane="oc">Online Courses ({{ sections.online_courses|length }})</button>
-            <button data-pane="pay">Payments ({{ sections.payments|length }})</button>
-            <button data-pane="cn">Call Notes ({{ sections.call_notes|length }})</button>
-            <button data-pane="rs">Research ({{ sections.research|length }})</button>
-            <button data-pane="wb">Webinars ({{ sections.webinars|length }})</button>
-        </div>
-
-        <div class="section-pane active" id="pane-tb">
-            {% if sections.test_bookings %}
-            <table class="linked">
-                <thead><tr><th>Exam</th><th>Booking</th><th>Exam Date</th><th>Status</th><th>Result</th><th>Score</th></tr></thead>
-                <tbody>
-                {% for r in sections.test_bookings %}
-                    <tr><td>{{ r.exam or '—' }}</td><td>{{ r.booking_date or '—' }}</td><td>{{ r.exam_date or '—' }}</td>
-                        <td>{{ r.exam_status or '—' }}</td><td>{{ r.exam_result or '—' }}</td><td>{{ r.score or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No test bookings for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-ac">
-            {% if sections.academic %}
-            <table class="linked">
-                <thead><tr><th>IMG/FMG</th><th>Medical College</th><th>MBBS Status</th><th>Internship</th><th>Working</th></tr></thead>
-                <tbody>
-                {% for r in sections.academic %}
-                    <tr><td>{{ r.img_fmg or '—' }}</td>
-                        <td>{{ r.img_medical_college or r.fmg_medical_college or '—' }}</td>
-                        <td>{{ r.mbbs_status or '—' }}</td>
-                        <td>{{ r.internship_status or '—' }}</td>
-                        <td>{{ r.working_status or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No academic record for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-ep">
-            {% if sections.epic %}
-            <table class="linked">
-                <thead><tr><th>EPIC Reg</th><th>EPIC Status</th><th>Notary Cam</th><th>Doc Stage</th><th>Reg Date</th></tr></thead>
-                <tbody>
-                {% for r in sections.epic %}
-                    <tr><td>{{ r.epic_registration_status or '—' }}</td><td>{{ r.epic_status or '—' }}</td>
-                        <td>{{ r.notary_cam or '—' }}</td><td>{{ r.documents_stage or '—' }}</td>
-                        <td>{{ r.registration_date or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No EPIC record for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-tr">
-            {% if sections.training %}
-            <table class="linked">
-                <thead><tr><th>Program</th><th>Method</th><th>Vendor</th><th>Start</th><th>End</th><th>Status</th></tr></thead>
-                <tbody>
-                {% for r in sections.training %}
-                    <tr><td>{{ r.english_training or '—' }}</td>
-                        <td>{{ r.coaching_method or '—' }}</td>
-                        <td>{{ r.vendor_provider or '—' }}</td>
-                        <td>{{ r.start_date or '—' }}</td>
-                        <td>{{ r.end_date or '—' }}</td>
-                        <td>{{ r.coaching_status or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No training records.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-oc">
-            {% if sections.online_courses %}
-            <table class="linked">
-                <thead><tr><th>Subscription</th><th>Activation</th><th>Issued</th><th>Booked By</th></tr></thead>
-                <tbody>
-                {% for r in sections.online_courses %}
-                    <tr><td>{{ r.online_subscription or '—' }}</td>
-                        <td>{{ r.activation_type or '—' }}</td>
-                        <td>{{ r.issued_date or '—' }}</td>
-                        <td>{{ r.booked_by or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No online courses for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-pay">
-            {% if sections.payments %}
-            <table class="linked">
-                <thead><tr><th>Date</th><th>Instalment</th><th>Amount</th><th>GST</th><th>Method</th></tr></thead>
-                <tbody>
-                {% for r in sections.payments %}
-                    <tr><td>{{ r.payment_date or '—' }}</td>
-                        <td>{{ r.instalment or '—' }}</td>
-                        <td>&#8377;{% if r.total_amount_paid %}{{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}0{% endif %}</td>
-                        <td>&#8377;{% if r.gst_paid %}{{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}0{% endif %}</td>
-                        <td>{{ r.payment_method or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No payments for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-cn">
-            {% if sections.call_notes %}
-            <table class="linked">
-                <thead><tr><th>Date</th><th>Note</th><th>Added by</th></tr></thead>
-                <tbody>
-                {% for r in sections.call_notes %}
-                    <tr><td>{{ r.call_date or '—' }}</td>
-                        <td style="white-space:pre-wrap;max-width:400px;">{{ r.call_note or '—' }}</td>
-                        <td>{{ r.added_by or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No call notes for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-rs">
-            {% if sections.research %}
-            <table class="linked">
-                <thead><tr><th>Status</th><th>Topic</th><th>Provider</th><th>Start</th><th>Journal</th></tr></thead>
-                <tbody>
-                {% for r in sections.research %}
-                    <tr><td>{{ r.research_status or '—' }}</td>
-                        <td>{{ r.research_topic or '—' }}</td>
-                        <td>{{ r.research_provider or '—' }}</td>
-                        <td>{{ r.research_start_date or '—' }}</td>
-                        <td>{{ r.published_journal_name or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No research records for this client.</div>{% endif %}
-        </div>
-
-        <div class="section-pane" id="pane-wb">
-            {% if sections.webinars %}
-            <table class="linked">
-                <thead><tr><th>Type</th><th>Event</th><th>Participation</th><th>Start</th><th>End</th></tr></thead>
-                <tbody>
-                {% for r in sections.webinars %}
-                    <tr><td>{{ r.event_type or '—' }}</td>
-                        <td>{{ r.webinar_conference_name or '—' }}</td>
-                        <td>{{ r.participation_type or '—' }}</td>
-                        <td>{{ r.start_date or '—' }}</td>
-                        <td>{{ r.end_date or '—' }}</td></tr>
-                {% endfor %}
-                </tbody>
-            </table>
-            {% else %}<div class="empty">No webinars for this client.</div>{% endif %}
-        </div>
-    </div>
-</div>
-
-<script>
-    document.querySelectorAll('.section-tabs button').forEach(btn => {
-        btn.addEventListener('click', () => {
-            document.querySelectorAll('.section-tabs button').forEach(b => b.classList.remove('active'));
-            document.querySelectorAll('.section-pane').forEach(p => p.classList.remove('active'));
-            btn.classList.add('active');
-            const pane = document.getElementById('pane-' + btn.dataset.pane);
-            if (pane) pane.classList.add('active');
-        });
-    });
-</script>
 {% endblock %}

@@ -448,7 +448,34 @@ def ops_australia_client_detail(client_id):
 
 
 @admin_required
-def ops_australia_client_edit(client_id):
+def ops_australia_client_edit_page(client_id):
+    """GET — render the edit form for an Australia client.
+
+    Mirrors the PLAB pattern (view page + separate edit page) so the layout
+    is consistent across pathways. The view page is /operations/australia/
+    clients/<id>; this edit page is .../edit (GET).
+    """
+    user = get_user()
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    conn.close()
+    if not client:
+        flash('Australia client not found.', 'error')
+        return redirect(url_for('ops_australia_clients_list'))
+    return render_template(
+        'ops_australia_client_edit_form.html',
+        user=user,
+        client=client,
+        active_ops_page='australia-clients',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_client_edit_save(client_id):
     """POST handler: save changes to an Australia client's editable fields.
 
     Strict allowlist (AU_EDITABLE_COLUMNS) — anything else in the form is
@@ -530,9 +557,17 @@ def register_routes(app):
         view_func=ops_australia_client_detail,
         methods=['GET'],
     )
+    # Edit page (GET) — renders the form
     app.add_url_rule(
         '/operations/australia/clients/<int:client_id>/edit',
-        endpoint='ops_australia_client_edit',
-        view_func=ops_australia_client_edit,
+        endpoint='ops_australia_client_edit_page',
+        view_func=ops_australia_client_edit_page,
+        methods=['GET'],
+    )
+    # Save (POST) — same URL, different method, separate endpoint
+    app.add_url_rule(
+        '/operations/australia/clients/<int:client_id>/edit',
+        endpoint='ops_australia_client_edit_save',
+        view_func=ops_australia_client_edit_save,
         methods=['POST'],
     )
