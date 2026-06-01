@@ -34,7 +34,7 @@ imports so the source rows exist.
 import logging
 
 
-IMPORT_VERSION = 'au_vendors_v1'
+IMPORT_VERSION = 'au_vendors_v2_force_resync'
 AU_COUNTRY = 'Australia Pathway'
 
 

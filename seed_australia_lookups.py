@@ -22,7 +22,7 @@ skipped so this works on fresh staging environments too.
 import logging
 
 
-IMPORT_VERSION = 'au_lookups_v2_force_resync'
+IMPORT_VERSION = 'au_lookups_v3_force_resync'
 
 
 # Each entry: (lookup_options.category, source_table, source_column).
