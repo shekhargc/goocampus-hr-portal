@@ -26332,7 +26332,7 @@ seed_access_master_baseline_once()
 #  Going from log-only to enforce = flip ACCESS_MASTER_ENFORCE.
 # ─────────────────────────────────────────────────────────────────────────
 
-ACCESS_MASTER_ENFORCE = False  # Phase 5a: seed baseline first; Phase 5b flips this.
+ACCESS_MASTER_ENFORCE = True  # Phase 5b (2026-06-01): enforce live. Audit log -> denial.
 
 
 def _ap(main, sub, action='view'):
