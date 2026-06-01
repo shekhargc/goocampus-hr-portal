@@ -673,16 +673,22 @@
                     || img.classList.contains('dash-photo')
                     || img.classList.contains('drawer-avatar')
                     || img.classList.contains('profile-photo')
+                    || img.classList.contains('avatar')
+                    || img.classList.contains('avatar-lg')
+                    || img.classList.contains('leave-avatar')
+                    || img.classList.contains('photo')
+                    || img.classList.contains('photo-banner')
                     ));
         }
         function applyFallback(img) {
             if (img.dataset.photoFallback === '1') return;
             img.dataset.photoFallback = '1';
             img.src = FALLBACK;
-            // Keep the avatar circle shape clean — letterbox the logo, white bg.
+            // Fill the avatar circle with the logo — minimal padding so the
+            // logo stays visible at small sizes (HR dashboard chips are tiny).
             img.style.objectFit = 'contain';
             img.style.background = '#fff';
-            img.style.padding = '6%';
+            img.style.padding = '2px';
             img.alt = 'GooCampus';
         }
         document.addEventListener('error', function(e) {
