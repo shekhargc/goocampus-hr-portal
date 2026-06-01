@@ -26141,6 +26141,220 @@ def ensure_user_section_permissions_table():
 ensure_user_section_permissions_table()
 
 
+# ─────────────────────────────────────────────────────────────────────────
+#  Access Master Phase 3: log-only enforcement
+#
+#  Centralised request-level audit. Instead of decorating 300 route
+#  handlers individually, one @app.before_request hook consults a static
+#  endpoint -> (main, sub, action) map and:
+#    - logs every "would-be-denied" request (info-level)
+#    - actually denies (302 to dashboard / 403 JSON) ONLY when
+#      ACCESS_MASTER_ENFORCE is True (Phase 5 will flip this).
+#  Admins and unauthenticated requests bypass — admins because the user
+#  decided so, anon because login_required / @admin_required handle that
+#  already.
+#
+#  Adding a new route to the map = single line.
+#  Going from log-only to enforce = flip ACCESS_MASTER_ENFORCE.
+# ─────────────────────────────────────────────────────────────────────────
+
+ACCESS_MASTER_ENFORCE = False  # Phase 5 will flip to True.
+
+
+def _ap(main, sub, action='view'):
+    """Tiny helper to keep the route map readable."""
+    return (main, sub, action)
+
+
+ACCESS_ROUTE_MAP = {
+    # ── Operations: Australia Pathway ─────────────────────────────────────
+    'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
+    'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
+    'ops_australia_client_detail':          _ap('australia_pathway', 'registration'),
+    'ops_australia_client_edit_page':       _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_client_edit_save':       _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_test_bookings_list':     _ap('australia_pathway', 'test_bookings'),
+    'ops_australia_test_bookings_detail':   _ap('australia_pathway', 'test_bookings'),
+    'ops_australia_test_bookings_edit_page':_ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_test_bookings_edit_save':_ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_academic_list':          _ap('australia_pathway', 'academic'),
+    'ops_australia_academic_detail':        _ap('australia_pathway', 'academic'),
+    'ops_australia_academic_edit_page':     _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_academic_edit_save':     _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_epic_list':              _ap('australia_pathway', 'epic'),
+    'ops_australia_epic_detail':            _ap('australia_pathway', 'epic'),
+    'ops_australia_epic_edit_page':         _ap('australia_pathway', 'epic', 'edit'),
+    'ops_australia_epic_edit_save':         _ap('australia_pathway', 'epic', 'edit'),
+    'ops_australia_training_list':          _ap('australia_pathway', 'training'),
+    'ops_australia_training_detail':        _ap('australia_pathway', 'training'),
+    'ops_australia_training_edit_page':     _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_training_edit_save':     _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_online_courses_list':    _ap('australia_pathway', 'online_courses'),
+    'ops_australia_online_courses_detail':  _ap('australia_pathway', 'online_courses'),
+    'ops_australia_online_courses_edit_page':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_online_courses_edit_save':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_payments_list':          _ap('australia_pathway', 'payments'),
+    'ops_australia_payments_detail':        _ap('australia_pathway', 'payments'),
+    'ops_australia_payments_edit_page':     _ap('australia_pathway', 'payments', 'edit'),
+    'ops_australia_payments_edit_save':     _ap('australia_pathway', 'payments', 'edit'),
+    'ops_australia_call_notes_list':        _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_tracker':     _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_not_contacted':_ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_detail':      _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_edit_page':   _ap('australia_pathway', 'call_notes', 'edit'),
+    'ops_australia_call_notes_edit_save':   _ap('australia_pathway', 'call_notes', 'edit'),
+    'ops_australia_call_notes_add':         _ap('australia_pathway', 'call_notes', 'add'),
+    'ops_australia_research_list':          _ap('australia_pathway', 'research'),
+    'ops_australia_research_detail':        _ap('australia_pathway', 'research'),
+    'ops_australia_research_edit_page':     _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_research_edit_save':     _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_webinars_list':          _ap('australia_pathway', 'webinars'),
+    'ops_australia_webinars_detail':        _ap('australia_pathway', 'webinars'),
+    'ops_australia_webinars_edit_page':     _ap('australia_pathway', 'webinars', 'edit'),
+    'ops_australia_webinars_edit_save':     _ap('australia_pathway', 'webinars', 'edit'),
+
+    # ── Operations: PLAB Pathway ──────────────────────────────────────────
+    'ops_plab_list':                _ap('plab_pathway', 'registration'),
+    'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
+    'ops_plab_add':                 _ap('plab_pathway', 'registration', 'add'),
+    'ops_plab_edit':                _ap('plab_pathway', 'registration', 'edit'),
+    'ops_plab_delete':              _ap('plab_pathway', 'registration', 'edit'),
+    'ops_plab_pathway_dashboard':   _ap('plab_pathway', 'dashboard'),
+    'ops_onboarding_list':          _ap('plab_pathway', 'onboarding'),
+    'ops_onboarding_detail':        _ap('plab_pathway', 'onboarding'),
+    'ops_coaching_list':            _ap('plab_pathway', 'coaching'),
+    'ops_english_logins_list':      _ap('plab_pathway', 'english_logins'),
+    'ops_test_bookings_list':       _ap('plab_pathway', 'test_bookings'),
+    'ops_call_notes_list':          _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_tracker':       _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_not_contacted': _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_add':           _ap('plab_pathway', 'call_notes', 'add'),
+    'ops_call_notes_edit':          _ap('plab_pathway', 'call_notes', 'edit'),
+    'ops_call_notes_delete':        _ap('plab_pathway', 'call_notes', 'edit'),
+    'ops_payments_list':            _ap('plab_pathway', 'payments'),
+    'ops_documents_list':           _ap('plab_pathway', 'documents'),
+    'ops_epic_list':                _ap('plab_pathway', 'epic'),
+    'ops_gmc_list':                 _ap('plab_pathway', 'gmc'),
+    'ops_visa_list':                _ap('plab_pathway', 'uk_visa'),
+    'ops_cab_list':                 _ap('plab_pathway', 'uk_cab'),
+    'ops_observerships_list':       _ap('plab_pathway', 'uk_observerships'),
+    'ops_academic_list':            _ap('plab_pathway', 'academic'),
+    'ops_research_list':            _ap('plab_pathway', 'research'),
+    'ops_subscriptions_list':       _ap('plab_pathway', 'subscriptions'),
+    'ops_webinars_list':            _ap('plab_pathway', 'webinars'),
+    'ops_courses_list':             _ap('plab_pathway', 'online_courses'),
+    'ops_ngo_list':                 _ap('plab_pathway', 'ngo'),
+    'ops_mentorship_list':          _ap('plab_pathway', 'mentorship'),
+
+    # ── Operations: Shared ────────────────────────────────────────────────
+    'ops_reports':                  _ap('operations_shared', 'reports'),
+    'ops_field_manager':            _ap('operations_shared', 'field_manager'),
+    'ops_vendors_providers':        _ap('operations_shared', 'vendors_providers'),
+
+    # ── Sales ─────────────────────────────────────────────────────────────
+    'meetings_list':                _ap('sales', 'meetings'),
+    'projects_list':                _ap('sales', 'projects'),
+    'products_list':                _ap('sales', 'products'),
+    'partners':                     _ap('sales', 'partners'),
+    'sales_news':                   _ap('sales', 'news'),
+
+    # ── HR ────────────────────────────────────────────────────────────────
+    'apply_leave':                  _ap('hr', 'leave_management', 'add'),
+    'apply_late_leave':             _ap('hr', 'late_leave', 'add'),
+    'admin_bulk_leave':             _ap('hr', 'bulk_leave', 'add'),
+    'wfh_request':                  _ap('hr', 'wfh', 'add'),
+    'attendance_log':               _ap('hr', 'attendance'),
+
+    # ── Company ───────────────────────────────────────────────────────────
+    'access_master':                _ap('company', 'access_master'),
+    'access_master_save':           _ap('company', 'access_master', 'edit'),
+    'access_master_save_bulk':      _ap('company', 'access_master', 'edit'),
+    'section_visibility':           _ap('company', 'section_visibility'),
+    'holidays_list':                _ap('company', 'holidays'),
+    'calendar':                     _ap('company', 'calendar'),
+    'org_chart':                    _ap('company', 'org_chart'),
+
+    # ── Dashboard ─────────────────────────────────────────────────────────
+    'dashboard':                    _ap('dashboard', 'personal'),
+    'admin_dashboard':              _ap('dashboard', 'admin'),
+    'hr_dashboard':                 _ap('dashboard', 'admin'),
+}
+
+
+# Counters for the audit log so we can see "in the last hour, X different
+# users would have been denied test_bookings". Reset at process boundary;
+# good enough for the human-eye dashboard we'll build in Phase 5.
+ACCESS_AUDIT_COUNTS = {}
+
+
+def _record_access_audit(user, endpoint, main_section, sub_section, action, would_deny):
+    """Bucket-count per (emp, endpoint) so the admin can grep / extract
+    later. Also emits a structured info line for Render logs."""
+    emp_code = (user or {}).get('emp_code') if isinstance(user, dict) else None
+    if not emp_code:
+        try:
+            emp_code = user['emp_code']
+        except Exception:
+            emp_code = '<unknown>'
+    key = (emp_code, endpoint)
+    ACCESS_AUDIT_COUNTS[key] = ACCESS_AUDIT_COUNTS.get(key, 0) + 1
+    logging.info(
+        f"ACCESS_AUDIT user={emp_code} endpoint={endpoint} "
+        f"section={main_section}/{sub_section} action={action} "
+        f"would_deny={would_deny}"
+    )
+
+
+@app.before_request
+def access_master_request_audit():
+    """Log-only access check on every request (Phase 3).
+
+    Looks up request.endpoint in ACCESS_ROUTE_MAP. If mapped and the user
+    lacks the listed (main, sub, action) permission, log an audit line.
+    Actual denial only happens when ACCESS_MASTER_ENFORCE is True
+    (Phase 5 will flip it).
+
+    Admins, anonymous requests, and routes NOT in the map are skipped.
+    """
+    endpoint = request.endpoint
+    if not endpoint:
+        return
+    rule = ACCESS_ROUTE_MAP.get(endpoint)
+    if not rule:
+        return  # route not yet in catalog — silently allow
+
+    # Best-effort user lookup. Don't run for static / health endpoints.
+    try:
+        user = get_user()
+    except Exception:
+        return
+    if not user:
+        return  # not logged in — other auth handles this layer
+    try:
+        if user['is_admin']:
+            return  # admin bypass
+    except (KeyError, IndexError, TypeError):
+        return
+
+    main_section, sub_section, action = rule
+    if has_section_permission(user, main_section, sub_section, action):
+        return  # has the permission, all good
+
+    # Would-deny path.
+    _record_access_audit(user, endpoint, main_section, sub_section, action,
+                         would_deny=ACCESS_MASTER_ENFORCE)
+
+    if ACCESS_MASTER_ENFORCE:
+        # Real denial path. JSON for API endpoints, redirect for pages.
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'You do not have permission for this section.'}), 403
+        flash(
+            f'Access denied: you don\'t have permission for "{main_section}/{sub_section}".',
+            'error',
+        )
+        return redirect(url_for('dashboard'))
+
+
 def has_section_permission(subject, main_section, sub_section, action='view', subject_type=None):
     """Return True if `subject` may perform `action` on (main_section, sub_section).
 
@@ -26654,6 +26868,46 @@ def access_master_save():
         'deleted': deleted,
         'skipped': skipped,
     })
+
+
+@app.route('/admin/access-master/audit')
+@login_required
+def access_master_audit_view():
+    """Show what permissions everyone WOULD need based on the in-memory
+    audit counts since process boot. Helps admins set up the right
+    Access Master grants before Phase 5 flips the enforce flag.
+
+    Counts reset whenever the Render process restarts (a deploy or idle
+    timeout); this is intentional — we want a rolling view, not an
+    eternal table that grows forever.
+    """
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Bucket: emp_code -> [{ endpoint, main, sub, action, hits }, ...]
+    by_user = {}
+    for (emp_code, endpoint), hits in ACCESS_AUDIT_COUNTS.items():
+        rule = ACCESS_ROUTE_MAP.get(endpoint)
+        if not rule:
+            continue
+        main, sub, action = rule
+        by_user.setdefault(emp_code, []).append({
+            'endpoint': endpoint,
+            'main': main, 'sub': sub, 'action': action,
+            'hits': hits,
+        })
+    for emp_code in by_user:
+        by_user[emp_code].sort(key=lambda r: -r['hits'])
+
+    return render_template(
+        'access_master_audit.html',
+        user=user,
+        by_user=by_user,
+        enforce_on=ACCESS_MASTER_ENFORCE,
+        active_section='company',
+    )
 
 
 @app.route('/api/access-master/save-bulk', methods=['POST'])
