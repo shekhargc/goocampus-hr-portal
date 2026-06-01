@@ -36,50 +36,120 @@ AU_CALL_NOTES_NUMERIC_COLUMNS = {
 }
 
 
+# Stage-based follow-up intervals for Australia clients (mirrors PLAB's
+# STAGE_FOLLOWUP_DAYS pattern). User can adjust these per Australia stage
+# semantics via Settings later — for now they match PLAB's defaults so the
+# urgency math is consistent across pathways.
+AU_STAGE_FOLLOWUP_DAYS = {
+    # Common stages — adjust here when Australia's stage taxonomy is finalised.
+    'English Stage':       7,
+    'AMC MCQ Stage':       15,
+    'AMC Clinical Stage':  15,
+    'AHPRA Stage':         30,
+    'Job Stage':           30,
+}
+AU_STAGE_FOLLOWUP_DEFAULT = 15
+
+
+def _au_stage_interval(stage):
+    return AU_STAGE_FOLLOWUP_DAYS.get(stage or '', AU_STAGE_FOLLOWUP_DEFAULT)
+
+
+def _au_categorise(days_since, stage):
+    """Mirror PLAB's categorise_by_stage. Urgency bands:
+       never / critical / overdue / attention / ok / recent."""
+    interval = _au_stage_interval(stage)
+    if days_since is None:
+        return 'never'
+    if days_since >= interval * 2:
+        return 'critical'
+    if days_since >= int(interval * 1.5):
+        return 'overdue'
+    if days_since >= interval:
+        return 'attention'
+    if days_since >= max(1, interval // 2):
+        return 'ok'
+    return 'recent'
+
+
 @admin_required
 def ops_australia_call_notes_list():
-    """Australia call notes list — ops_call_notes WHERE pathway='australia'."""
+    """Australia call notes list — Notes tab.
+
+    Mirrors PLAB pattern: when no filters/tab are present in the query
+    string, redirect to the Tracker tab (the more useful default for ops).
+    Returns the same render shape PLAB does (records + tracker_data both
+    passed) so the unified template can switch on active_tab.
+    """
+    # Default to tracker view when no explicit tab/filters provided.
+    if (not request.args.get('tab')
+            and not request.args.get('reg')
+            and not request.args.get('client_name')
+            and not request.args.get('added_by')
+            and not request.args.get('note_search')
+            and not request.args.get('q')
+            and not request.args.get('client')
+            and not request.args.get('page')):
+        return redirect(url_for('ops_australia_call_notes_tracker'))
+
     user = get_user()
     conn = get_db()
 
-    search = (request.args.get('q', '') or '').strip()
-    added_by_filter = (request.args.get('added_by', '') or '').strip()
-    reg = (request.args.get('client', '') or '').strip()
+    # Accept both legacy (q/client) and PLAB (note_search/reg) parameter names.
+    reg = (request.args.get('reg') or request.args.get('client') or '').strip()
+    client_name = (request.args.get('client_name') or '').strip()
+    added_by_filter = (request.args.get('added_by') or '').strip()
+    note_search = (request.args.get('note_search') or request.args.get('q') or '').strip()
+
+    page = max(1, request.args.get('page', 1, type=int))
+    per_page = 50
+    offset = (page - 1) * per_page
 
     records = []
     added_by_options = []
-    total = 0
+    total_count = 0
 
     try:
-        sql = '''SELECT n.id, n.registration_number, n.call_date, n.call_note,
-                        n.added_by, n.contact_type, n.contacted_status, n.pathway,
-                        p.first_name, p.last_name, p.prefix
-                   FROM ops_call_notes n
-                   LEFT JOIN plab_clients p
-                          ON n.registration_number = p.registration_number
-                         AND COALESCE(p.pathway, 'plab') = 'australia'
-                  WHERE n.pathway = 'australia' '''
+        sql_base = '''SELECT n.id, n.registration_number, n.call_date, n.call_note,
+                             n.added_by, n.contact_type, n.contacted_status, n.pathway,
+                             p.first_name, p.last_name, p.prefix
+                        FROM ops_call_notes n
+                        LEFT JOIN plab_clients p
+                               ON n.registration_number = p.registration_number
+                              AND COALESCE(p.pathway, 'plab') = 'australia'
+                       WHERE COALESCE(n.pathway, 'plab') = 'australia' '''
         params = []
         if reg:
-            sql += " AND n.registration_number = ? "
-            params.append(reg)
+            sql_base += " AND n.registration_number ILIKE ? "
+            params.append(f'%{reg}%')
+        if client_name:
+            sql_base += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ?
+                OR (p.first_name || ' ' || p.last_name) ILIKE ?
+                OR n.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?) """
+            params.extend([f'%{client_name}%'] * 5)
         if added_by_filter:
-            sql += " AND n.added_by = ? "
+            sql_base += " AND n.added_by = ? "
             params.append(added_by_filter)
-        if search:
-            sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                n.registration_number LIKE ? OR n.call_note LIKE ?
-            ) """
-            params.extend([f'%{search}%'] * 4)
-        sql += " ORDER BY n.call_date DESC NULLS LAST, n.id DESC "
-        records = conn.execute(sql, params).fetchall()
-        total = len(records)
+        if note_search:
+            sql_base += " AND n.call_note ILIKE ? "
+            params.append(f'%{note_search}%')
+
+        # Count
+        count_sql = "SELECT COUNT(*) AS c FROM (" + sql_base + ") AS sub"
+        try:
+            total_count = conn.execute(count_sql, params).fetchone()['c']
+        except Exception:
+            total_count = 0
+
+        records_sql = sql_base + " ORDER BY n.call_date DESC NULLS LAST, n.id DESC LIMIT ? OFFSET ? "
+        records = conn.execute(records_sql, params + [per_page, offset]).fetchall()
 
         added_by_options = [
             r['added_by'] for r in conn.execute(
                 """SELECT DISTINCT added_by FROM ops_call_notes
-                    WHERE pathway = 'australia' AND added_by IS NOT NULL AND added_by != ''
+                    WHERE COALESCE(pathway, 'plab') = 'australia'
+                      AND added_by IS NOT NULL AND added_by != ''
                     ORDER BY added_by"""
             ).fetchall()
         ]
@@ -87,18 +157,298 @@ def ops_australia_call_notes_list():
         logging.error(f"ops_australia_call_notes_list: {e}")
         flash(f'Error loading Australia call notes: {e}', 'error')
     finally:
-        conn.close()
+        try: conn.close()
+        except Exception: pass
+
+    total_pages = max(0, (total_count + per_page - 1) // per_page) if total_count else 0
+    has_filters = bool(reg or client_name or added_by_filter or note_search)
 
     return render_template(
         'ops_australia_call_notes_list.html',
         user=user,
+        # Notes tab data
         records=records,
-        total=total,
-        search=search,
-        added_by_filter=added_by_filter,
-        client_reg=reg,
         added_by_options=added_by_options,
+        has_filters=has_filters,
+        reg=reg,
+        client_name=client_name,
+        added_by_filter=added_by_filter,
+        note_search=note_search,
+        page=page,
+        per_page=per_page,
+        total_count=total_count,
+        total_pages=total_pages,
+        # Tracker tab data (empty here — the tracker route fills these)
+        tracker_data=[],
+        summary={'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0},
+        gap_filter='',
+        search_q='',
+        stage_filter='',
+        stage_counts={},
+        stage_intervals=AU_STAGE_FOLLOWUP_DAYS,
+        # Shared
         pathway_name='Australia Pathway',
+        active_tab='notes',
+        active_ops_page='australia-call-notes',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_call_notes_tracker():
+    """Australia Follow-up Tracker — mirrors PLAB ops_call_notes_tracker.
+
+    Aggregates per-client last contact date + counts, categorises by
+    stage-specific follow-up interval, returns the same shape PLAB does so
+    the unified template can render the tracker view.
+    """
+    from datetime import date, datetime
+    conn = get_db()
+    search_q = (request.args.get('q') or '').strip()
+    gap_filter = (request.args.get('gap') or '').strip()
+    stage_filter = (request.args.get('stage') or '').strip()
+
+    tracker_data = []
+    summary = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0}
+    stage_counts = {}
+
+    try:
+        sql = '''
+            SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
+                   p.current_stage, p.mobile, p.account_status,
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.call_date END) AS last_call_date,
+                   COUNT(n.id) AS note_count,
+                   COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) AS contacted_count,
+                   COUNT(CASE WHEN n.contacted_status = 'No' THEN 1 END) AS not_contacted_count,
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.contact_type END) AS last_contact_type
+              FROM plab_clients p
+         LEFT JOIN ops_call_notes n
+                ON p.registration_number = n.registration_number
+               AND COALESCE(n.pathway, 'plab') = 'australia'
+             WHERE COALESCE(p.pathway, 'plab') = 'australia'
+               AND p.account_status = 'In Process'
+        '''
+        params = []
+        if stage_filter:
+            sql += " AND p.current_stage = ? "
+            params.append(stage_filter)
+        if search_q:
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'') || ' ' || p.first_name || ' ' || COALESCE(p.last_name,'')) ILIKE ?) """
+            params.extend([f'%{search_q}%'] * 4)
+        sql += '''
+            GROUP BY p.registration_number, p.prefix, p.first_name, p.last_name,
+                     p.current_stage, p.mobile, p.account_status
+            ORDER BY last_call_date ASC NULLS FIRST
+        '''
+        rows = conn.execute(sql, params).fetchall()
+
+        today = date.today()
+        category_counts = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0}
+        for row in rows:
+            last_call_date = row['last_call_date']
+            contacted_count = row['contacted_count'] or 0
+            stage = row['current_stage'] or ''
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+
+            days_since = None
+            if not last_call_date or contacted_count == 0:
+                category = 'never'
+            else:
+                try:
+                    if isinstance(last_call_date, str):
+                        last_call = datetime.strptime(last_call_date, '%Y-%m-%d').date()
+                    else:
+                        last_call = last_call_date if isinstance(last_call_date, date) else last_call_date.date()
+                except Exception:
+                    last_call = None
+                if last_call:
+                    days_since = (today - last_call).days
+                    category = _au_categorise(days_since, stage)
+                else:
+                    category = 'never'
+            category_counts[category] += 1
+
+            name_parts = [row['prefix'] or '', row['first_name'] or '', row['last_name'] or '']
+            client_name = ' '.join(p for p in name_parts if p).strip()
+            interval = _au_stage_interval(stage)
+            tracker_data.append({
+                'registration_number': row['registration_number'],
+                'name': client_name,
+                'stage': stage,
+                'mobile': row['mobile'],
+                'last_call_date': last_call_date,
+                'note_count': row['note_count'],
+                'contacted_count': contacted_count,
+                'not_contacted_count': row['not_contacted_count'] or 0,
+                'last_contact_type': row['last_contact_type'] or '',
+                'days_since': days_since,
+                'category': category,
+                'followup_interval': interval,
+                'days_overdue': max(0, (days_since or 0) - interval) if days_since is not None else None,
+            })
+
+        if gap_filter:
+            tracker_data = [d for d in tracker_data if d['category'] == gap_filter]
+
+        summary = {
+            'never': category_counts['never'],
+            'critical': category_counts['critical'],
+            'overdue': category_counts['overdue'],
+            'attention': category_counts['attention'],
+            'ok': category_counts['ok'],
+            'recent': category_counts['recent'],
+            'total': len(tracker_data) if gap_filter else sum(category_counts.values()),
+        }
+    except Exception as e:
+        logging.error(f"ops_australia_call_notes_tracker: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return render_template(
+        'ops_australia_call_notes_list.html',
+        tracker_data=tracker_data, summary=summary,
+        gap_filter=gap_filter, search_q=search_q, stage_filter=stage_filter,
+        stage_counts=stage_counts, stage_intervals=AU_STAGE_FOLLOWUP_DAYS,
+        records=[], added_by_options=[], has_filters=False,
+        reg='', client_name='', added_by_filter='', note_search='',
+        page=1, per_page=50, total_count=0, total_pages=0,
+        pathway_name='Australia Pathway',
+        active_tab='tracker',
+        active_ops_page='australia-call-notes',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_call_notes_not_contacted():
+    """Australia Not Contacted Tracker — mirrors PLAB ops_call_notes_not_contacted.
+
+    Lists Australia clients with at least one contacted_status='No' note,
+    bucketed by stage-based urgency just like the tracker view.
+    """
+    from datetime import date, datetime
+    conn = get_db()
+    search_q = (request.args.get('q') or '').strip()
+    gap_filter = (request.args.get('gap') or '').strip()
+    stage_filter = (request.args.get('stage') or '').strip()
+
+    tracker_data = []
+    summary = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0, 'total': 0}
+    stage_counts = {}
+
+    try:
+        sql = '''
+            SELECT p.registration_number, p.prefix, p.first_name, p.last_name,
+                   p.current_stage, p.mobile, p.account_status,
+                   MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.call_date END) AS last_contact_date,
+                   MAX(CASE WHEN n.contacted_status = 'No' THEN n.call_date END) AS last_attempt_date,
+                   COUNT(n.id) AS note_count,
+                   COUNT(CASE WHEN n.contacted_status = 'No' THEN 1 END) AS not_contacted_count,
+                   COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) AS contacted_count
+              FROM plab_clients p
+              INNER JOIN ops_call_notes n
+                      ON p.registration_number = n.registration_number
+                     AND COALESCE(n.pathway, 'plab') = 'australia'
+             WHERE COALESCE(p.pathway, 'plab') = 'australia'
+               AND p.account_status = 'In Process'
+               AND EXISTS (SELECT 1 FROM ops_call_notes n2
+                            WHERE n2.registration_number = p.registration_number
+                              AND COALESCE(n2.pathway, 'plab') = 'australia'
+                              AND n2.contacted_status = 'No')
+        '''
+        params = []
+        if stage_filter:
+            sql += " AND p.current_stage = ? "
+            params.append(stage_filter)
+        if search_q:
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ?
+                OR p.registration_number ILIKE ?
+                OR (COALESCE(p.prefix,'') || ' ' || p.first_name || ' ' || COALESCE(p.last_name,'')) ILIKE ?) """
+            params.extend([f'%{search_q}%'] * 4)
+        sql += '''
+            GROUP BY p.registration_number, p.prefix, p.first_name, p.last_name,
+                     p.current_stage, p.mobile, p.account_status
+            ORDER BY last_contact_date ASC NULLS FIRST
+        '''
+        rows = conn.execute(sql, params).fetchall()
+
+        today = date.today()
+        category_counts = {'never': 0, 'critical': 0, 'overdue': 0, 'attention': 0, 'ok': 0, 'recent': 0}
+        for row in rows:
+            last_contact_date = row['last_contact_date']
+            contacted_count = row['contacted_count'] or 0
+            stage = row['current_stage'] or ''
+            stage_counts[stage] = stage_counts.get(stage, 0) + 1
+
+            days_since = None
+            if not last_contact_date or contacted_count == 0:
+                category = 'never'
+            else:
+                try:
+                    if isinstance(last_contact_date, str):
+                        last_c = datetime.strptime(last_contact_date, '%Y-%m-%d').date()
+                    else:
+                        last_c = last_contact_date if isinstance(last_contact_date, date) else last_contact_date.date()
+                except Exception:
+                    last_c = None
+                if last_c:
+                    days_since = (today - last_c).days
+                    category = _au_categorise(days_since, stage)
+                else:
+                    category = 'never'
+            category_counts[category] += 1
+
+            name_parts = [row['prefix'] or '', row['first_name'] or '', row['last_name'] or '']
+            client_name = ' '.join(p for p in name_parts if p).strip()
+            interval = _au_stage_interval(stage)
+            tracker_data.append({
+                'registration_number': row['registration_number'],
+                'name': client_name,
+                'stage': stage,
+                'mobile': row['mobile'],
+                'last_call_date': last_contact_date,
+                'last_attempt_date': row['last_attempt_date'],
+                'note_count': row['note_count'],
+                'not_contacted_count': row['not_contacted_count'] or 0,
+                'contacted_count': contacted_count,
+                'last_contact_type': '',
+                'days_since': days_since,
+                'category': category,
+                'followup_interval': interval,
+                'days_overdue': max(0, (days_since or 0) - interval) if days_since is not None else None,
+            })
+
+        if gap_filter:
+            tracker_data = [d for d in tracker_data if d['category'] == gap_filter]
+
+        summary = {
+            'never': category_counts['never'],
+            'critical': category_counts['critical'],
+            'overdue': category_counts['overdue'],
+            'attention': category_counts['attention'],
+            'ok': category_counts['ok'],
+            'recent': category_counts['recent'],
+            'total': len(tracker_data) if gap_filter else sum(category_counts.values()),
+        }
+    except Exception as e:
+        logging.error(f"ops_australia_call_notes_not_contacted: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return render_template(
+        'ops_australia_call_notes_list.html',
+        tracker_data=tracker_data, summary=summary,
+        gap_filter=gap_filter, search_q=search_q, stage_filter=stage_filter,
+        stage_counts=stage_counts, stage_intervals=AU_STAGE_FOLLOWUP_DAYS,
+        records=[], added_by_options=[], has_filters=False,
+        reg='', client_name='', added_by_filter='', note_search='',
+        page=1, per_page=50, total_count=0, total_pages=0,
+        pathway_name='Australia Pathway',
+        active_tab='not_contacted',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
     )
@@ -340,4 +690,19 @@ def register_routes(app):
         endpoint='ops_australia_call_notes_add',
         view_func=ops_australia_call_notes_add,
         methods=['GET', 'POST'],
+    )
+    # Follow-up Tracker tab — categorises Australia "In Process" clients by
+    # contact urgency, just like PLAB /operations/call-notes/tracker.
+    app.add_url_rule(
+        '/operations/australia/call-notes/tracker',
+        endpoint='ops_australia_call_notes_tracker',
+        view_func=ops_australia_call_notes_tracker,
+        methods=['GET'],
+    )
+    # Not Contacted tab — Australia clients with contacted_status='No' notes.
+    app.add_url_rule(
+        '/operations/australia/call-notes/not-contacted',
+        endpoint='ops_australia_call_notes_not_contacted',
+        view_func=ops_australia_call_notes_not_contacted,
+        methods=['GET'],
     )
