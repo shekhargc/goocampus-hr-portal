@@ -39,14 +39,22 @@
                     <input type="text" name="added_by" value="{{ record.added_by or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
             </div>
+            <!-- ===== CONTACT STATUS (matches PLAB form pattern) ===== -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contact Type</label>
-                    <input type="text" name="contact_type" value="{{ record.contact_type or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contacted? *</label>
+                    <select name="contacted_status" id="contacted_status" required onchange="toggleContactType()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Yes" {% if (record.contacted_status or 'Yes') != 'No' %}selected{% endif %}>Yes</option>
+                        <option value="No" {% if record.contacted_status == 'No' %}selected{% endif %}>No</option>
+                    </select>
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contacted Status</label>
-                    <input type="text" name="contacted_status" value="{{ record.contacted_status or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <div id="contact_type_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contact Type *</label>
+                    <select name="contact_type" id="contact_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Call" {% if (record.contact_type or 'Call') == 'Call' %}selected{% endif %}>Call</option>
+                        <option value="WhatsApp" {% if record.contact_type == 'WhatsApp' %}selected{% endif %}>WhatsApp</option>
+                        <option value="Email" {% if record.contact_type == 'Email' %}selected{% endif %}>Email</option>
+                    </select>
                 </div>
             </div>
 
@@ -63,6 +71,22 @@
                 <button type="submit" style="padding:0.7rem 1.4rem;background:var(--orange);color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">Save Changes</button>
             </div>
         </form>
+
+        <script>
+            // Hide Contact Type when Contacted=No (matches PLAB call notes UX).
+            function toggleContactType() {
+                const status = document.getElementById('contacted_status').value;
+                const wrapper = document.getElementById('contact_type_wrapper');
+                if (status === 'No') {
+                    wrapper.style.display = 'none';
+                    document.getElementById('contact_type').removeAttribute('required');
+                } else {
+                    wrapper.style.display = '';
+                    document.getElementById('contact_type').setAttribute('required', 'required');
+                }
+            }
+            toggleContactType();
+        </script>
     </div>
 </div>
 {% endblock %}
