@@ -25667,6 +25667,149 @@ def ensure_section_permissions_table():
 ensure_section_permissions_table()
 
 
+# ─────────────────────────────────────────────────────────────────────────
+#  ACCESS MASTER (2026-06-01) — granular per-user, per-section permissions
+#
+#  Three independent flags per (employee, main_section, sub_section):
+#    can_view  — sees the page / data
+#    can_edit  — can save changes to existing rows
+#    can_add   — can create new rows
+#
+#  Coexists with the older `module_access` + `section_permissions` tables.
+#  The new helper has_section_permission(user, main, sub, action) checks
+#  this table first. Admins always bypass. The legacy helpers
+#  (has_module_access, etc.) keep working unchanged so nothing breaks.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# Catalog: which main sections + sub-sections show in the Access Master UI.
+# Operations first (priority per user 2026-06-01), then Sales.
+ACCESS_SECTION_CATALOG = [
+    {
+        'key': 'operations',
+        'label': 'Operations',
+        'description': 'PLAB, Australia, and all operational sub-areas.',
+        'sub_sections': [
+            ('pathway_dashboard',  'Pathway Dashboard',     'PLAB / Australia / UAE pathway dashboards'),
+            ('registration_plab',  'PLAB Registration',     'PLAB client registration list'),
+            ('registration_au',    'Australia Registration','Australia client registration list'),
+            ('onboarding',         'Onboarding',            'Client onboarding workflow + kanban'),
+            ('call_notes',         'Call Notes',            'Call notes + follow-up tracker'),
+            ('payments',           'Payments',              'Per-client payment records'),
+            ('documents',          'Documents',             'Client document tracking + upload'),
+            ('coaching',           'Coaching & Training',   'Training enrolment + status'),
+            ('test_bookings',      'Test Bookings',         'AMC / PLAB / English exam bookings'),
+            ('english_logins',     'English Logins',        'IELTS/OET portal credentials'),
+            ('online_courses',     'Online Courses',        'Online course tracking'),
+            ('epic',               'EPIC Registration',     'EPIC + Notary Cam workflow'),
+            ('gmc',                'GMC Registration',      'GMC registration tracking (UK only)'),
+            ('uk_visa',            'UK Visa & Travel',      'UK visa + travel logistics (UK only)'),
+            ('uk_cab',             'UK Cab Bookings',       'UK cab bookings (UK only)'),
+            ('uk_observerships',   'UK Observerships',      'UK observership tracking (UK only)'),
+            ('academic',           'Academic Details',      'Client academic / medical college records'),
+            ('research',           'Research & Publication','Research project tracking'),
+            ('subscriptions',      'Online Subscriptions',  'Resource subscriptions (Plabable, Pastest, etc.)'),
+            ('webinars',           'Webinars & Conferences','Event attendance log'),
+            ('ngo',                'NGO Activities',        'NGO volunteer activities'),
+            ('mentorship',         'Mentorship',            'Mentorship sessions'),
+            ('reports',            'Reports',               'Operations reports'),
+            ('field_manager',      'Settings (Field Manager)','Lookup options + form config'),
+            ('vendors_providers',  'Vendors & Providers',   'Vendor / partner directory'),
+        ],
+    },
+    {
+        'key': 'sales',
+        'label': 'Sales',
+        'description': 'Lead, deal, and sales-team-side workflows.',
+        'sub_sections': [
+            ('meetings',         'Meetings',             'Sales meeting log'),
+            ('projects',         'Projects',             'Sales projects'),
+            ('products',         'Products & Services',  'Product / service catalog'),
+            ('partners',         'Partners',             'Channel / referral partners'),
+            ('news',             'Sales News',           'Internal sales news feed'),
+            ('clients_pipeline', 'Clients Pipeline',     'Client deal pipeline'),
+            ('reports',          'Sales Reports',        'Sales analytics + reports'),
+            ('settings',         'Sales Settings',       'Sales-team-specific settings'),
+        ],
+    },
+]
+
+
+def ensure_user_section_permissions_table():
+    """Create user_section_permissions table on boot. Idempotent.
+
+    Three flags per row so view / edit / add can be granted independently.
+    UNIQUE(employee_id, main_section, sub_section) enforces one row per
+    sub-section per employee — the UI upserts in place.
+    """
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS user_section_permissions (
+            id SERIAL PRIMARY KEY,
+            employee_id    INTEGER NOT NULL REFERENCES employees(id),
+            main_section   TEXT    NOT NULL,
+            sub_section    TEXT    NOT NULL,
+            can_view       INTEGER NOT NULL DEFAULT 0,
+            can_edit       INTEGER NOT NULL DEFAULT 0,
+            can_add        INTEGER NOT NULL DEFAULT 0,
+            granted_by     INTEGER REFERENCES employees(id),
+            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(employee_id, main_section, sub_section)
+        )''')
+        conn.commit()
+    except Exception as e:
+        logging.error(f"ensure_user_section_permissions_table: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+ensure_user_section_permissions_table()
+
+
+def has_section_permission(user, main_section, sub_section, action='view'):
+    """Return True if `user` may perform `action` on (main_section, sub_section).
+
+    Rules:
+      - Admins ALWAYS bypass (per user decision 2026-06-01).
+      - action must be one of 'view' | 'edit' | 'add'.
+      - Looks up user_section_permissions for the (employee, main, sub) row.
+      - If the row is missing or the matching flag is 0 → returns False.
+
+    Note: this is the NEW granular helper. The older has_module_access()
+    + section_permissions table-based checks are NOT consulted here so
+    they don't override an explicit deny; callers needing legacy fallback
+    should check both.
+    """
+    if not user:
+        return False
+    try:
+        if user['is_admin']:
+            return True
+    except (KeyError, IndexError):
+        return False
+    if action not in ('view', 'edit', 'add'):
+        return False
+    column = {'view': 'can_view', 'edit': 'can_edit', 'add': 'can_add'}[action]
+    conn = get_db()
+    try:
+        row = conn.execute(
+            f"SELECT {column} AS flag FROM user_section_permissions "
+            "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
+            (user['id'], main_section, sub_section),
+        ).fetchone()
+        return bool(row and row['flag'])
+    except Exception as e:
+        logging.error(f"has_section_permission: {e}")
+        return False
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def migrate_client_academics_v2():
     """Migrate client_academics to match ops_academic_details fields."""
     try:
@@ -25846,6 +25989,180 @@ def seed_client_form_configs():
         logging.error(f"seed_client_form_configs: {e}")
 
 seed_client_form_configs()
+
+
+@app.route('/admin/access-master')
+@login_required
+def access_master():
+    """New per-user access setup. Companion to (not replacement for) the
+    older /admin/section-visibility page.
+
+    Flow: admin picks one team member from the dropdown -> the page reloads
+    with that employee's current permissions overlaid on the section
+    catalog -> admin ticks View/Edit/Add per sub-section -> POST to
+    /api/access-master/save persists.
+    """
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+
+    selected_emp_id = request.args.get('emp_id', type=int)
+    conn = get_db()
+    try:
+        employees = [dict(r) for r in conn.execute(
+            "SELECT id, emp_code, name, department, designation "
+            "FROM employees WHERE is_active = 1 ORDER BY name"
+        ).fetchall()]
+        selected_employee = None
+        permissions_map = {}  # {(main, sub): {'view':1,'edit':0,'add':0}}
+        if selected_emp_id:
+            sel = conn.execute(
+                "SELECT id, emp_code, name, department, designation "
+                "FROM employees WHERE id = ?", (selected_emp_id,)
+            ).fetchone()
+            if sel:
+                selected_employee = dict(sel)
+                rows = conn.execute(
+                    "SELECT main_section, sub_section, can_view, can_edit, can_add "
+                    "FROM user_section_permissions WHERE employee_id = ?",
+                    (selected_emp_id,),
+                ).fetchall()
+                for r in rows:
+                    permissions_map[(r['main_section'], r['sub_section'])] = {
+                        'view': bool(r['can_view']),
+                        'edit': bool(r['can_edit']),
+                        'add':  bool(r['can_add']),
+                    }
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return render_template(
+        'access_master.html',
+        user=user,
+        employees=employees,
+        selected_employee=selected_employee,
+        permissions_map=permissions_map,
+        catalog=ACCESS_SECTION_CATALOG,
+        active_section='company',
+    )
+
+
+@app.route('/api/access-master/save', methods=['POST'])
+@login_required
+def access_master_save():
+    """Bulk upsert all permission rows for one employee.
+
+    Request JSON:
+      {
+        "employee_id": 7,
+        "permissions": [
+          {"main": "operations", "sub": "call_notes", "view": 1, "edit": 1, "add": 0},
+          ...
+        ]
+      }
+
+    Behavior:
+      - Validates main/sub against ACCESS_SECTION_CATALOG (rejects unknown
+        keys so the table can't be polluted by a stale UI).
+      - Enforces the can_view-required rule: if edit or add is 1, view is
+        forced to 1 (per user decision 2026-06-01).
+      - Rows with all three flags 0 are deleted (cleaner than keeping
+        zero-rows around).
+    """
+    actor = get_user()
+    if not (actor and actor['is_admin']):
+        return jsonify({'error': 'Admin access required'}), 403
+    payload = request.get_json(silent=True) or {}
+    try:
+        employee_id = int(payload.get('employee_id') or 0)
+    except (TypeError, ValueError):
+        employee_id = 0
+    if not employee_id:
+        return jsonify({'error': 'employee_id required'}), 400
+    perms = payload.get('permissions') or []
+    if not isinstance(perms, list):
+        return jsonify({'error': 'permissions must be a list'}), 400
+
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+
+    inserted = updated = deleted = skipped = 0
+    conn = get_db()
+    try:
+        # Confirm the employee exists.
+        emp = conn.execute(
+            "SELECT id FROM employees WHERE id = ?", (employee_id,)
+        ).fetchone()
+        if not emp:
+            return jsonify({'error': 'Employee not found'}), 404
+
+        for entry in perms:
+            main = (entry.get('main') or '').strip()
+            sub  = (entry.get('sub') or '').strip()
+            if (main, sub) not in valid_keys:
+                skipped += 1
+                continue
+            view = 1 if entry.get('view') else 0
+            edit = 1 if entry.get('edit') else 0
+            add  = 1 if entry.get('add')  else 0
+            # Enforce: if edit or add is set, view must be set too.
+            if edit or add:
+                view = 1
+
+            existing = conn.execute(
+                "SELECT id FROM user_section_permissions "
+                "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
+                (employee_id, main, sub),
+            ).fetchone()
+
+            if not view and not edit and not add:
+                # All flags off — remove the row instead of storing all zeros.
+                if existing:
+                    conn.execute(
+                        "DELETE FROM user_section_permissions WHERE id = ?",
+                        (existing['id'],),
+                    )
+                    deleted += 1
+                continue
+
+            if existing:
+                conn.execute(
+                    "UPDATE user_section_permissions "
+                    "SET can_view = ?, can_edit = ?, can_add = ?, "
+                    "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?",
+                    (view, edit, add, actor['id'], existing['id']),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO user_section_permissions "
+                    "(employee_id, main_section, sub_section, can_view, can_edit, can_add, granted_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                    (employee_id, main, sub, view, edit, add, actor['id']),
+                )
+                inserted += 1
+        conn.commit()
+    except Exception as e:
+        logging.error(f"access_master_save: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return jsonify({
+        'success': True,
+        'inserted': inserted,
+        'updated': updated,
+        'deleted': deleted,
+        'skipped': skipped,
+    })
 
 
 @app.route('/admin/section-visibility')

@@ -1,0 +1,324 @@
+{% extends "base.html" %}
+
+{% block title %}Access Master &mdash; GooCampus Portal{% endblock %}
+
+{% block content %}
+<style>
+    .am-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem; }
+    .am-head {
+        background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
+        color: white; border-radius: 0.75rem; padding: 1.5rem 1.75rem; margin-bottom: 1.5rem;
+    }
+    .am-head h1 { margin: 0 0 0.3rem; font-size: 1.5rem; font-weight: 700; }
+    .am-head h1 span { color: var(--orange); }
+    .am-head .sub { font-size: 0.85rem; color: rgba(255,255,255,0.7); margin: 0; }
+
+    .am-card {
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem; margin-bottom: 1rem; box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+    }
+    .am-card h2 {
+        margin: 0 0 0.85rem; font-size: 1.05rem; font-weight: 700; color: var(--navy);
+    }
+    .am-step-num {
+        display: inline-block; width: 22px; height: 22px; border-radius: 50%;
+        background: var(--orange); color: white; font-size: 0.78rem; font-weight: 700;
+        text-align: center; line-height: 22px; margin-right: 0.5rem;
+    }
+
+    .am-emp-picker {
+        display: grid; grid-template-columns: 1fr auto; gap: 0.75rem; align-items: end;
+    }
+    .am-emp-picker label {
+        display: block; font-size: 0.75rem; font-weight: 600; color: var(--gray-500);
+        margin-bottom: 0.3rem; text-transform: uppercase; letter-spacing: 0.03em;
+    }
+    .am-emp-picker select {
+        width: 100%; padding: 0.55rem 0.75rem; border: 1px solid var(--gray-300);
+        border-radius: 0.4rem; font-size: 0.9rem;
+    }
+    .am-emp-picker button {
+        padding: 0.55rem 1.1rem; background: var(--navy); color: white; border: none;
+        border-radius: 0.4rem; font-weight: 600; font-size: 0.85rem; cursor: pointer;
+    }
+
+    .am-emp-summary {
+        display: flex; gap: 1rem; align-items: center;
+        padding: 0.85rem 1rem; background: var(--gray-50); border-radius: 0.5rem;
+        margin-bottom: 1rem;
+    }
+    .am-emp-summary .avatar {
+        width: 42px; height: 42px; border-radius: 50%; background: var(--orange);
+        color: white; display: flex; align-items: center; justify-content: center;
+        font-weight: 700; font-size: 0.95rem; flex-shrink: 0;
+    }
+    .am-emp-summary .name { font-weight: 700; color: var(--navy); }
+    .am-emp-summary .meta { font-size: 0.75rem; color: var(--gray-500); }
+
+    .am-section {
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        margin-bottom: 0.85rem; overflow: hidden;
+    }
+    .am-section-head {
+        padding: 0.85rem 1.1rem; background: var(--gray-50); cursor: pointer;
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .am-section-head .title { font-size: 0.95rem; font-weight: 700; color: var(--navy); }
+    .am-section-head .desc { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.15rem; }
+    .am-section-head .meta-right {
+        display: flex; align-items: center; gap: 0.5rem; font-size: 0.78rem;
+        color: var(--gray-500); font-weight: 600;
+    }
+    .am-section-head .chev { font-size: 1rem; color: var(--gray-400); transition: transform 0.2s; }
+    .am-section.open .am-section-head .chev { transform: rotate(180deg); }
+
+    .am-section-body { display: none; padding: 0.5rem 0 0; }
+    .am-section.open .am-section-body { display: block; }
+
+    .am-presets {
+        display: flex; gap: 0.4rem; padding: 0.75rem 1.1rem;
+        border-bottom: 1px solid var(--gray-100); background: white; flex-wrap: wrap;
+    }
+    .am-presets button {
+        padding: 0.35rem 0.75rem; font-size: 0.75rem; font-weight: 600;
+        background: white; border: 1px solid var(--gray-300); border-radius: 0.35rem;
+        cursor: pointer; color: var(--navy);
+    }
+    .am-presets button:hover { background: var(--orange); color: white; border-color: var(--orange); }
+
+    table.am-grid { width: 100%; border-collapse: collapse; }
+    table.am-grid th, table.am-grid td {
+        padding: 0.55rem 1.1rem; text-align: left; font-size: 0.85rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    table.am-grid th {
+        background: white; font-size: 0.7rem; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.05em; font-weight: 600;
+    }
+    table.am-grid th.check, table.am-grid td.check { text-align: center; width: 70px; }
+    table.am-grid td .sub-name { font-weight: 600; color: var(--navy); }
+    table.am-grid td .sub-desc { font-size: 0.72rem; color: var(--gray-500); margin-top: 0.1rem; }
+    table.am-grid input[type=checkbox] { width: 18px; height: 18px; cursor: pointer; }
+    table.am-grid tr:hover td { background: #FFFBEB; }
+
+    .am-actions {
+        position: sticky; bottom: 0; background: white; border-top: 1px solid var(--gray-200);
+        padding: 0.85rem 1.1rem; display: flex; justify-content: flex-end; gap: 0.6rem;
+        margin: 1rem 0; border-radius: 0.5rem;
+    }
+    .am-actions button {
+        padding: 0.6rem 1.4rem; border: none; border-radius: 0.45rem;
+        font-weight: 600; font-size: 0.9rem; cursor: pointer;
+    }
+    .am-actions .save { background: var(--orange); color: white; }
+    .am-actions .cancel { background: white; color: var(--gray-600); border: 1px solid var(--gray-300); }
+    #am-save-status { font-size: 0.85rem; margin-right: auto; align-self: center; }
+    #am-save-status.success { color: #16A34A; }
+    #am-save-status.error { color: #DC2626; }
+
+    .empty-state {
+        text-align: center; padding: 2rem 1rem; color: var(--gray-500); font-size: 0.9rem;
+    }
+</style>
+
+<div class="am-page">
+    <div class="am-head">
+        <h1><span>Access</span> Master</h1>
+        <p class="sub">
+            One place to manage every team member's per-section permissions across Operations and Sales.
+            View / Edit / Add are independent flags. Admins always bypass.
+        </p>
+    </div>
+
+    <!-- Step 1: Pick employee -->
+    <div class="am-card">
+        <h2><span class="am-step-num">1</span>Pick a team member</h2>
+        <form method="GET" class="am-emp-picker">
+            <div>
+                <label>Employee</label>
+                <select name="emp_id" onchange="this.form.submit()">
+                    <option value="">&mdash; select &mdash;</option>
+                    {% for emp in employees %}
+                        <option value="{{ emp.id }}" {% if selected_employee and selected_employee.id == emp.id %}selected{% endif %}>
+                            {{ emp.name }}{% if emp.department %} &middot; {{ emp.department }}{% endif %}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <button type="submit">Load</button>
+        </form>
+    </div>
+
+    {% if not selected_employee %}
+        <div class="am-card empty-state">
+            Select a team member above to view + edit their per-section access.
+        </div>
+    {% else %}
+        <!-- Step 2: Show employee summary + permission grid -->
+        <div class="am-card">
+            <h2><span class="am-step-num">2</span>Permissions for this user</h2>
+            <div class="am-emp-summary">
+                <div class="avatar">{{ selected_employee.name[0]|upper }}</div>
+                <div>
+                    <div class="name">{{ selected_employee.name }}</div>
+                    <div class="meta">
+                        {{ selected_employee.emp_code }}
+                        {% if selected_employee.designation %} &middot; {{ selected_employee.designation }}{% endif %}
+                        {% if selected_employee.department %} &middot; {{ selected_employee.department }}{% endif %}
+                    </div>
+                </div>
+            </div>
+            <p style="margin:0 0 0.6rem;font-size:0.8rem;color:var(--gray-500);">
+                Click a main section to expand its sub-sections. Tick View / Edit / Add per row.
+                Edit or Add automatically enables View (you can't change what you can't see).
+            </p>
+
+            {% for section in catalog %}
+            <div class="am-section" data-section-key="{{ section.key }}">
+                <div class="am-section-head" onclick="amToggleSection(this)">
+                    <div>
+                        <div class="title">{{ section.label }}</div>
+                        <div class="desc">{{ section.description }}</div>
+                    </div>
+                    <div class="meta-right">
+                        <span class="meta-count" id="meta-{{ section.key }}">0 / {{ section.sub_sections|length }} granted</span>
+                        <span class="chev">&#9662;</span>
+                    </div>
+                </div>
+                <div class="am-section-body">
+                    <div class="am-presets">
+                        <span style="font-size:0.7rem;color:var(--gray-500);font-weight:600;align-self:center;margin-right:0.5rem;">QUICK SET:</span>
+                        <button type="button" onclick="amApplyPreset('{{ section.key }}','full')">Full Access (all 3)</button>
+                        <button type="button" onclick="amApplyPreset('{{ section.key }}','view')">View Only</button>
+                        <button type="button" onclick="amApplyPreset('{{ section.key }}','clear')">Clear All</button>
+                    </div>
+                    <table class="am-grid">
+                        <thead>
+                            <tr>
+                                <th>Sub-section</th>
+                                <th class="check">View</th>
+                                <th class="check">Edit</th>
+                                <th class="check">Add</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for sub_key, sub_label, sub_desc in section.sub_sections %}
+                                {% set p = permissions_map.get((section.key, sub_key), {'view': False, 'edit': False, 'add': False}) %}
+                                <tr>
+                                    <td>
+                                        <div class="sub-name">{{ sub_label }}</div>
+                                        <div class="sub-desc">{{ sub_desc }}</div>
+                                    </td>
+                                    <td class="check">
+                                        <input type="checkbox" class="am-cb am-cb-view"
+                                               data-main="{{ section.key }}" data-sub="{{ sub_key }}"
+                                               data-action="view" {% if p.view %}checked{% endif %}
+                                               onchange="amOnChange(this)">
+                                    </td>
+                                    <td class="check">
+                                        <input type="checkbox" class="am-cb am-cb-edit"
+                                               data-main="{{ section.key }}" data-sub="{{ sub_key }}"
+                                               data-action="edit" {% if p.edit %}checked{% endif %}
+                                               onchange="amOnChange(this)">
+                                    </td>
+                                    <td class="check">
+                                        <input type="checkbox" class="am-cb am-cb-add"
+                                               data-main="{{ section.key }}" data-sub="{{ sub_key }}"
+                                               data-action="add" {% if p.add %}checked{% endif %}
+                                               onchange="amOnChange(this)">
+                                    </td>
+                                </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+
+        <div class="am-actions">
+            <span id="am-save-status"></span>
+            <a href="{{ url_for('access_master') }}" class="cancel" style="text-decoration:none;display:inline-flex;align-items:center;">Cancel</a>
+            <button type="button" class="save" onclick="amSave()">Save Access Setup</button>
+        </div>
+    {% endif %}
+</div>
+
+<script>
+    const AM_EMP_ID = {{ selected_employee.id if selected_employee else 0 }};
+
+    function amToggleSection(headerEl) {
+        headerEl.parentElement.classList.toggle('open');
+    }
+
+    // Auto-tick View when Edit/Add are checked.
+    function amOnChange(cb) {
+        if (cb.dataset.action !== 'view' && cb.checked) {
+            const row = cb.closest('tr');
+            const viewCb = row.querySelector('.am-cb-view');
+            if (viewCb && !viewCb.checked) viewCb.checked = true;
+        }
+        amRecountSection(cb.dataset.main);
+    }
+
+    function amApplyPreset(sectionKey, preset) {
+        const section = document.querySelector(`.am-section[data-section-key="${sectionKey}"]`);
+        if (!section) return;
+        section.querySelectorAll('.am-cb').forEach(cb => {
+            if (preset === 'full')        cb.checked = true;
+            else if (preset === 'view')   cb.checked = (cb.dataset.action === 'view');
+            else if (preset === 'clear')  cb.checked = false;
+        });
+        amRecountSection(sectionKey);
+    }
+
+    function amRecountSection(sectionKey) {
+        const meta = document.getElementById('meta-' + sectionKey);
+        if (!meta) return;
+        const section = document.querySelector(`.am-section[data-section-key="${sectionKey}"]`);
+        if (!section) return;
+        const viewCbs = section.querySelectorAll('.am-cb-view');
+        const grantedCount = Array.from(viewCbs).filter(cb => cb.checked).length;
+        meta.textContent = `${grantedCount} / ${viewCbs.length} granted`;
+    }
+
+    function amSave() {
+        if (!AM_EMP_ID) return;
+        // Collect a flat permissions list grouped by (main, sub).
+        const map = {};
+        document.querySelectorAll('.am-cb').forEach(cb => {
+            const key = cb.dataset.main + '::' + cb.dataset.sub;
+            if (!map[key]) map[key] = { main: cb.dataset.main, sub: cb.dataset.sub, view: 0, edit: 0, add: 0 };
+            if (cb.checked) map[key][cb.dataset.action] = 1;
+        });
+        const permissions = Object.values(map);
+        const status = document.getElementById('am-save-status');
+        status.textContent = 'Saving…';
+        status.className = '';
+        fetch('/api/access-master/save', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ employee_id: AM_EMP_ID, permissions: permissions })
+        }).then(r => r.json()).then(data => {
+            if (data.error) {
+                status.textContent = 'Error: ' + data.error;
+                status.className = 'error';
+                return;
+            }
+            status.textContent = `Saved. ${data.inserted} added · ${data.updated} updated · ${data.deleted} cleared.`;
+            status.className = 'success';
+        }).catch(err => {
+            status.textContent = 'Network error: ' + err;
+            status.className = 'error';
+        });
+    }
+
+    // Initial count + open the first section so the user immediately sees data.
+    document.addEventListener('DOMContentLoaded', () => {
+        document.querySelectorAll('.am-section').forEach(s => amRecountSection(s.dataset.sectionKey));
+        const first = document.querySelector('.am-section');
+        if (first) first.classList.add('open');
+    });
+</script>
+{% endblock %}
