@@ -25870,22 +25870,153 @@ ACCESS_SECTION_CATALOG = [
         ],
     },
     # ── Partner Portal (for partners — subject_type='partner') ─────────────
-    # Partners only have these sections; team grants here are valid but
-    # functionally unused.
+    # Aligned with the real partner portal sections (was a placeholder).
     {
         'key': 'partner_portal',
         'label': 'Partner Portal',
-        'description': 'Sections visible inside the partner-facing portal.',
+        'description': 'Sections visible inside the partner-facing portal. Grant these only to partner subjects.',
         'sub_sections': [
-            ('dashboard',     'Partner Dashboard',  'Partner landing page'),
-            ('clients',       'My Clients',         'Clients referred by this partner'),
-            ('documents',     'Documents',          'Shared document workspace'),
-            ('commissions',   'Commissions',        'Commission tracking + payouts'),
-            ('reports',       'Reports',            'Partner-side analytics'),
-            ('profile',       'Profile Settings',   'Partner profile + bank details'),
+            ('dashboard',         'Dashboard',          'Partner landing page'),
+            ('student_leads',     'Student Leads',      'Student leads referred by this partner'),
+            ('b2b_leads',         'School / College Leads', 'B2B / institutional leads'),
+            ('team',              'Team Members',       'Partner-side team members'),
+            ('products',          'Products & Services','Products + services the partner can sell'),
+            ('commissions',       'Commissions',        'Commission tracking + payouts'),
+            ('reports',           'Reports',            'Partner-side analytics + reports'),
+            ('college_portal',    'College Portal',     'College directory access'),
+            ('medical_predictor', 'Medical Predictor',  'MBBS predictor tool'),
+            ('profile',           'Profile Settings',   'Partner profile + bank details'),
         ],
     },
 ]
+
+
+# ── Map from legacy partner_section_permissions.section_key to the
+#    new (main_section, sub_section) tuple in the Access Master catalog.
+LEGACY_PARTNER_SECTION_MAP = {
+    'partner_dashboard':         ('partner_portal', 'dashboard'),
+    'partner_student_leads':     ('partner_portal', 'student_leads'),
+    'partner_b2b_leads':         ('partner_portal', 'b2b_leads'),
+    'partner_team':              ('partner_portal', 'team'),
+    'partner_products':          ('partner_portal', 'products'),
+    'partner_commissions':       ('partner_portal', 'commissions'),
+    'partner_reports':           ('partner_portal', 'reports'),
+    'partner_college_portal':    ('partner_portal', 'college_portal'),
+    'partner_medical_predictor': ('partner_portal', 'medical_predictor'),
+}
+
+
+def migrate_partner_section_permissions_once():
+    """One-time migration: copy rows from the legacy
+    partner_section_permissions table into the unified
+    user_section_permissions table (subject_type='partner').
+
+    Idempotent via the marker key 'access_master_partner_migrated' in
+    _import_markers. Bumping the marker value forces a re-run.
+    """
+    MARKER_KEY = 'access_master_partner_migrated'
+    MARKER_VAL = 'phase2_v1'
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already migrated
+
+        try:
+            legacy_rows = conn.execute(
+                "SELECT section_key, allowed_partner_ids, is_active "
+                "FROM partner_section_permissions"
+            ).fetchall()
+        except Exception:
+            legacy_rows = []
+
+        migrated = 0
+        for row in legacy_rows:
+            if not row['is_active']:
+                continue
+            mapped = LEGACY_PARTNER_SECTION_MAP.get(row['section_key'])
+            if not mapped:
+                continue
+            main_section, sub_section = mapped
+            ids_str = (row['allowed_partner_ids'] or '').strip()
+            if not ids_str:
+                continue
+            for raw in ids_str.split(','):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    partner_id = int(raw)
+                except ValueError:
+                    continue
+                # Already migrated? skip.
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='partner' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (partner_id, main_section, sub_section),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(subject_type, subject_id, main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES ('partner', ?, ?, ?, 1, 0, 0)",
+                        (partner_id, main_section, sub_section),
+                    )
+                    migrated += 1
+                except Exception as e:
+                    logging.warning(
+                        f"migrate_partner_section_permissions: skipped "
+                        f"(partner={partner_id}, key={row['section_key']}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"migrate_partner_section_permissions: marker write failed: {e}")
+
+        if migrated:
+            logging.info(f"Access Master: migrated {migrated} legacy partner permissions")
+    except Exception as e:
+        logging.warning(f"migrate_partner_section_permissions: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+# Runs after partner_section_permissions has been ensured/seeded.
+# Note: depends on ensure_section_permissions_table(), which runs earlier
+# in the boot sequence.
+migrate_partner_section_permissions_once()
 
 
 def cleanup_orphan_access_permissions():
@@ -25974,6 +26105,11 @@ def ensure_user_section_permissions_table():
         for ddl in [
             "ALTER TABLE user_section_permissions ADD COLUMN subject_type TEXT DEFAULT 'employee'",
             "ALTER TABLE user_section_permissions ADD COLUMN subject_id INTEGER",
+            # Drop the old NOT NULL on employee_id (Postgres syntax). Partner
+            # rows have employee_id = NULL since they don't exist in employees.
+            # SQLite ignores this — its column already allows NULL after
+            # CREATE TABLE IF NOT EXISTS picked up the new schema.
+            "ALTER TABLE user_section_permissions ALTER COLUMN employee_id DROP NOT NULL",
         ]:
             try:
                 conn.execute(ddl)
@@ -26292,28 +26428,67 @@ def access_master():
     if mode not in ('by-person', 'by-section'):
         mode = 'by-person'
 
+    subject_type = (request.args.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
+
+    # Filter the catalog by subject_type:
+    #   employee: every section EXCEPT 'partner_portal' (which is partner-only)
+    #   partner:  ONLY the 'partner_portal' section
+    if subject_type == 'partner':
+        filtered_catalog = [s for s in ACCESS_SECTION_CATALOG if s['key'] == 'partner_portal']
+    else:
+        filtered_catalog = [s for s in ACCESS_SECTION_CATALOG if s['key'] != 'partner_portal']
+
     conn = get_db()
     try:
-        employees = [dict(r) for r in conn.execute(
-            "SELECT id, emp_code, name, department, designation "
-            "FROM employees WHERE is_active = 1 ORDER BY name"
-        ).fetchall()]
+        # Load the right subject list.
+        if subject_type == 'partner':
+            try:
+                subjects = [dict(r) for r in conn.execute(
+                    "SELECT id, company_name AS name, contact_person, partner_type "
+                    "FROM partners ORDER BY company_name"
+                ).fetchall()]
+            except Exception:
+                subjects = []
+            employees_list = []
+            partners_list = subjects
+        else:
+            employees_list = [dict(r) for r in conn.execute(
+                "SELECT id, emp_code, name, department, designation "
+                "FROM employees WHERE is_active = 1 ORDER BY name"
+            ).fetchall()]
+            partners_list = []
+            subjects = employees_list
 
-        selected_employee = None
+        selected_subject = None
         permissions_map = {}
         if mode == 'by-person':
-            selected_emp_id = request.args.get('emp_id', type=int)
-            if selected_emp_id:
-                sel = conn.execute(
-                    "SELECT id, emp_code, name, department, designation "
-                    "FROM employees WHERE id = ?", (selected_emp_id,)
-                ).fetchone()
-                if sel:
-                    selected_employee = dict(sel)
+            sel_id = request.args.get('subject_id', type=int) or request.args.get('emp_id', type=int)
+            if sel_id:
+                if subject_type == 'partner':
+                    sel = conn.execute(
+                        "SELECT id, company_name AS name, contact_person, partner_type "
+                        "FROM partners WHERE id = ?", (sel_id,)
+                    ).fetchone()
+                    if sel:
+                        selected_subject = dict(sel)
+                        selected_subject['_label'] = 'Partner'
+                else:
+                    sel = conn.execute(
+                        "SELECT id, emp_code, name, department, designation "
+                        "FROM employees WHERE id = ?", (sel_id,)
+                    ).fetchone()
+                    if sel:
+                        selected_subject = dict(sel)
+                        selected_subject['_label'] = 'Team Member'
+
+                if selected_subject:
                     rows = conn.execute(
                         "SELECT main_section, sub_section, can_view, can_edit, can_add "
-                        "FROM user_section_permissions WHERE employee_id = ?",
-                        (selected_emp_id,),
+                        "FROM user_section_permissions "
+                        "WHERE subject_type = ? AND subject_id = ?",
+                        (subject_type, sel_id),
                     ).fetchall()
                     for r in rows:
                         permissions_map[(r['main_section'], r['sub_section'])] = {
@@ -26325,17 +26500,20 @@ def access_master():
         try: conn.close()
         except Exception: pass
 
-    # Catalog as {main_key: [(sub_key, label, desc), ...]} for the JS in by-section mode.
-    catalog_by_main = {sec['key']: sec['sub_sections'] for sec in ACCESS_SECTION_CATALOG}
+    catalog_by_main = {sec['key']: sec['sub_sections'] for sec in filtered_catalog}
 
     return render_template(
         'access_master.html',
         user=user,
         mode=mode,
-        employees=employees,
-        selected_employee=selected_employee,
+        subject_type=subject_type,
+        subjects=subjects,
+        employees=employees_list,           # back-compat with old template var
+        partners=partners_list,
+        selected_employee=selected_subject, # template still references this name
+        selected_subject=selected_subject,
         permissions_map=permissions_map,
-        catalog=ACCESS_SECTION_CATALOG,
+        catalog=filtered_catalog,
         catalog_by_main=catalog_by_main,
         active_section='company',
     )
@@ -26367,12 +26545,19 @@ def access_master_save():
     if not (actor and actor['is_admin']):
         return jsonify({'error': 'Admin access required'}), 403
     payload = request.get_json(silent=True) or {}
+    # Subject is either an employee or a partner. Default to employee
+    # for back-compat with older UI POSTs that only send employee_id.
+    subject_type = (payload.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
     try:
-        employee_id = int(payload.get('employee_id') or 0)
+        subject_id = int(payload.get('subject_id') or payload.get('employee_id') or 0)
     except (TypeError, ValueError):
-        employee_id = 0
-    if not employee_id:
-        return jsonify({'error': 'employee_id required'}), 400
+        subject_id = 0
+    if not subject_id:
+        return jsonify({'error': 'subject_id (or employee_id) required'}), 400
+    # employee_id column is only populated when the subject is an employee.
+    employee_id = subject_id if subject_type == 'employee' else None
     perms = payload.get('permissions') or []
     if not isinstance(perms, list):
         return jsonify({'error': 'permissions must be a list'}), 400
@@ -26385,12 +26570,15 @@ def access_master_save():
     inserted = updated = deleted = skipped = 0
     conn = get_db()
     try:
-        # Confirm the employee exists.
-        emp = conn.execute(
-            "SELECT id FROM employees WHERE id = ?", (employee_id,)
-        ).fetchone()
-        if not emp:
-            return jsonify({'error': 'Employee not found'}), 404
+        # Confirm the subject exists.
+        if subject_type == 'partner':
+            subj = conn.execute("SELECT id FROM partners WHERE id = ?", (subject_id,)).fetchone()
+            if not subj:
+                return jsonify({'error': 'Partner not found'}), 404
+        else:
+            subj = conn.execute("SELECT id FROM employees WHERE id = ?", (subject_id,)).fetchone()
+            if not subj:
+                return jsonify({'error': 'Employee not found'}), 404
 
         for entry in perms:
             main = (entry.get('main') or '').strip()
@@ -26407,12 +26595,20 @@ def access_master_save():
 
             existing = conn.execute(
                 "SELECT id FROM user_section_permissions "
-                "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
-                (employee_id, main, sub),
+                "WHERE subject_type = ? AND subject_id = ? "
+                "  AND main_section = ? AND sub_section = ?",
+                (subject_type, subject_id, main, sub),
             ).fetchone()
+            # Legacy fallback for unmigrated rows (employee-only).
+            if not existing and subject_type == 'employee':
+                existing = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE employee_id = ? AND main_section = ? AND sub_section = ? "
+                    "  AND subject_id IS NULL",
+                    (subject_id, main, sub),
+                ).fetchone()
 
             if not view and not edit and not add:
-                # All flags off — remove the row instead of storing all zeros.
                 if existing:
                     conn.execute(
                         "DELETE FROM user_section_permissions WHERE id = ?",
@@ -26425,21 +26621,20 @@ def access_master_save():
                 conn.execute(
                     "UPDATE user_section_permissions "
                     "SET can_view = ?, can_edit = ?, can_add = ?, "
-                    "    subject_type = COALESCE(subject_type, 'employee'), "
-                    "    subject_id   = COALESCE(subject_id, ?), "
+                    "    subject_type = ?, subject_id = ?, "
                     "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
                     "WHERE id = ?",
-                    (view, edit, add, employee_id, actor['id'], existing['id']),
+                    (view, edit, add, subject_type, subject_id, actor['id'], existing['id']),
                 )
                 updated += 1
             else:
-                # New rows write both old and new columns so back-compat reads keep working.
                 conn.execute(
                     "INSERT INTO user_section_permissions "
                     "(employee_id, subject_type, subject_id, main_section, sub_section, "
                     " can_view, can_edit, can_add, granted_by) "
-                    "VALUES (?, 'employee', ?, ?, ?, ?, ?, ?, ?)",
-                    (employee_id, employee_id, main, sub, view, edit, add, actor['id']),
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (employee_id, subject_type, subject_id, main, sub,
+                     view, edit, add, actor['id']),
                 )
                 inserted += 1
         conn.commit()
@@ -26484,18 +26679,22 @@ def access_master_save_bulk():
     if not (actor and actor['is_admin']):
         return jsonify({'error': 'Admin access required'}), 403
     payload = request.get_json(silent=True) or {}
+    subject_type = (payload.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
 
-    raw_ids = payload.get('employee_ids') or []
+    # Accept either subject_ids or the older employee_ids key.
+    raw_ids = payload.get('subject_ids') or payload.get('employee_ids') or []
     if not isinstance(raw_ids, list) or not raw_ids:
-        return jsonify({'error': 'employee_ids required (non-empty list)'}), 400
-    employee_ids = []
-    for eid in raw_ids:
+        return jsonify({'error': 'subject_ids (or employee_ids) required (non-empty list)'}), 400
+    subject_ids = []
+    for sid in raw_ids:
         try:
-            employee_ids.append(int(eid))
+            subject_ids.append(int(sid))
         except (TypeError, ValueError):
             continue
-    if not employee_ids:
-        return jsonify({'error': 'No valid employee_ids'}), 400
+    if not subject_ids:
+        return jsonify({'error': 'No valid subject_ids'}), 400
 
     perms = payload.get('permissions') or []
     if not isinstance(perms, list):
@@ -26510,20 +26709,23 @@ def access_master_save_bulk():
     affected_employees = 0
     conn = get_db()
     try:
-        # Confirm all employees exist (fail fast on a bad id).
-        placeholders = ','.join(['?'] * len(employee_ids))
+        # Confirm all subjects exist (fail fast on bad ids).
+        placeholders = ','.join(['?'] * len(subject_ids))
+        table = 'partners' if subject_type == 'partner' else 'employees'
         existing_ids = {
             r['id'] for r in conn.execute(
-                f"SELECT id FROM employees WHERE id IN ({placeholders})",
-                tuple(employee_ids),
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})",
+                tuple(subject_ids),
             ).fetchall()
         }
-        valid_employee_ids = [e for e in employee_ids if e in existing_ids]
+        valid_employee_ids = [e for e in subject_ids if e in existing_ids]
         if not valid_employee_ids:
-            return jsonify({'error': 'None of the supplied employee_ids exist'}), 404
+            return jsonify({'error': f'None of the supplied {subject_type}_ids exist'}), 404
 
-        for emp_id in valid_employee_ids:
+        for sid in valid_employee_ids:
             touched = False
+            # employee_id stays NULL for partner subjects to avoid FK issues.
+            employee_id_for_row = sid if subject_type == 'employee' else None
             for entry in perms:
                 main = (entry.get('main') or '').strip()
                 sub  = (entry.get('sub') or '').strip()
@@ -26533,15 +26735,22 @@ def access_master_save_bulk():
                 view = 1 if entry.get('view') else 0
                 edit = 1 if entry.get('edit') else 0
                 add  = 1 if entry.get('add')  else 0
-                # Enforce: edit/add requires view.
                 if edit or add:
                     view = 1
 
                 existing = conn.execute(
                     "SELECT id FROM user_section_permissions "
-                    "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
-                    (emp_id, main, sub),
+                    "WHERE subject_type = ? AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (subject_type, sid, main, sub),
                 ).fetchone()
+                if not existing and subject_type == 'employee':
+                    existing = conn.execute(
+                        "SELECT id FROM user_section_permissions "
+                        "WHERE employee_id = ? AND main_section = ? AND sub_section = ? "
+                        "  AND subject_id IS NULL",
+                        (sid, main, sub),
+                    ).fetchone()
 
                 if not view and not edit and not add:
                     if existing:
@@ -26557,11 +26766,10 @@ def access_master_save_bulk():
                     conn.execute(
                         "UPDATE user_section_permissions "
                         "SET can_view = ?, can_edit = ?, can_add = ?, "
-                        "    subject_type = COALESCE(subject_type, 'employee'), "
-                        "    subject_id   = COALESCE(subject_id, ?), "
+                        "    subject_type = ?, subject_id = ?, "
                         "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
                         "WHERE id = ?",
-                        (view, edit, add, emp_id, actor['id'], existing['id']),
+                        (view, edit, add, subject_type, sid, actor['id'], existing['id']),
                     )
                     totals['updated'] += 1
                 else:
@@ -26569,8 +26777,9 @@ def access_master_save_bulk():
                         "INSERT INTO user_section_permissions "
                         "(employee_id, subject_type, subject_id, main_section, sub_section, "
                         " can_view, can_edit, can_add, granted_by) "
-                        "VALUES (?, 'employee', ?, ?, ?, ?, ?, ?, ?)",
-                        (emp_id, emp_id, main, sub, view, edit, add, actor['id']),
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (employee_id_for_row, subject_type, sid, main, sub,
+                         view, edit, add, actor['id']),
                     )
                     totals['inserted'] += 1
                 touched = True

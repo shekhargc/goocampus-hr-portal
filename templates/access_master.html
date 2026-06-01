@@ -140,19 +140,33 @@
     <div class="am-head">
         <h1><span>Access</span> Master</h1>
         <p class="sub">
-            One place to manage every team member's per-section permissions across Operations and Sales.
+            Manage per-section permissions for both team members and partners.
             View / Edit / Add are independent flags. Admins always bypass.
         </p>
     </div>
 
+    <!-- Subject-type toggle (Team vs Partner) -->
+    <div style="display:flex;gap:0;background:#1e293b;border-radius:0.75rem;padding:0.3rem;margin-bottom:0.6rem;">
+        <a href="{{ url_for('access_master', mode=mode, subject_type='employee') }}"
+           style="flex:1;padding:0.55rem 1rem;text-align:center;font-weight:700;font-size:0.85rem;text-decoration:none;border-radius:0.5rem;
+                  {% if subject_type == 'employee' %}background:white;color:var(--navy);{% else %}color:rgba(255,255,255,0.7);{% endif %}">
+            👥 Team Members <span style="opacity:0.65;font-weight:normal;font-size:0.72rem;">— internal staff</span>
+        </a>
+        <a href="{{ url_for('access_master', mode=mode, subject_type='partner') }}"
+           style="flex:1;padding:0.55rem 1rem;text-align:center;font-weight:700;font-size:0.85rem;text-decoration:none;border-radius:0.5rem;
+                  {% if subject_type == 'partner' %}background:white;color:var(--navy);{% else %}color:rgba(255,255,255,0.7);{% endif %}">
+            🤝 Partners <span style="opacity:0.65;font-weight:normal;font-size:0.72rem;">— external partner portal</span>
+        </a>
+    </div>
+
     <!-- Mode tabs -->
     <div style="display:flex;gap:0;background:white;border:1px solid var(--gray-200);border-radius:0.75rem;padding:0.3rem;margin-bottom:1rem;">
-        <a href="{{ url_for('access_master', mode='by-person') }}"
+        <a href="{{ url_for('access_master', mode='by-person', subject_type=subject_type) }}"
            style="flex:1;padding:0.6rem 1rem;text-align:center;font-weight:600;font-size:0.85rem;text-decoration:none;border-radius:0.5rem;
                   {% if mode == 'by-person' %}background:var(--orange);color:white;{% else %}color:var(--gray-600);{% endif %}">
-            By Person <span style="opacity:0.8;font-weight:normal;font-size:0.75rem;">— pick one team member, set their access</span>
+            By Person <span style="opacity:0.8;font-weight:normal;font-size:0.75rem;">— pick one {{ 'partner' if subject_type=='partner' else 'team member' }}, set access</span>
         </a>
-        <a href="{{ url_for('access_master', mode='by-section') }}"
+        <a href="{{ url_for('access_master', mode='by-section', subject_type=subject_type) }}"
            style="flex:1;padding:0.6rem 1rem;text-align:center;font-weight:600;font-size:0.85rem;text-decoration:none;border-radius:0.5rem;
                   {% if mode == 'by-section' %}background:var(--orange);color:white;{% else %}color:var(--gray-600);{% endif %}">
             By Section <span style="opacity:0.8;font-weight:normal;font-size:0.75rem;">— pick a section, grant to many at once</span>
@@ -208,28 +222,34 @@
     </div>
 
     <div class="am-card" id="bs-step-3" style="display:none;">
-        <h2><span class="am-step-num">3</span>Pick team members</h2>
-        <input type="text" id="bs-emp-search" placeholder="Search by name or department..."
+        <h2><span class="am-step-num">3</span>Pick {{ 'partners' if subject_type == 'partner' else 'team members' }}</h2>
+        <input type="text" id="bs-emp-search" placeholder="Search by name {% if subject_type != 'partner' %}or department{% endif %}..."
                oninput="bsFilterEmployees()"
                style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;margin-bottom:0.75rem;">
         <div style="display:flex;justify-content:space-between;align-items:center;padding:0.3rem 0 0.5rem;font-size:0.8rem;color:var(--gray-600);">
-            <span><span id="bs-emp-selected">0</span> of {{ employees|length }} selected</span>
+            <span><span id="bs-emp-selected">0</span> of {{ subjects|length }} selected</span>
             <div style="display:flex;gap:0.4rem;">
                 <button type="button" onclick="bsToggleAllEmployees(true)" style="padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:600;background:white;border:1px solid var(--gray-300);border-radius:0.35rem;cursor:pointer;">Select all</button>
                 <button type="button" onclick="bsToggleAllEmployees(false)" style="padding:0.3rem 0.7rem;font-size:0.72rem;font-weight:600;background:white;border:1px solid var(--gray-300);border-radius:0.35rem;cursor:pointer;">Clear all</button>
             </div>
         </div>
         <div id="bs-emp-list" style="max-height:340px;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:0.4rem;border:1px solid var(--gray-200);border-radius:0.5rem;padding:0.6rem;">
-            {% for emp in employees %}
-            <label class="bs-emp-item" data-name="{{ (emp.name or '')|lower }}" data-dept="{{ (emp.department or '')|lower }}"
+            {% for subj in subjects %}
+            {% set meta = (subj.contact_person if subject_type == 'partner' else subj.department) or '' %}
+            <label class="bs-emp-item" data-name="{{ (subj.name or '')|lower }}" data-dept="{{ meta|lower }}"
                    style="display:flex;align-items:center;gap:0.5rem;padding:0.45rem 0.6rem;border:1px solid var(--gray-200);border-radius:0.35rem;cursor:pointer;font-size:0.8rem;">
-                <input type="checkbox" class="bs-emp-cb" data-emp-id="{{ emp.id }}" onchange="bsOnEmployeeChange()" style="width:16px;height:16px;cursor:pointer;">
+                <input type="checkbox" class="bs-emp-cb" data-emp-id="{{ subj.id }}" onchange="bsOnEmployeeChange()" style="width:16px;height:16px;cursor:pointer;">
                 <div>
-                    <div style="font-weight:600;color:var(--navy);">{{ emp.name }}</div>
-                    <div style="font-size:0.7rem;color:var(--gray-500);">{{ emp.department or '—' }}</div>
+                    <div style="font-weight:600;color:var(--navy);">{{ subj.name }}</div>
+                    <div style="font-size:0.7rem;color:var(--gray-500);">{{ meta or '—' }}</div>
                 </div>
             </label>
             {% endfor %}
+            {% if not subjects %}
+            <div style="grid-column:1/-1;text-align:center;padding:1.5rem;color:var(--gray-500);font-size:0.85rem;">
+                No {{ 'partners' if subject_type == 'partner' else 'team members' }} available.
+            </div>
+            {% endif %}
         </div>
     </div>
 
@@ -325,10 +345,16 @@
             const permissions = subKeys.map(sub => ({ main: mainKey, sub, view, edit, add }));
             status.textContent = `Granting to ${empIds.length} team member(s)…`;
             status.className = '';
+            const subjectType = {{ subject_type|tojson }};
             fetch('/api/access-master/save-bulk', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ employee_ids: empIds, permissions })
+                body: JSON.stringify({
+                    subject_type: subjectType,
+                    subject_ids: empIds,
+                    employee_ids: subjectType === 'employee' ? empIds : [],  // back-compat
+                    permissions
+                })
             }).then(r => r.json()).then(data => {
                 if (data.error) {
                     status.textContent = 'Error: ' + data.error;
@@ -345,41 +371,52 @@
     </script>
     {% else %}
     {# ─── BY PERSON FLOW (existing) ─── #}
-    <!-- Step 1: Pick employee -->
+    <!-- Step 1: Pick subject -->
     <div class="am-card">
-        <h2><span class="am-step-num">1</span>Pick a team member</h2>
+        <h2><span class="am-step-num">1</span>Pick a {{ 'partner' if subject_type == 'partner' else 'team member' }}</h2>
         <form method="GET" class="am-emp-picker">
+            <input type="hidden" name="subject_type" value="{{ subject_type }}">
+            <input type="hidden" name="mode" value="by-person">
             <div>
-                <label>Employee</label>
-                <select name="emp_id" onchange="this.form.submit()">
+                <label>{{ 'Partner' if subject_type == 'partner' else 'Employee' }}</label>
+                <select name="subject_id" onchange="this.form.submit()">
                     <option value="">&mdash; select &mdash;</option>
-                    {% for emp in employees %}
-                        <option value="{{ emp.id }}" {% if selected_employee and selected_employee.id == emp.id %}selected{% endif %}>
-                            {{ emp.name }}{% if emp.department %} &middot; {{ emp.department }}{% endif %}
+                    {% for subj in subjects %}
+                        <option value="{{ subj.id }}" {% if selected_subject and selected_subject.id == subj.id %}selected{% endif %}>
+                            {{ subj.name }}{% if subject_type == 'partner' %}{% if subj.contact_person %} &middot; {{ subj.contact_person }}{% endif %}{% else %}{% if subj.department %} &middot; {{ subj.department }}{% endif %}{% endif %}
                         </option>
                     {% endfor %}
                 </select>
             </div>
             <button type="submit">Load</button>
         </form>
+        {% if subject_type == 'partner' and not subjects %}
+        <p style="font-size:0.78rem;color:var(--gray-500);margin:0.6rem 0 0;">No partners on file yet. Add partners from <a href="/partners" style="color:var(--orange);">Sales &rarr; Partners</a> first.</p>
+        {% endif %}
     </div>
 
-    {% if not selected_employee %}
+    {% if not selected_subject %}
         <div class="am-card empty-state">
-            Select a team member above to view + edit their per-section access.
+            Select a {{ 'partner' if subject_type == 'partner' else 'team member' }} above to view + edit their per-section access.
         </div>
     {% else %}
         <!-- Step 2: Show employee summary + permission grid -->
         <div class="am-card">
             <h2><span class="am-step-num">2</span>Permissions for this user</h2>
             <div class="am-emp-summary">
-                <div class="avatar">{{ selected_employee.name[0]|upper }}</div>
+                <div class="avatar">{{ (selected_subject.name or '?')[0]|upper }}</div>
                 <div>
-                    <div class="name">{{ selected_employee.name }}</div>
+                    <div class="name">{{ selected_subject.name }}</div>
                     <div class="meta">
-                        {{ selected_employee.emp_code }}
-                        {% if selected_employee.designation %} &middot; {{ selected_employee.designation }}{% endif %}
-                        {% if selected_employee.department %} &middot; {{ selected_employee.department }}{% endif %}
+                        {% if subject_type == 'partner' %}
+                            🤝 Partner
+                            {% if selected_subject.contact_person %} &middot; {{ selected_subject.contact_person }}{% endif %}
+                            {% if selected_subject.partner_type %} &middot; {{ selected_subject.partner_type }}{% endif %}
+                        {% else %}
+                            {{ selected_subject.emp_code }}
+                            {% if selected_subject.designation %} &middot; {{ selected_subject.designation }}{% endif %}
+                            {% if selected_subject.department %} &middot; {{ selected_subject.department }}{% endif %}
+                        {% endif %}
                     </div>
                 </div>
             </div>
@@ -459,7 +496,8 @@
     {% endif %}
 
 <script>
-    const AM_EMP_ID = {{ selected_employee.id if selected_employee else 0 }};
+    const AM_EMP_ID = {{ selected_subject.id if selected_subject else 0 }};
+    const AM_SUBJECT_TYPE = {{ subject_type|tojson }};
 
     function amToggleSection(headerEl) {
         headerEl.parentElement.classList.toggle('open');
@@ -512,7 +550,12 @@
         fetch('/api/access-master/save', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ employee_id: AM_EMP_ID, permissions: permissions })
+            body: JSON.stringify({
+                subject_type: AM_SUBJECT_TYPE,
+                subject_id: AM_EMP_ID,
+                employee_id: AM_SUBJECT_TYPE === 'employee' ? AM_EMP_ID : null,  // back-compat
+                permissions: permissions,
+            })
         }).then(r => r.json()).then(data => {
             if (data.error) {
                 status.textContent = 'Error: ' + data.error;
