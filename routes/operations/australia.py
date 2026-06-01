@@ -359,7 +359,8 @@ def ops_australia_clients_list():
                 registration_number LIKE ? OR mobile LIKE ? OR email LIKE ?
             ) """
             params.extend([f'%{search}%'] * 5)
-        sql += " ORDER BY id DESC "
+        # Latest registrations on top (user request 2026-06-01) — mirrors PLAB.
+        sql += " ORDER BY registration_date DESC NULLS LAST, id DESC "
         records = conn.execute(sql, params).fetchall()
         total = len(records)
 

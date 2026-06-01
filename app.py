@@ -15050,7 +15050,9 @@ def ops_plab_list():
         if stage_filter:
             sql += " AND current_stage = ?"
             params.append(stage_filter)
-        sql += " ORDER BY id DESC"
+        # Recent registrations on top (user request 2026-06-01). Fall back to
+        # id DESC for rows missing a registration_date — keeps order stable.
+        sql += " ORDER BY registration_date DESC NULLS LAST, id DESC"
         clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
         # Payment totals scoped to PLAB too so the Total Paid card on this
@@ -15463,7 +15465,8 @@ def ops_documents_list():
         if wheres:
             q += " WHERE " + " AND ".join(wheres)
         q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
-        q += " ORDER BY c.id DESC"
+        # Latest first (user request 2026-06-01) — newer client docs on top.
+        q += " ORDER BY c.created_at DESC NULLS LAST, c.id DESC"
         rows = conn.execute(q, params).fetchall()
         total_required = len(PLAB_ALL_REQUIRED_DOCS)
         all_clients = []
