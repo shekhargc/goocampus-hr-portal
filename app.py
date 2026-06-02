@@ -28008,36 +28008,48 @@ backfill_completed_kit_dispatch_dates_once()
 
 
 def cleanup_obsolete_form_config_fields_once():
-    """Remove system-managed fields from client_form_configs.
+    """Remove system-managed + redundant fields from client_form_configs.
 
     Per user feedback: the Form Config page should hold form fields the
-    USER fills in (or the team fills in via the form). The Welcome Kit
-    items, Welcome Call schedule, and Welcome Email send-state are now
-    fully owned by:
-        /admin/welcome-kit (kit template -> welcome_kit_items)
-        /operations/(...)/onboarding/<id> (per-client status)
+    user (or the team) actually fills in. The following are managed
+    elsewhere or are redundant:
 
-    Keeping those names in client_form_configs created a phantom
-    "Operations" step on the registration form that didn't reflect
-    reality. Drop them.
+      * Welcome Kit items + dates -> welcome_kit_items + client_welcome_kit
+      * Welcome Email / Welcome Call -> Onboarding section UI
+      * Counsellor fields -> known via client_invitations.invited_by
+        (the salesperson who raised the invite is the counsellor)
+      * English Training -> not used; legacy field
 
-    Idempotent via marker form_config_obsoletes_cleared = v1.
+    Idempotent via marker form_config_obsoletes_cleared. Bumping the
+    value re-runs the cleanup with an expanded list.
     """
     MARKER_KEY = 'form_config_obsoletes_cleared'
-    MARKER_VAL = 'v1'
+    MARKER_VAL = 'v2'
 
     # Fields that have moved out of the form into the Onboarding/
-    # Welcome-Kit subsystem. Apply across ALL products.
+    # Welcome-Kit subsystem, plus other redundant/legacy entries.
+    # Apply across ALL products.
     OBSOLETE = (
+        # Welcome Email + Welcome Call
         'welcome_mail', 'welcome_email',
         'welcome_call_by', 'welcome_call_date', 'welcome_call_notes',
+        # Kit dispatch logistics
         'kit_delivery_method', 'kit_delivered_date', 'kit_tracking_number',
+        # Kit items (PLAB)
         'plab_brochure', 'ceo_letter', 'refund_policy', 'service_agreement',
         'english_book', 'oxford_book',
+        'english_book_date', 'oxford_book_date',
+        # Kit items (AMC)
         'amc_handbook', 'amc_clinical_handbook', 'australia_brochure',
         'service_level_agreement', 'brochure_policy_items',
         'sla_copy_method', 'additional_goodies',
+        # Goodies
         'goodie_pen', 'goodie_diary', 'goodie_laptop_bag', 'goodie_stickers',
+        # Counsellor (the sales user who raised the invitation is the
+        # counsellor -- no need for free-text entry).
+        'counsellor', 'counsellor_email', 'counsellor_number',
+        # Legacy / unused
+        'english_training',
     )
 
     conn = None
@@ -28100,6 +28112,141 @@ def cleanup_obsolete_form_config_fields_once():
 
 
 cleanup_obsolete_form_config_fields_once()
+
+
+def seed_documents_step_once():
+    """Add a 'Documents' step (Step 3, role=client) to client_form_configs
+    for the canonical PLAB + AMC products. Files the client uploads as
+    part of registration -- photo, ID proofs, academic certificates,
+    score-cards.
+
+    Idempotent via marker documents_step_seeded. INSERT-IF-ABSENT per
+    field_name within each product, so admin edits are preserved.
+    """
+    MARKER_KEY = 'documents_step_seeded'
+    MARKER_VAL = 'v1'
+
+    # Step 3 sits between Academic Details (step 2) and Sales/Operations
+    # (currently step 3 / step 4). The display_order keeps documents
+    # rendering in the order admins typically want to collect them.
+    # (step, step_name, field, label, type, options, role, required, order, placeholder, hint)
+    DOCUMENT_FIELDS_COMMON = [
+        ('photo',                 'Profile Photo',           'file', 1,  10),
+        ('aadhaar_card',          'Aadhaar Card',            'file', 1,  20),
+        ('passport',              'Passport',                'file', 1,  30),
+        ('passport_back',         'Passport (Back)',         'file', 0,  35),
+        ('class10_marksheet',     'Class 10 Marksheet',      'file', 1,  40),
+        ('class12_marksheet',     'Class 12 Marksheet',      'file', 1,  50),
+        ('mbbs_marksheet',        'MBBS Final Marksheet',    'file', 1,  60),
+        ('mbbs_degree',           'MBBS Degree Certificate', 'file', 1,  70),
+        ('internship_certificate','Internship Certificate',  'file', 0,  80),
+        ('mci_registration',      'MCI / NMC Registration',  'file', 0,  90),
+        ('bank_statement',        'Bank Statement (last 3 months)', 'file', 0, 100),
+        ('address_proof',         'Address Proof',           'file', 0, 110),
+    ]
+    # Product-specific extras (slipped into the same step)
+    DOCUMENT_FIELDS_BY_PRODUCT = {
+        'UK PGCP': [
+            ('ielts_oet_scorecard', 'IELTS / OET Scorecard',  'file', 0, 120),
+            ('plab1_scorecard',     'PLAB 1 Scorecard',       'file', 0, 130),
+        ],
+        'AUS PGCP': [
+            ('ielts_oet_scorecard', 'IELTS / OET Scorecard',  'file', 0, 120),
+            ('amc_mcq_scorecard',   'AMC MCQ Scorecard',      'file', 0, 130),
+            ('mdb_certificate',     'Medical Board Certificate', 'file', 0, 140),
+        ],
+    }
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        seeded = 0
+        for product_name in ('UK PGCP', 'AUS PGCP'):
+            try:
+                prow = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (product_name,),
+                ).fetchone()
+                if not prow:
+                    continue
+                pid = prow['id']
+                fields = list(DOCUMENT_FIELDS_COMMON)
+                fields.extend(DOCUMENT_FIELDS_BY_PRODUCT.get(product_name, []))
+                for field_name, label, ftype, required, order in fields:
+                    exists = conn.execute(
+                        "SELECT id FROM client_form_configs "
+                        " WHERE product_id = ? AND field_name = ?",
+                        (pid, field_name),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_form_configs "
+                            "(product_id, step_number, step_name, "
+                            " field_name, field_label, field_type, "
+                            " field_options, role, is_required, is_visible, "
+                            " display_order, placeholder, hint_text) "
+                            "VALUES (?, 3, 'Documents', ?, ?, ?, '', 'client', "
+                            "         ?, 1, ?, 'Upload file', '')",
+                            (pid, field_name, label, ftype, required, order),
+                        )
+                        seeded += 1
+                    except Exception as e:
+                        logging.warning(
+                            f"documents seed insert {field_name}: {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+            except Exception as e:
+                logging.warning(f"documents seed product {product_name}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"documents seed marker: {e}")
+
+        if seeded:
+            logging.info(f"Documents step seeded: {seeded} row(s)")
+    except Exception as e:
+        logging.warning(f"seed_documents_step_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_documents_step_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
