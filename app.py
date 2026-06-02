@@ -15271,6 +15271,9 @@ def ops_onboarding_update(client_id):
         flash('Client not found.', 'error')
         return redirect(url_for('ops_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    # Item E-3: snapshot the pre-update state so we can detect
+    # milestone transitions after the save and fire stage emails.
+    _e3_old_state = dict(onb) if onb else {}
     f = request.form
     conn.execute("""UPDATE client_onboarding SET
         welcome_call_date=?, welcome_call_by=?, welcome_call_confirmed=?,
@@ -15352,7 +15355,14 @@ def ops_onboarding_update(client_id):
     ]
     new_status = _compute_onboarding_status(dict(onb), pseudo_items)
     conn.execute("UPDATE client_onboarding SET onboarding_status=? WHERE id=?", (new_status, onb['id']))
+    # Item E-3: re-read fresh state and fire any stage emails whose
+    # milestone just transitioned. Helper is dormant (template
+    # enabled=0 by seed) until admin opts in.
+    _e3_new_state = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone() or {})
     conn.commit()
+    _maybe_fire_stage_transitions(conn, client_id, _e3_old_state, _e3_new_state)
     conn.close()
     flash('Onboarding updated.', 'success')
     return redirect(url_for('ops_onboarding_detail', client_id=client_id))
@@ -15516,6 +15526,8 @@ def ops_au_onboarding_update(client_id):
         flash('AMC client not found.', 'error')
         return redirect(url_for('ops_au_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    # Item E-3: snapshot pre-update state for transition detection.
+    _e3_old_state = dict(onb) if onb else {}
     f = request.form
     conn.execute(
         """UPDATE client_onboarding SET
@@ -15608,7 +15620,14 @@ def ops_au_onboarding_update(client_id):
         "UPDATE client_onboarding SET onboarding_status = ? WHERE id = ?",
         (status, onb['id']),
     )
+    # Item E-3: re-read fresh state and fire any stage emails whose
+    # milestone just transitioned. Dormant until admin enables the
+    # relevant template in /admin/email-templates.
+    _e3_new_state = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone() or {})
     conn.commit()
+    _maybe_fire_stage_transitions(conn, client_id, _e3_old_state, _e3_new_state)
     conn.close()
     flash('AMC onboarding updated.', 'success')
     return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
@@ -15946,6 +15965,69 @@ def _send_stage_email(conn, template_key, plab_client_id, context=None):
             f"_send_stage_email(template={template_key}, "
             f"client={plab_client_id}): {e}")
         return {'status': 'error', 'error': str(e), 'recipients': []}
+
+
+def _maybe_fire_stage_transitions(conn, plab_client_id, old_state, new_state):
+    """Item E-3: detect milestone transitions on a client_onboarding row
+    and fire the corresponding stage email -- silently no-ops if the
+    template is disabled (which is the seeded default for all 4 new
+    stages, so this whole helper is dormant until admin enables them
+    in /admin/email-templates).
+
+    Transitions detected per a save:
+      welcome_call_scheduled  -- welcome_call_date  went from empty -> set
+      kit_dispatched          -- kit_delivered_date OR welcome_kit_sent_date
+                                  went from empty -> set
+      onboarded               -- onboarding_status transitioned to 'Completed'
+
+    Per the standing "do not send emails during the current
+    backfill" constraint, the templates above stay enabled=0 by
+    seed. Admin can flip on per template + recipient toggle from
+    the Email Templates UI when they're ready.
+    """
+    if not old_state or not new_state:
+        return
+    try:
+        client_row = conn.execute(
+            "SELECT * FROM plab_clients WHERE id = ?", (plab_client_id,)
+        ).fetchone()
+        if not client_row:
+            return
+        ctx = _stage_email_context_from_client(dict(client_row))
+
+        def _was_empty_now_set(col):
+            return (not (old_state.get(col) or '').strip()
+                    and (new_state.get(col) or '').strip())
+
+        # Welcome Call Scheduled
+        if _was_empty_now_set('welcome_call_date'):
+            ctx['welcome_call_date'] = new_state.get('welcome_call_date') or ''
+            _send_stage_email(conn, 'welcome_call_scheduled',
+                              plab_client_id, ctx)
+
+        # Kit Dispatched -- either column counts (PLAB uses
+        # kit_delivered_date, AMC uses welcome_kit_sent_date).
+        old_kit = ((old_state.get('kit_delivered_date') or '')
+                   or (old_state.get('welcome_kit_sent_date') or '')).strip()
+        new_kit = ((new_state.get('kit_delivered_date') or '')
+                   or (new_state.get('welcome_kit_sent_date') or '')).strip()
+        if not old_kit and new_kit:
+            ctx['kit_dispatched_date'] = new_kit
+            ctx['kit_tracking_number'] = new_state.get('kit_tracking_number') or ''
+            ctx['kit_delivery_method']  = (new_state.get('kit_delivery_method')
+                                           or new_state.get('welcome_kit_method')
+                                           or '')
+            _send_stage_email(conn, 'kit_dispatched',
+                              plab_client_id, ctx)
+
+        # Onboarded -- status transitioned to 'Completed'
+        old_status = (old_state.get('onboarding_status') or '').strip().lower()
+        new_status = (new_state.get('onboarding_status') or '').strip().lower()
+        if old_status != 'completed' and new_status == 'completed':
+            _send_stage_email(conn, 'onboarded', plab_client_id, ctx)
+    except Exception as e:
+        # Never let a fire-point break the save handler.
+        logging.error(f"_maybe_fire_stage_transitions: {e}")
 
 
 def _stage_email_context_from_client(client):
