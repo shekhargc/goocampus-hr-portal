@@ -1788,6 +1788,128 @@ def welcome_kit_delete(item_id):
     return redirect(url_for('welcome_kit_page', product_id=pid))
 
 
+# ── Item E-1: Email-template admin UI ─────────────────────────────────
+# A single admin surface for editing every onboarding-stage email
+# template + toggling who receives each one (client / counsellor / ops /
+# parents). Backed by the email_templates table extended in the boot
+# migration above. NEW templates seeded with enabled=0 so nothing
+# auto-fires until an admin explicitly turns it on.
+
+EMAIL_RECIPIENT_KEYS = [
+    ('recipients_client',     'Client',      'Sent to the client themselves.'),
+    ('recipients_counsellor', 'Counsellor',  'Sent to the registered counsellor.'),
+    ('recipients_ops',        'Operations',  'Sent to ops@goocampus.in.'),
+    ('recipients_parents',    'Parents',     "Sent to the parents' email (if captured)."),
+]
+
+
+@app.route('/admin/email-templates', methods=['GET'])
+@login_required
+def admin_email_templates_list():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT id, template_key, stage, label, subject, enabled,
+                   recipients_client, recipients_counsellor,
+                   recipients_ops, recipients_parents, updated_at
+              FROM email_templates
+             ORDER BY CASE stage
+                        WHEN 'welcome_email' THEN 1
+                        WHEN 'welcome_call_scheduled' THEN 2
+                        WHEN 'kit_dispatched' THEN 3
+                        WHEN 'onboarded' THEN 4
+                        WHEN 'thirty_day_checkin' THEN 5
+                        ELSE 99 END,
+                      template_key
+        """).fetchall()
+    except Exception:
+        rows = []
+    templates = []
+    for r in rows:
+        d = dict(r)
+        d['recipient_summary'] = ', '.join(
+            label for col, label, _ in EMAIL_RECIPIENT_KEYS if d.get(col))
+        if not d['recipient_summary']:
+            d['recipient_summary'] = '(no recipients selected)'
+        templates.append(d)
+    conn.close()
+    return render_template(
+        'admin_email_templates_list.html',
+        user=user, templates=templates,
+        active_section='company',
+    )
+
+
+@app.route('/admin/email-templates/<template_key>', methods=['GET'])
+@login_required
+def admin_email_template_edit(template_key):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    tpl = conn.execute(
+        "SELECT * FROM email_templates WHERE template_key = ?", (template_key,)
+    ).fetchone()
+    conn.close()
+    if not tpl:
+        flash('Template not found.', 'error')
+        return redirect(url_for('admin_email_templates_list'))
+    return render_template(
+        'admin_email_templates_edit.html',
+        user=user, tpl=dict(tpl),
+        recipient_keys=EMAIL_RECIPIENT_KEYS,
+        active_section='company',
+    )
+
+
+@app.route('/admin/email-templates/<template_key>/save', methods=['POST'])
+@login_required
+def admin_email_template_save(template_key):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.form
+    subject = (f.get('subject') or '').strip()
+    body_html = (f.get('body_html') or '').strip()
+    notes = (f.get('notes') or '').strip()
+    label = (f.get('label') or '').strip()
+    if not subject or not body_html:
+        flash('Subject and body are required.', 'error')
+        return redirect(url_for('admin_email_template_edit', template_key=template_key))
+    enabled = 1 if f.get('enabled') else 0
+    r_client = 1 if f.get('recipients_client') else 0
+    r_couns  = 1 if f.get('recipients_counsellor') else 0
+    r_ops    = 1 if f.get('recipients_ops') else 0
+    r_parent = 1 if f.get('recipients_parents') else 0
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE email_templates SET
+              subject = ?, body_html = ?, label = ?, notes = ?, enabled = ?,
+              recipients_client = ?, recipients_counsellor = ?,
+              recipients_ops = ?, recipients_parents = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE template_key = ?
+        """, (subject, body_html, label, notes, enabled,
+              r_client, r_couns, r_ops, r_parent, template_key))
+        conn.commit()
+        flash('Email template saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"admin_email_template_save: {e}")
+        flash(f'Save failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('admin_email_template_edit', template_key=template_key))
+
+
 # Toggle a client's welcome-kit item between done <-> pending.
 @app.route('/admin/client/<int:reg_id>/welcome-kit/<int:cwk_id>/toggle', methods=['POST'])
 @login_required
@@ -12618,6 +12740,25 @@ def ensure_ops_tables():
             body_html TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Item E-1: extend email_templates with stage, enable flag,
+        # per-stakeholder recipient toggles and admin notes. All
+        # idempotent ALTERs so re-boots are safe on Postgres.
+        for ddl in (
+            "ALTER TABLE email_templates ADD COLUMN stage TEXT",
+            "ALTER TABLE email_templates ADD COLUMN label TEXT",
+            "ALTER TABLE email_templates ADD COLUMN enabled INTEGER DEFAULT 1",
+            "ALTER TABLE email_templates ADD COLUMN recipients_client INTEGER DEFAULT 1",
+            "ALTER TABLE email_templates ADD COLUMN recipients_counsellor INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN recipients_ops INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN recipients_parents INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN notes TEXT",
+        ):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
 
         # ── WhatsApp Messaging System ──
         conn.execute('''CREATE TABLE IF NOT EXISTS wa_contacts (
@@ -27134,6 +27275,7 @@ ACCESS_SECTION_CATALOG = [
             ('announcements',     'Announcements',       'Internal announcements feed'),
             ('state_city',        'State & City Settings','Location lookup management'),
             ('reset_passwords',   'Reset Passwords',     'Admin password reset tool'),
+            ('email_templates',   'Email Templates',     'Edit onboarding-stage emails + stakeholder recipient toggles'),
             ('access_master',     'Access Master',       'Manage section permissions (this page)'),
         ],
     },
@@ -28711,6 +28853,229 @@ def normalize_form_config_steps_once():
 
 
 normalize_form_config_steps_once()
+
+
+# ── Item E-1: Email-template stage seed ────────────────────────────────
+# Seeds the five onboarding-stage email templates that map 1:1 to the
+# client-facing timeline shipped in Item D:
+#   welcome_email, welcome_call_scheduled, kit_dispatched,
+#   onboarded, thirty_day_checkin
+# All NEW templates are seeded with enabled=0 so they cannot fire until
+# an admin opens /admin/email-templates and explicitly enables them
+# (respects the standing "do not send any emails to clients while we
+# complete the onboarding process" constraint). The existing
+# welcome_email row is back-filled with stage='welcome_email' and
+# enabled=1 since it was already live before this commit.
+EMAIL_TEMPLATE_STAGES = [
+    {
+        'key': 'welcome_email',
+        'label': 'Welcome Email',
+        'stage': 'welcome_email',
+        'subject': 'Welcome to GooCampus - {{client_name}}!',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 1,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to GooCampus</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Welcome to the GooCampus family. We're delighted to have you with us.</p>
+    <p>Your registration details:</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Registration Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_number}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Plan Type</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{plan_type}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Registration Date</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_date}}</td></tr>
+    </table>
+    <p>Your counsellor will be in touch shortly to schedule your welcome call.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'welcome_call_scheduled',
+        'label': 'Welcome Call Scheduled',
+        'stage': 'welcome_call_scheduled',
+        'subject': 'Your welcome call is scheduled - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome Call Scheduled</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Your welcome call has been scheduled for <strong>{{welcome_call_date}}</strong>.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> will walk you through your plan, what to expect over the coming weeks, and answer any questions you have.</p>
+    <p>If this time doesn't work, reply to this email or message your counsellor directly.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'kit_dispatched',
+        'label': 'Welcome Kit Dispatched',
+        'stage': 'kit_dispatched',
+        'subject': 'Your GooCampus welcome kit is on its way - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Your Welcome Kit Is On Its Way</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Good news -- your GooCampus welcome kit has been dispatched.</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Dispatched On</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_dispatched_date}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Tracking Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_tracking_number}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Courier</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_delivery_method}}</td></tr>
+    </table>
+    <p>It should reach you within a few working days.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'onboarded',
+        'label': 'Onboarding Completed',
+        'stage': 'onboarded',
+        'subject': 'You are officially onboarded with GooCampus - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">You're Officially Onboarded</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Congratulations -- you are now fully onboarded with the GooCampus {{product_name}} programme.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> remains your single point of contact for everything that comes next.</p>
+    <p>You can always log in to your client dashboard to see your plan, payment schedule and onboarding progress at <a href="https://goocampus.in/client/login">goocampus.in/client/login</a>.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'thirty_day_checkin',
+        'label': '30-Day Check-in',
+        'stage': 'thirty_day_checkin',
+        'subject': 'How are things going? - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">30-Day Check-in</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>It's been about a month since you joined GooCampus -- we'd love to hear how things are going.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> will reach out shortly for a quick check-in. If anything has come up in the meantime, reply to this email and we'll get you the right help.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+]
+
+
+def seed_email_templates_once():
+    """Idempotently ensure all five Item-E stage templates exist.
+
+    - For brand-new template keys, INSERT with the defaults above.
+    - For existing keys (only welcome_email today), back-fill stage/
+      label/recipient toggles WITHOUT touching subject/body_html (so
+      any admin edits already saved are preserved).
+    Marker: email_templates_stages_seeded=v1
+    """
+    MARKER_KEY = 'email_templates_stages_seeded'
+    MARKER_VAL = 'v1'
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        cur = conn.execute("SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,)).fetchone()
+        if cur and cur['value'] == MARKER_VAL:
+            return
+        inserted = 0
+        updated = 0
+        for tpl in EMAIL_TEMPLATE_STAGES:
+            existing = conn.execute(
+                "SELECT id FROM email_templates WHERE template_key = ?",
+                (tpl['key'],)
+            ).fetchone()
+            if existing:
+                # Back-fill new metadata columns only; leave subject + body
+                # untouched in case admin already edited them.
+                conn.execute("""
+                    UPDATE email_templates SET
+                        stage = COALESCE(stage, ?),
+                        label = COALESCE(label, ?),
+                        enabled = COALESCE(enabled, ?),
+                        recipients_client = COALESCE(recipients_client, ?),
+                        recipients_counsellor = COALESCE(recipients_counsellor, ?),
+                        recipients_ops = COALESCE(recipients_ops, ?),
+                        recipients_parents = COALESCE(recipients_parents, ?)
+                    WHERE template_key = ?
+                """, (tpl['stage'], tpl['label'], tpl['enabled'],
+                      tpl['recipients_client'], tpl['recipients_counsellor'],
+                      tpl['recipients_ops'], tpl['recipients_parents'],
+                      tpl['key']))
+                updated += 1
+            else:
+                conn.execute("""
+                    INSERT INTO email_templates
+                      (template_key, stage, label, subject, body_html, enabled,
+                       recipients_client, recipients_counsellor,
+                       recipients_ops, recipients_parents)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (tpl['key'], tpl['stage'], tpl['label'],
+                      tpl['subject'], tpl['body_html'], tpl['enabled'],
+                      tpl['recipients_client'], tpl['recipients_counsellor'],
+                      tpl['recipients_ops'], tpl['recipients_parents']))
+                inserted += 1
+        # Mark done
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (MARKER_KEY, MARKER_VAL))
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)",
+                         (MARKER_KEY, MARKER_VAL))
+        conn.commit()
+        logging.info(
+            f"Email templates seed v1: inserted {inserted} new, "
+            f"back-filled {updated} existing")
+    except Exception as e:
+        logging.warning(f"seed_email_templates_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_email_templates_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from

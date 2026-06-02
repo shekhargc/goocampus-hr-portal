@@ -1,0 +1,117 @@
+{% extends "company_sidebar_base.html" %}
+
+{% block title %}Edit Email Template - {{ tpl.label or tpl.template_key }}{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;max-width:980px;margin:0 auto;">
+
+  <div style="margin-bottom:14px;">
+    <a href="/admin/email-templates" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">
+      <i class="bi bi-arrow-left me-1"></i>Back to email templates
+    </a>
+  </div>
+
+  <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 4px;">
+    <i class="bi bi-envelope-paper-fill me-1" style="color:var(--orange);"></i> {{ tpl.label or tpl.template_key }}
+  </h1>
+  <p style="color:#6B7280;font-size:0.84rem;margin:0 0 18px;">
+    Stage: <code style="background:#F3F4F6;padding:2px 6px;border-radius:4px;font-size:0.8rem;">{{ tpl.stage or tpl.template_key }}</code>
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div style="margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:0.86rem;
+        {% if category == 'success' %}background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7;
+        {% elif category == 'error' %}background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;
+        {% else %}background:#E0E7FF;color:#3730A3;border:1px solid #A5B4FC;{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  <form method="POST" action="/admin/email-templates/{{ tpl.template_key }}/save">
+
+    <!-- Enabled + recipient toggles card -->
+    <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:0.95rem;font-weight:700;color:var(--navy);">
+        <i class="bi bi-toggles me-1"></i>Sending controls
+      </h3>
+
+      <label style="display:flex;align-items:center;gap:10px;padding:10px 12px;background:{% if tpl.enabled %}#ECFDF5{% else %}#F9FAFB{% endif %};border:1px solid {% if tpl.enabled %}#A7F3D0{% else %}#E5E7EB{% endif %};border-radius:8px;margin-bottom:14px;cursor:pointer;">
+        <input type="checkbox" name="enabled" value="1" {% if tpl.enabled %}checked{% endif %} style="width:18px;height:18px;accent-color:#059669;">
+        <div>
+          <div style="font-weight:700;color:var(--navy);font-size:0.92rem;">Enabled</div>
+          <div style="font-size:0.76rem;color:#6B7280;">When off this template never fires. Use as an emergency stop.</div>
+        </div>
+      </label>
+
+      <div style="font-weight:600;font-size:0.78rem;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;margin:14px 0 8px;">Who receives this email</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;">
+        {% for col, label, desc in recipient_keys %}
+        <label style="display:flex;align-items:flex-start;gap:9px;padding:10px 12px;background:#FAFAFA;border:1px solid #E5E7EB;border-radius:8px;cursor:pointer;">
+          <input type="checkbox" name="{{ col }}" value="1" {% if tpl[col] %}checked{% endif %} style="width:16px;height:16px;accent-color:var(--orange);margin-top:2px;">
+          <div>
+            <div style="font-weight:700;color:var(--navy);font-size:0.86rem;">{{ label }}</div>
+            <div style="font-size:0.72rem;color:#6B7280;line-height:1.4;">{{ desc }}</div>
+          </div>
+        </label>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Subject + body card -->
+    <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+      <h3 style="margin:0 0 12px;font-size:0.95rem;font-weight:700;color:var(--navy);">
+        <i class="bi bi-pencil-square me-1"></i>Email content
+      </h3>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:6px;">Display label</label>
+        <input type="text" name="label" value="{{ tpl.label or '' }}" placeholder="Welcome Email" style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.88rem;">
+        <div style="font-size:0.7rem;color:#9CA3AF;margin-top:4px;">Friendly name shown in the list view.</div>
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:6px;">Subject *</label>
+        <input type="text" name="subject" value="{{ tpl.subject }}" required style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.88rem;">
+      </div>
+
+      <div style="margin-bottom:14px;">
+        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:6px;">Body (HTML) *</label>
+        <textarea name="body_html" required rows="22" style="width:100%;padding:11px 13px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.82rem;font-family:ui-monospace,'SF Mono',Menlo,monospace;line-height:1.5;">{{ tpl.body_html }}</textarea>
+      </div>
+
+      <div>
+        <label style="display:block;font-size:0.78rem;font-weight:700;color:#374151;margin-bottom:6px;">Internal notes</label>
+        <textarea name="notes" rows="3" placeholder="Anything the team should know about when / why this template fires." style="width:100%;padding:9px 11px;border:1px solid #D1D5DB;border-radius:6px;font-size:0.84rem;">{{ tpl.notes or '' }}</textarea>
+      </div>
+    </div>
+
+    <!-- Variables reference -->
+    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:14px 16px;margin-bottom:16px;font-size:0.8rem;color:#9A3412;line-height:1.6;">
+      <strong><i class="bi bi-braces me-1"></i>Available variables</strong>
+      <div style="margin-top:6px;display:flex;flex-wrap:wrap;gap:6px;">
+        {% for v in ['client_name', 'registration_number', 'plan_type', 'registration_date', 'product_name', 'counsellor_name', 'counsellor_email', 'welcome_call_date', 'kit_dispatched_date', 'kit_tracking_number', 'kit_delivery_method'] %}
+        <code style="background:#fff;border:1px solid #FED7AA;padding:2px 8px;border-radius:4px;font-size:0.74rem;">{% raw %}{{{% endraw %}{{ v }}{% raw %}}}{% endraw %}</code>
+        {% endfor %}
+      </div>
+      <div style="margin-top:6px;font-size:0.74rem;opacity:0.9;">Variables are substituted at send-time. Unknown ones come through blank rather than failing.</div>
+    </div>
+
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;">
+      <a href="/admin/email-templates" style="padding:9px 18px;background:#F3F4F6;color:#374151;border-radius:6px;font-size:0.86rem;font-weight:600;text-decoration:none;">Cancel</a>
+      <button type="submit" style="padding:10px 24px;background:var(--orange);color:#fff;border:none;border-radius:6px;font-size:0.9rem;font-weight:700;cursor:pointer;">
+        <i class="bi bi-check2-circle me-1"></i>Save template
+      </button>
+    </div>
+
+  </form>
+
+  {% if tpl.updated_at %}
+  <p style="margin:14px 0 0;font-size:0.74rem;color:#9CA3AF;text-align:right;">
+    Last saved {{ tpl.updated_at }}
+  </p>
+  {% endif %}
+
+</div>
+{% endblock %}

@@ -1,0 +1,83 @@
+{% extends "company_sidebar_base.html" %}
+
+{% block title %}Email Templates - GooCampus Portal{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;max-width:1100px;margin:0 auto;">
+
+  <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:18px;gap:12px;flex-wrap:wrap;">
+    <div>
+      <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0;">
+        <i class="bi bi-envelope-paper-fill me-1" style="color:var(--orange);"></i> Email Templates
+      </h1>
+      <p style="color:var(--gray-500);font-size:0.875rem;margin:6px 0 0;max-width:720px;">
+        One template per onboarding stage. Toggle who receives each email - the client, their counsellor, ops, and parents - and pause any template instantly with the Enabled switch.
+      </p>
+    </div>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+      <div style="margin-bottom:14px;padding:10px 14px;border-radius:8px;font-size:0.86rem;
+        {% if category == 'success' %}background:#D1FAE5;color:#065F46;border:1px solid #6EE7B7;
+        {% elif category == 'error' %}background:#FEE2E2;color:#991B1B;border:1px solid #FCA5A5;
+        {% else %}background:#E0E7FF;color:#3730A3;border:1px solid #A5B4FC;{% endif %}">
+        {{ message }}
+      </div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if templates %}
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <thead>
+        <tr style="background:#F9FAFB;">
+          <th style="text-align:left;padding:12px 14px;font-size:0.72rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #E5E7EB;">Stage</th>
+          <th style="text-align:left;padding:12px 14px;font-size:0.72rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #E5E7EB;">Subject</th>
+          <th style="text-align:left;padding:12px 14px;font-size:0.72rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #E5E7EB;">Recipients</th>
+          <th style="text-align:center;padding:12px 14px;font-size:0.72rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #E5E7EB;">Status</th>
+          <th style="text-align:right;padding:12px 14px;font-size:0.72rem;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:0.04em;border-bottom:1px solid #E5E7EB;">&nbsp;</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for t in templates %}
+        <tr style="border-bottom:1px solid #F3F4F6;">
+          <td style="padding:14px;">
+            <div style="font-weight:700;color:var(--navy);font-size:0.92rem;">{{ t.label or t.template_key }}</div>
+            <div style="font-size:0.72rem;color:#9CA3AF;margin-top:2px;font-family:ui-monospace,'SF Mono',Menlo,monospace;">{{ t.template_key }}</div>
+          </td>
+          <td style="padding:14px;color:#374151;">{{ t.subject }}</td>
+          <td style="padding:14px;font-size:0.82rem;color:{% if 'no recipients' in t.recipient_summary %}#B91C1C{% else %}#374151{% endif %};">
+            {{ t.recipient_summary }}
+          </td>
+          <td style="padding:14px;text-align:center;">
+            {% if t.enabled %}
+            <span style="display:inline-block;padding:3px 10px;background:#D1FAE5;color:#065F46;border-radius:999px;font-size:0.72rem;font-weight:700;">Enabled</span>
+            {% else %}
+            <span style="display:inline-block;padding:3px 10px;background:#F3F4F6;color:#6B7280;border-radius:999px;font-size:0.72rem;font-weight:700;">Disabled</span>
+            {% endif %}
+          </td>
+          <td style="padding:14px;text-align:right;">
+            <a href="/admin/email-templates/{{ t.template_key }}" style="display:inline-block;padding:6px 14px;background:var(--orange);color:#fff;border-radius:6px;font-size:0.8rem;font-weight:600;text-decoration:none;">
+              <i class="bi bi-pencil-square me-1"></i>Edit
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="background:#fff;border:1px solid #E5E7EB;border-radius:12px;padding:40px;text-align:center;color:#6B7280;">
+    <i class="bi bi-envelope-x" style="font-size:2.4rem;color:#D1D5DB;"></i>
+    <p style="margin:12px 0 0;font-size:0.92rem;">No email templates have been seeded yet. They'll appear here after the next boot.</p>
+  </div>
+  {% endif %}
+
+  <div style="margin-top:18px;padding:12px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:0.78rem;color:#9A3412;line-height:1.55;">
+    <i class="bi bi-info-circle me-1"></i>
+    <strong>How sending works.</strong> Each template will fire at the point in the onboarding flow named by its stage. Disabled templates never send. Recipients with no email captured for a registration are silently skipped. The trigger wiring for new stages (Welcome Call Scheduled, Kit Dispatched, Onboarded, 30-day Check-in) lands in the next commit (Item E-2).
+  </div>
+
+</div>
+{% endblock %}
