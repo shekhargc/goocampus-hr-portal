@@ -1363,6 +1363,7 @@ def client_form_config_page():
     conn = get_db()
     products = conn.execute("SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()
     selected_product = request.args.get('product_id', '')
+    selected_role = request.args.get('role', '').strip().lower()  # '' = all
     configs = []
     if selected_product:
         configs = conn.execute('''
@@ -1380,9 +1381,37 @@ def client_form_config_page():
             ORDER BY cfc.product_id, cfc.step_number, cfc.display_order
         ''').fetchall()
 
+    # Apply role filter post-query (small datasets; cleaner than dynamic SQL).
+    if selected_role in ('client', 'sales', 'ops'):
+        configs = [c for c in configs if (c['role'] or 'client') == selected_role]
+
+    # Phase D (2026-06-02): group fields by step so the template can render
+    # collapsible step-cards instead of one long flat table. Each group is
+    # {step_number, step_name, items[], role_counts{}}.
+    step_groups = []
+    by_step = {}
+    for c in configs:
+        sn = c['step_number'] or 0
+        if sn not in by_step:
+            by_step[sn] = {
+                'step_number': sn,
+                'step_name': c['step_name'] or f'Step {sn}',
+                'items': [],
+                'role_counts': {'client': 0, 'sales': 0, 'ops': 0},
+            }
+        by_step[sn]['items'].append(c)
+        r = (c['role'] or 'client').lower()
+        if r in by_step[sn]['role_counts']:
+            by_step[sn]['role_counts'][r] += 1
+    step_groups = [by_step[k] for k in sorted(by_step.keys())]
+
+    overall_role_counts = {'client': 0, 'sales': 0, 'ops': 0}
+    for c in configs:
+        r = (c['role'] or 'client').lower()
+        if r in overall_role_counts:
+            overall_role_counts[r] += 1
+
     # Available lookup categories — both pathways merged for the picker.
-    # When admin picks "exam_name" here, the client form will look up the
-    # values from lookup_options scoped to the matching product's pathway.
     try:
         lookup_categories = [
             r['category'] for r in conn.execute(
@@ -1392,9 +1421,13 @@ def client_form_config_page():
     except Exception:
         lookup_categories = []
     conn.close()
-    return render_template('client_form_config.html', configs=configs, products=products,
-                         selected_product=selected_product, user=user,
-                         lookup_categories=lookup_categories,
+    return render_template('client_form_config.html',
+                         configs=configs, products=products,
+                         selected_product=selected_product,
+                         selected_role=selected_role,
+                         step_groups=step_groups,
+                         overall_role_counts=overall_role_counts,
+                         user=user, lookup_categories=lookup_categories,
                          active_section='clients')
 
 
@@ -1474,6 +1507,207 @@ def client_form_config_delete(config_id):
     finally:
         conn.close()
     return redirect(url_for('client_form_config_page', product_id=pid))
+
+
+# ── ADMIN: Welcome Kit per-product templates (Phase E, 2026-06-02) ──
+
+@app.route('/admin/welcome-kit', methods=['GET'])
+@login_required
+def welcome_kit_page():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status='active' ORDER BY name"
+    ).fetchall()
+    selected_product = request.args.get('product_id', '')
+    items = []
+    if selected_product:
+        items = conn.execute(
+            "SELECT * FROM welcome_kit_items WHERE product_id = ? "
+            "ORDER BY sort_order, id",
+            (selected_product,),
+        ).fetchall()
+    conn.close()
+    return render_template(
+        'welcome_kit_config.html',
+        user=user, products=products, items=items,
+        selected_product=selected_product,
+        active_section='clients',
+    )
+
+
+@app.route('/admin/welcome-kit/add', methods=['POST'])
+@login_required
+def welcome_kit_add():
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    pid = request.form.get('product_id', '').strip()
+    if not pid.isdigit():
+        flash('Pick a product first', 'error')
+        return redirect(url_for('welcome_kit_page'))
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO welcome_kit_items "
+            "(product_id, item_name, item_type, description, sort_order, "
+            " is_required, is_active, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+            (
+                int(pid),
+                request.form.get('item_name', '').strip(),
+                request.form.get('item_type', 'task').strip() or 'task',
+                request.form.get('description', '').strip(),
+                int(request.form.get('sort_order', '0') or 0),
+                1 if request.form.get('is_required') else 0,
+                user['id'],
+            ),
+        )
+        conn.commit()
+        flash('Kit item added', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_add: {e}")
+        flash('Could not add item', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+@app.route('/admin/welcome-kit/edit/<int:item_id>', methods=['POST'])
+@login_required
+def welcome_kit_edit(item_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    pid = ''
+    try:
+        row = conn.execute(
+            "SELECT product_id FROM welcome_kit_items WHERE id = ?", (item_id,),
+        ).fetchone()
+        pid = str(row['product_id']) if row else ''
+        conn.execute(
+            "UPDATE welcome_kit_items SET "
+            " item_name = ?, item_type = ?, description = ?, "
+            " sort_order = ?, is_required = ?, is_active = ? "
+            "WHERE id = ?",
+            (
+                request.form.get('item_name', '').strip(),
+                request.form.get('item_type', 'task').strip() or 'task',
+                request.form.get('description', '').strip(),
+                int(request.form.get('sort_order', '0') or 0),
+                1 if request.form.get('is_required') else 0,
+                1 if request.form.get('is_active') else 0,
+                item_id,
+            ),
+        )
+        conn.commit()
+        flash('Kit item updated', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_edit: {e}")
+        flash('Could not update item', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+@app.route('/admin/welcome-kit/delete/<int:item_id>', methods=['POST'])
+@login_required
+def welcome_kit_delete(item_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    pid = ''
+    try:
+        row = conn.execute(
+            "SELECT product_id FROM welcome_kit_items WHERE id = ?", (item_id,),
+        ).fetchone()
+        pid = str(row['product_id']) if row else ''
+        conn.execute("DELETE FROM welcome_kit_items WHERE id = ?", (item_id,))
+        conn.commit()
+        flash('Kit item deleted', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_delete: {e}")
+        flash('Could not delete item (it may be referenced by a client kit)', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+# Toggle a client's welcome-kit item between done <-> pending.
+@app.route('/admin/client/<int:reg_id>/welcome-kit/<int:cwk_id>/toggle', methods=['POST'])
+@login_required
+def client_welcome_kit_toggle(reg_id, cwk_id):
+    user = get_user()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT status FROM client_welcome_kit "
+            " WHERE id = ? AND registration_id = ?",
+            (cwk_id, reg_id),
+        ).fetchone()
+        if row:
+            if row['status'] == 'done':
+                conn.execute(
+                    "UPDATE client_welcome_kit SET status='pending', "
+                    " completed_by=NULL, completed_at=NULL WHERE id = ?",
+                    (cwk_id,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE client_welcome_kit SET status='done', "
+                    " completed_by = ?, completed_at = CURRENT_TIMESTAMP "
+                    " WHERE id = ?",
+                    (user['id'], cwk_id),
+                )
+            conn.commit()
+    except Exception as e:
+        logging.warning(f"client_welcome_kit_toggle: {e}")
+    finally:
+        conn.close()
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+def _seed_client_welcome_kit_from_template(conn, registration_id):
+    """Copy every active welcome_kit_items row for the registration's
+    product into client_welcome_kit, one row per item. Idempotent via
+    the UNIQUE(registration_id, kit_item_id) constraint -- re-running
+    after the kit has been seeded is a no-op.
+
+    Returns the number of items inserted (0 if the kit is already
+    seeded or the product has no template).
+    """
+    reg = conn.execute(
+        "SELECT product_id FROM client_registrations WHERE id = ?",
+        (registration_id,),
+    ).fetchone()
+    if not reg or not reg['product_id']:
+        return 0
+    items = conn.execute(
+        "SELECT id, item_name, item_type FROM welcome_kit_items "
+        "WHERE product_id = ? AND is_active = 1 "
+        "ORDER BY sort_order, id",
+        (reg['product_id'],),
+    ).fetchall()
+    inserted = 0
+    for it in items:
+        try:
+            conn.execute(
+                "INSERT INTO client_welcome_kit "
+                "(registration_id, kit_item_id, item_name, item_type, status) "
+                "VALUES (?, ?, ?, ?, 'pending')",
+                (registration_id, it['id'], it['item_name'], it['item_type']),
+            )
+            inserted += 1
+        except Exception:
+            # UNIQUE constraint -> kit already seeded for this item; skip.
+            try: conn.rollback()
+            except Exception: pass
+    return inserted
 
 
 def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
@@ -1597,10 +1831,25 @@ def admin_client_detail(reg_id):
     doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
     notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
     counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    # Phase E: welcome-kit checklist for this client (rows are seeded on
+    # ops-verify; an empty list means either ops hasn't verified yet or
+    # the product has no welcome-kit template configured).
+    try:
+        welcome_kit = conn.execute(
+            "SELECT cwk.*, e.name AS completed_by_name "
+            "FROM client_welcome_kit cwk "
+            "LEFT JOIN employees e ON e.id = cwk.completed_by "
+            "WHERE cwk.registration_id = ? "
+            "ORDER BY cwk.id",
+            (reg_id,),
+        ).fetchall()
+    except Exception:
+        welcome_kit = []
     conn.close()
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
-        counsellors=counsellors, user=user, active_section='clients')
+        counsellors=counsellors, welcome_kit=welcome_kit,
+        user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──
@@ -1692,10 +1941,17 @@ def admin_client_ops_verify(reg_id):
             ops_status = 'verified', ops_verified_by = ?, ops_verified_at = CURRENT_TIMESTAMP,
             ops_notes = ?, onboarding_status = 'confirmed', updated_at = CURRENT_TIMESTAMP
             WHERE id = ?''', (user['id'], request.form.get('ops_notes',''), reg_id))
+        # 2026-06-02 (Phase E): auto-populate the welcome-kit checklist
+        # from the product's template. Skips silently if a checklist
+        # already exists or the product has no template defined.
+        try:
+            _seed_client_welcome_kit_from_template(conn, reg_id)
+        except Exception as wk_err:
+            logging.warning(f"seed client welcome kit at ops-verify: {wk_err}")
         conn.commit()
         conn.close()
         _notify_onboarding_confirmed(reg_id)
-        flash('Client onboarding confirmed! Notifications sent.', 'success')
+        flash('Client onboarding confirmed! Welcome-kit checklist created. Notifications sent.', 'success')
 
     elif action == 'request_docs':
         doc_type = request.form.get('doc_type', '')
@@ -25980,6 +26236,7 @@ ACCESS_SECTION_CATALOG = [
             ('invitations',     'Client Invitations',  'Generate + send client portal invites'),
             ('registrations',   'Client Registrations','v2 client registration list'),
             ('form_config',     'Form Configuration',  'Centralised client form field config'),
+            ('welcome_kit',     'Welcome Kit',         'Per-product onboarding checklist template'),
             ('doc_requests',    'Document Requests',   'Ops doc request queue'),
             ('notifications',   'Notification Log',    'Client notification log'),
         ],
@@ -26434,6 +26691,53 @@ def ensure_user_section_permissions_table():
 
 
 ensure_user_section_permissions_table()
+
+
+def ensure_welcome_kit_tables():
+    """Phase E (2026-06-02): per-product welcome-kit checklist.
+
+    Two tables:
+      welcome_kit_items     -- the template: admin defines items per product
+      client_welcome_kit    -- the instance: per registration, one row per
+                               template item, tracking completion state
+
+    Idempotent CREATE TABLE IF NOT EXISTS. No seeding -- admin populates
+    the templates from the new /admin/welcome-kit page.
+    """
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS welcome_kit_items (
+            id           SERIAL PRIMARY KEY,
+            product_id   INTEGER REFERENCES products_services(id) ON DELETE CASCADE,
+            item_name    TEXT    NOT NULL,
+            item_type    TEXT    DEFAULT 'task',
+            description  TEXT,
+            sort_order   INTEGER DEFAULT 0,
+            is_required  INTEGER DEFAULT 1,
+            is_active    INTEGER DEFAULT 1,
+            created_by   INTEGER REFERENCES employees(id),
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_welcome_kit (
+            id              SERIAL PRIMARY KEY,
+            registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
+            kit_item_id     INTEGER REFERENCES welcome_kit_items(id),
+            item_name       TEXT NOT NULL,
+            item_type       TEXT,
+            status          TEXT DEFAULT 'pending',
+            notes           TEXT,
+            completed_by    INTEGER REFERENCES employees(id),
+            completed_at    TIMESTAMP,
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (registration_id, kit_item_id)
+        )''')
+        conn.commit()
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_welcome_kit_tables: {e}")
+
+
+ensure_welcome_kit_tables()
 
 
 # Phase 5 baseline must run AFTER the table is guaranteed to exist.

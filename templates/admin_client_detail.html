@@ -377,6 +377,7 @@
         <button class="tab-btn" data-tab="sales" type="button">Sales Section</button>
         <button class="tab-btn" data-tab="operations" type="button">Operations</button>
         <button class="tab-btn" data-tab="documents" type="button">Documents</button>
+        <button class="tab-btn" data-tab="welcome-kit" type="button">Welcome Kit{% if welcome_kit %} ({{ welcome_kit|selectattr('status', 'equalto', 'done')|list|length }}/{{ welcome_kit|length }}){% endif %}</button>
         <button class="tab-btn" data-tab="notifications" type="button">Notifications</button>
     </div>
 
@@ -904,7 +905,76 @@
     </div>
 
     <!-- ============================================================ -->
-    <!-- TAB 5: NOTIFICATIONS -->
+    <!-- TAB 5: WELCOME KIT (Phase E, 2026-06-02) -->
+    <!-- ============================================================ -->
+    <div class="tab-panel" id="tab-welcome-kit">
+        <div class="card">
+            <h2 class="card-title">Welcome Kit Checklist</h2>
+            {% if welcome_kit %}
+                {% set done_count = welcome_kit|selectattr('status', 'equalto', 'done')|list|length %}
+                <div style="display:flex;align-items:center;gap:14px;margin-bottom:18px;">
+                    <div style="flex:1;background:#f3f4f6;border-radius:999px;height:10px;overflow:hidden;">
+                        <div style="background:#22c55e;height:100%;width:{{ (done_count * 100 / welcome_kit|length)|round(0, 'floor') }}%;border-radius:999px;transition:width 0.3s;"></div>
+                    </div>
+                    <div style="font-size:0.85rem;font-weight:600;color:var(--navy);white-space:nowrap;">
+                        {{ done_count }} / {{ welcome_kit|length }} done
+                    </div>
+                </div>
+                <ul style="list-style:none;padding:0;margin:0;">
+                    {% for wk in welcome_kit %}
+                    <li style="display:flex;align-items:flex-start;gap:12px;padding:12px 0;border-bottom:1px solid #f3f4f6;">
+                        <form method="POST" action="/admin/client/{{ reg.id }}/welcome-kit/{{ wk.id }}/toggle" style="margin:0;flex-shrink:0;padding-top:2px;">
+                            <button type="submit" title="Toggle done"
+                                    style="background:none;border:2px solid {% if wk.status == 'done' %}#22c55e{% else %}#d1d5db{% endif %};border-radius:50%;width:22px;height:22px;cursor:pointer;padding:0;display:flex;align-items:center;justify-content:center;">
+                                {% if wk.status == 'done' %}<span style="color:#22c55e;font-weight:700;font-size:14px;">✓</span>{% endif %}
+                            </button>
+                        </form>
+                        <div style="flex:1;min-width:0;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <span style="font-weight:600;color:var(--navy);font-size:0.92rem;{% if wk.status == 'done' %}text-decoration:line-through;color:var(--gray-500);{% endif %}">{{ wk.item_name }}</span>
+                                {% if wk.item_type %}<span style="display:inline-block;background:#f3f4f6;color:#6b7280;padding:1px 7px;border-radius:4px;font-size:0.7rem;">{{ wk.item_type }}</span>{% endif %}
+                            </div>
+                            {% if wk.status == 'done' and wk.completed_at %}
+                            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:3px;">
+                                ✓ Completed{% if wk.completed_by_name %} by {{ wk.completed_by_name }}{% endif %}{% if wk.completed_at %} on {{ wk.completed_at|format_date }}{% endif %}
+                            </div>
+                            {% endif %}
+                        </div>
+                    </li>
+                    {% endfor %}
+                </ul>
+                {% if reg.product_id %}
+                <p style="margin-top:14px;font-size:0.76rem;color:var(--gray-500);">
+                    To change which items appear on this checklist, edit the
+                    <a href="/admin/welcome-kit?product_id={{ reg.product_id }}" style="color:var(--orange);font-weight:600;text-decoration:none;">Welcome Kit template for {{ reg.product_name or 'this product' }}</a>.
+                    Changes apply to new clients verified after the update.
+                </p>
+                {% endif %}
+            {% else %}
+                <div style="text-align:center;padding:2rem;">
+                    <div style="font-size:2.5rem;margin-bottom:0.8rem;opacity:0.3;">📦</div>
+                    {% if reg.ops_status == 'verified' %}
+                    <p style="color:var(--gray-500);font-size:0.95rem;margin:0;">No welcome kit checklist for this client yet.</p>
+                    <p style="color:var(--gray-500);font-size:0.82rem;margin:8px 0 0;">
+                        {% if reg.product_id %}
+                        Configure the kit template at
+                        <a href="/admin/welcome-kit?product_id={{ reg.product_id }}" style="color:var(--orange);font-weight:600;">Welcome Kit → {{ reg.product_name or 'this product' }}</a>,
+                        then re-verify this client to populate the checklist.
+                        {% else %}
+                        This client has no product assigned, so no welcome kit template applies.
+                        {% endif %}
+                    </p>
+                    {% else %}
+                    <p style="color:var(--gray-500);font-size:0.95rem;margin:0;">Welcome kit unlocks after Operations verification.</p>
+                    <p style="color:var(--gray-500);font-size:0.82rem;margin:8px 0 0;">Once Ops confirms the client, items from the product's template auto-populate here.</p>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+    </div>
+
+    <!-- ============================================================ -->
+    <!-- TAB 6: NOTIFICATIONS -->
     <!-- ============================================================ -->
     <div class="tab-panel" id="tab-notifications">
         <div class="card">

@@ -17,16 +17,41 @@
     </button>
   </div>
 
-  <!-- Product Filter -->
-  <div style="margin-bottom: 20px; display: flex; align-items: center; gap: 12px;">
-    <label style="font-size: 0.85rem; font-weight: 600; color: var(--navy, #1e3a5f);">Filter by Product:</label>
-    <select id="productFilter" onchange="filterByProduct()"
-      style="padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 6px; font-size: 0.875rem; min-width: 220px;">
-      <option value="">All Products</option>
-      {% for p in products %}
-      <option value="{{ p.id }}" {{ 'selected' if selected_product|string == p.id|string else '' }}>{{ p.name }}</option>
+  <!-- Filters (Product + Role) -->
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:14px 18px;margin-bottom:16px;display:flex;flex-wrap:wrap;align-items:center;gap:18px;">
+    <div style="display:flex;align-items:center;gap:10px;">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--navy);">Product:</label>
+      <select id="productFilter" onchange="applyFilters()"
+              style="padding:7px 11px;border:1px solid #d1d5db;border-radius:6px;font-size:0.85rem;min-width:230px;">
+        <option value="">All products</option>
+        {% for p in products %}
+        <option value="{{ p.id }}" {{ 'selected' if selected_product|string == p.id|string else '' }}>{{ p.name }}</option>
+        {% endfor %}
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:6px;">
+      <label style="font-size:0.82rem;font-weight:600;color:var(--navy);">Role:</label>
+      {% for role_key, role_label, role_bg, role_fg in [
+        ('', 'All', '#e5e7eb', '#374151'),
+        ('client', 'Client', '#dbeafe', '#1e40af'),
+        ('sales', 'Sales', '#fef3c7', '#92400e'),
+        ('ops', 'Ops', '#d1fae5', '#065f46')
+      ] %}
+      <a href="?{% if selected_product %}product_id={{ selected_product }}&{% endif %}role={{ role_key }}"
+         style="padding:5px 11px;border-radius:999px;font-size:0.75rem;font-weight:600;text-decoration:none;
+                background:{% if selected_role == role_key %}{{ role_bg }}{% else %}#f9fafb{% endif %};
+                color:{% if selected_role == role_key %}{{ role_fg }}{% else %}#9ca3af{% endif %};
+                border:1px solid {% if selected_role == role_key %}{{ role_fg }}33{% else %}#e5e7eb{% endif %};">
+        {{ role_label }}
+        {% if role_key == 'client' %} ({{ overall_role_counts.client }}){% elif role_key == 'sales' %} ({{ overall_role_counts.sales }}){% elif role_key == 'ops' %} ({{ overall_role_counts.ops }}){% elif not role_key %} ({{ overall_role_counts.client + overall_role_counts.sales + overall_role_counts.ops }}){% endif %}
+      </a>
       {% endfor %}
-    </select>
+    </div>
+    {% if step_groups %}
+    <div style="margin-left:auto;font-size:0.78rem;color:var(--gray-500);">
+      {{ step_groups|length }} step{{ '' if step_groups|length == 1 else 's' }} · {{ configs|length }} field{{ '' if configs|length == 1 else 's' }} shown
+    </div>
+    {% endif %}
   </div>
 
   <!-- Add Field Form (hidden by default) -->
@@ -145,72 +170,75 @@
     </form>
   </div>
 
-  <!-- Config Table -->
-  <div style="background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 3px rgba(0,0,0,0.06);">
-    <div style="overflow-x: auto;">
-    <table style="width: 100%; border-collapse: collapse; font-size: 0.85rem;">
-      <thead>
-        <tr style="background: #f9fafb; border-bottom: 1px solid #e5e7eb;">
-          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Product</th>
-          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Step</th>
-          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Field Name</th>
-          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Label</th>
-          <th style="text-align: left; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Type</th>
-          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Role</th>
-          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Req</th>
-          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Visible</th>
-          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Order</th>
-          <th style="text-align: center; padding: 10px 14px; font-weight: 600; color: var(--navy); font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Actions</th>
-        </tr>
-      </thead>
-      <tbody>
-        {% for c in configs %}
-        <tr style="border-bottom: 1px solid #f3f4f6;" onmouseover="this.style.background='#f9fafb'" onmouseout="this.style.background='#fff'">
-          <td style="padding: 10px 14px; font-weight: 500; color: #111827;">{{ c.product_name }}</td>
-          <td style="padding: 10px 14px; color: #374151;">
-            <span style="display: inline-block; background: #eff6ff; color: #1e40af; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem; font-weight: 600;">{{ c.step_number }}</span>
-            {{ c.step_name }}
-          </td>
-          <td style="padding: 10px 14px; color: #6b7280; font-family: monospace; font-size: 0.8rem;">{{ c.field_name }}</td>
-          <td style="padding: 10px 14px; color: #374151;">{{ c.field_label }}</td>
-          <td style="padding: 10px 14px;">
-            <span style="display: inline-block; background: #f3f4f6; color: #374151; padding: 2px 8px; border-radius: 4px; font-size: 0.75rem;">{{ c.field_type }}</span>
-          </td>
-          <td style="padding: 10px 14px; text-align: center;">
-            <span style="display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 0.7rem; font-weight: 600;
-              {% if c.role == 'client' %}background: #dbeafe; color: #1e40af;
-              {% elif c.role == 'sales' %}background: #fef3c7; color: #92400e;
-              {% else %}background: #d1fae5; color: #065f46;{% endif %}">{{ c.role }}</span>
-          </td>
-          <td style="padding: 10px 14px; text-align: center;">
-            {% if c.is_required %}<span style="color: #ef4444; font-weight: 700;">*</span>{% else %}<span style="color: #d1d5db;">-</span>{% endif %}
-          </td>
-          <td style="padding: 10px 14px; text-align: center;">
-            {% if c.is_visible %}<span style="color: #22c55e;">Yes</span>{% else %}<span style="color: #ef4444;">No</span>{% endif %}
-          </td>
-          <td style="padding: 10px 14px; text-align: center; color: #6b7280;">{{ c.display_order }}</td>
-          <td style="padding: 10px 14px; text-align: center;">
-            <div style="display: flex; gap: 6px; justify-content: center;">
-              <button onclick="editConfig({{ c.id }}, {{ c.product_id }}, {{ c.step_number }}, '{{ c.step_name }}', '{{ c.field_name }}', '{{ c.field_label }}', '{{ c.field_type }}', '{{ c.field_options or '' }}', '{{ c.role }}', {{ c.is_required }}, {{ c.is_visible }}, {{ c.display_order }}, '{{ c.placeholder or '' }}', '{{ c.hint_text or '' }}', '{{ c.lookup_category or '' }}')"
-                style="background: none; border: 1px solid #d1d5db; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: var(--navy);">Edit</button>
-              <form method="POST" action="/admin/client-form-config/delete/{{ c.id }}" style="display: inline;" onsubmit="return confirm('Delete this field config?')">
-                <button type="submit" style="background: none; border: 1px solid #fca5a5; border-radius: 4px; padding: 4px 10px; cursor: pointer; font-size: 0.75rem; color: #ef4444;">Del</button>
-              </form>
-            </div>
-          </td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
+  <!-- Step-grouped cards -->
+  {% if step_groups %}
+    {% for sg in step_groups %}
+    <details open style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;margin-bottom:14px;overflow:hidden;">
+      <summary style="padding:12px 18px;background:#f9fafb;cursor:pointer;list-style:none;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid #e5e7eb;user-select:none;">
+        <div style="display:flex;align-items:center;gap:10px;">
+          <span style="display:inline-flex;align-items:center;justify-content:center;width:26px;height:26px;background:#1e40af;color:#fff;border-radius:50%;font-size:0.78rem;font-weight:700;">{{ sg.step_number }}</span>
+          <span style="font-weight:700;color:var(--navy);font-size:0.95rem;">{{ sg.step_name }}</span>
+          <span style="font-size:0.78rem;color:var(--gray-500);">· {{ sg.items|length }} field{{ '' if sg.items|length == 1 else 's' }}</span>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;font-size:0.72rem;">
+          {% if sg.role_counts.client %}<span style="background:#dbeafe;color:#1e40af;padding:2px 7px;border-radius:999px;font-weight:600;">{{ sg.role_counts.client }} client</span>{% endif %}
+          {% if sg.role_counts.sales %}<span style="background:#fef3c7;color:#92400e;padding:2px 7px;border-radius:999px;font-weight:600;">{{ sg.role_counts.sales }} sales</span>{% endif %}
+          {% if sg.role_counts.ops %}<span style="background:#d1fae5;color:#065f46;padding:2px 7px;border-radius:999px;font-weight:600;">{{ sg.role_counts.ops }} ops</span>{% endif %}
+        </div>
+      </summary>
+      <div style="overflow-x:auto;">
+        <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+          <thead>
+            <tr style="background:#fafafa;border-bottom:1px solid #f1f5f9;">
+              {% if not selected_product %}<th style="text-align:left;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Product</th>{% endif %}
+              <th style="text-align:left;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Field</th>
+              <th style="text-align:left;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Label</th>
+              <th style="text-align:left;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Type</th>
+              <th style="text-align:center;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Role</th>
+              <th style="text-align:center;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Req</th>
+              <th style="text-align:center;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Vis</th>
+              <th style="text-align:center;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Order</th>
+              <th style="text-align:center;padding:8px 14px;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:var(--gray-500);">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for c in sg.items %}
+            <tr style="border-bottom:1px solid #f3f4f6;">
+              {% if not selected_product %}<td style="padding:8px 14px;font-weight:500;color:#111827;">{{ c.product_name }}</td>{% endif %}
+              <td style="padding:8px 14px;color:#6b7280;font-family:monospace;font-size:0.78rem;">{{ c.field_name }}</td>
+              <td style="padding:8px 14px;color:#374151;">{{ c.field_label }}</td>
+              <td style="padding:8px 14px;"><span style="display:inline-block;background:#f3f4f6;color:#374151;padding:1px 7px;border-radius:4px;font-size:0.72rem;">{{ c.field_type }}</span></td>
+              <td style="padding:8px 14px;text-align:center;">
+                <span style="display:inline-block;padding:1px 7px;border-radius:999px;font-size:0.68rem;font-weight:600;
+                  {% if c.role == 'sales' %}background:#fef3c7;color:#92400e;
+                  {% elif c.role == 'ops' %}background:#d1fae5;color:#065f46;
+                  {% else %}background:#dbeafe;color:#1e40af;{% endif %}">{{ c.role or 'client' }}</span>
+              </td>
+              <td style="padding:8px 14px;text-align:center;">{% if c.is_required %}<span style="color:#ef4444;font-weight:700;">*</span>{% else %}<span style="color:#d1d5db;">—</span>{% endif %}</td>
+              <td style="padding:8px 14px;text-align:center;">{% if c.is_visible %}<span style="color:#22c55e;">●</span>{% else %}<span style="color:#ef4444;">○</span>{% endif %}</td>
+              <td style="padding:8px 14px;text-align:center;color:#6b7280;font-size:0.78rem;">{{ c.display_order }}</td>
+              <td style="padding:8px 14px;text-align:center;">
+                <div style="display:flex;gap:6px;justify-content:center;">
+                  <button onclick="editConfig({{ c.id }}, {{ c.product_id }}, {{ c.step_number }}, '{{ c.step_name }}', '{{ c.field_name }}', '{{ c.field_label }}', '{{ c.field_type }}', '{{ c.field_options or '' }}', '{{ c.role }}', {{ c.is_required }}, {{ c.is_visible }}, {{ c.display_order }}, '{{ c.placeholder or '' }}', '{{ c.hint_text or '' }}', '{{ c.lookup_category or '' }}')"
+                          style="background:none;border:1px solid #d1d5db;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:0.72rem;color:var(--navy);">Edit</button>
+                  <form method="POST" action="/admin/client-form-config/delete/{{ c.id }}" style="display:inline;" onsubmit="return confirm('Delete this field config?')">
+                    <button type="submit" style="background:none;border:1px solid #fca5a5;border-radius:4px;padding:3px 9px;cursor:pointer;font-size:0.72rem;color:#ef4444;">Del</button>
+                  </form>
+                </div>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+    </details>
+    {% endfor %}
+  {% else %}
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:48px 24px;text-align:center;color:var(--gray-500);">
+      <p style="font-size:1rem;margin:0 0 4px;">{% if selected_product or selected_role %}No fields match the current filters{% else %}No form configurations yet{% endif %}</p>
+      <p style="font-size:0.85rem;margin:0;">{% if selected_product %}Click "Add Field" to add the first one for this product.{% else %}Pick a product and add the first field.{% endif %}</p>
     </div>
-
-    {% if not configs %}
-    <div style="text-align: center; padding: 48px 24px; color: var(--gray-500, #6b7280);">
-      <p style="font-size: 1rem; margin: 0 0 4px 0;">No form configurations yet</p>
-      <p style="font-size: 0.875rem; margin: 0;">Click "Add Field" to define custom fields per product.</p>
-    </div>
-    {% endif %}
-  </div>
+  {% endif %}
 
 </div>
 
@@ -305,10 +333,15 @@ function toggleAddForm() {
   else { form.style.display = 'none'; icon.textContent = '+'; }
 }
 
-function filterByProduct() {
+function filterByProduct() { applyFilters(); }
+function applyFilters() {
   var pid = document.getElementById('productFilter').value;
+  var role = {{ selected_role|tojson }};
   var url = '/admin/client-form-config';
-  if (pid) url += '?product_id=' + pid;
+  var qs = [];
+  if (pid) qs.push('product_id=' + encodeURIComponent(pid));
+  if (role) qs.push('role=' + encodeURIComponent(role));
+  if (qs.length) url += '?' + qs.join('&');
   window.location.href = url;
 }
 
