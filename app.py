@@ -1921,6 +1921,262 @@ def admin_email_template_save(template_key):
     return redirect(url_for('admin_email_template_edit', template_key=template_key))
 
 
+# ── Item G-1: Time-slot request flow (calendar slot picker) ──────────
+# Pattern A: ops triggers a slot request -> system generates N open
+# 30-min slots over the next 5 working days -> client opens a public
+# token URL and picks one -> chosen slot writes back into
+# client_onboarding.welcome_call_date which lights up E-3's
+# welcome_call_scheduled fire-point. Zero back-and-forth.
+
+SLOT_CALL_HOURS = (10, 17)          # 10:00 - 17:00 IST (last slot starts 16:30)
+SLOT_LENGTH_MIN = 30
+SLOT_LOOKAHEAD_WORKING_DAYS = 5
+SLOT_EXPIRES_DAYS = 14              # token good for 14 calendar days
+
+
+def _generate_call_slots(holidays_set):
+    """Build a list of ISO datetime strings for the next
+    SLOT_LOOKAHEAD_WORKING_DAYS working days, 30-min slots between
+    10:00 and 17:00 IST. Honours the F-1 5pm cutoff so 'today' is
+    skipped after 17:00 IST.
+    """
+    from working_days import add_working_days, next_working_day, now_ist
+    from datetime import datetime as _dt, timedelta as _td
+    today_ist = now_ist().date()
+    # Use add_working_days with n=0 to apply the cutoff rule to the
+    # starting date in one place.
+    start = add_working_days(today_ist, 0, holidays_set)
+    days = [start]
+    cur = start
+    for _ in range(SLOT_LOOKAHEAD_WORKING_DAYS - 1):
+        cur = add_working_days(cur, 1, holidays_set, cutoff_hour=None)
+        days.append(cur)
+
+    slots = []
+    for d in days:
+        slot_dt = _dt(d.year, d.month, d.day, SLOT_CALL_HOURS[0], 0)
+        end_dt  = _dt(d.year, d.month, d.day, SLOT_CALL_HOURS[1], 0)
+        while slot_dt + _td(minutes=SLOT_LENGTH_MIN) <= end_dt + _td(minutes=1):
+            slots.append(slot_dt.isoformat(timespec='minutes'))
+            slot_dt += _td(minutes=SLOT_LENGTH_MIN)
+    return slots
+
+
+def _gen_slot_token():
+    """Random URL-safe token for the public client URL."""
+    import secrets
+    return secrets.token_urlsafe(16)
+
+
+@app.route('/operations/onboarding/<int:client_id>/request-call-slot', methods=['POST'])
+@admin_required
+def ops_request_call_slot(client_id):
+    """Ops trigger: create a slot request for a client. Returns the
+    ops onboarding detail page with the share URL flashed up."""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    user = get_user()
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('ops_onboarding_list'))
+
+    # Don't allow stacking requests -- if there's already a pending
+    # request for this client + slot_type, reuse its token (so ops can
+    # re-send the same link).
+    existing = conn.execute(
+        "SELECT * FROM scheduled_slots "
+        " WHERE client_id = ? AND slot_type = 'welcome_call' "
+        "   AND status = 'pending' "
+        " ORDER BY id DESC LIMIT 1",
+        (client_id,)
+    ).fetchone()
+    if existing:
+        token = existing['token']
+        is_new = False
+    else:
+        try:
+            from working_days import load_holidays_set
+            holidays_set = load_holidays_set(conn)
+        except Exception:
+            holidays_set = set()
+        try:
+            slots = _generate_call_slots(holidays_set)
+        except Exception as e:
+            logging.error(f"slot generation: {e}")
+            slots = []
+        token = _gen_slot_token()
+        expires = _dt.utcnow() + _td(days=SLOT_EXPIRES_DAYS)
+        try:
+            conn.execute(
+                "INSERT INTO scheduled_slots "
+                "(token, client_id, slot_type, available_slots, "
+                " status, requested_by, expires_at) "
+                "VALUES (?, ?, 'welcome_call', ?, 'pending', ?, ?)",
+                (token, client_id, _json.dumps(slots),
+                 user['id'] if user else None,
+                 expires.isoformat(timespec='seconds'))
+            )
+            conn.commit()
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"ops_request_call_slot insert: {e}")
+            conn.close()
+            flash(f'Failed to create slot request: {e}', 'error')
+            return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+        is_new = True
+    pathway = (client['pathway'] if 'pathway' in client.keys() else None) or 'plab'
+    conn.close()
+    share_url = url_for('client_pick_slot', token=token, _external=True)
+    if is_new:
+        flash(
+            f'Slot picker created. Share this link with the client: {share_url}',
+            'success')
+    else:
+        flash(
+            f'A pending slot request already exists. Reuse this link: {share_url}',
+            'info')
+    redirect_endpoint = ('ops_au_onboarding_detail'
+                        if pathway == 'australia'
+                        else 'ops_onboarding_detail')
+    return redirect(url_for(redirect_endpoint, client_id=client_id))
+
+
+@app.route('/slot/<token>', methods=['GET'])
+def client_pick_slot(token):
+    """Public client-facing slot picker. No login required -- the
+    token is the access control."""
+    import json as _json
+    from datetime import datetime as _dt
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM scheduled_slots WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return render_template('slot_pick.html',
+            error='This link is invalid or has been removed.',
+            row=None, slots_by_day={})
+    row = dict(row)
+    # Expiry check
+    try:
+        if row.get('expires_at'):
+            exp = _dt.fromisoformat(str(row['expires_at'])[:19])
+            if _dt.utcnow() > exp and row.get('status') == 'pending':
+                row['status'] = 'expired'
+    except Exception:
+        pass
+    # Client name for the friendly header
+    client = conn.execute(
+        "SELECT first_name, last_name, prefix FROM plab_clients WHERE id = ?",
+        (row['client_id'],)
+    ).fetchone()
+    client_name = ''
+    if client:
+        client_name = (
+            f"{client['prefix'] or ''} "
+            f"{client['first_name'] or ''} "
+            f"{client['last_name'] or ''}"
+        ).strip()
+
+    # Group slots by date for the UI
+    slots_by_day = {}
+    try:
+        for iso in _json.loads(row.get('available_slots') or '[]'):
+            day = iso[:10]
+            slots_by_day.setdefault(day, []).append(iso)
+    except Exception:
+        pass
+    conn.close()
+    return render_template('slot_pick.html',
+        row=row, slots_by_day=slots_by_day,
+        client_name=client_name, error=None)
+
+
+@app.route('/slot/<token>/pick', methods=['POST'])
+def client_pick_slot_save(token):
+    """Public submission: client picked a slot."""
+    import json as _json
+    from datetime import datetime as _dt
+    chosen = (request.form.get('chosen_slot') or '').strip()
+    if not chosen:
+        flash('Please pick a time slot.', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM scheduled_slots WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        flash('This link is invalid or has been removed.', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    row = dict(row)
+    if row.get('status') != 'pending':
+        conn.close()
+        return redirect(url_for('client_pick_slot', token=token))
+    # Validate chosen against available
+    try:
+        avail = _json.loads(row.get('available_slots') or '[]')
+    except Exception:
+        avail = []
+    if chosen not in avail:
+        conn.close()
+        flash('That slot is no longer available. Please pick another.',
+              'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    try:
+        conn.execute(
+            "UPDATE scheduled_slots SET "
+            "  chosen_slot = ?, status = 'confirmed', "
+            "  chosen_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (chosen, row['id']))
+        # Wire back to client_onboarding so the D timeline + E-3
+        # welcome_call_scheduled fire-point both light up. Snapshot
+        # old state first so the transition is detected.
+        onb = conn.execute(
+            "SELECT * FROM client_onboarding WHERE client_id = ?",
+            (row['client_id'],)
+        ).fetchone()
+        if not onb:
+            client = conn.execute(
+                "SELECT registration_number FROM plab_clients WHERE id = ?",
+                (row['client_id'],)
+            ).fetchone()
+            if client:
+                onb = _ensure_client_onboarding(
+                    conn, row['client_id'], client['registration_number'])
+        if onb:
+            old_state = dict(onb)
+            chosen_date = chosen[:10]  # YYYY-MM-DD
+            conn.execute(
+                "UPDATE client_onboarding SET "
+                "  welcome_call_date = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (chosen_date, onb['id']))
+            conn.commit()
+            new_state = dict(conn.execute(
+                "SELECT * FROM client_onboarding WHERE id = ?",
+                (onb['id'],)
+            ).fetchone() or {})
+            _maybe_fire_stage_transitions(
+                conn, row['client_id'], old_state, new_state)
+        else:
+            conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"client_pick_slot_save: {e}")
+        conn.close()
+        flash(f'Save failed: {e}', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    conn.close()
+    return redirect(url_for('client_pick_slot', token=token))
+
+
 # Toggle a client's welcome-kit item between done <-> pending.
 @app.route('/admin/client/<int:reg_id>/welcome-kit/<int:cwk_id>/toggle', methods=['POST'])
 @login_required
@@ -12758,6 +13014,28 @@ def ensure_ops_tables():
             body_html TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+
+        # ── Item G-1: Time-slot request flow (calendar slot picker) ──
+        # One row per request from ops. The token is the public URL key
+        # the client uses to view + pick a slot (no login required).
+        # available_slots is a JSON array of ISO datetime strings;
+        # chosen_slot is set once client picks.
+        conn.execute('''CREATE TABLE IF NOT EXISTS scheduled_slots (
+            id SERIAL PRIMARY KEY,
+            token TEXT NOT NULL UNIQUE,
+            client_id INTEGER NOT NULL REFERENCES plab_clients(id) ON DELETE CASCADE,
+            slot_type TEXT DEFAULT 'welcome_call',
+            available_slots TEXT,
+            chosen_slot TIMESTAMP,
+            status TEXT DEFAULT 'pending',
+            requested_by INTEGER,
+            requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            chosen_at TIMESTAMP,
+            expires_at TIMESTAMP
+        )''')
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_slots_client ON scheduled_slots(client_id, slot_type, status)")
+        except Exception: pass
         # Item E-1: extend email_templates with stage, enable flag,
         # per-stakeholder recipient toggles and admin notes. All
         # idempotent ALTERs so re-boots are safe on Postgres.
