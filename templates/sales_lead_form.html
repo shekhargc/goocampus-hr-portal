@@ -125,9 +125,70 @@
                 </p>
             </div>
 
+            <!-- Item C: Service / Package details captured up-front so the
+                 client sees them on their portal as read-only "What you
+                 signed up for" the moment they log in. -->
+            <div style="margin-bottom:1.1rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:0.65rem;padding:1.2rem;">
+                <p style="margin:0 0 0.8rem 0;font-size:0.82rem;font-weight:700;color:#9A3412;">
+                    Service / Package details · these are shown to the client on their portal
+                </p>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.9rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Plan Type</label>
+                        <input type="text" name="plan_type" placeholder="e.g. Premium, Standard"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Lead Source</label>
+                        <input type="text" name="lead_source" placeholder="e.g. Website, Referral, Walk-in"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                </div>
+
+                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:0.9rem;">
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Package Amount (₹)</label>
+                        <input type="number" step="1" min="0" name="package_amount" id="pkgAmount"
+                               oninput="updateFinal()" value="0"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Discount Allowed (₹)</label>
+                        <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed"
+                               oninput="updateFinal()" value="0"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    </div>
+                    <div>
+                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Final Package (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                        <input type="number" step="1" min="0" name="final_package" id="finalPkg"
+                               readonly value="0"
+                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;background:var(--gray-50);" />
+                    </div>
+                </div>
+
+                <p style="margin:0.4rem 0 0.5rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments</p>
+                {% for i in range(1, 5) %}
+                <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:0.7rem;margin-bottom:0.45rem;">
+                    <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Inst {{ i }} amount" value="0"
+                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                    <input type="date" name="inst{{ i }}_date"
+                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                    <input type="text" name="inst{{ i }}_note" placeholder="Inst {{ i }} note (optional)"
+                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                </div>
+                {% endfor %}
+
+                <div style="margin-top:0.7rem;">
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Additional Package Notes</label>
+                    <textarea name="additional_package_notes" rows="2" placeholder="Any package-related notes for the client to see..."
+                              style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
+                </div>
+            </div>
+
             <div style="margin-bottom:1.5rem;">
-                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Notes</label>
-                <textarea name="notes" rows="4" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
+                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Internal Notes <span style="font-weight:400;color:var(--gray-500);">(not shown to client)</span></label>
+                <textarea name="notes" rows="3" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
             </div>
 
             <div style="display:flex;gap:0.75rem;">
@@ -154,6 +215,14 @@
             if (revInput) revInput.addEventListener('input', updateMargin);
             if (costInput) costInput.addEventListener('input', updateMargin);
             updateMargin();
+
+            // Item C: auto-compute Final Package = Package - Discount.
+            window.updateFinal = function() {
+                var p = parseFloat((document.getElementById('pkgAmount')||{}).value) || 0;
+                var d = parseFloat((document.getElementById('discAllowed')||{}).value) || 0;
+                var f = document.getElementById('finalPkg');
+                if (f) f.value = Math.max(0, p - d).toFixed(0);
+            };
 
             // --- Auto-fill stream & expected value when product changes ---
             var productSelect = document.querySelector('select[name="product_id"]');

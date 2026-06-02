@@ -984,10 +984,7 @@ def client_register(token):
         reg_num = next_registration_number(conn, product['name'] if product else None)
 
         # 2026-06-02: counsellor auto-assign -- the sales rep who raised
-        # the invitation IS the counsellor. Look up their name so the
-        # client portal can show "Your counsellor: <name>" without any
-        # manual data entry. Free-text counsellor fields were retired
-        # in the form-config v2 cleanup.
+        # the invitation IS the counsellor.
         counsellor_id = inv['invited_by']
         counsellor_name = ''
         if counsellor_id:
@@ -997,15 +994,51 @@ def client_register(token):
             ).fetchone()
             if emp_row:
                 counsellor_name = emp_row['name'] or ''
+
+        # Item C: parse the sales closure metadata stashed on the
+        # invitation, so the registration row is born with plan +
+        # package + installments already filled in. Sales can still
+        # tweak any of these later via /admin/clients/<id>.
+        import json as _json
+        try:
+            closure_meta = _json.loads(inv['closure_metadata']) \
+                           if inv['closure_metadata'] else {}
+        except Exception:
+            closure_meta = {}
+        plan_type        = closure_meta.get('plan_type', '') or ''
+        package_amount   = float(closure_meta.get('package_amount',   0) or 0)
+        discount_allowed = float(closure_meta.get('discount_allowed', 0) or 0)
+        final_package    = float(closure_meta.get('final_package',    0) or 0)
+        addl_pack_notes  = closure_meta.get('additional_package_notes', '') or ''
+        lead_source      = closure_meta.get('lead_source', '') or ''
+        addl_notes       = closure_meta.get('additional_notes', '') or ''
+        inst_amts = [float(closure_meta.get(f'inst{i}_amount', 0) or 0) for i in (1,2,3,4)]
+        inst_dts  = [closure_meta.get(f'inst{i}_date', '') or '' for i in (1,2,3,4)]
+        inst_nts  = [closure_meta.get(f'inst{i}_note', '') or '' for i in (1,2,3,4)]
+
         conn.execute('''INSERT INTO client_registrations
             (account_id, invitation_id, product_id, registration_number,
              first_name, last_name, mobile, email,
              counsellor_id, counsellor_name,
+             plan_type, package_amount, discount_allowed, final_package,
+             inst1_amount, inst1_date, inst1_note,
+             inst2_amount, inst2_date, inst2_note,
+             inst3_amount, inst3_date, inst3_note,
+             inst4_amount, inst4_date, inst4_note,
+             lead_source, additional_notes,
              form_status, current_step)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)''',
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, 'draft', 1)''',
             (acct_id, inv['id'], inv['product_id'], reg_num,
              first_name, last_name, clean, inv['client_email'] or '',
-             counsellor_id, counsellor_name))
+             counsellor_id, counsellor_name,
+             plan_type, package_amount, discount_allowed, final_package,
+             inst_amts[0], inst_dts[0], inst_nts[0],
+             inst_amts[1], inst_dts[1], inst_nts[1],
+             inst_amts[2], inst_dts[2], inst_nts[2],
+             inst_amts[3], inst_dts[3], inst_nts[3],
+             lead_source, addl_notes))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
         conn.close()
@@ -1767,25 +1800,30 @@ def _seed_client_welcome_kit_from_template(conn, registration_id):
 
 
 def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
-                              client_email, invited_by):
+                              client_email, invited_by, closure_data=None):
     """Create a client_invitations row tied to a fresh closure and send the
     WhatsApp invite. Used by the sales -> closure auto-flow so the closing
     rep doesn't have to manually generate the invite.
+
+    closure_data (Item C): optional dict of sales-collected fields
+    (plan_type, package_amount, discount_allowed, final_package,
+    inst1..inst4 amount/date/note, lead_source, additional_notes). When
+    provided, JSON-serialized into client_invitations.closure_metadata
+    so /client/register/<token> can pre-fill the registration row
+    with what the client signed up for.
 
     Returns the token on success, or None when name/mobile are missing.
     Idempotent-ish: if a non-cancelled invitation already exists for this
     (mobile, product) pair we skip creating a duplicate.
     """
-    import uuid
+    import uuid, json
     if not client_name or not client_mobile:
         return None
-    # Normalize the phone the same way the manual invite path does.
     mobile = client_mobile.lstrip('+').lstrip('0')
     if mobile.startswith('91') and len(mobile) == 12:
         mobile = mobile[2:]
     if not mobile or len(mobile) < 10:
         return None
-    # Skip if an active invitation already exists for this mobile + product.
     try:
         existing = conn.execute(
             "SELECT token FROM client_invitations "
@@ -1799,12 +1837,22 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
     if existing:
         return existing['token']
     token = uuid.uuid4().hex
+    closure_json = None
+    if closure_data:
+        try:
+            closure_json = json.dumps(
+                {k: v for k, v in closure_data.items() if v not in (None, '')}
+            )
+        except Exception as e:
+            logging.warning(f"_auto_invite: closure_data serialize: {e}")
     try:
         conn.execute(
             "INSERT INTO client_invitations "
-            "(token, product_id, client_name, client_mobile, client_email, invited_by) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
-            (token, product_id, client_name, mobile, client_email, invited_by),
+            "(token, product_id, client_name, client_mobile, client_email, "
+            " invited_by, closure_metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (token, product_id, client_name, mobile, client_email,
+             invited_by, closure_json),
         )
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
@@ -12644,6 +12692,17 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             registered_at TIMESTAMP
         )''')
+        # 2026-06-02 (Item C): stash the sales-collected closure details
+        # on the invitation so the client_registrations row created when
+        # the client accepts can be pre-filled with what they signed up
+        # for. JSON-encoded; populated by sales_leads_add (Add Closed
+        # Client), consumed by /client/register/<token>.
+        try:
+            conn.execute("ALTER TABLE client_invitations ADD COLUMN closure_metadata TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Registrations (main client data per product) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
@@ -21101,6 +21160,37 @@ def sales_leads_add():
                     # send the WhatsApp link. Failure here doesn't block
                     # the lead/closure save.
                     try:
+                        # Item C: capture full sales closure details from the
+                        # form so the client_registrations row created when
+                        # the client accepts the invitation is pre-filled.
+                        def _f(name, default=''):
+                            return (request.form.get(name) or default).strip() \
+                                if isinstance(request.form.get(name), str) \
+                                else (request.form.get(name) or default)
+                        def _n(name):
+                            try: return float(request.form.get(name) or 0)
+                            except ValueError: return 0
+                        closure_data = {
+                            'plan_type':                _f('plan_type'),
+                            'package_amount':           _n('package_amount'),
+                            'discount_allowed':         _n('discount_allowed'),
+                            'final_package':            _n('final_package'),
+                            'additional_package_notes': _f('additional_package_notes'),
+                            'inst1_amount':             _n('inst1_amount'),
+                            'inst1_date':               _f('inst1_date'),
+                            'inst1_note':               _f('inst1_note'),
+                            'inst2_amount':             _n('inst2_amount'),
+                            'inst2_date':               _f('inst2_date'),
+                            'inst2_note':               _f('inst2_note'),
+                            'inst3_amount':             _n('inst3_amount'),
+                            'inst3_date':               _f('inst3_date'),
+                            'inst3_note':               _f('inst3_note'),
+                            'inst4_amount':             _n('inst4_amount'),
+                            'inst4_date':               _f('inst4_date'),
+                            'inst4_note':               _f('inst4_note'),
+                            'lead_source':              _f('source') or _f('lead_source'),
+                            'additional_notes':         _f('notes') or _f('additional_notes'),
+                        }
                         token = _auto_invite_from_closure(
                             conn,
                             product_id=product_id,
@@ -21108,6 +21198,7 @@ def sales_leads_add():
                             client_mobile=(request.form.get('phone') or '').strip(),
                             client_email=(request.form.get('email') or '').strip(),
                             invited_by=user['id'],
+                            closure_data=closure_data,
                         )
                         if token:
                             flash('Closed client recorded and invitation sent on WhatsApp', 'success')
