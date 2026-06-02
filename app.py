@@ -15617,7 +15617,9 @@ def ops_au_onboarding_update(client_id):
 @app.route('/operations/australia/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
 @admin_required
 def ops_au_onboarding_send_welcome_email(client_id):
-    """Mirror of ops_onboarding_send_welcome_email for AMC pathway."""
+    """Mirror of ops_onboarding_send_welcome_email for AMC pathway.
+    Routes through the Item E-2 stage-email helper so recipient
+    toggles + enabled flag are honoured."""
     conn = get_db()
     client = conn.execute(
         "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway,'plab')='australia'",
@@ -15632,43 +15634,36 @@ def ops_au_onboarding_send_welcome_email(client_id):
         flash('Client has no email address.', 'error')
         return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
-    email_tpl = conn.execute(
-        "SELECT * FROM email_templates WHERE template_key = 'welcome_email'"
-    ).fetchone()
-    if not email_tpl:
-        conn.close()
+
+    context = _stage_email_context_from_client(dict(client))
+    context['product_name'] = 'GooCampus AMC Pathway'
+    result = _send_stage_email(conn, 'welcome_email', client_id, context)
+
+    if result['status'] == 'sent':
+        conn.execute(
+            """UPDATE client_onboarding SET
+                 welcome_email_sent = 1,
+                 welcome_email_sent_at = CURRENT_TIMESTAMP,
+                 welcome_email_sent_by = ?,
+                 onboarding_status = CASE
+                   WHEN onboarding_status = 'Pending' THEN 'Email Sent'
+                   ELSE onboarding_status END,
+                 updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (session.get('user_id'), onb['id']),
+        )
+        conn.commit()
+        flash(f'Welcome email sent to {", ".join(result["recipients"])}', 'success')
+    elif result['status'] == 'disabled':
+        flash('Welcome email template is disabled. Enable it in Email Templates to send.', 'error')
+    elif result['status'] == 'no_template':
         flash('Welcome email template not found.', 'error')
-        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
-    client_name = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
-    reg_display = format_reg_filter(client['registration_number'])
-    subject = email_tpl['subject'].replace('{{client_name}}', client_name)
-    body = email_tpl['body_html'].replace('{{client_name}}', client_name)
-    body = body.replace('{{registration_number}}', reg_display)
-    body = body.replace('{{plan_type}}', client['plan_type'] or 'N/A')
-    body = body.replace('{{registration_date}}', client['registration_date'] or '')
-    try:
-        from email_utils import send_email
-        success = send_email([client['email']], subject, body)
-        if success:
-            conn.execute(
-                """UPDATE client_onboarding SET
-                     welcome_email_sent = 1,
-                     welcome_email_sent_at = CURRENT_TIMESTAMP,
-                     welcome_email_sent_by = ?,
-                     onboarding_status = CASE
-                       WHEN onboarding_status = 'Pending' THEN 'Email Sent'
-                       ELSE onboarding_status END,
-                     updated_at = CURRENT_TIMESTAMP
-                   WHERE id = ?""",
-                (session.get('user_id'), onb['id']),
-            )
-            conn.commit()
-            flash(f'Welcome email sent to {client["email"]}', 'success')
-        else:
-            flash('Failed to send email. Check Resend API key.', 'error')
-    except Exception as e:
-        logging.error(f"ops_au_onboarding_send_welcome_email: {e}")
-        flash(f'Error sending email: {e}', 'error')
+    elif result['status'] == 'no_recipients':
+        flash('No recipients selected on the welcome email template (and at least one stakeholder must have a valid email).', 'error')
+    elif result['status'] == 'send_failed':
+        flash('Failed to send email. Check Resend API key.', 'error')
+    else:
+        flash(f'Error sending email: {result.get("error","unknown")}', 'error')
     conn.close()
     return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
 
@@ -15837,10 +15832,151 @@ def seed_amc_onboarding_from_xlsx_once():
         except Exception: pass
 
 
+# ── Item E-2: stage-email send helper ─────────────────────────────────
+# Single entry-point for sending any onboarding-stage email. Honours
+# the enabled flag and the per-stakeholder recipient toggles set in
+# /admin/email-templates. Returns a dict describing the outcome --
+# never raises -- so callers can light-touch fire it from milestone
+# handlers without try/except wrapping.
+#
+# A template's `recipients_*` toggles are layered on top of "does the
+# email address actually exist?" so missing addresses are silently
+# skipped (e.g. no parents_email -> parents row not added).
+
+OPS_EMAIL_RECIPIENT = 'ops@goocampus.in'
+
+
+def _resolve_stage_email_recipients(conn, template_key, plab_client_id):
+    """Resolve recipient address list for a stage email.
+
+    Returns (recipients_list, template_dict). Either can be empty/None:
+      - template_dict is None when the template_key doesn't exist
+      - recipients_list is [] when the template is disabled or every
+        toggled-on stakeholder is missing an email address
+    """
+    tpl_row = conn.execute(
+        "SELECT * FROM email_templates WHERE template_key = ?",
+        (template_key,)
+    ).fetchone()
+    if not tpl_row:
+        return [], None
+    tpl = dict(tpl_row)
+    if not tpl.get('enabled'):
+        return [], tpl
+
+    client_row = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ?", (plab_client_id,)
+    ).fetchone()
+    if not client_row:
+        return [], tpl
+    client = dict(client_row)
+
+    recipients = []
+    if tpl.get('recipients_client') and client.get('email'):
+        recipients.append(client['email'])
+    if tpl.get('recipients_parents') and client.get('parents_email'):
+        recipients.append(client['parents_email'])
+    if tpl.get('recipients_counsellor'):
+        # Counsellor lives on client_registrations; resolve via
+        # registration_number (same join used in Item D's timeline).
+        try:
+            r = conn.execute(
+                """SELECT e.email AS email
+                     FROM client_registrations cr
+                     LEFT JOIN employees e ON e.id = cr.counsellor_id
+                    WHERE cr.registration_number = ?
+                    LIMIT 1""",
+                (client.get('registration_number'),)
+            ).fetchone()
+            if r and r['email']:
+                recipients.append(r['email'])
+        except Exception:
+            pass
+    if tpl.get('recipients_ops'):
+        recipients.append(OPS_EMAIL_RECIPIENT)
+
+    # De-dup while preserving order.
+    seen, dedup = set(), []
+    for r in recipients:
+        if r and r not in seen:
+            seen.add(r); dedup.append(r)
+    return dedup, tpl
+
+
+def _render_stage_email(tpl, context):
+    """Substitute {{var}} placeholders. Unknown vars come through as
+    empty string rather than failing the send."""
+    subject = tpl.get('subject') or ''
+    body = tpl.get('body_html') or ''
+    for k, v in (context or {}).items():
+        token = '{{' + k + '}}'
+        rendered = '' if v is None else str(v)
+        subject = subject.replace(token, rendered)
+        body = body.replace(token, rendered)
+    return subject, body
+
+
+def _send_stage_email(conn, template_key, plab_client_id, context=None):
+    """Fire a stage email. Returns a status dict; never raises.
+
+    Result keys:
+      status:       'sent' / 'send_failed' / 'disabled'
+                    / 'no_template' / 'no_recipients' / 'error'
+      recipients:   list of email addresses actually sent to
+      error:        only present when status='error'
+    """
+    try:
+        recipients, tpl = _resolve_stage_email_recipients(
+            conn, template_key, plab_client_id)
+        if tpl is None:
+            return {'status': 'no_template', 'recipients': []}
+        if not tpl.get('enabled'):
+            return {'status': 'disabled', 'recipients': []}
+        if not recipients:
+            return {'status': 'no_recipients', 'recipients': []}
+        subject, body = _render_stage_email(tpl, context or {})
+        from email_utils import send_email
+        ok = send_email(recipients, subject, body)
+        return {
+            'status': 'sent' if ok else 'send_failed',
+            'recipients': recipients,
+        }
+    except Exception as e:
+        logging.error(
+            f"_send_stage_email(template={template_key}, "
+            f"client={plab_client_id}): {e}")
+        return {'status': 'error', 'error': str(e), 'recipients': []}
+
+
+def _stage_email_context_from_client(client):
+    """Build the standard variable bag for a stage email from a
+    plab_clients row dict. Stage-specific handlers can extend by
+    merging additional keys on top."""
+    name = (
+        f"{client.get('prefix') or ''} "
+        f"{client.get('first_name') or ''} "
+        f"{client.get('last_name') or ''}"
+    ).strip()
+    return {
+        'client_name':         name or (client.get('email') or 'there'),
+        'registration_number': format_reg_filter(client.get('registration_number') or ''),
+        'plan_type':           client.get('plan_type') or 'N/A',
+        'registration_date':   client.get('registration_date') or '',
+        'product_name':        'GooCampus',
+        'counsellor_name':     '',
+        'counsellor_email':    '',
+        'welcome_call_date':   client.get('welcome_call_date') or '',
+        'kit_dispatched_date': '',
+        'kit_tracking_number': '',
+        'kit_delivery_method': '',
+    }
+
+
 @app.route('/operations/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
 @admin_required
 def ops_onboarding_send_welcome_email(client_id):
-    """Send welcome email to a client."""
+    """Send welcome email to a client. Now routes through the stage-
+    email helper so recipient toggles + enabled flag are honoured."""
     conn = get_db()
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
     if not client:
@@ -15852,35 +15988,29 @@ def ops_onboarding_send_welcome_email(client_id):
         flash('Client has no email address.', 'error')
         return redirect(url_for('ops_onboarding_detail', client_id=client_id))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
-    email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
-    if not email_tpl:
-        conn.close()
+
+    context = _stage_email_context_from_client(dict(client))
+    result = _send_stage_email(conn, 'welcome_email', client_id, context)
+
+    if result['status'] == 'sent':
+        conn.execute("""UPDATE client_onboarding SET
+            welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
+            welcome_email_sent_by=?,
+            onboarding_status = CASE WHEN onboarding_status = 'Pending' THEN 'Email Sent' ELSE onboarding_status END,
+            updated_at=CURRENT_TIMESTAMP
+            WHERE id=?""", (session.get('user_id'), onb['id']))
+        conn.commit()
+        flash(f'Welcome email sent to {", ".join(result["recipients"])}', 'success')
+    elif result['status'] == 'disabled':
+        flash('Welcome email template is disabled. Enable it in Email Templates to send.', 'error')
+    elif result['status'] == 'no_template':
         flash('Welcome email template not found.', 'error')
-        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
-    client_name = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
-    reg_display = format_reg_filter(client['registration_number'])
-    subject = email_tpl['subject'].replace('{{client_name}}', client_name)
-    body = email_tpl['body_html'].replace('{{client_name}}', client_name)
-    body = body.replace('{{registration_number}}', reg_display)
-    body = body.replace('{{plan_type}}', client['plan_type'] or 'N/A')
-    body = body.replace('{{registration_date}}', client['registration_date'] or '')
-    try:
-        from email_utils import send_email
-        success = send_email([client['email']], subject, body)
-        if success:
-            conn.execute("""UPDATE client_onboarding SET
-                welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
-                welcome_email_sent_by=?,
-                onboarding_status = CASE WHEN onboarding_status = 'Pending' THEN 'Email Sent' ELSE onboarding_status END,
-                updated_at=CURRENT_TIMESTAMP
-                WHERE id=?""", (session.get('user_id'), onb['id']))
-            conn.commit()
-            flash(f'Welcome email sent to {client["email"]}', 'success')
-        else:
-            flash('Failed to send email. Check Resend API key.', 'error')
-    except Exception as e:
-        logging.error(f"ops_onboarding_send_welcome_email: {e}")
-        flash(f'Error sending email: {e}', 'error')
+    elif result['status'] == 'no_recipients':
+        flash('No recipients selected on the welcome email template (and at least one stakeholder must have a valid email).', 'error')
+    elif result['status'] == 'send_failed':
+        flash('Failed to send email. Check Resend API key.', 'error')
+    else:
+        flash(f'Error sending email: {result.get("error","unknown")}', 'error')
     conn.close()
     return redirect(url_for('ops_onboarding_detail', client_id=client_id))
 
