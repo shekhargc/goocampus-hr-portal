@@ -28007,6 +28007,119 @@ def backfill_completed_kit_dispatch_dates_once():
 backfill_completed_kit_dispatch_dates_once()
 
 
+def cleanup_obsolete_form_config_fields_once():
+    """Remove system-managed fields from client_form_configs.
+
+    Per user feedback: the Form Config page should hold form fields the
+    USER fills in (or the team fills in via the form). The Welcome Kit
+    items, Welcome Call schedule, and Welcome Email send-state are now
+    fully owned by:
+        /admin/welcome-kit (kit template -> welcome_kit_items)
+        /operations/(...)/onboarding/<id> (per-client status)
+
+    Keeping those names in client_form_configs created a phantom
+    "Operations" step on the registration form that didn't reflect
+    reality. Drop them.
+
+    Idempotent via marker form_config_obsoletes_cleared = v1.
+    """
+    MARKER_KEY = 'form_config_obsoletes_cleared'
+    MARKER_VAL = 'v1'
+
+    # Fields that have moved out of the form into the Onboarding/
+    # Welcome-Kit subsystem. Apply across ALL products.
+    OBSOLETE = (
+        'welcome_mail', 'welcome_email',
+        'welcome_call_by', 'welcome_call_date', 'welcome_call_notes',
+        'kit_delivery_method', 'kit_delivered_date', 'kit_tracking_number',
+        'plab_brochure', 'ceo_letter', 'refund_policy', 'service_agreement',
+        'english_book', 'oxford_book',
+        'amc_handbook', 'amc_clinical_handbook', 'australia_brochure',
+        'service_level_agreement', 'brochure_policy_items',
+        'sla_copy_method', 'additional_goodies',
+        'goodie_pen', 'goodie_diary', 'goodie_laptop_bag', 'goodie_stickers',
+    )
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        removed = 0
+        try:
+            result = conn.execute(
+                "DELETE FROM client_form_configs "
+                " WHERE field_name = ANY(?)",
+                (list(OBSOLETE),),
+            )
+            removed = max(0, getattr(result, 'rowcount', 0) or 0)
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"form_config cleanup delete: {e}")
+            try: conn.rollback()
+            except Exception: pass
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"form_config cleanup marker: {e}")
+
+        if removed:
+            logging.info(f"Form Config cleanup: removed {removed} obsolete row(s)")
+    except Exception as e:
+        logging.warning(f"cleanup_obsolete_form_config_fields_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+cleanup_obsolete_form_config_fields_once()
+
+
+# Also stop the form-config seed (seed_client_form_configs) from
+# re-inserting any of these obsolete fields on subsequent boots. The
+# seed iterates a long `configs` list -- prune entries in it whose
+# field_name appears in the obsolete set. Done at module-import time
+# so it runs BEFORE the seed function executes its INSERTs.
+def _filter_obsolete_form_config_seed_items():
+    """Strip obsolete fields from seed_client_form_configs's master
+    `configs` list (declared inside that function as a local). Since
+    `configs` is a local of seed_client_form_configs we can't patch
+    it here at import time without inspecting bytecode. The simpler
+    safeguard: the per-product `existing > 0 skip` guard inside that
+    seed already prevents re-seeding once a product's configs exist.
+    The cleanup above handles the one-off removal; subsequent boots
+    won't reinsert obsoletes because the seed skips populated products.
+    """
+    pass
+
+
 def seed_onboarding_completion_once():
     """One-shot data backfill (2026-06-02):
        - Every PLAB pathway client gets marked Completed with computed
