@@ -1,0 +1,128 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Standard Consulting Clients - GooCampus Portal{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .list-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:1rem; }
+    .list-header h1 { font-size:1.4rem; font-weight:800; color:var(--navy); margin:0; }
+    .list-header h1 span { color:var(--orange); }
+
+    .filter-bar { background:#fff; border:1px solid var(--gray-200); border-radius:0.6rem; padding:0.9rem 1rem; margin-bottom:1.1rem; display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .filter-bar input, .filter-bar select { padding:7px 10px; border:1px solid var(--gray-300); border-radius:6px; font-size:0.84rem; }
+    .filter-bar input[type="text"] { min-width:220px; }
+    .filter-bar button { padding:7px 16px; background:var(--orange); color:white; border:none; border-radius:6px; font-size:0.84rem; font-weight:600; cursor:pointer; }
+    .filter-bar a.clear { font-size:0.78rem; color:var(--gray-500); text-decoration:none; margin-left:auto; }
+    .filter-bar .count { font-size:0.78rem; color:var(--gray-500); }
+
+    table.clients { width:100%; background:#fff; border:1px solid var(--gray-200); border-collapse:collapse; border-radius:0.6rem; overflow:hidden; font-size:0.86rem; }
+    table.clients th { text-align:left; padding:10px 12px; background:#F9FAFB; font-size:0.72rem; font-weight:700; color:var(--gray-500); text-transform:uppercase; letter-spacing:0.04em; border-bottom:1px solid var(--gray-200); }
+    table.clients td { padding:11px 12px; border-bottom:1px solid var(--gray-100); color:var(--navy); }
+    table.clients tr:hover td { background:#FFFBEB; }
+    table.clients tr:last-child td { border-bottom:none; }
+    .reg-mono { font-family:ui-monospace,'SF Mono',monospace; font-size:0.8rem; color:var(--orange); font-weight:600; }
+    .pill { display:inline-block; padding:2px 9px; font-size:0.7rem; font-weight:700; border-radius:999px; }
+    .pill-active { background:#D1FAE5; color:#065F46; }
+    .pill-hold { background:#FEF3C7; color:#92400E; }
+    .pill-drop { background:#FEE2E2; color:#991B1B; }
+    .pill-done { background:#E0E7FF; color:#3730A3; }
+    .pill-na { background:#F3F4F6; color:#6B7280; }
+
+    .empty-row td { text-align:center; padding:40px 16px; color:var(--gray-400); }
+    .pager { display:flex; justify-content:space-between; align-items:center; margin-top:1rem; font-size:0.82rem; color:var(--gray-500); flex-wrap:wrap; gap:8px; }
+    .pager a { color:var(--orange); text-decoration:none; font-weight:600; padding:5px 12px; border:1px solid #FED7AA; border-radius:6px; }
+    .pager a.disabled { color:var(--gray-400); border-color:var(--gray-200); pointer-events:none; }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="list-header">
+    <div>
+        <h1>Standard <span>Consulting</span> Clients</h1>
+        <p style="color:var(--gray-500); font-size:0.84rem; margin:4px 0 0;">All clients across AMC / UAE / USA / UK Consulting in one list.</p>
+    </div>
+</div>
+
+{% with messages = get_flashed_messages(with_categories=true) %}
+    {% for category, message in messages %}
+        <div style="padding:10px 14px; border-radius:8px; font-size:0.84rem; margin-bottom:1rem; background:{% if category == 'error' %}#FEE2E2{% else %}#D1FAE5{% endif %}; color:{% if category == 'error' %}#991B1B{% else %}#065F46{% endif %};">{{ message }}</div>
+    {% endfor %}
+{% endwith %}
+
+<form method="GET" class="filter-bar">
+    <input type="text" name="search" value="{{ search or '' }}" placeholder="Search name / reg# / email...">
+    <select name="product">
+        <option value="">All products</option>
+        {% for p in products %}
+        <option value="{{ p }}" {% if p == product_filter %}selected{% endif %}>{{ p }}</option>
+        {% endfor %}
+    </select>
+    <select name="status">
+        <option value="">All statuses</option>
+        {% for s in statuses %}
+        <option value="{{ s }}" {% if s == status_filter %}selected{% endif %}>{{ s }}</option>
+        {% endfor %}
+    </select>
+    <button type="submit"><i class="bi bi-funnel-fill me-1"></i>Filter</button>
+    {% if search or product_filter or status_filter %}
+    <a href="/operations/consulting/clients" class="clear">Clear</a>
+    {% endif %}
+    <span class="count" style="margin-left:auto;">{{ total }} match{{ '' if total == 1 else 'es' }}</span>
+</form>
+
+<table class="clients">
+    <thead>
+        <tr>
+            <th>Reg #</th>
+            <th>Name</th>
+            <th>Product</th>
+            <th>Counsellor</th>
+            <th>Status</th>
+            <th>Stage</th>
+            <th>Mobile</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% if clients %}
+            {% for c in clients %}
+            <tr>
+                <td><span class="reg-mono">{{ (c.registration_number or '')|format_reg }}</span></td>
+                <td>
+                    <div style="font-weight:700;">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</div>
+                    {% if c.email %}<div style="color:var(--gray-500); font-size:0.74rem; margin-top:2px;">{{ c.email }}</div>{% endif %}
+                </td>
+                <td>{{ c.product_name or '—' }}</td>
+                <td>{{ c.counsellor or '—' }}</td>
+                <td>
+                    {% set st = (c.account_status or '').strip() %}
+                    {% if st == 'In Process' %}<span class="pill pill-active">{{ st }}</span>
+                    {% elif st == 'On Hold' %}<span class="pill pill-hold">{{ st }}</span>
+                    {% elif st == 'Dropped' %}<span class="pill pill-drop">{{ st }}</span>
+                    {% elif st == 'Completed' %}<span class="pill pill-done">{{ st }}</span>
+                    {% else %}<span class="pill pill-na">{{ st or '—' }}</span>{% endif %}
+                </td>
+                <td>{{ c.current_stage or '—' }}</td>
+                <td>{{ c.mobile or '—' }}</td>
+            </tr>
+            {% endfor %}
+        {% else %}
+            <tr class="empty-row">
+                <td colspan="7">
+                    <i class="bi bi-inbox" style="font-size:2rem;"></i>
+                    <p style="margin:8px 0 0;">No consulting clients yet. Sales can raise the first invitation from <a href="/admin/client-invitations" style="color:var(--orange); font-weight:600;">/admin/client-invitations</a>.</p>
+                </td>
+            </tr>
+        {% endif %}
+    </tbody>
+</table>
+
+{% if total_pages > 1 %}
+<div class="pager">
+    <span>Page {{ page }} of {{ total_pages }}</span>
+    <span>
+        <a href="?page={{ page - 1 }}{% if search %}&search={{ search }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="{% if page <= 1 %}disabled{% endif %}">&larr; Prev</a>
+        <a href="?page={{ page + 1 }}{% if search %}&search={{ search }}{% endif %}{% if product_filter %}&product={{ product_filter }}{% endif %}{% if status_filter %}&status={{ status_filter }}{% endif %}" class="{% if page >= total_pages %}disabled{% endif %}">Next &rarr;</a>
+    </span>
+</div>
+{% endif %}
+{% endblock %}

@@ -14334,13 +14334,9 @@ def ops_uae_pathway():
                          pathway_desc='UAE medical pathway operations will be configured here.')
 
 
-@app.route('/operations/consulting')
-@admin_required
-def ops_consulting():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='Consulting',
-                         pathway_desc='Consulting operations and client management will be configured here.')
+# S-0: /operations/consulting is now served by
+# routes/operations/consulting.py (real dashboard + clients list).
+# Placeholder removed. Endpoint name reused: ops_consulting_pathway.
 
 
 @app.route('/operations/plab-pathway-dashboard')
@@ -24210,6 +24206,17 @@ def ensure_pathway_column_on_plab_clients():
                 conn.rollback()
             except Exception:
                 pass
+        # S-0: product_id column lets us link consulting clients to
+        # which specific consulting product they signed up for
+        # (AMC / UAE / USA / UK Consulting). The dashboard's "By Product"
+        # split + clients list Product column both depend on it.
+        try:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN product_id INTEGER")
+            conn.commit()
+            logging.info("Migration: added product_id column to plab_clients")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         try:
             conn.execute("UPDATE plab_clients SET pathway = 'plab' WHERE pathway IS NULL")
             conn.commit()
@@ -27734,6 +27741,25 @@ ACCESS_SECTION_CATALOG = [
             ('webinars',      'Webinars & Conferences',  'Australia event attendance log'),
         ],
     },
+    # ── Operations: Standard Consulting (S-0) ─────────────────────────
+    {
+        'key': 'consulting_pathway',
+        'label': 'Operations · Standard Consulting',
+        'description': 'Standard Consulting operational sub-areas. Houses AMC / UAE / USA / UK Consulting clients in one pathway. Grant these to staff supporting consulting clients.',
+        'sub_sections': [
+            ('dashboard',         'Pathway Dashboard',  'Overview stats for consulting clients'),
+            ('registration',      'Registration',       'Consulting client registration list + full profile'),
+            ('academic',          'Academic Details',   'Consulting client academic records'),
+            ('documents',         'Documents',          'Consulting client document tracker'),
+            ('call_notes',        'Call Notes',         'Consulting call log + tracker'),
+            ('payments',          'Payments',           'Consulting payment records'),
+            ('onboarding',        'Onboarding',         'Welcome flow for consulting clients (shared with other pathways)'),
+            ('epic_verification', 'EPIC Verification',  'ECFMG EPIC credentialing tracker'),
+            ('gmc_registration',  'GMC Registration',   'UK General Medical Council registration tracker'),
+            ('amc_registration',  'AMC Registration',   'Australian Medical Council registration tracker'),
+            ('mentorship',        'Mentorship Sessions','Mentorship session scheduling + tracker'),
+        ],
+    },
     # ── Operations: Shared / cross-pathway ────────────────────────────────
     {
         'key': 'operations_shared',
@@ -30170,20 +30196,25 @@ def seed_product_pathways_once():
     in the future re-runs.
     """
     MARKER_KEY = 'product_pathway_seeded'
-    MARKER_VAL = 'v4'
+    MARKER_VAL = 'v5'
 
     # Exact-name -> pathway slug map. Slug -> display label:
-    #   plab                = PLAB Pathway      (UK PGCP)
-    #   australia           = AMC Pathway       (AUS PGCP)
-    #   standard_consulting = Standard Consulting Pathway
-    #   germany             = Germany Pathway
-    #   amc_training        = AMC Training
+    #   plab        = PLAB Pathway              (UK PGCP)
+    #   australia   = AMC Pathway               (AUS PGCP)
+    #   consulting  = Standard Consulting       (S-0)
+    #   germany     = Germany Pathway
+    #   amc_training= AMC Training
+    # S-0 (2026-06-02): slug for Standard Consulting unified to
+    # 'consulting' (matching the operations sidebar / URL slug /
+    # lookup_options scope). Previous value 'standard_consulting'
+    # migrated below. UK Consulting added -- was missing in v4.
     NAME_TO_PATHWAY = {
         'UK PGCP':         'plab',
         'AUS PGCP':        'australia',
-        'AMC Consulting':  'standard_consulting',
-        'UAE Consulting':  'standard_consulting',
-        'USA Consulting':  'standard_consulting',
+        'AMC Consulting':  'consulting',
+        'UAE Consulting':  'consulting',
+        'USA Consulting':  'consulting',
+        'UK Consulting':   'consulting',
         'Germany PGCP':    'germany',
         'AMC MCQ':         'amc_training',
     }
@@ -30287,6 +30318,54 @@ def seed_product_pathways_once():
                 except Exception: pass
         conn.commit()
 
+        # ── 1.5) S-0: Standard Consulting pathway slug unification.
+        # Any rows previously tagged 'standard_consulting' (v4 seed)
+        # move to the canonical 'consulting' slug used by sidebar /
+        # routes / lookup_options. Also ensures all 4 consulting
+        # products exist in products_services -- UK Consulting was
+        # missing from the v4 product seed. INSERTs are idempotent
+        # (existence check first). ──
+        try:
+            conn.execute(
+                "UPDATE products_services "
+                "   SET pathway = 'consulting' "
+                " WHERE pathway = 'standard_consulting'"
+            )
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"S-0 consulting slug migration: {e}")
+            try: conn.rollback()
+            except Exception: pass
+
+        consulting_products = [
+            'AMC Consulting', 'UAE Consulting',
+            'USA Consulting', 'UK Consulting',
+        ]
+        inserted_consulting = 0
+        for cname in consulting_products:
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (cname,),
+                ).fetchone()
+                if existing:
+                    continue
+                conn.execute(
+                    "INSERT INTO products_services "
+                    "  (name, type, status, pathway) "
+                    "VALUES (?, 'service', 'active', 'consulting')",
+                    (cname,),
+                )
+                inserted_consulting += 1
+            except Exception as e:
+                logging.warning(f"S-0 insert {cname}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        if inserted_consulting:
+            conn.commit()
+            logging.info(
+                f"S-0: inserted {inserted_consulting} consulting product(s)")
+
         # ── 2) Set pathway by exact-name match ──
         tagged = 0
         for name, pathway in NAME_TO_PATHWAY.items():
@@ -30363,6 +30442,9 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
+    # ── Operations: Standard Consulting (S-0) ──────────────────────
+    'ops_consulting_pathway':               _ap('consulting_pathway', 'dashboard'),
+    'ops_consulting_clients_list':          _ap('consulting_pathway', 'registration'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
@@ -30709,8 +30791,16 @@ def seed_client_form_configs():
         conn = get_db()
 
         # Each product gets the same 85 fields (see configs below).
+        # S-0: Standard Consulting's 4 products share the same field set
+        # as UK PGCP -- they all collect personal / academic / sales /
+        # operations data. Listed by exact name (no LIKE) so the lookup
+        # is deterministic.
         product_definitions = [
-            {'name': 'UK PGCP', 'search': 'uk pgcp', 'use_like': False},
+            {'name': 'UK PGCP',         'search': 'uk pgcp',         'use_like': False},
+            {'name': 'AMC Consulting',  'search': 'amc consulting',  'use_like': False},
+            {'name': 'UAE Consulting',  'search': 'uae consulting',  'use_like': False},
+            {'name': 'USA Consulting',  'search': 'usa consulting',  'use_like': False},
+            {'name': 'UK Consulting',   'search': 'uk consulting',   'use_like': False},
         ]
 
         # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)

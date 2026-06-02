@@ -44,6 +44,12 @@ def register_operations_modules(app):
     from . import australia
     australia.register_routes(app)
 
+    # Standard Consulting — S-0 foundation (/operations/consulting dashboard
+    # + /operations/consulting/clients list). Houses the four consulting
+    # products (AMC / UAE / USA / UK Consulting).
+    from . import consulting
+    consulting.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.
