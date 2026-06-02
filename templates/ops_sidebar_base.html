@@ -383,6 +383,13 @@
             </a>
             {% endif %}
 
+            <!-- Onboarding (welcome-kit driven, shared with Clients tab) -->
+            <div class="ops-nav-group-label">Onboarding</div>
+            <a href="/operations/welcome-kit-onboarding?pathway=australia" class="ops-nav-item {% if active_ops_page == 'australia-welcome-kit' %}active{% endif %}" data-tooltip="Welcome Kit Onboarding">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 010-4h12v4"/><path d="M4 6v14a2 2 0 002 2h14v-4"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
+                <span class="ops-nav-text">Welcome Kit</span>
+            </a>
+
             <!-- Training & Exams -->
             <div class="ops-nav-group-label">Training &amp; Exams</div>
             {% if can_access('australia_pathway','training','view') %}
@@ -498,6 +505,13 @@
                 <span class="ops-nav-text">Documents</span>
             </a>
             {% endif %}
+
+            <!-- Welcome Kit Onboarding (welcome-kit driven, shared with Clients tab) -->
+            <a href="/operations/welcome-kit-onboarding?pathway=plab" class="ops-nav-item {% if active_ops_page == 'welcome-kit' %}active{% endif %}" data-tooltip="Welcome Kit Onboarding">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 010-4h12v4"/><path d="M4 6v14a2 2 0 002 2h14v-4"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
+                <span class="ops-nav-text">Welcome Kit</span>
+            </a>
+
 
             <!-- Training & Exams -->
             <div class="ops-nav-group-label">Training & Exams</div>

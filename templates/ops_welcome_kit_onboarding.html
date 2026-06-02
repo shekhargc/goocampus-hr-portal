@@ -1,0 +1,105 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Welcome Kit Onboarding — {{ pathway_label }}{% endblock %}
+
+{% block ops_content %}
+<div style="max-width: 1200px; margin: 0 auto; padding: 1.5rem;">
+
+  <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.25rem; flex-wrap: wrap; gap: 1rem;">
+    <div>
+      <h1 style="font-size: 1.4rem; font-weight: 700; color: var(--navy); margin: 0 0 0.25rem;">Welcome Kit · Onboarding</h1>
+      <p style="margin: 0; color: var(--gray-500); font-size: 0.88rem;">
+        {{ pathway_label }} · {{ clients|length }} verified client{{ '' if clients|length == 1 else 's' }}.
+        Edits made here auto-sync with the client's detail page and vice versa.
+      </p>
+    </div>
+    <a href="/admin/welcome-kit?product_id={% if pathway == 'plab' %}16{% else %}4{% endif %}"
+       style="background:#fff;border:1px solid var(--gray-300);color:var(--navy);padding:0.55rem 1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.85rem;">
+      ⚙ Configure {{ pathway_label }} kit template
+    </a>
+  </div>
+
+  <!-- Summary tiles -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:0.85rem;margin-bottom:1.25rem;">
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem;">
+      <div style="font-size:0.7rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.04em;">Not started</div>
+      <div style="font-size:1.7rem;font-weight:700;color:#ef4444;margin-top:0.2rem;">{{ summary.not_started }}</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem;">
+      <div style="font-size:0.7rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.04em;">In progress</div>
+      <div style="font-size:1.7rem;font-weight:700;color:#f59e0b;margin-top:0.2rem;">{{ summary.in_progress }}</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem;">
+      <div style="font-size:0.7rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.04em;">Complete</div>
+      <div style="font-size:1.7rem;font-weight:700;color:#22c55e;margin-top:0.2rem;">{{ summary.complete }}</div>
+    </div>
+    {% if summary.no_template %}
+    <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.7rem;padding:1rem;">
+      <div style="font-size:0.7rem;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.04em;">No template</div>
+      <div style="font-size:1.7rem;font-weight:700;color:var(--gray-500);margin-top:0.2rem;">{{ summary.no_template }}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- Client list -->
+  {% if clients %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.85rem;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.88rem;">
+      <thead>
+        <tr style="background:var(--gray-50);border-bottom:1px solid var(--gray-200);">
+          <th style="text-align:left;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Client</th>
+          <th style="text-align:left;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Product</th>
+          <th style="text-align:left;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Verified</th>
+          <th style="text-align:left;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Progress</th>
+          <th style="text-align:center;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Status</th>
+          <th style="text-align:right;padding:0.65rem 1rem;font-size:0.7rem;text-transform:uppercase;letter-spacing:0.04em;color:var(--gray-500);">Action</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for c in clients %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:0.65rem 1rem;">
+            <div style="font-weight:600;color:var(--navy);">{{ c.display_name }}</div>
+            <div style="font-size:0.74rem;color:var(--gray-500);">{{ c.registration_number or '—' }}{% if c.mobile %} · {{ c.mobile }}{% endif %}</div>
+          </td>
+          <td style="padding:0.65rem 1rem;color:#374151;">{{ c.product_name or '—' }}</td>
+          <td style="padding:0.65rem 1rem;color:var(--gray-600);font-size:0.82rem;">
+            {% if c.ops_verified_at %}{{ c.ops_verified_at|format_date }}{% else %}—{% endif %}
+          </td>
+          <td style="padding:0.65rem 1rem;min-width:160px;">
+            <div style="background:#f3f4f6;border-radius:999px;height:6px;overflow:hidden;">
+              <div style="background:{% if c.progress_pct >= 100 %}#22c55e{% elif c.progress_pct > 0 %}#f59e0b{% else %}#9ca3af{% endif %};height:100%;width:{{ c.progress_pct }}%;transition:width 0.2s;"></div>
+            </div>
+            <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.25rem;">{{ c.kit_done }} / {{ c.kit_total }} done</div>
+          </td>
+          <td style="padding:0.65rem 1rem;text-align:center;">
+            {% if c.bucket == 'complete' %}<span style="background:#d1fae5;color:#065f46;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">Complete</span>
+            {% elif c.bucket == 'in_progress' %}<span style="background:#fef3c7;color:#92400e;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">In progress</span>
+            {% elif c.bucket == 'not_started' %}<span style="background:#fee2e2;color:#991b1b;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">Not started</span>
+            {% else %}<span style="background:#f3f4f6;color:#6b7280;padding:0.2rem 0.55rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">No template</span>
+            {% endif %}
+          </td>
+          <td style="padding:0.65rem 1rem;text-align:right;">
+            <a href="/admin/clients/{{ c.id }}#tab-welcome-kit"
+               style="background:var(--orange);color:#fff;padding:0.4rem 0.9rem;border-radius:0.4rem;text-decoration:none;font-size:0.78rem;font-weight:600;">
+              Open checklist →
+            </a>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% else %}
+  <div style="background:#fff;border:1px solid var(--gray-200);border-radius:0.85rem;padding:3rem 1.5rem;text-align:center;color:var(--gray-500);">
+    <div style="font-size:2.4rem;margin-bottom:0.6rem;">📦</div>
+    <p style="margin:0;font-size:1rem;color:var(--navy);font-weight:600;">No verified {{ pathway_label }} clients yet</p>
+    <p style="margin:0.5rem 0 0;font-size:0.85rem;">
+      Once Operations verifies a client whose product is on {{ pathway_label }},
+      the welcome-kit checklist auto-populates and the client appears here.
+    </p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

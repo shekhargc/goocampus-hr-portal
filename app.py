@@ -1387,7 +1387,10 @@ def client_form_config_page():
 
     # Phase D (2026-06-02): group fields by step so the template can render
     # collapsible step-cards instead of one long flat table. Each group is
-    # {step_number, step_name, items[], role_counts{}}.
+    # {step_number, step_name, fields[], role_counts{}}.
+    # NOTE: the list key is 'fields' (not 'items') because Jinja's dot-access
+    # resolves `sg.items` to the dict.items() method before falling through
+    # to the key lookup -- naming it 'items' silently breaks the template.
     step_groups = []
     by_step = {}
     for c in configs:
@@ -1396,10 +1399,10 @@ def client_form_config_page():
             by_step[sn] = {
                 'step_number': sn,
                 'step_name': c['step_name'] or f'Step {sn}',
-                'items': [],
+                'fields': [],
                 'role_counts': {'client': 0, 'sales': 0, 'ops': 0},
             }
-        by_step[sn]['items'].append(c)
+        by_step[sn]['fields'].append(c)
         r = (c['role'] or 'client').lower()
         if r in by_step[sn]['role_counts']:
             by_step[sn]['role_counts'][r] += 1
@@ -14655,6 +14658,74 @@ def _ensure_client_onboarding(conn, client_id, reg_num):
     return onb
 
 
+# ── Unified Welcome-Kit-driven Onboarding (Phase E continuation) ────
+# A single list view per pathway. Backed entirely by client_welcome_kit
+# so any tick/untick auto-syncs with the Welcome Kit tab on the client
+# detail page (admin/clients/<reg_id>). PLAB sidebar's existing
+# "Onboarding" link continues to point at the legacy plab_clients page
+# below; the new "Welcome Kit" link in the sidebar points here.
+
+@app.route('/operations/welcome-kit-onboarding')
+@admin_required
+def ops_welcome_kit_onboarding():
+    pathway = request.args.get('pathway', 'plab')
+    if pathway not in ('plab', 'australia'):
+        pathway = 'plab'
+    pathway_label = {'plab': 'PLAB Pathway', 'australia': 'AMC Pathway'}[pathway]
+    conn = get_db()
+    # Only verified v2 clients on this pathway. Verified = ops has
+    # confirmed onboarding, which is exactly when the welcome kit gets
+    # seeded.
+    rows = conn.execute(
+        '''SELECT cr.id, cr.registration_number, cr.first_name, cr.last_name,
+                  cr.mobile, cr.email, cr.ops_verified_at,
+                  ps.name AS product_name,
+                  (SELECT COUNT(*) FROM client_welcome_kit cwk
+                    WHERE cwk.registration_id = cr.id) AS kit_total,
+                  (SELECT COUNT(*) FROM client_welcome_kit cwk
+                    WHERE cwk.registration_id = cr.id
+                      AND cwk.status = 'done') AS kit_done
+             FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+            WHERE COALESCE(ps.pathway, '') = ?
+              AND cr.ops_status = 'verified'
+         ORDER BY cr.ops_verified_at DESC NULLS LAST, cr.id DESC''',
+        (pathway,),
+    ).fetchall()
+    # Bucket clients by progress for a kanban-style summary at the top.
+    summary = {'not_started': 0, 'in_progress': 0, 'complete': 0, 'no_template': 0}
+    enriched = []
+    for r in rows:
+        d = dict(r)
+        d['kit_total'] = d.get('kit_total') or 0
+        d['kit_done'] = d.get('kit_done') or 0
+        if d['kit_total'] == 0:
+            d['bucket'] = 'no_template'
+        elif d['kit_done'] == 0:
+            d['bucket'] = 'not_started'
+        elif d['kit_done'] >= d['kit_total']:
+            d['bucket'] = 'complete'
+        else:
+            d['bucket'] = 'in_progress'
+        summary[d['bucket']] += 1
+        d['progress_pct'] = (d['kit_done'] * 100 // d['kit_total']) if d['kit_total'] else 0
+        d['display_name'] = (
+            f"{d['first_name'] or ''} {d['last_name'] or ''}".strip()
+            or d['registration_number'] or '—'
+        )
+        enriched.append(d)
+    conn.close()
+    return render_template(
+        'ops_welcome_kit_onboarding.html',
+        clients=enriched, summary=summary,
+        pathway=pathway, pathway_label=pathway_label,
+        active_pathway=pathway,
+        active_ops_page=('australia-welcome-kit' if pathway == 'australia'
+                         else 'welcome-kit'),
+        active_section='operations',
+    )
+
+
 @app.route('/operations/onboarding')
 @admin_required
 def ops_onboarding_list():
@@ -26738,6 +26809,120 @@ def ensure_welcome_kit_tables():
 
 
 ensure_welcome_kit_tables()
+
+
+def seed_default_welcome_kit_items_once():
+    """Seed a baseline welcome-kit template for the canonical PLAB and AMC
+    products so /admin/welcome-kit isn't blank when admin opens it.
+
+    Idempotent via marker welcome_kit_seeded = v1. Per-product items are
+    added ONLY if the product currently has zero welcome_kit_items, so
+    admin edits / additions are never overwritten.
+    """
+    MARKER_KEY = 'welcome_kit_seeded'
+    MARKER_VAL = 'v1'
+
+    DEFAULT_ITEMS = [
+        ('Send welcome email with portal credentials', 'communication', 10),
+        ('Send welcome WhatsApp message',              'communication', 20),
+        ('Add client to cohort WhatsApp group',         'communication', 30),
+        ('Schedule onboarding call',                   'meeting',       40),
+        ('Onboarding call completed',                  'meeting',       50),
+        ('Send goodie kit (pen, diary, stickers, bag)','goodie',        60),
+        ('Confirm goodie kit delivery',                'goodie',        70),
+        ('30-day check-in call',                       'meeting',       80),
+    ]
+    PATHWAY_TO_PRODUCT = {
+        'plab':      'UK PGCP',
+        'australia': 'AUS PGCP',
+    }
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        seeded = 0
+        for pathway, product_name in PATHWAY_TO_PRODUCT.items():
+            try:
+                prow = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (product_name,),
+                ).fetchone()
+                if not prow:
+                    continue
+                pid = prow['id']
+                existing = conn.execute(
+                    "SELECT COUNT(*) AS c FROM welcome_kit_items WHERE product_id = ?",
+                    (pid,),
+                ).fetchone()
+                if existing and existing['c'] > 0:
+                    continue
+                for name, kind, order in DEFAULT_ITEMS:
+                    try:
+                        conn.execute(
+                            "INSERT INTO welcome_kit_items "
+                            "(product_id, item_name, item_type, sort_order, "
+                            " is_required, is_active) "
+                            "VALUES (?, ?, ?, ?, 1, 1)",
+                            (pid, name, kind, order),
+                        )
+                        seeded += 1
+                    except Exception as e:
+                        logging.warning(
+                            f"seed_default_welcome_kit: insert {name}: {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+            except Exception as e:
+                logging.warning(
+                    f"seed_default_welcome_kit: pathway {pathway}: {e}"
+                )
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_default_welcome_kit marker write: {e}")
+
+        if seeded:
+            logging.info(f"Default welcome-kit items seeded: {seeded} row(s)")
+    except Exception as e:
+        logging.warning(f"seed_default_welcome_kit_items_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_default_welcome_kit_items_once()
 
 
 # Phase 5 baseline must run AFTER the table is guaranteed to exist.
