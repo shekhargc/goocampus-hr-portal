@@ -359,7 +359,10 @@
                             {% if step.done %}✓{% endif %}
                         </div>
                         <div style="font-size:0.7rem;font-weight:600;line-height:1.2;color:{% if step.done or step.current %}#0F172A{% else %}#94A3B8{% endif %};">{{ step.label }}</div>
-                        {% if step.date %}
+                        {% if step.date and step.projected %}
+                        {# Item F: working-day projection -- shown with ~ to flag forecast vs recorded #}
+                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;" title="Projected from your Onboarded date (30 working days, weekends + holidays skipped)">~ {{ step.date }}</div>
+                        {% elif step.date %}
                         <div style="font-size:0.62rem;color:#64748B;margin-top:0.2rem;">{{ step.date }}</div>
                         {% elif step.current and not step.done %}
                         <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;">Up next</div>

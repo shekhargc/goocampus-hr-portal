@@ -1080,6 +1080,15 @@ def client_dashboard():
         WHERE cr.account_id = ?
         ORDER BY cr.created_at DESC
     ''', (acct_id,)).fetchall()
+    # Item F: load the admin-managed holidays once per dashboard load
+    # so the working-day projection for the 30-day Check-in step
+    # honours weekends + holidays. Cheap query, single fetch.
+    try:
+        from working_days import load_holidays_set
+        holidays_set = load_holidays_set(conn)
+    except Exception:
+        holidays_set = set()
+
     # Item D: pre-fetch onboarding milestones for every registration
     # number, joined via plab_clients (which holds the ops-side record
     # both PLAB and AMC flows write into). Keyed by registration_number
@@ -1129,12 +1138,14 @@ def client_dashboard():
         # don't render four empty rows for a single-installment plan.
         d['installments'] = [it for it in d['installments'] if it['amount'] or it['date']]
 
-        # Item D: build the 5-step client-facing onboarding timeline.
-        # onb is None for any client who hasn't been pushed into
-        # client_onboarding yet; helper handles that by returning all
-        # steps as 'upcoming'.
+        # Item D + F: build the 5-step client-facing onboarding
+        # timeline. holidays_set lets the helper project the 30-day
+        # Check-in date forward using working_days. onb is None for
+        # clients without a client_onboarding row yet; helper handles
+        # that by returning all steps as 'upcoming'.
         d['timeline'] = _build_client_timeline(
-            onboarding_by_reg.get(d.get('registration_number')))
+            onboarding_by_reg.get(d.get('registration_number')),
+            holidays_set=holidays_set)
         registrations.append(d)
 
     # Get doc requests for all registrations
@@ -14971,19 +14982,27 @@ def _compute_onboarding_status(onb, kit_items):
     return 'Call Done'
 
 
-def _build_client_timeline(onb):
-    """Item D: build the 5-step client-facing onboarding timeline.
+def _build_client_timeline(onb, holidays_set=None):
+    """Item D + F: build the 5-step client-facing onboarding timeline.
 
     Returns a list of dicts, one per milestone:
-        {key, label, done, current, date}
+        {key, label, done, current, date, projected}
     `done` is True once Ops has marked the milestone complete.
     `current` is True for the first not-yet-done step (so the UI can
     light it up as the next thing to expect).
     `date` is an ISO-style date string (YYYY-MM-DD) or '' when unset.
+    `projected` is True when the date shown is a forward projection
+    rather than an actual recorded milestone date (Item F applies
+    this to the 30-day Check-in step once Onboarded).
 
     `onb` may be None — when the client has no client_onboarding row
     yet (e.g. they just signed up and Ops hasn't created the record),
     all 5 steps come back as upcoming.
+
+    `holidays_set` (Item F): optional set of 'YYYY-MM-DD' strings
+    used to project the 30-day Check-in date forward using the
+    working_days helper (weekends + holidays skipped). Pass None to
+    skip projection -- the 30-day step then stays blank.
     """
     o = onb or {}
 
@@ -14997,6 +15016,24 @@ def _build_client_timeline(onb):
 
     kit_date = o.get('kit_delivered_date') or o.get('welcome_kit_sent_date')
     onboarded = (o.get('onboarding_status') or '').strip().lower() == 'completed'
+    onboarded_date_str = _d(o.get('onb_updated_at')) if onboarded else ''
+
+    # Item F: project the 30-day Check-in date if the client is
+    # already Onboarded. Uses 30 working days from the Onboarded
+    # date, skipping weekends + holidays + the 5pm cutoff. Silently
+    # falls back to blank on any error so the timeline never breaks.
+    checkin_date = ''
+    checkin_projected = False
+    if onboarded and onboarded_date_str and holidays_set is not None:
+        try:
+            from working_days import add_working_days
+            from datetime import datetime as _dt
+            base = _dt.strptime(onboarded_date_str, '%Y-%m-%d').date()
+            projected = add_working_days(base, 30, holidays_set)
+            checkin_date = projected.strftime('%Y-%m-%d')
+            checkin_projected = True
+        except Exception:
+            pass
 
     steps = [
         {
@@ -15004,18 +15041,21 @@ def _build_client_timeline(onb):
             'label': 'Welcome Email',
             'done':  bool(o.get('welcome_email_sent')),
             'date':  _d(o.get('welcome_email_sent_at')),
+            'projected': False,
         },
         {
             'key':   'call',
             'label': 'Welcome Call',
             'done':  bool(o.get('welcome_call_confirmed')),
             'date':  _d(o.get('welcome_call_date')),
+            'projected': False,
         },
         {
             'key':   'kit',
             'label': 'Welcome Kit',
             'done':  bool(kit_date),
             'date':  _d(kit_date),
+            'projected': False,
         },
         {
             'key':   'onboarded',
@@ -15023,15 +15063,18 @@ def _build_client_timeline(onb):
             'done':  onboarded,
             # Show the last-updated timestamp when Completed so the
             # client can see when it actually happened.
-            'date':  _d(o.get('onb_updated_at')) if onboarded else '',
+            'date':  onboarded_date_str,
+            'projected': False,
         },
         {
-            # No DB tracking yet — appears as upcoming until Item F
-            # (working-day scheduler) wires in the actual check-in date.
+            # Date is projected forward (Item F) once Onboarded. Stays
+            # blank until then. Actual email firing (Item F-2) reads
+            # the same projected date.
             'key':   'checkin',
             'label': '30-day Check-in',
             'done':  False,
-            'date':  '',
+            'date':  checkin_date,
+            'projected': checkin_projected,
         },
     ]
 
