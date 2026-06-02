@@ -180,35 +180,42 @@
         </div>
     </div>
 
-    <!-- Kit Items Checklist -->
+    <!-- Kit Items Checklist (driven by /admin/welcome-kit; same UX as AMC) -->
     <div style="margin-top:20px;">
-        <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 12px;">Kit Items Checklist</h4>
+        <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 6px;">Items in this Welcome Kit</h4>
+        <p style="font-size:0.74rem;color:var(--gray-500);margin:0 0 12px;">
+            Items are managed in <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;text-decoration:none;">Welcome Kit Settings</a>. Add or remove items there.
+        </p>
+        {% if kit_items %}
         <table class="kit-table">
             <thead>
                 <tr>
-                    <th style="width:40px;">Include</th>
+                    <th style="width:40px;">Included</th>
                     <th>Item</th>
-                    <th style="width:60px;">Delivered</th>
+                    <th style="width:130px;">Type</th>
+                    <th style="width:140px;">Sent Date</th>
                     <th>Notes</th>
                 </tr>
             </thead>
             <tbody>
-                {% for ki in kit_items %}
+                {% for k in kit_items %}
                 <tr>
                     <td style="text-align:center;">
-                        <input type="checkbox" name="kit_included_{{ ki.id }}" value="1" {% if ki.included %}checked{% endif %}>
+                        <input type="checkbox" name="kit_included_{{ k.id }}" value="1" {% if k.included %}checked{% endif %}>
                     </td>
-                    <td style="font-weight:600;">{{ ki.item_name }}</td>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="kit_delivered_{{ ki.id }}" value="1" {% if ki.delivered %}checked{% endif %}>
-                    </td>
-                    <td>
-                        <input type="text" name="kit_notes_{{ ki.id }}" value="{{ ki.notes or '' }}" placeholder="Optional notes">
-                    </td>
+                    <td style="font-weight:600;">{{ k.item_name }}</td>
+                    <td><span style="display:inline-block;background:#F3F4F6;color:#374151;padding:1px 7px;border-radius:4px;font-size:0.7rem;">{{ k.item_type }}</span></td>
+                    <td><input type="date" name="kit_sent_date_{{ k.id }}" value="{{ k.sent_date }}" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;"></td>
+                    <td><input type="text" name="kit_notes_{{ k.id }}" value="{{ k.notes }}" placeholder="Optional notes" style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:4px;font-size:0.78rem;width:100%;box-sizing:border-box;"></td>
                 </tr>
                 {% endfor %}
             </tbody>
         </table>
+        {% else %}
+        <div style="background:#F9FAFB;border:1px dashed #D1D5DB;border-radius:8px;padding:18px;text-align:center;color:var(--gray-500);font-size:0.85rem;">
+            No kit items defined for PLAB pathway yet. <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;">Configure items →</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 

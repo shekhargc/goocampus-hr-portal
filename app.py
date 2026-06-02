@@ -14856,7 +14856,10 @@ def ops_onboarding_list():
 @app.route('/operations/onboarding/<int:client_id>')
 @admin_required
 def ops_onboarding_detail(client_id):
-    """Client onboarding detail/edit page."""
+    """PLAB onboarding detail/edit -- now driven by welcome_kit_items
+    (per-product master template configured in /admin/welcome-kit)
+    + client_welcome_kit (per-client status). Same data model as the
+    AMC pathway page."""
     conn = get_db()
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
     if not client:
@@ -14864,9 +14867,37 @@ def ops_onboarding_detail(client_id):
         flash('Client not found.', 'error')
         return redirect(url_for('ops_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
-    kit_items = conn.execute(
-        "SELECT * FROM client_kit_items WHERE onboarding_id = ? ORDER BY id", (onb['id'],)
-    ).fetchall()
+
+    plab_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'plab' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    kit_items = []
+    if plab_prod:
+        templ = conn.execute(
+            "SELECT id, item_name, item_type, sort_order "
+            " FROM welcome_kit_items WHERE product_id = ? AND is_active = 1 "
+            " ORDER BY sort_order, id",
+            (plab_prod['id'],),
+        ).fetchall()
+        progress = {
+            r['kit_item_id']: r for r in conn.execute(
+                "SELECT kit_item_id, status, sent_date, completed_at, notes "
+                " FROM client_welcome_kit WHERE client_id = ?",
+                (client_id,),
+            ).fetchall()
+        }
+        for t in templ:
+            p = progress.get(t['id'])
+            kit_items.append({
+                'id': t['id'],
+                'item_name': t['item_name'],
+                'item_type': t['item_type'] or 'task',
+                'sort_order': t['sort_order'] or 0,
+                'included': bool(p and p['status'] == 'done'),
+                'sent_date': (p['sent_date'] if p else '') or '',
+                'notes': (p['notes'] if p else '') or '',
+            })
     email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
     conn.close()
     return render_template('ops_onboarding_detail.html',
@@ -14900,17 +14931,71 @@ def ops_onboarding_update(client_id):
          f.get('kit_tracking_number', ''),
          1 if f.get('kit_tracking_communicated') else 0,
          onb['id']))
-    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
-    for ki in kit_items:
-        included = 1 if f.get(f'kit_included_{ki["id"]}') else 0
-        delivered = 1 if f.get(f'kit_delivered_{ki["id"]}') else 0
-        notes = f.get(f'kit_notes_{ki["id"]}', '')
-        conn.execute("UPDATE client_kit_items SET included=?, delivered=?, notes=? WHERE id=?",
-                     (included, delivered, notes, ki['id']))
-    # Recompute status
-    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
+    user = get_user()
+    plab_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'plab' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    if plab_prod:
+        items = conn.execute(
+            "SELECT id, item_name, item_type FROM welcome_kit_items "
+            " WHERE product_id = ? AND is_active = 1",
+            (plab_prod['id'],),
+        ).fetchall()
+        for it in items:
+            included = bool(f.get(f"kit_included_{it['id']}"))
+            sent_date = (f.get(f"kit_sent_date_{it['id']}") or '').strip()
+            notes = (f.get(f"kit_notes_{it['id']}") or '').strip()
+            row = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, it['id']),
+            ).fetchone()
+            if included or sent_date:
+                if row:
+                    conn.execute(
+                        "UPDATE client_welcome_kit SET "
+                        " status = 'done', sent_date = ?, notes = ?, "
+                        " completed_by = ?, "
+                        " completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP) "
+                        " WHERE id = ?",
+                        (sent_date, notes, user['id'] if user else None, row['id']),
+                    )
+                else:
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_welcome_kit "
+                            "(client_id, kit_item_id, item_name, item_type, "
+                            " status, sent_date, notes, completed_by, completed_at) "
+                            "VALUES (?, ?, ?, ?, 'done', ?, ?, ?, CURRENT_TIMESTAMP)",
+                            (client_id, it['id'], it['item_name'], it['item_type'],
+                             sent_date, notes, user['id'] if user else None),
+                        )
+                    except Exception as e:
+                        logging.warning(f"plab onb update insert cwk: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            elif row:
+                conn.execute(
+                    "UPDATE client_welcome_kit SET "
+                    " status = 'pending', sent_date = NULL, "
+                    " completed_by = NULL, completed_at = NULL, notes = ? "
+                    " WHERE id = ?",
+                    (notes, row['id']),
+                )
+    # Recompute status using the new per-item store.
+    cwk = conn.execute(
+        "SELECT status FROM client_welcome_kit WHERE client_id = ?",
+        (client_id,),
+    ).fetchall()
     onb = conn.execute("SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)).fetchone()
-    new_status = _compute_onboarding_status(dict(onb), [dict(ki) for ki in kit_items])
+    # Legacy compute helper expected client_kit_items rows; emulate with
+    # delivered/included flags derived from the new table.
+    pseudo_items = [
+        {'included': 1, 'delivered': 1 if (r['status'] or '') == 'done' else 0}
+        for r in cwk
+    ]
+    new_status = _compute_onboarding_status(dict(onb), pseudo_items)
     conn.execute("UPDATE client_onboarding SET onboarding_status=? WHERE id=?", (new_status, onb['id']))
     conn.commit()
     conn.close()
@@ -27614,6 +27699,124 @@ def migrate_amc_onboarding_to_kit_items_once():
 
 
 migrate_amc_onboarding_to_kit_items_once()
+
+
+def migrate_plab_kit_items_to_welcome_kit_once():
+    """One-shot: copy the legacy client_kit_items rows (PLAB onboarding)
+    into the unified client_welcome_kit table so the PLAB Onboarding
+    page can switch over to the welcome_kit_items / client_welcome_kit
+    model that AMC already uses.
+
+    Mapping: each client_kit_items row (linked via client_onboarding ->
+    plab_clients) is matched by item_name to a welcome_kit_items row in
+    the UK PGCP product. delivered=1 -> status='done', sent_date set
+    to client_onboarding.kit_delivered_date if present. notes preserved.
+
+    Idempotent via marker plab_kit_items_migrated=v1.
+    """
+    MARKER_KEY = 'plab_kit_items_migrated'
+    MARKER_VAL = 'v1'
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        plab_prod = conn.execute(
+            "SELECT id FROM products_services WHERE pathway = 'plab' "
+            " ORDER BY id LIMIT 1"
+        ).fetchone()
+        if not plab_prod:
+            return
+        items = conn.execute(
+            "SELECT id, item_name FROM welcome_kit_items WHERE product_id = ?",
+            (plab_prod['id'],),
+        ).fetchall()
+        by_name = {(r['item_name'] or '').strip().lower(): r['id'] for r in items}
+
+        rows = conn.execute(
+            "SELECT cki.item_name, cki.included, cki.delivered, cki.notes, "
+            "       co.client_id, co.kit_delivered_date "
+            "  FROM client_kit_items cki "
+            "  JOIN client_onboarding co ON co.id = cki.onboarding_id "
+            "  JOIN plab_clients p       ON p.id  = co.client_id "
+            " WHERE COALESCE(p.pathway,'plab') = 'plab'"
+        ).fetchall()
+
+        migrated = 0
+        for r in rows:
+            key = (r['item_name'] or '').strip().lower()
+            kit_id = by_name.get(key)
+            if not kit_id:
+                continue
+            exists = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (r['client_id'], kit_id),
+            ).fetchone()
+            if exists:
+                continue
+            status = 'done' if (r['delivered'] or 0) else 'pending'
+            sent = (r['kit_delivered_date'] or '') if status == 'done' else ''
+            try:
+                conn.execute(
+                    "INSERT INTO client_welcome_kit "
+                    "(client_id, kit_item_id, item_name, item_type, status, "
+                    " sent_date, notes, completed_at) "
+                    "VALUES (?, ?, ?, 'kit_item', ?, ?, ?, "
+                    "        CASE WHEN ?<>'' THEN ?::timestamp ELSE NULL END)",
+                    (r['client_id'], kit_id, r['item_name'], status,
+                     sent or None, r['notes'] or None,
+                     sent or '', sent or None),
+                )
+                migrated += 1
+            except Exception as e:
+                logging.warning(f"plab kit-items migrate insert: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"plab kit-items migrate marker: {e}")
+
+        if migrated:
+            logging.info(f"PLAB kit-items migration: {migrated} row(s) seeded")
+    except Exception as e:
+        logging.warning(f"migrate_plab_kit_items_to_welcome_kit_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+migrate_plab_kit_items_to_welcome_kit_once()
 
 
 def seed_onboarding_completion_once():
