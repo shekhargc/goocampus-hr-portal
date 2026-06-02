@@ -157,7 +157,7 @@ def ops_australia_test_bookings_list():
         client_reg=reg,
         exams=exams,
         statuses=statuses,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-test-bookings',
         active_pathway='australia',
     )
@@ -189,7 +189,7 @@ def ops_australia_test_bookings_detail(rid):
         'ops_australia_test_bookings_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-test-bookings',
         active_pathway='australia',
     )
@@ -221,7 +221,7 @@ def ops_australia_test_bookings_edit_page(rid):
         'ops_australia_test_bookings_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-test-bookings',
         active_pathway='australia',
     )

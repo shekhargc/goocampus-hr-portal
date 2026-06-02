@@ -1,5 +1,5 @@
 """
-routes/operations/australia.py — Operations: Australia Pathway dashboard.
+routes/operations/australia.py — Operations: AMC Pathway dashboard.
 
 Surfaces Australia client stats from plab_clients WHERE pathway='australia'
 (the storage decision locked 2026-05-31). The 228 historical Australia
@@ -23,7 +23,7 @@ from db import get_db
 
 @admin_required
 def ops_australia_pathway():
-    """Australia Pathway dashboard — stats from plab_clients where pathway='australia'."""
+    """AMC Pathway dashboard — stats from plab_clients where pathway='australia'."""
     user = get_user()
     conn = get_db()
 
@@ -216,14 +216,14 @@ def ops_australia_pathway():
 
     except Exception as e:
         logging.error(f"ops_australia_pathway: {e}")
-        flash(f'Error loading Australia Pathway dashboard: {e}', 'error')
+        flash(f'Error loading AMC Pathway dashboard: {e}', 'error')
     finally:
         conn.close()
 
     return render_template(
         'ops_australia_pathway_dashboard.html',
         user=user,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         stats=stats,
         active_ops_page='australia',
         active_pathway='australia',
@@ -330,7 +330,7 @@ def ops_australia_clients_list():
         statuses=statuses,
         stages=stages,
         counsellors=counsellors,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-clients',
         active_pathway='australia',
     )
@@ -438,7 +438,7 @@ def ops_australia_client_detail(client_id):
         final_pkg=final_pkg,
         balance=balance,
         payment_pct=pct,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-clients',
         active_pathway='australia',
     )

@@ -1,5 +1,5 @@
 """
-routes/operations/au_webinars.py — Operations: Australia Pathway
+routes/operations/au_webinars.py — Operations: AMC Pathway
 Webinars & Conferences list + detail + edit.
 
 Surfaces rows from ops_webinars_conferences WHERE pathway='australia',
@@ -131,7 +131,7 @@ def ops_australia_webinars_list():
         event_types=event_types,
         participations=participations,
         event_values=event_values,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-webinars',
         active_pathway='australia',
     )
@@ -173,7 +173,7 @@ def ops_australia_webinars_detail(rid):
         'ops_australia_webinars_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-webinars',
         active_pathway='australia',
     )
@@ -209,7 +209,7 @@ def ops_australia_webinars_edit_page(rid):
         'ops_australia_webinars_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-webinars',
         active_pathway='australia',
     )

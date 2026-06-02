@@ -135,7 +135,7 @@ def ops_australia_academic_list():
         img_fmgs=img_fmgs,
         mbbs_statuses=mbbs_statuses,
         working_statuses=working_statuses,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-academic',
         active_pathway='australia',
     )
@@ -169,7 +169,7 @@ def ops_australia_academic_detail(rid):
         'ops_australia_academic_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-academic',
         active_pathway='australia',
     )
@@ -198,7 +198,7 @@ def ops_australia_academic_edit_page(rid):
         'ops_australia_academic_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-academic',
         active_pathway='australia',
     )

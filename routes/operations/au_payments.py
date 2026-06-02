@@ -1,5 +1,5 @@
 """
-routes/operations/au_payments.py — Australia Pathway: Payments list + detail + edit.
+routes/operations/au_payments.py — AMC Pathway: Payments list + detail + edit.
 
 Surfaces rows from ops_payments WHERE pathway='australia', joined to
 plab_clients on registration_number so each row shows the candidate's
@@ -123,7 +123,7 @@ def ops_australia_payments_list():
         client_reg=reg,
         instalments=instalments,
         methods=methods,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-payments',
         active_pathway='australia',
     )
@@ -156,7 +156,7 @@ def ops_australia_payments_detail(rid):
         'ops_australia_payments_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-payments',
         active_pathway='australia',
     )
@@ -189,7 +189,7 @@ def ops_australia_payments_edit_page(rid):
         'ops_australia_payments_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-payments',
         active_pathway='australia',
     )

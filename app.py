@@ -13678,7 +13678,7 @@ def ops_field_manager():
     # Pathway selector. Only show known pathways in the picker.
     PATHWAY_TABS = [
         {'slug': 'plab',       'label': 'UK / PLAB Pathway', 'flag': '\U0001f1ec\U0001f1e7'},
-        {'slug': 'australia',  'label': 'Australia Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
+        {'slug': 'australia',  'label': 'AMC Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
         {'slug': 'uae',        'label': 'UAE Pathway',       'flag': '\U0001f1e6\U0001f1ea'},
         {'slug': 'consulting', 'label': 'Standard Consulting','flag': '\U0001f9ed'},
     ]
@@ -13937,7 +13937,7 @@ def ops_field_manager_reorder():
 #  VENDORS & PROVIDERS — Centralised Vendor Database
 # ─────────────────────────────────────────────────────────
 
-VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
+VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
@@ -14185,7 +14185,7 @@ def ops_vendors_providers():
     pathway = (request.args.get('pathway') or '').strip().lower()
     PATHWAY_TO_COUNTRY = {
         'plab':       'UK Pathway',
-        'australia':  'Australia Pathway',
+        'australia':  'AMC Pathway',
         'usmle':      'USMLE Pathway',
         'germany':    'Germany Pathway',
     }
@@ -25843,10 +25843,10 @@ ACCESS_SECTION_CATALOG = [
             ('mentorship',        'Mentorship',              'Mentorship sessions for PLAB clients'),
         ],
     },
-    # ── Operations: Australia Pathway ─────────────────────────────────────
+    # ── Operations: AMC Pathway ─────────────────────────────────────
     {
         'key': 'australia_pathway',
-        'label': 'Operations · Australia Pathway',
+        'label': 'Operations · AMC Pathway',
         'description': 'Australia (AMC) Pathway operational sub-areas. Grant these to staff supporting Australia clients.',
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
@@ -26703,7 +26703,7 @@ def seed_product_pathways_once():
         # (pathway, list-of-substrings-to-match-in-name)
         rules = [
             ('plab',      ['UK PGCP', 'PLAB']),
-            ('australia', ['AUS PGCP', 'Australia Pathway', 'AMC']),
+            ('australia', ['AUS PGCP', 'AMC Pathway', 'AMC']),
         ]
         tagged = 0
         for pathway, needles in rules:
@@ -26791,7 +26791,7 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
-    # ── Operations: Australia Pathway ─────────────────────────────────────
+    # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
     'ops_australia_client_detail':          _ap('australia_pathway', 'registration'),

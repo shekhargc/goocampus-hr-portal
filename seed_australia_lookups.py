@@ -2,7 +2,7 @@
 seed_australia_lookups.py — auto-populate lookup_options for pathway='australia'.
 
 After Phase 2 imports landed 5,500+ records of historical Australia data into
-the ops_* tables, the user expected Settings -> Australia Pathway tab to
+the ops_* tables, the user expected Settings -> AMC Pathway tab to
 already show populated dropdowns. This script seeds those dropdowns from
 the actual imported data — every distinct value in the relevant column
 becomes a selectable option, scoped to pathway='australia'.

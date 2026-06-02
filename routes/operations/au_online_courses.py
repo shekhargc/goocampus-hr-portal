@@ -1,5 +1,5 @@
 """
-routes/operations/au_online_courses.py — Operations: Australia Pathway
+routes/operations/au_online_courses.py — Operations: AMC Pathway
 Online Courses & Subscriptions list view + detail + edit.
 
 Surfaces ops_online_subscriptions WHERE pathway='australia' — populated
@@ -142,7 +142,7 @@ def ops_australia_online_courses_list():
         courses=courses,
         activations=activations,
         booked_bys=booked_bys,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-online-courses',
         active_pathway='australia',
     )
@@ -182,7 +182,7 @@ def ops_australia_online_courses_detail(rid):
         'ops_australia_online_courses_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-online-courses',
         active_pathway='australia',
     )
@@ -221,7 +221,7 @@ def ops_australia_online_courses_edit_page(rid):
         editable_columns=AU_OC_EDITABLE_COLUMNS,
         date_columns=AU_OC_DATE_COLUMNS,
         numeric_columns=AU_OC_NUMERIC_COLUMNS,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-online-courses',
         active_pathway='australia',
     )

@@ -135,7 +135,7 @@ def ops_australia_research_list():
         statuses=statuses,
         providers=providers,
         batches=batches,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-research',
         active_pathway='australia',
     )
@@ -179,7 +179,7 @@ def ops_australia_research_detail(rid):
         'ops_australia_research_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-research',
         active_pathway='australia',
     )
@@ -216,7 +216,7 @@ def ops_australia_research_edit_page(rid):
         'ops_australia_research_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-research',
         active_pathway='australia',
     )

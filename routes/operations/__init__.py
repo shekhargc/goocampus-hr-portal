@@ -14,7 +14,7 @@ existing url_for('ops_*') call sites — using Blueprints would rename
 endpoints to 'operations_ngo.ops_ngo_list' and break every one of those
 calls. Plain add_url_rule preserves names with zero call-site changes.
 
-To add a new sub-area (e.g. Australia Pathway, which will mirror PLAB ~75%):
+To add a new sub-area (e.g. AMC Pathway, which will mirror PLAB ~75%):
 1. Create routes/operations/<name>.py
 2. Define route functions decorated with @login_required / @admin_required
 3. Define a register_routes(app) function that calls app.add_url_rule(...)
@@ -38,7 +38,7 @@ def register_operations_modules(app):
     from . import ngo
     ngo.register_routes(app)
 
-    # Australia Pathway — v2 client management dashboard (/operations/australia-pathway)
+    # AMC Pathway — v2 client management dashboard (/operations/australia-pathway)
     # and the Australia client list (/operations/australia/clients) live in australia.py.
     # Test bookings now lives in its own au_test_bookings module (drawer/detail/edit).
     from . import australia

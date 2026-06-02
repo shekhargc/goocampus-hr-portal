@@ -187,7 +187,7 @@ def ops_australia_call_notes_list():
         stage_counts={},
         stage_intervals=AU_STAGE_FOLLOWUP_DAYS,
         # Shared
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_tab='notes',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
@@ -315,7 +315,7 @@ def ops_australia_call_notes_tracker():
         records=[], added_by_options=[], has_filters=False,
         reg='', client_name='', added_by_filter='', note_search='',
         page=1, per_page=50, total_count=0, total_pages=0,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_tab='tracker',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
@@ -447,7 +447,7 @@ def ops_australia_call_notes_not_contacted():
         records=[], added_by_options=[], has_filters=False,
         reg='', client_name='', added_by_filter='', note_search='',
         page=1, per_page=50, total_count=0, total_pages=0,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_tab='not_contacted',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
@@ -481,7 +481,7 @@ def ops_australia_call_notes_detail(rid):
         'ops_australia_call_notes_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
     )
@@ -506,7 +506,7 @@ def ops_australia_call_notes_edit_page(rid):
         'ops_australia_call_notes_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
     )
@@ -604,7 +604,7 @@ def ops_australia_call_notes_add():
                 (registration_number,),
             ).fetchone()
             if not client:
-                flash('Selected client is not an Australia Pathway client.', 'error')
+                flash('Selected client is not an AMC Pathway client.', 'error')
                 try: conn.rollback()
                 except Exception: pass
                 return redirect(url_for('ops_australia_call_notes_add'))
@@ -652,7 +652,7 @@ def ops_australia_call_notes_add():
         user=user,
         pre_reg=pre_reg,
         pre_client=pre_client,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-call-notes',
         active_pathway='australia',
     )

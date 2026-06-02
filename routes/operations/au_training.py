@@ -2,7 +2,7 @@
 routes/operations/au_training.py — Operations: Australia Training list + detail/edit.
 
 Lists ops_coaching records imported from "All Trainings.xlsx" (stored in
-the repo as All_Australia_Trainings.xlsx) for the Australia Pathway.
+the repo as All_Australia_Trainings.xlsx) for the AMC Pathway.
 
 The legacy DB table name is `ops_coaching` even though the Excel and the
 UI both call it Training. We filter by pathway='australia' so this view
@@ -147,7 +147,7 @@ def ops_australia_training_list():
         methods=methods,
         statuses=statuses,
         vendors=vendors,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-training',
         active_pathway='australia',
     )
@@ -189,7 +189,7 @@ def ops_australia_training_detail(rid):
         'ops_australia_training_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-training',
         active_pathway='australia',
     )
@@ -225,7 +225,7 @@ def ops_australia_training_edit_page(rid):
         'ops_australia_training_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-training',
         active_pathway='australia',
     )

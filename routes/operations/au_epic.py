@@ -1,5 +1,5 @@
 """
-routes/operations/au_epic.py — Operations: Australia Pathway → EPIC Registration.
+routes/operations/au_epic.py — Operations: AMC Pathway → EPIC Registration.
 
 Mirrors the standardized Australia Registration pattern:
   - List view  (/operations/australia/epic)
@@ -141,7 +141,7 @@ def ops_australia_epic_list():
         epic_statuses=epic_statuses,
         epic_registrations=epic_registrations,
         documents_stages=documents_stages,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-epic',
         active_pathway='australia',
     )
@@ -178,7 +178,7 @@ def ops_australia_epic_detail(rid):
         'ops_australia_epic_detail.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-epic',
         active_pathway='australia',
     )
@@ -215,7 +215,7 @@ def ops_australia_epic_edit_page(rid):
         'ops_australia_epic_edit.html',
         user=user,
         record=record,
-        pathway_name='Australia Pathway',
+        pathway_name='AMC Pathway',
         active_ops_page='australia-epic',
         active_pathway='australia',
     )

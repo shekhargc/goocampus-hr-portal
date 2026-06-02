@@ -1,12 +1,12 @@
 """
 seed_australia_vendors.py — auto-populate vendors_providers + vendor_service_map
-for the Australia Pathway from the data we already imported.
+for the AMC Pathway from the data we already imported.
 
 The user pointed out that the historical Excel imports already contain every
 vendor / provider / course / subscription name we need. Rather than asking
 them for a separate vendor Excel, we extract those distinct names from the
 existing ops_* tables (scoped to pathway='australia') and insert them into
-the shared centralised tables with country='Australia Pathway'.
+the shared centralised tables with country='AMC Pathway'.
 
 What it does, in order:
 
@@ -24,7 +24,7 @@ What it does, in order:
 
 3. ops_research_publication.research_provider (Australia rows)
      -> vendors_providers (category='Research & Publications', country=
-        'Australia Pathway')
+        'AMC Pathway')
 
 Idempotent via _import_markers marker key 'au_vendors_seed'. Bump
 IMPORT_VERSION to force a re-run. Runs on app boot AFTER the Phase 2/3
@@ -35,7 +35,7 @@ import logging
 
 
 IMPORT_VERSION = 'au_vendors_v3_postgres_safe'
-AU_COUNTRY = 'Australia Pathway'
+AU_COUNTRY = 'AMC Pathway'
 
 
 def _vendor_id_or_rowid(row):
@@ -56,7 +56,7 @@ def _ensure_vendor(conn, name, category):
     """Return (vendor_id, created) — insert if missing, otherwise return existing id.
 
     Vendors are uniquely identified by (name, country, category). We use
-    country='Australia Pathway' for everything here. Falls back to rowid on
+    country='AMC Pathway' for everything here. Falls back to rowid on
     SQLite where SERIAL columns may not auto-populate.
     """
     row = conn.execute(
