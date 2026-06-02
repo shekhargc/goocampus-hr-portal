@@ -26685,10 +26685,10 @@ def seed_product_pathways_once():
     in the future re-runs.
     """
     MARKER_KEY = 'product_pathway_seeded'
-    MARKER_VAL = 'v2'
+    MARKER_VAL = 'v3'
 
     # Exact-name -> pathway slug map. Slug -> display label:
-    #   plab                = UK Pathway        (UK PGCP)
+    #   plab                = PLAB Pathway      (UK PGCP)
     #   australia           = AMC Pathway       (AUS PGCP)
     #   standard_consulting = Standard Consulting Pathway
     #   germany             = Germany Pathway
@@ -26702,7 +26702,14 @@ def seed_product_pathways_once():
         'Germany PGCP':    'germany',
         'AMC MCQ':         'amc_training',
     }
-    DELETE_BY_NAME = ['UK / PLAB Pathway']
+    # Duplicate -> canonical merges. For each pair we move any
+    # foreign-key references on the duplicate over to the canonical
+    # product before hard-deleting the duplicate, so no history is lost.
+    # Form-config rows on the duplicate are dropped outright since the
+    # canonical product has its own copy.
+    MERGE_DUPLICATE_INTO_CANONICAL = [
+        ('UK / PLAB Pathway', 'UK PGCP'),
+    ]
 
     conn = None
     try:
@@ -26720,16 +26727,77 @@ def seed_product_pathways_once():
         if marker and marker['value'] == MARKER_VAL:
             return
 
-        # ── 1) Hard delete duplicates ──
+        # ── 1) Merge duplicate products into their canonical -- repoint FK
+        # references first, then hard-delete the duplicate. ──
         deleted = 0
-        for name in DELETE_BY_NAME:
+        for dup_name, canon_name in MERGE_DUPLICATE_INTO_CANONICAL:
             try:
-                result = conn.execute(
-                    "DELETE FROM products_services WHERE name = ?", (name,),
-                )
-                deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+                dup_row = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (dup_name,),
+                ).fetchone()
+                canon_row = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (canon_name,),
+                ).fetchone()
+                if not dup_row:
+                    continue  # already gone
+                if not canon_row:
+                    logging.warning(
+                        f"seed_product_pathways v3: canonical '{canon_name}' "
+                        f"missing, skipping merge of '{dup_name}'"
+                    )
+                    continue
+                dup_id = dup_row['id']
+                canon_id = canon_row['id']
+                # Repoint history-bearing FK references duplicate -> canonical.
+                for repoint_sql in (
+                    "UPDATE sales_leads          SET product_id = ? WHERE product_id = ?",
+                    "UPDATE sales_closures       SET product_id = ? WHERE product_id = ?",
+                    "UPDATE client_invitations   SET product_id = ? WHERE product_id = ?",
+                    "UPDATE client_registrations SET product_id = ? WHERE product_id = ?",
+                ):
+                    try:
+                        conn.execute(repoint_sql, (canon_id, dup_id))
+                    except Exception as e:
+                        logging.warning(
+                            f"seed_product_pathways v3: repoint failed "
+                            f"({repoint_sql.split()[1]}): {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+                # Drop the duplicate's form configs (the canonical has its own).
+                try:
+                    conn.execute(
+                        "DELETE FROM client_form_configs WHERE product_id = ?",
+                        (dup_id,),
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"seed_product_pathways v3: form-config drop for "
+                        f"{dup_id}: {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+                # Finally remove the duplicate product itself.
+                try:
+                    result = conn.execute(
+                        "DELETE FROM products_services WHERE id = ?",
+                        (dup_id,),
+                    )
+                    deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+                except Exception as e:
+                    logging.warning(
+                        f"seed_product_pathways v3: final delete for "
+                        f"{dup_name} (id={dup_id}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
             except Exception as e:
-                logging.warning(f"seed_product_pathways v2: delete {name}: {e}")
+                logging.warning(
+                    f"seed_product_pathways v3: merge {dup_name} -> "
+                    f"{canon_name}: {e}"
+                )
                 try: conn.rollback()
                 except Exception: pass
         conn.commit()
