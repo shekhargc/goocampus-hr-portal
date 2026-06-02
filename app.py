@@ -1068,13 +1068,39 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
-    registrations = conn.execute('''
-        SELECT cr.*, ps.name as product_name
+    # Item C-2: fetch counsellor contact for "Your counsellor" card.
+    registrations_raw = conn.execute('''
+        SELECT cr.*, ps.name as product_name,
+               e.name as counsellor_full_name,
+               e.email as counsellor_email_addr,
+               e.phone as counsellor_phone_no
         FROM client_registrations cr
         LEFT JOIN products_services ps ON ps.id = cr.product_id
+        LEFT JOIN employees e ON e.id = cr.counsellor_id
         WHERE cr.account_id = ?
         ORDER BY cr.created_at DESC
     ''', (acct_id,)).fetchall()
+    # Convert to dicts so the template can attach a pre-computed
+    # installments list without complicating the SELECT.
+    registrations = []
+    for r in registrations_raw:
+        d = dict(r)
+        d['installments'] = [
+            {
+                'n': i,
+                'amount':  float(d.get(f'inst{i}_amount') or 0),
+                'date':    d.get(f'inst{i}_date') or '',
+                'note':    d.get(f'inst{i}_note') or '',
+                'paid':    bool(d.get(f'inst{i}_amount') and float(d.get(f'inst{i}_amount') or 0) > 0
+                                and (d.get('total_paid') or 0) >= sum(
+                                    float(d.get(f'inst{j}_amount') or 0) for j in range(1, i + 1))),
+            }
+            for i in (1, 2, 3, 4)
+        ]
+        # Only keep installments that have an amount or date set so we
+        # don't render four empty rows for a single-installment plan.
+        d['installments'] = [it for it in d['installments'] if it['amount'] or it['date']]
+        registrations.append(d)
 
     # Get doc requests for all registrations
     reg_ids = [r['id'] for r in registrations]
