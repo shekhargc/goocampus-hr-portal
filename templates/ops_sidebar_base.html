@@ -383,11 +383,11 @@
             </a>
             {% endif %}
 
-            <!-- Onboarding (welcome-kit driven, shared with Clients tab) -->
-            <div class="ops-nav-group-label">Onboarding</div>
-            <a href="/operations/welcome-kit-onboarding?pathway=australia" class="ops-nav-item {% if active_ops_page == 'australia-welcome-kit' %}active{% endif %}" data-tooltip="Welcome Kit Onboarding">
-                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 010-4h12v4"/><path d="M4 6v14a2 2 0 002 2h14v-4"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
-                <span class="ops-nav-text">Welcome Kit</span>
+            <!-- Onboarding (welcome-kit driven; same data as the Welcome Kit
+                 tab on each client's detail page) -->
+            <a href="/operations/welcome-kit-onboarding?pathway=australia" class="ops-nav-item {% if active_ops_page == 'australia-welcome-kit' %}active{% endif %}" data-tooltip="Onboarding">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></span>
+                <span class="ops-nav-text">Onboarding</span>
             </a>
 
             <!-- Training & Exams -->
@@ -505,12 +505,6 @@
                 <span class="ops-nav-text">Documents</span>
             </a>
             {% endif %}
-
-            <!-- Welcome Kit Onboarding (welcome-kit driven, shared with Clients tab) -->
-            <a href="/operations/welcome-kit-onboarding?pathway=plab" class="ops-nav-item {% if active_ops_page == 'welcome-kit' %}active{% endif %}" data-tooltip="Welcome Kit Onboarding">
-                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 12V8H6a2 2 0 010-4h12v4"/><path d="M4 6v14a2 2 0 002 2h14v-4"/><path d="M18 12a2 2 0 000 4h4v-4z"/></svg></span>
-                <span class="ops-nav-text">Welcome Kit</span>
-            </a>
 
 
             <!-- Training & Exams -->
