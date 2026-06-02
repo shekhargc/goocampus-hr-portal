@@ -57,6 +57,9 @@
                     <option value="" {% if not product.pathway %}selected{% endif %}>— Unassigned —</option>
                     <option value="plab" {% if product.pathway == 'plab' %}selected{% endif %}>PLAB Pathway</option>
                     <option value="australia" {% if product.pathway == 'australia' %}selected{% endif %}>AMC Pathway</option>
+                    <option value="standard_consulting" {% if product.pathway == 'standard_consulting' %}selected{% endif %}>Standard Consulting Pathway</option>
+                    <option value="germany" {% if product.pathway == 'germany' %}selected{% endif %}>Germany Pathway</option>
+                    <option value="amc_training" {% if product.pathway == 'amc_training' %}selected{% endif %}>AMC Training</option>
                 </select>
                 <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">When sales adds a closed client with this product, the invitation routes to the picked pathway's Ops team.</div>
             </div>

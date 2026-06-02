@@ -7230,7 +7230,7 @@ def add_product(project_id):
             return redirect(url_for('add_product', project_id=project_id))
 
         pathway_raw = (request.form.get('pathway') or '').strip().lower()
-        pathway = pathway_raw if pathway_raw in ('plab', 'australia') else None
+        pathway = pathway_raw if pathway_raw in ('plab', 'australia', 'standard_consulting', 'germany', 'amc_training') else None
         conn.execute('''
             INSERT INTO products_services
                 (name, description, type, project_id, revenue_stream_id, product_cost, sale_price,
@@ -7325,7 +7325,7 @@ def edit_product(ps_id):
             revenue_stream_id = None
 
     pathway_raw = (request.form.get('pathway') or '').strip().lower()
-    pathway = pathway_raw if pathway_raw in ('plab', 'australia') else None
+    pathway = pathway_raw if pathway_raw in ('plab', 'australia', 'standard_consulting', 'germany', 'amc_training') else None
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
                         product_cost = ?, sale_price = ?,
@@ -26674,16 +26674,36 @@ drop_legacy_section_tables_once()
 
 
 def seed_product_pathways_once():
-    """Backfill `pathway` on products_services for known UK PGCP /
-    Australia PGCP product names. Runs once per marker version,
-    idempotent.
+    """Apply the canonical product -> pathway taxonomy plus the one-off
+    cleanup of the duplicate "UK / PLAB Pathway" product.
 
-    Pattern matching is intentionally conservative -- only products
-    whose names clearly map to a pathway get tagged. Anything ambiguous
-    stays NULL and the admin sets it manually via the product edit page.
+    v2 (2026-06-02) supersedes the v1 keyword-match logic. Uses an
+    explicit name -> pathway map signed off by admin -- safer than
+    fuzzy ILIKE. Anything not on the map stays NULL.
+
+    Idempotent via marker product_pathway_seeded = v2. Bumping to v3
+    in the future re-runs.
     """
     MARKER_KEY = 'product_pathway_seeded'
-    MARKER_VAL = 'v1'
+    MARKER_VAL = 'v2'
+
+    # Exact-name -> pathway slug map. Slug -> display label:
+    #   plab                = UK Pathway        (UK PGCP)
+    #   australia           = AMC Pathway       (AUS PGCP)
+    #   standard_consulting = Standard Consulting Pathway
+    #   germany             = Germany Pathway
+    #   amc_training        = AMC Training
+    NAME_TO_PATHWAY = {
+        'UK PGCP':         'plab',
+        'AUS PGCP':        'australia',
+        'AMC Consulting':  'standard_consulting',
+        'UAE Consulting':  'standard_consulting',
+        'USA Consulting':  'standard_consulting',
+        'Germany PGCP':    'germany',
+        'AMC MCQ':         'amc_training',
+    }
+    DELETE_BY_NAME = ['UK / PLAB Pathway']
+
     conn = None
     try:
         conn = get_db()
@@ -26700,37 +26720,33 @@ def seed_product_pathways_once():
         if marker and marker['value'] == MARKER_VAL:
             return
 
-        # (pathway, list-of-substrings-to-match-in-name)
-        rules = [
-            ('plab',      ['UK PGCP', 'PLAB']),
-            ('australia', ['AUS PGCP', 'AMC Pathway', 'AMC']),
-        ]
+        # ── 1) Hard delete duplicates ──
+        deleted = 0
+        for name in DELETE_BY_NAME:
+            try:
+                result = conn.execute(
+                    "DELETE FROM products_services WHERE name = ?", (name,),
+                )
+                deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"seed_product_pathways v2: delete {name}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        # ── 2) Set pathway by exact-name match ──
         tagged = 0
-        for pathway, needles in rules:
-            for needle in needles:
-                like = f'%{needle}%'
-                try:
-                    result = conn.execute(
-                        "UPDATE products_services SET pathway = ? "
-                        " WHERE pathway IS NULL AND name ILIKE ?",
-                        (pathway, like),
-                    )
-                    tagged += max(0, getattr(result, 'rowcount', 0) or 0)
-                except Exception:
-                    # SQLite path: ILIKE not supported
-                    try: conn.rollback()
-                    except Exception: pass
-                    try:
-                        result = conn.execute(
-                            "UPDATE products_services SET pathway = ? "
-                            " WHERE pathway IS NULL AND UPPER(name) LIKE UPPER(?)",
-                            (pathway, like),
-                        )
-                        tagged += max(0, getattr(result, 'rowcount', 0) or 0)
-                    except Exception as e:
-                        logging.warning(f"seed_product_pathways: {needle}: {e}")
-                        try: conn.rollback()
-                        except Exception: pass
+        for name, pathway in NAME_TO_PATHWAY.items():
+            try:
+                result = conn.execute(
+                    "UPDATE products_services SET pathway = ? WHERE name = ?",
+                    (pathway, name),
+                )
+                tagged += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"seed_product_pathways v2: tag {name}: {e}")
+                try: conn.rollback()
+                except Exception: pass
         conn.commit()
 
         try:
@@ -26749,8 +26765,11 @@ def seed_product_pathways_once():
             except Exception as e:
                 logging.warning(f"seed_product_pathways marker write failed: {e}")
 
-        if tagged:
-            logging.info(f"Product pathway backfill: tagged {tagged} product(s)")
+        if deleted or tagged:
+            logging.info(
+                f"Product pathway v2: deleted {deleted} duplicate(s), "
+                f"tagged {tagged} product(s)"
+            )
     except Exception as e:
         logging.warning(f"seed_product_pathways_once: {e}")
         try:
