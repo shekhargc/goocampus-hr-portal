@@ -76,7 +76,22 @@
 
   <div style="margin-top:18px;padding:12px 14px;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;font-size:0.78rem;color:#9A3412;line-height:1.55;">
     <i class="bi bi-info-circle me-1"></i>
-    <strong>How sending works.</strong> Each template will fire at the point in the onboarding flow named by its stage. Disabled templates never send. Recipients with no email captured for a registration are silently skipped. The trigger wiring for new stages (Welcome Call Scheduled, Kit Dispatched, Onboarded, 30-day Check-in) lands in the next commit (Item E-2).
+    <strong>How sending works.</strong> Each template fires at the point in the onboarding flow named by its stage. Disabled templates never send; toggled-off recipients are silently skipped. Welcome Call Scheduled / Kit Dispatched / Onboarded fire from the ops onboarding-save handler when their milestone is first set. <strong>30-day Check-in</strong> is a scheduled job that runs daily at 9:00 AM IST (Item F-2).
+  </div>
+
+  {# Item F-2: manual trigger for the 30-day check-in scheduler #}
+  <div style="margin-top:14px;padding:14px 16px;background:#fff;border:1px solid #E5E7EB;border-radius:10px;display:flex;justify-content:space-between;align-items:center;gap:14px;flex-wrap:wrap;">
+    <div style="flex:1;min-width:240px;">
+      <div style="font-weight:700;color:var(--navy);font-size:0.92rem;"><i class="bi bi-stopwatch me-1" style="color:var(--orange);"></i>Run the 30-day check-in job now</div>
+      <div style="font-size:0.78rem;color:#6B7280;margin-top:3px;line-height:1.45;">
+        Useful for testing once you've enabled the 30-Day Check-in template. The scheduler also runs this automatically every day at 9:00 AM IST. Each row fires at most once; rows past the 7-day freshness window are marked skipped.
+      </div>
+    </div>
+    <form method="POST" action="/admin/email-templates/run-checkin-job-now" style="margin:0;">
+      <button type="submit" style="padding:9px 18px;background:#1e3a5f;color:#fff;border:none;border-radius:6px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;">
+        <i class="bi bi-play-fill me-1"></i>Run now
+      </button>
+    </form>
   </div>
 
 </div>

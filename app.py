@@ -12735,6 +12735,13 @@ def ensure_ops_tables():
             "ALTER TABLE client_onboarding ADD COLUMN brochure_policy_items TEXT",
             "ALTER TABLE client_onboarding ADD COLUMN sla_copy_method TEXT",
             "ALTER TABLE client_onboarding ADD COLUMN additional_goodies TEXT",
+            # Item F-2: 30-day check-in scheduler tracking. sent_at
+            # is set when the daily job actually fires the email;
+            # skipped=1 means the row was past the freshness window
+            # (too late to send) and should be ignored on subsequent
+            # job runs.
+            "ALTER TABLE client_onboarding ADD COLUMN thirty_day_checkin_sent_at TIMESTAMP",
+            "ALTER TABLE client_onboarding ADD COLUMN thirty_day_checkin_skipped INTEGER DEFAULT 0",
         ):
             try:
                 conn.execute(ddl)
@@ -32907,10 +32914,150 @@ def neetpg_catchup_publish():
         logging.error(f"neetpg_catchup_publish error: {e}")
 
 
+# ── Item F-2: 30-day check-in scheduler ─────────────────────────────
+# Daily job: find clients onboarded ~30 working days ago and fire the
+# `thirty_day_checkin` stage email (gated on the template being
+# enabled in /admin/email-templates).
+#
+# Freshness window of FRESHNESS_DAYS guards against retroactive bulk-
+# send: when an admin first enables the template, only clients due
+# within the past `FRESHNESS_DAYS` calendar days will be emailed.
+# Older candidates are silently marked `thirty_day_checkin_skipped=1`
+# so they don't keep getting reconsidered each day.
+
+THIRTY_DAY_CHECKIN_FRESHNESS_DAYS = 7
+
+
+def process_thirty_day_checkins():
+    """One pass of the 30-day check-in job. Safe to call from the
+    daily APScheduler trigger OR an admin "run now" button. Never
+    raises. Returns a summary dict for caller-side reporting.
+    """
+    summary = {'sent': 0, 'disabled': 0, 'not_due': 0,
+               'skipped_late': 0, 'error': 0, 'considered': 0}
+    conn = None
+    try:
+        from working_days import (
+            add_working_days, load_holidays_set, now_ist,
+        )
+        from datetime import datetime as _dt
+        conn = get_db()
+        holidays_set = load_holidays_set(conn)
+        today_ist = now_ist().date()
+
+        rows = conn.execute("""
+            SELECT id, client_id, registration_number,
+                   onboarding_status, updated_at,
+                   thirty_day_checkin_sent_at,
+                   thirty_day_checkin_skipped
+              FROM client_onboarding
+             WHERE LOWER(COALESCE(onboarding_status,'')) = 'completed'
+               AND thirty_day_checkin_sent_at IS NULL
+               AND COALESCE(thirty_day_checkin_skipped, 0) = 0
+        """).fetchall()
+        summary['considered'] = len(rows)
+
+        for r in rows:
+            try:
+                onboarded_str = str(r['updated_at'] or '')[:10]
+                if not onboarded_str:
+                    continue
+                try:
+                    base = _dt.strptime(onboarded_str, '%Y-%m-%d').date()
+                except Exception:
+                    continue
+                # Compute the projected due date once -- same logic
+                # the client's dashboard timeline shows.
+                due = add_working_days(
+                    base, 30, holidays_set, cutoff_hour=None)
+                days_overdue = (today_ist - due).days
+                if days_overdue < 0:
+                    summary['not_due'] += 1
+                    continue
+                if days_overdue > THIRTY_DAY_CHECKIN_FRESHNESS_DAYS:
+                    # Past the freshness window -- mark skipped so we
+                    # don't keep reconsidering this row every morning.
+                    try:
+                        conn.execute(
+                            "UPDATE client_onboarding "
+                            "  SET thirty_day_checkin_skipped = 1 "
+                            "WHERE id = ?",
+                            (r['id'],))
+                        conn.commit()
+                    except Exception: pass
+                    summary['skipped_late'] += 1
+                    continue
+
+                client_row = conn.execute(
+                    "SELECT * FROM plab_clients WHERE id = ?",
+                    (r['client_id'],)
+                ).fetchone()
+                if not client_row:
+                    continue
+                ctx = _stage_email_context_from_client(dict(client_row))
+                result = _send_stage_email(
+                    conn, 'thirty_day_checkin', r['client_id'], ctx)
+
+                if result['status'] == 'sent':
+                    conn.execute(
+                        "UPDATE client_onboarding "
+                        "  SET thirty_day_checkin_sent_at = CURRENT_TIMESTAMP "
+                        "WHERE id = ?", (r['id'],))
+                    conn.commit()
+                    summary['sent'] += 1
+                elif result['status'] == 'disabled':
+                    # Don't mark sent: when admin enables the
+                    # template, the row remains a candidate on
+                    # tomorrow's run (still within freshness).
+                    summary['disabled'] += 1
+                else:
+                    summary['error'] += 1
+            except Exception as e:
+                logging.error(
+                    f"thirty_day_checkin row {r.get('id')}: {e}")
+                summary['error'] += 1
+        logging.info(
+            f"thirty_day_checkin job: considered={summary['considered']}, "
+            f"sent={summary['sent']}, disabled={summary['disabled']}, "
+            f"not_due={summary['not_due']}, "
+            f"skipped_late={summary['skipped_late']}, "
+            f"errors={summary['error']}")
+    except Exception as e:
+        logging.error(f"process_thirty_day_checkins fatal: {e}")
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+    return summary
+
+
+@app.route('/admin/email-templates/run-checkin-job-now', methods=['POST'])
+@login_required
+def admin_run_thirty_day_checkin_job():
+    """Admin-triggered immediate run of the 30-day check-in job.
+    Useful for testing after enabling the template -- no need to
+    wait for tomorrow's 9 AM IST cron."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    summary = process_thirty_day_checkins()
+    flash(
+        f"Check-in job: considered {summary['considered']}, "
+        f"sent {summary['sent']}, disabled {summary['disabled']}, "
+        f"not due {summary['not_due']}, "
+        f"skipped (past freshness) {summary['skipped_late']}, "
+        f"errors {summary['error']}",
+        'success' if summary['sent'] else 'info'
+    )
+    return redirect(url_for('admin_email_templates_list'))
+
+
 def start_neetpg_scheduler():
     """Start background scheduler for auto-publishing PDFs at 10 AM, 1 PM and 5 PM IST.
 
-    Also runs a one-time catchup to handle any slots missed due to app restarts.
+    Also runs the daily 30-day check-in job (Item F-2) and a one-
+    time catchup to handle any slots missed due to app restarts.
     """
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -32924,8 +33071,19 @@ def start_neetpg_scheduler():
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=13, minute=0, timezone=ist), id='neetpg_publish_afternoon')
         # 5:00 PM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
+        # Item F-2: 30-day check-in -- 09:00 AM IST daily. Cheap
+        # query (uses thirty_day_checkin_sent_at IS NULL filter), so
+        # safe to run unconditionally even if the template is
+        # disabled (helper short-circuits with status='disabled').
+        scheduler.add_job(
+            process_thirty_day_checkins,
+            CronTrigger(hour=9, minute=0, timezone=ist),
+            id='thirty_day_checkin_daily',
+        )
         scheduler.start()
-        logging.info("NEET PG auto-publish scheduler started (10 AM + 1 PM + 5 PM IST)")
+        logging.info(
+            "Schedulers started: NEET PG auto-publish (10am+1pm+5pm IST), "
+            "30-day check-in (9am IST)")
         # Run catchup for missed slots after restarts/deploys
         neetpg_catchup_publish()
     except ImportError:
