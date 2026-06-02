@@ -1,32 +1,41 @@
 {% extends "sales_sidebar_base.html" %}
-{% block title %}{{ 'Edit' if mode == 'edit' else 'Add' }} Lead - Sales CRM{% endblock %}
+{% block title %}{{ 'Edit Client' if mode == 'edit' else 'Add Closed Client' }} - Sales CRM{% endblock %}
 {% block section_content %}
 <div style="max-width:780px;margin:0 auto;padding:2rem 1.5rem;">
-    <div style="margin-bottom:1rem;"><a href="/sales/leads" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to Leads</a></div>
+    <div style="margin-bottom:1rem;"><a href="/sales/leads" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to Closed Clients</a></div>
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
-        <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Lead' if mode == 'edit' else 'Add New Lead' }}</h1>
-        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Track this prospect through your pipeline. Mark Hot to surface in CRM dashboard.</p>
+        <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closed Client' if mode == 'edit' else 'Add Closed Client' }}</h1>
+        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Record a finalised client to start onboarding. The closure is recorded automatically and a WhatsApp invitation link is sent to the client.</p>
 
         <form method="POST">
-            <div style="display:grid;grid-template-columns:2fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+            {# Hidden Closed Won stage -- the backend forces this regardless,
+               but we send the form value too so any extension flows see the
+               intended stage. #}
+            <input type="hidden" name="is_hot" value="0" />
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Lead name *</label>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Client name *</label>
                     <input type="text" name="lead_name" required maxlength="120" value="{{ lead.lead_name if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Hot</label>
-                    <label style="display:flex;align-items:center;gap:0.5rem;background:var(--gray-50);padding:0.55rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;cursor:pointer;font-size:0.88rem;">
-                        <input type="checkbox" name="is_hot" value="1" {% if lead and lead.is_hot %}checked{% endif %} />
-                        Mark as hot lead
-                    </label>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">WhatsApp number * <span style="color:var(--gray-500);font-weight:400;">(10-digit Indian)</span></label>
+                    <input type="tel" name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" value="{{ lead.phone if lead else '' }}" placeholder="9XXXXXXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
                 </div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Source</label>
-                    <input type="text" name="source" maxlength="60" value="{{ lead.source if lead else '' }}" placeholder="e.g. Website, Referral, Cold call" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Email</label>
+                    <input type="email" name="email" maxlength="160" value="{{ lead.email if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
                 </div>
+                <div>
+                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Source</label>
+                    <input type="text" name="source" maxlength="60" value="{{ lead.source if lead else '' }}" placeholder="e.g. Website, Referral, Direct" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Owner *</label>
                     {% if role == 'admin' %}
@@ -42,17 +51,8 @@
                 </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Stage</label>
-                    <select name="stage_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
-                        <option value="">— Pick a stage —</option>
-                        {% for s in stages %}
-                        <option value="{{ s.id }}" {% if lead and lead.stage_id == s.id %}selected{% endif %}>{{ s.name }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
+            {# Stage picker removed 2026-06-02: every new entry is a closed
+               client; backend silently forces stage = Closed Won. #}
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
@@ -86,8 +86,8 @@
                 </div>
             </div>
 
-            <!-- Closure fields — shown when stage is "Closed Won" -->
-            <div id="closure-fields" style="display:none;margin-bottom:1.1rem;background:var(--green-50, #f0fdf4);border:1px solid var(--green-200, #bbf7d0);border-radius:0.65rem;padding:1.2rem;">
+            <!-- Closure fields — always shown for the closed-client flow -->
+            <div id="closure-fields" style="display:block;margin-bottom:1.1rem;background:var(--green-50, #f0fdf4);border:1px solid var(--green-200, #bbf7d0);border-radius:0.65rem;padding:1.2rem;">
                 <p style="margin:0 0 0.8rem 0;font-size:0.82rem;font-weight:700;color:var(--green-700, #15803d);">
                     Closure will be auto-recorded. Confirm amounts below:
                 </p>
@@ -131,43 +131,29 @@
             </div>
 
             <div style="display:flex;gap:0.75rem;">
-                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Add Lead' }}</button>
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Add Closed Client &amp; Send Invite' }}</button>
                 <a href="/sales/leads" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
             </div>
         </form>
 
         <script>
         (function() {
-            var wonIds = {{ won_stage_ids|default([])|tojson }};
-            var stageSelect = document.querySelector('select[name="stage_id"]');
-            var closureBox = document.getElementById('closure-fields');
+            /* Closure box is always visible in the closed-client flow --
+               no stage picker, so no toggling. Just keep the margin
+               preview live. */
             var revInput = document.getElementById('closure_revenue');
             var costInput = document.getElementById('closure_cost');
             var marginVal = document.getElementById('margin-val');
             var evInput = document.querySelector('input[name="expected_value"]');
 
-            function toggleClosure() {
-                var sel = parseInt(stageSelect.value);
-                if (wonIds.indexOf(sel) !== -1) {
-                    closureBox.style.display = 'block';
-                    // Pre-fill revenue from expected value if currently 0
-                    if (parseFloat(revInput.value) === 0 && evInput) {
-                        revInput.value = evInput.value || 0;
-                    }
-                    updateMargin();
-                } else {
-                    closureBox.style.display = 'none';
-                }
-            }
             function updateMargin() {
                 var r = parseFloat(revInput.value) || 0;
                 var c = parseFloat(costInput.value) || 0;
                 marginVal.textContent = (r - c).toFixed(2);
             }
-            stageSelect.addEventListener('change', toggleClosure);
             if (revInput) revInput.addEventListener('input', updateMargin);
             if (costInput) costInput.addEventListener('input', updateMargin);
-            toggleClosure();
+            updateMargin();
 
             // --- Auto-fill stream & expected value when product changes ---
             var productSelect = document.querySelector('select[name="product_id"]');

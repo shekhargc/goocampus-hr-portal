@@ -1476,6 +1476,61 @@ def client_form_config_delete(config_id):
     return redirect(url_for('client_form_config_page', product_id=pid))
 
 
+def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
+                              client_email, invited_by):
+    """Create a client_invitations row tied to a fresh closure and send the
+    WhatsApp invite. Used by the sales -> closure auto-flow so the closing
+    rep doesn't have to manually generate the invite.
+
+    Returns the token on success, or None when name/mobile are missing.
+    Idempotent-ish: if a non-cancelled invitation already exists for this
+    (mobile, product) pair we skip creating a duplicate.
+    """
+    import uuid
+    if not client_name or not client_mobile:
+        return None
+    # Normalize the phone the same way the manual invite path does.
+    mobile = client_mobile.lstrip('+').lstrip('0')
+    if mobile.startswith('91') and len(mobile) == 12:
+        mobile = mobile[2:]
+    if not mobile or len(mobile) < 10:
+        return None
+    # Skip if an active invitation already exists for this mobile + product.
+    try:
+        existing = conn.execute(
+            "SELECT token FROM client_invitations "
+            " WHERE client_mobile = ? AND product_id = ? "
+            "   AND COALESCE(status,'pending') <> 'cancelled' "
+            " ORDER BY id DESC LIMIT 1",
+            (mobile, product_id),
+        ).fetchone()
+    except Exception:
+        existing = None
+    if existing:
+        return existing['token']
+    token = uuid.uuid4().hex
+    try:
+        conn.execute(
+            "INSERT INTO client_invitations "
+            "(token, product_id, client_name, client_mobile, client_email, invited_by) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (token, product_id, client_name, mobile, client_email, invited_by),
+        )
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return None
+    # WhatsApp invite is a side-effect; don't let a delivery failure roll
+    # back the row.
+    try:
+        invite_url = f"https://goocampus.org/client/register/{token}"
+        _send_client_invite_wa(mobile, client_name, invite_url)
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: WA send failed: {e}")
+    return token
+
+
 def _send_client_invite_wa(mobile, name, link):
     """Send WhatsApp template message with invitation link."""
     import os, requests as http_requests
@@ -6240,6 +6295,15 @@ def ensure_crm_tables():
             conn.execute("ALTER TABLE products_services ADD COLUMN revenue_stream_id INTEGER REFERENCES revenue_streams(id)")
             conn.commit()
         except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        # Sales/Closure flow (2026-06-02): link each product to a pathway
+        # so the sales -> closure -> invitation -> ops pipeline knows where
+        # to route the client. Values: 'plab', 'australia', NULL (unassigned).
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN pathway TEXT")
+            conn.commit()
+        except Exception:
             try:
                 conn.rollback()
             except Exception:
@@ -7165,13 +7229,15 @@ def add_product(project_id):
             conn.close()
             return redirect(url_for('add_product', project_id=project_id))
 
+        pathway_raw = (request.form.get('pathway') or '').strip().lower()
+        pathway = pathway_raw if pathway_raw in ('plab', 'australia') else None
         conn.execute('''
             INSERT INTO products_services
                 (name, description, type, project_id, revenue_stream_id, product_cost, sale_price,
-                 cost_currency, sale_currency, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cost_currency, sale_currency, pathway, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (name, description, ps_type, effective_project_id, revenue_stream_id, product_cost, sale_price,
-              cost_currency, sale_currency, user['id']))
+              cost_currency, sale_currency, pathway, user['id']))
         conn.commit()
         conn.close()
         flash('Product/Service added', 'success')
@@ -7258,14 +7324,18 @@ def edit_product(ps_id):
         if not chk:
             revenue_stream_id = None
 
+    pathway_raw = (request.form.get('pathway') or '').strip().lower()
+    pathway = pathway_raw if pathway_raw in ('plab', 'australia') else None
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
                         product_cost = ?, sale_price = ?,
                         cost_currency = ?, sale_currency = ?,
-                        project_id = ?, revenue_stream_id = ?
+                        project_id = ?, revenue_stream_id = ?,
+                        pathway = ?
                     WHERE id = ?''',
                 (name, description, ps_type, status, product_cost, sale_price,
-                 cost_currency, sale_currency, project_id_val, revenue_stream_id, ps_id))
+                 cost_currency, sale_currency, project_id_val, revenue_stream_id,
+                 pathway, ps_id))
     conn.commit()
     conn.close()
     flash('Updated successfully', 'success')
@@ -19982,8 +20052,15 @@ def sales_leads_add():
         product_id = int(product_id) if product_id and product_id.isdigit() else None
         stream_id = request.form.get('stream_id')
         stream_id = int(stream_id) if stream_id and stream_id.isdigit() else None
-        stage_id = request.form.get('stage_id')
-        stage_id = int(stage_id) if stage_id and stage_id.isdigit() else None
+        # 2026-06-02: sales no longer tracks open pipeline -- every new lead
+        # is a finalised (closed) client. Force the stage to Closed Won
+        # regardless of what the form submits, so the auto-closure +
+        # auto-invitation flow fires every time.
+        won_row = conn.execute(
+            "SELECT id FROM sales_lead_stages WHERE is_won = 1 AND is_active = 1 "
+            "ORDER BY sort_order LIMIT 1"
+        ).fetchone()
+        stage_id = won_row['id'] if won_row else None
         try:
             ev = float(request.form.get('expected_value') or 0)
         except ValueError:
@@ -20002,7 +20079,7 @@ def sales_leads_add():
                 (request.form.get('email') or '').strip(),
                 (request.form.get('source') or '').strip(),
                 product_id, stream_id, stage_id, owner_id, ev, ecd,
-                1 if request.form.get('is_hot') else 0,
+                0,  # is_hot retired with the "hot lead" UI cleanup
                 (request.form.get('notes') or '').strip(),
                 user['id']
             )
@@ -20056,10 +20133,31 @@ def sales_leads_add():
                             user['id']
                         )
                     )
-                    flash('Closure auto-recorded from won lead', 'success')
+                    # 2026-06-02: auto-generate the client invitation +
+                    # send the WhatsApp link. Failure here doesn't block
+                    # the lead/closure save.
+                    try:
+                        token = _auto_invite_from_closure(
+                            conn,
+                            product_id=product_id,
+                            client_name=lead_name_new,
+                            client_mobile=(request.form.get('phone') or '').strip(),
+                            client_email=(request.form.get('email') or '').strip(),
+                            invited_by=user['id'],
+                        )
+                        if token:
+                            flash('Closed client recorded and invitation sent on WhatsApp', 'success')
+                        else:
+                            flash('Closed client recorded (invitation skipped: phone missing or duplicate)', 'success')
+                    except Exception as inv_err:
+                        logging.warning(f"auto_invite from leads_add failed: {inv_err}")
+                        flash('Closed client recorded (invitation send failed -- check logs)', 'warning')
         conn.commit()
         conn.close()
-        flash('Lead added', 'success')
+        # Fallback flash only if no won-stage flash fired (e.g. no Closed Won
+        # row exists in sales_lead_stages -- unusual but possible).
+        if not stage_id:
+            flash('Lead recorded (no Closed Won stage configured -- closure + invitation skipped)', 'warning')
         return redirect(url_for('sales_leads_list'))
 
     stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
@@ -26573,6 +26671,98 @@ def drop_legacy_section_tables_once():
 
 
 drop_legacy_section_tables_once()
+
+
+def seed_product_pathways_once():
+    """Backfill `pathway` on products_services for known UK PGCP /
+    Australia PGCP product names. Runs once per marker version,
+    idempotent.
+
+    Pattern matching is intentionally conservative -- only products
+    whose names clearly map to a pathway get tagged. Anything ambiguous
+    stays NULL and the admin sets it manually via the product edit page.
+    """
+    MARKER_KEY = 'product_pathway_seeded'
+    MARKER_VAL = 'v1'
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        # (pathway, list-of-substrings-to-match-in-name)
+        rules = [
+            ('plab',      ['UK PGCP', 'PLAB']),
+            ('australia', ['AUS PGCP', 'Australia Pathway', 'AMC']),
+        ]
+        tagged = 0
+        for pathway, needles in rules:
+            for needle in needles:
+                like = f'%{needle}%'
+                try:
+                    result = conn.execute(
+                        "UPDATE products_services SET pathway = ? "
+                        " WHERE pathway IS NULL AND name ILIKE ?",
+                        (pathway, like),
+                    )
+                    tagged += max(0, getattr(result, 'rowcount', 0) or 0)
+                except Exception:
+                    # SQLite path: ILIKE not supported
+                    try: conn.rollback()
+                    except Exception: pass
+                    try:
+                        result = conn.execute(
+                            "UPDATE products_services SET pathway = ? "
+                            " WHERE pathway IS NULL AND UPPER(name) LIKE UPPER(?)",
+                            (pathway, like),
+                        )
+                        tagged += max(0, getattr(result, 'rowcount', 0) or 0)
+                    except Exception as e:
+                        logging.warning(f"seed_product_pathways: {needle}: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_product_pathways marker write failed: {e}")
+
+        if tagged:
+            logging.info(f"Product pathway backfill: tagged {tagged} product(s)")
+    except Exception as e:
+        logging.warning(f"seed_product_pathways_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_product_pathways_once()
 
 
 # ─────────────────────────────────────────────────────────────────────────
