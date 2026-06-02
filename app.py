@@ -26685,7 +26685,7 @@ def seed_product_pathways_once():
     in the future re-runs.
     """
     MARKER_KEY = 'product_pathway_seeded'
-    MARKER_VAL = 'v3'
+    MARKER_VAL = 'v4'
 
     # Exact-name -> pathway slug map. Slug -> display label:
     #   plab                = PLAB Pathway      (UK PGCP)
@@ -27211,13 +27211,20 @@ migrate_client_academics_v2()
 
 
 def seed_client_form_configs():
-    """Seed default form configs for UK/PLAB pathway AND UK PGCP with all fields."""
+    """Seed default form configs for the canonical UK PGCP product.
+
+    Historical note: this seed used to also (re-)create a duplicate
+    'UK / PLAB Pathway' product whenever it couldn't find an existing
+    `%plab%` match -- which fought with the pathway-taxonomy migration
+    that's trying to delete it. The duplicate entry was removed
+    2026-06-02; the canonical 'UK PGCP' entry is kept since it's
+    exact-match and idempotent.
+    """
     try:
         conn = get_db()
 
-        # Define products to seed — each gets the same 85 fields
+        # Each product gets the same 85 fields (see configs below).
         product_definitions = [
-            {'name': 'UK / PLAB Pathway', 'search': '%plab%', 'use_like': True},
             {'name': 'UK PGCP', 'search': 'uk pgcp', 'use_like': False},
         ]
 
