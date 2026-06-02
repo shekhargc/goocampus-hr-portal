@@ -27318,6 +27318,291 @@ seed_default_welcome_kit_items_once()
 seed_amc_onboarding_from_xlsx_once()
 
 
+def seed_onboarding_completion_once():
+    """One-shot data backfill (2026-06-02):
+       - Every PLAB pathway client gets marked Completed with computed
+         working-day-aware timeline dates (welcome email + welcome call
+         + welcome kit) derived from their registration_date.
+       - 8 named AMC clients get marked Completed (Ashwin Rahul,
+         Aiswarya, Swikriti, Chinmay, Sona, Adarsh, Midhun, Liz).
+       - Every AMC client currently in 'Kit Dispatched' state also
+         transitions to Completed.
+
+    Idempotent via marker onboarding_completion_seeded=v1.
+    No emails sent -- this just writes DB rows. The actual onboarding
+    automation (email send, time-slot request, working-day scheduler)
+    is a separate phase.
+    """
+    MARKER_KEY = 'onboarding_completion_seeded'
+    MARKER_VAL = 'v1'
+
+    from datetime import datetime, date, timedelta
+    import re as _re
+
+    AMC_TARGETED_REGS = [
+        'GCAUSIP/25-26/039',  # Ashwin Rahul Ravi Nadar
+        'GCAUSIP/25-26/038',  # Aiswarya Menon
+        'GCAUSIP/25-26/037',  # Swikriti Baksi
+        'GCAUSIP/25-26/036',  # Chinmay Sakharekar
+        'GCAUSIP/25-26/027',  # SONA SUSAN BINOY
+        'GCAUSIP/24-25/106',  # Adarsh Sheena sajan
+        'GCAUSIP/23-24/016',  # Midhun Krishna
+        'GCAUSIP/23-24/007',  # Liz Catherine (stored as GCAUSIP/2023/07)
+    ]
+
+    def _variants(reg):
+        """Generate likely stored forms for a canonical reg number.
+        Covers YYYY vs YY-YY middle, and 1/2/3-digit trailing number.
+        """
+        m = _re.match(r'^(GC\w+)/(\d{2})-(\d{2})/(\d+)$', reg)
+        if not m:
+            return [reg]
+        pfx, yy_a, yy_b, num = m.groups()
+        try:
+            num_int = int(num)
+        except ValueError:
+            return [reg]
+        full_year = 2000 + int(yy_a) if int(yy_a) < 50 else 1900 + int(yy_a)
+        nums = {str(num_int), f"{num_int:02d}", f"{num_int:03d}"}
+        middles = {f"{yy_a}-{yy_b}", str(full_year)}
+        out = set()
+        for mid in middles:
+            for n in nums:
+                out.add(f"{pfx}/{mid}/{n}")
+        return list(out)
+
+    def _parse_date(s):
+        if not s:
+            return None
+        s = str(s).split('T')[0].split(' ')[0]
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y'):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _to_working_day(d):
+        # If d falls on Sat/Sun, advance to Monday.
+        while d.weekday() >= 5:
+            d += timedelta(days=1)
+        return d
+
+    def _add_working_days(d, n):
+        added = 0
+        while added < n:
+            d += timedelta(days=1)
+            if d.weekday() < 5:
+                added += 1
+        return d
+
+    def _timeline(reg_date):
+        """Compute (email_date, call_date, kit_date) from a registration
+        date. Falls back to 30 days ago if reg_date is unparseable.
+        Capped at today so we don't end up with future dates."""
+        if reg_date is None:
+            reg_date = date.today() - timedelta(days=30)
+        email_d = _to_working_day(reg_date)
+        call_d  = _add_working_days(email_d, 1)
+        kit_d   = _add_working_days(call_d, 5)  # within the 7-working-day SLA
+        today = date.today()
+        if email_d > today: email_d = today
+        if call_d  > today: call_d  = today
+        if kit_d   > today: kit_d   = today
+        return email_d, call_d, kit_d
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        def _ensure_onb_row(client_id, reg_no):
+            row = conn.execute(
+                "SELECT id, onboarding_status FROM client_onboarding "
+                " WHERE client_id = ?", (client_id,),
+            ).fetchone()
+            if row:
+                return row['id'], row['onboarding_status']
+            try:
+                conn.execute(
+                    "INSERT INTO client_onboarding "
+                    "(client_id, registration_number) VALUES (?, ?)",
+                    (client_id, reg_no),
+                )
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"onb seed: insert failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+                return None, None
+            row = conn.execute(
+                "SELECT id, onboarding_status FROM client_onboarding "
+                " WHERE client_id = ?", (client_id,),
+            ).fetchone()
+            return (row['id'], row['onboarding_status']) if row else (None, None)
+
+        plab_completed = 0
+        amc_completed = 0
+
+        # ── PLAB: every active client -> Completed ──
+        plab = conn.execute(
+            "SELECT id, registration_number, registration_date "
+            " FROM plab_clients WHERE COALESCE(pathway,'plab')='plab'"
+        ).fetchall()
+        for c in plab:
+            onb_id, status = _ensure_onb_row(c['id'], c['registration_number'])
+            if not onb_id:
+                continue
+            if status == 'Completed':
+                continue
+            email_d, call_d, kit_d = _timeline(_parse_date(c['registration_date']))
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_email_sent = 1,
+                          welcome_email_sent_at = COALESCE(welcome_email_sent_at,
+                                                           ?::timestamp),
+                          welcome_call_date    = COALESCE(NULLIF(welcome_call_date,''),    ?),
+                          welcome_call_by      = COALESCE(NULLIF(welcome_call_by,''),      'Operations'),
+                          welcome_call_confirmed = 1,
+                          welcome_call_notes   = COALESCE(NULLIF(welcome_call_notes,''),
+                                                          'Backfilled -- pre-existing onboarding.'),
+                          kit_delivery_method  = COALESCE(NULLIF(kit_delivery_method,''),  'Couriered'),
+                          kit_delivered_date   = COALESCE(NULLIF(kit_delivered_date,''),   ?),
+                          kit_tracking_communicated = 1,
+                          onboarding_status    = 'Completed',
+                          updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (email_d.strftime('%Y-%m-%d %H:%M:%S'),
+                     call_d.isoformat(), kit_d.isoformat(), onb_id),
+                )
+                plab_completed += 1
+            except Exception as e:
+                logging.warning(f"onb seed PLAB {c['registration_number']}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        # ── AMC: targeted regs + currently Kit Dispatched -> Completed ──
+        # Resolve targeted regs to plab_clients.id via variant matching.
+        targeted_ids = set()
+        for reg in AMC_TARGETED_REGS:
+            try:
+                rows = conn.execute(
+                    "SELECT id FROM plab_clients "
+                    " WHERE registration_number = ANY(?) "
+                    "   AND COALESCE(pathway,'plab')='australia'",
+                    (_variants(reg),),
+                ).fetchall()
+            except Exception as e:
+                logging.warning(f"onb seed AMC variant lookup {reg}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+                continue
+            for r in rows:
+                targeted_ids.add(r['id'])
+
+        # Plus all AMC clients currently Kit Dispatched.
+        kit_dispatched = conn.execute(
+            "SELECT p.id FROM plab_clients p "
+            " JOIN client_onboarding o ON o.client_id = p.id "
+            " WHERE COALESCE(p.pathway,'plab')='australia' "
+            "   AND o.onboarding_status = 'Kit Dispatched'"
+        ).fetchall()
+        for r in kit_dispatched:
+            targeted_ids.add(r['id'])
+
+        for cid in targeted_ids:
+            c = conn.execute(
+                "SELECT registration_number, registration_date "
+                " FROM plab_clients WHERE id = ?", (cid,),
+            ).fetchone()
+            if not c:
+                continue
+            onb_id, status = _ensure_onb_row(cid, c['registration_number'])
+            if not onb_id:
+                continue
+            if status == 'Completed':
+                continue
+            email_d, call_d, kit_d = _timeline(_parse_date(c['registration_date']))
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_email_sent = 1,
+                          welcome_email_sent_at = COALESCE(welcome_email_sent_at,
+                                                           ?::timestamp),
+                          welcome_call_date     = COALESCE(NULLIF(welcome_call_date,''),     ?),
+                          welcome_call_by       = COALESCE(NULLIF(welcome_call_by,''),       'Vipin'),
+                          welcome_call_confirmed = 1,
+                          welcome_kit_method    = COALESCE(NULLIF(welcome_kit_method,''),    'Postal from Office'),
+                          welcome_kit_sent_date = COALESCE(NULLIF(welcome_kit_sent_date,''), ?),
+                          amc_handbook_method   = COALESCE(NULLIF(amc_handbook_method,''),   'Postal from Office'),
+                          amc_handbook_sent_date= COALESCE(NULLIF(amc_handbook_sent_date,''),?),
+                          amc_clinical_handbook_method     = COALESCE(NULLIF(amc_clinical_handbook_method,''),     'Postal from Office'),
+                          amc_clinical_handbook_sent_date  = COALESCE(NULLIF(amc_clinical_handbook_sent_date,''),  ?),
+                          brochure_policy_items = COALESCE(NULLIF(brochure_policy_items,''),
+                                                           'Australia Brochure,CEO Letter,Refund Policy,Service Level Agreement'),
+                          additional_goodies    = COALESCE(NULLIF(additional_goodies,''),
+                                                           'Pen,Diary,Laptop Bag,Stickers'),
+                          onboarding_status     = 'Completed',
+                          updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (email_d.strftime('%Y-%m-%d %H:%M:%S'),
+                     call_d.isoformat(),
+                     kit_d.isoformat(), kit_d.isoformat(), kit_d.isoformat(),
+                     onb_id),
+                )
+                amc_completed += 1
+            except Exception as e:
+                logging.warning(f"onb seed AMC id={cid}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"onb seed marker write: {e}")
+
+        logging.info(
+            f"Onboarding completion seed: PLAB={plab_completed}  AMC={amc_completed}"
+        )
+    except Exception as e:
+        logging.warning(f"seed_onboarding_completion_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_onboarding_completion_once()
+
+
 # Phase 5 baseline must run AFTER the table is guaranteed to exist.
 seed_access_master_baseline_once()
 
