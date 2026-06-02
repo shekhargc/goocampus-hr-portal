@@ -99,7 +99,6 @@ from core.auth import (
     client_required,
     can_post_announcements,
     can_approve_leave,
-    has_module_access,
     sales_access_required,
 )
 from core.users import get_user, is_manager, get_pending_team_count
@@ -118,7 +117,7 @@ def inject_manager_status():
         user = get_user()
         mgr = is_manager(user_id)
         pending_team = get_pending_team_count(user_id) if mgr else 0
-        sales_access = has_module_access(user, 'sales') if user else False
+        sales_access = has_section_permission(user, 'sales', 'meetings', 'view') if user else False
         return {'is_manager': mgr, 'pending_team_count': pending_team, 'has_sales_access': sales_access}
     return {'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False}
 
@@ -426,24 +425,43 @@ def partner_login():
 
 
 def get_partner_visible_sections(partner_id):
-    """Return list of section_key strings this partner can see."""
+    """Return list of legacy `section_key` strings this partner can see.
+
+    Phase 6 (2026-06-01): now reads from user_section_permissions
+    (subject_type='partner'). The legacy `partner_section_permissions`
+    table is going away. We translate from the new (main, sub) tuples
+    back to the legacy section_key strings so existing template /
+    sidebar consumers don't need to change.
+    """
+    # Inverse of LEGACY_PARTNER_SECTION_MAP defined further down in app.py.
+    # Hand-inlined here so this helper has no forward-reference dependency.
+    INVERSE = {
+        ('partner_portal', 'dashboard'):         'partner_dashboard',
+        ('partner_portal', 'student_leads'):     'partner_student_leads',
+        ('partner_portal', 'b2b_leads'):         'partner_b2b_leads',
+        ('partner_portal', 'team'):              'partner_team',
+        ('partner_portal', 'products'):          'partner_products',
+        ('partner_portal', 'commissions'):       'partner_commissions',
+        ('partner_portal', 'reports'):           'partner_reports',
+        ('partner_portal', 'college_portal'):    'partner_college_portal',
+        ('partner_portal', 'medical_predictor'): 'partner_medical_predictor',
+    }
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT section_key, allowed_partner_ids FROM partner_section_permissions WHERE is_active = 1"
+            "SELECT main_section, sub_section FROM user_section_permissions "
+            "WHERE subject_type='partner' AND subject_id = ? AND can_view = 1",
+            (partner_id,),
         ).fetchall()
         visible = []
-        pid_str = str(partner_id)
         for r in rows:
-            allowed = (r['allowed_partner_ids'] or '').strip()
-            # Empty allowed_partner_ids means visible to ALL partners
-            if not allowed:
-                visible.append(r['section_key'])
-            else:
-                # Check if this partner's ID is in the comma-separated list
-                allowed_list = [x.strip() for x in allowed.split(',') if x.strip()]
-                if pid_str in allowed_list:
-                    visible.append(r['section_key'])
+            key = INVERSE.get((r['main_section'], r['sub_section']))
+            if key:
+                visible.append(key)
+        # Always include the dashboard so a partner with zero grants still
+        # has a landing page (matches legacy except-clause behavior).
+        if 'partner_dashboard' not in visible:
+            visible.append('partner_dashboard')
         return visible
     except Exception as e:
         logging.error(f"get_partner_visible_sections: {e}")
@@ -6712,7 +6730,7 @@ def approve_wfh(wfh_id):
 @login_required
 def projects_list():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         # All employees can view projects, but only certain can manage
         pass
     conn = get_db()
@@ -6756,7 +6774,7 @@ def projects_list():
 @admin_required
 def add_project():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -6842,7 +6860,7 @@ def project_detail(project_id):
 @admin_required
 def edit_project(project_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -6941,7 +6959,7 @@ def streams_list():
 @admin_required
 def add_revenue_stream():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('streams_list'))
     if request.method == 'POST':
@@ -6975,7 +6993,7 @@ def add_revenue_stream():
 @admin_required
 def edit_revenue_stream(stream_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('streams_list'))
     conn = get_db()
@@ -7099,7 +7117,7 @@ def products_list():
 @admin_required
 def add_product(project_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -7177,7 +7195,7 @@ def add_product(project_id):
 @admin_required
 def edit_product(ps_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -19423,7 +19441,7 @@ def sales_crm_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = get_user()
-        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+        if not has_section_permission(user, 'sales', 'meetings', 'view'):
             flash('Sales module access required', 'error')
             return redirect(url_for('dashboard'))
         if not get_sales_role(user):
@@ -19442,7 +19460,7 @@ def sales_write_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = get_user()
-        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+        if not has_section_permission(user, 'sales', 'meetings', 'view'):
             flash('Sales module access required', 'error')
             return redirect(url_for('dashboard'))
         role = get_sales_role(user)
@@ -25572,7 +25590,17 @@ def college_import_all():
 # ─── SECTION VISIBILITY CONTROL ───
 
 def ensure_section_permissions_table():
-    """Create section_permissions table for admin visibility control."""
+    """No-op since Phase 6 (2026-06-01). Kept for any callers still
+    referencing the function name; the legacy section_permissions and
+    partner_section_permissions tables are dropped by
+    drop_legacy_section_tables_once() on boot. Access Master replaced this.
+    """
+    return
+
+
+def _legacy_ensure_section_permissions_table_REMOVED():
+    """Original implementation, kept here only as historical comment.
+    Do NOT call. See ensure_section_permissions_table() above."""
     try:
         conn = get_db()
         conn.execute('''CREATE TABLE IF NOT EXISTS section_permissions (
@@ -25818,7 +25846,6 @@ ACCESS_SECTION_CATALOG = [
             ('state_city',        'State & City Settings','Location lookup management'),
             ('reset_passwords',   'Reset Passwords',     'Admin password reset tool'),
             ('access_master',     'Access Master',       'Manage section permissions (this page)'),
-            ('section_visibility','Section Visibility',  'Legacy visibility editor'),
         ],
     },
     # ── Colleges ───────────────────────────────────────────────────────────
@@ -26473,6 +26500,81 @@ def realign_access_master_baseline_once():
 realign_access_master_baseline_once()
 
 
+def drop_legacy_section_tables_once():
+    """Phase 6 (2026-06-01): drop the legacy section_permissions and
+    partner_section_permissions tables. Their job has moved to Access
+    Master (user_section_permissions).
+
+    Idempotent via marker 'access_master_legacy_dropped' = 'phase6_v1'.
+    `DROP TABLE IF EXISTS` is itself idempotent at the SQL level but we
+    still guard with a marker so the boot log stays quiet after the
+    first deploy.
+
+    The legacy `module_access` table is NOT dropped here -- it's still
+    used by the admin_view tier check in sales views. That's a separate
+    cleanup.
+    """
+    MARKER_KEY = 'access_master_legacy_dropped'
+    MARKER_VAL = 'phase6_v1'
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already dropped
+
+        for ddl in ("DROP TABLE IF EXISTS section_permissions",
+                    "DROP TABLE IF EXISTS partner_section_permissions"):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"drop_legacy_section_tables: {ddl} failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"drop_legacy_section_tables marker write failed: {e}")
+
+        logging.info("Access Master Phase 6: dropped legacy section_permissions + partner_section_permissions tables")
+    except Exception as e:
+        logging.warning(f"drop_legacy_section_tables_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+drop_legacy_section_tables_once()
+
+
 # ─────────────────────────────────────────────────────────────────────────
 #  Access Master Phase 3: log-only enforcement
 #
@@ -26601,7 +26703,7 @@ ACCESS_ROUTE_MAP = {
     'access_master':                _ap('company', 'access_master'),
     'access_master_save':           _ap('company', 'access_master', 'edit'),
     'access_master_save_bulk':      _ap('company', 'access_master', 'edit'),
-    'section_visibility':           _ap('company', 'section_visibility'),
+    # 'section_visibility' route deleted in Phase 6.
     'holidays_list':                _ap('company', 'holidays'),
     'calendar':                     _ap('company', 'calendar'),
     'org_chart':                    _ap('company', 'org_chart'),
@@ -27419,177 +27521,16 @@ def access_master_save_bulk():
     })
 
 
-@app.route('/admin/section-visibility')
-@login_required
-def section_visibility():
-    user = get_user()
-    if not user.get('is_admin'):
-        flash('Admin access required', 'error')
-        return redirect(url_for('dashboard'))
-
-    conn = get_db()
-    # Team sections
-    sections = conn.execute("SELECT * FROM section_permissions ORDER BY sort_order, section_key").fetchall()
-    sections = [dict(s) for s in sections]
-
-    # Group by menu_group
-    groups = {}
-    for s in sections:
-        g = s['menu_group']
-        if g not in groups:
-            groups[g] = []
-        groups[g].append(s)
-
-    # Partner sections
-    partner_sections = conn.execute("SELECT * FROM partner_section_permissions ORDER BY sort_order, section_key").fetchall()
-    partner_sections = [dict(s) for s in partner_sections]
-
-    # Group partner sections
-    partner_groups = {}
-    for s in partner_sections:
-        g = s['menu_group']
-        if g not in partner_groups:
-            partner_groups[g] = []
-        partner_groups[g].append(s)
-
-    # Get all employees for the selector
-    employees = conn.execute("SELECT emp_code, name, department FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
-    employees = [dict(e) for e in employees]
-
-    # Get unique departments
-    departments = sorted(set(e['department'] for e in employees if e.get('department') and e['department'].strip()))
-
-    # Get all partners for the selector
-    partners = conn.execute("SELECT id, company_name, contact_person, partner_type FROM partners ORDER BY company_name").fetchall()
-    partners = [dict(p) for p in partners]
-
-    conn.close()
-
-    return render_template('section_visibility.html', user=user, groups=groups,
-                         partner_groups=partner_groups, employees=employees,
-                         departments=departments, partners=partners,
-                    active_section='company')
-
-
-@app.route('/api/section-permissions/<int:section_id>', methods=['PUT'])
-@login_required
-def update_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''UPDATE section_permissions
-        SET is_admin_only = ?, allowed_roles = ?, allowed_emp_codes = ?, allowed_departments = ?, is_active = ?
-        WHERE id = ?''',
-        (data.get('is_admin_only', 0),
-         data.get('allowed_roles', ''),
-         data.get('allowed_emp_codes', ''),
-         data.get('allowed_departments', ''),
-         data.get('is_active', 1),
-         section_id))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/section-permissions', methods=['POST'])
-@login_required
-def add_section_permission():
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''INSERT INTO section_permissions (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, allowed_departments, is_active, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (data.get('section_key', ''),
-         data.get('section_label', ''),
-         data.get('menu_group', 'Other'),
-         data.get('is_admin_only', 0),
-         data.get('allowed_roles', ''),
-         data.get('allowed_emp_codes', ''),
-         data.get('allowed_departments', ''),
-         data.get('is_active', 1),
-         data.get('sort_order', 99)))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/section-permissions/<int:section_id>', methods=['DELETE'])
-@login_required
-def delete_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    conn = get_db()
-    conn.execute("DELETE FROM section_permissions WHERE id = ?", (section_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-# ── Partner Section Permission APIs ──
-
-@app.route('/api/partner-section-permissions/<int:section_id>', methods=['PUT'])
-@login_required
-def update_partner_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''UPDATE partner_section_permissions
-        SET allowed_partner_ids = ?, is_active = ?
-        WHERE id = ?''',
-        (data.get('allowed_partner_ids', ''),
-         data.get('is_active', 1),
-         section_id))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/partner-section-permissions', methods=['POST'])
-@login_required
-def add_partner_section_permission():
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''INSERT INTO partner_section_permissions
-        (section_key, section_label, menu_group, allowed_partner_ids, is_active, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        (data.get('section_key', ''),
-         data.get('section_label', ''),
-         data.get('menu_group', 'Partner Portal'),
-         data.get('allowed_partner_ids', ''),
-         data.get('is_active', 1),
-         data.get('sort_order', 99)))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/partner-section-permissions/<int:section_id>', methods=['DELETE'])
-@login_required
-def delete_partner_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    conn = get_db()
-    conn.execute("DELETE FROM partner_section_permissions WHERE id = ?", (section_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+# ── Legacy Section Visibility editor + APIs (DELETED in Phase 6, 2026-06-01)
+#
+# The /admin/section-visibility page, its template, and the seven API endpoints
+# that backed it (PUT/POST/DELETE on section-permissions and partner-section-permissions)
+# were the old way of controlling who sees what in the sidebar. Access Master
+# replaces all of it. The legacy `section_permissions` and `partner_section_permissions`
+# tables are dropped by drop_legacy_section_tables_once() on boot.
+#
+# If you find yourself reaching for a "section visibility" page, you want
+# /admin/access-master instead — same idea, finer grain, audited.
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
