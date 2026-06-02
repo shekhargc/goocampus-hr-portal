@@ -141,100 +141,40 @@
 
     <!-- Items checklist inside the welcome kit -->
     <div style="margin-top:20px;">
-        <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 12px;">Items in this Welcome Kit</h4>
+        <h4 style="font-size:0.9rem;font-weight:700;color:var(--navy);margin:0 0 6px;">Items in this Welcome Kit</h4>
+        <p style="font-size:0.74rem;color:var(--gray-500);margin:0 0 12px;">
+            Items are managed in <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;text-decoration:none;">Welcome Kit Settings</a>. Add or remove items there.
+        </p>
+        {% if kit_items %}
         <table class="kit-table">
             <thead>
                 <tr>
                     <th style="width:40px;">Included</th>
                     <th>Item</th>
+                    <th style="width:130px;">Type</th>
                     <th style="width:140px;">Sent Date</th>
-                    <th style="width:170px;">Method</th>
+                    <th>Notes</th>
                 </tr>
             </thead>
             <tbody>
-                <!-- AMC Hand Book -->
+                {% for k in kit_items %}
                 <tr>
                     <td style="text-align:center;">
-                        <input type="checkbox" name="amc_handbook_included" value="1" {% if onboarding.amc_handbook_sent_date or onboarding.amc_handbook_method %}checked{% endif %}>
+                        <input type="checkbox" name="kit_included_{{ k.id }}" value="1" {% if k.included %}checked{% endif %}>
                     </td>
-                    <td style="font-weight:600;">AMC Hand Book</td>
-                    <td><input type="date" name="amc_handbook_sent_date" value="{{ onboarding.amc_handbook_sent_date or '' }}" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;"></td>
-                    <td>
-                        <select name="amc_handbook_method" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;background:#fff;">
-                            <option value="">—</option>
-                            <option value="Postal from Office"  {% if onboarding.amc_handbook_method == 'Postal from Office' %}selected{% endif %}>Postal from Office</option>
-                            <option value="Couriered"           {% if onboarding.amc_handbook_method == 'Couriered' %}selected{% endif %}>Couriered</option>
-                            <option value="In Office Delivered" {% if onboarding.amc_handbook_method == 'In Office Delivered' %}selected{% endif %}>In Office Delivered</option>
-                            <option value="Digital / Soft Copy" {% if onboarding.amc_handbook_method == 'Digital / Soft Copy' %}selected{% endif %}>Digital / Soft Copy</option>
-                        </select>
-                    </td>
+                    <td style="font-weight:600;">{{ k.item_name }}</td>
+                    <td><span style="display:inline-block;background:#F3F4F6;color:#374151;padding:1px 7px;border-radius:4px;font-size:0.7rem;">{{ k.item_type }}</span></td>
+                    <td><input type="date" name="kit_sent_date_{{ k.id }}" value="{{ k.sent_date }}" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;"></td>
+                    <td><input type="text" name="kit_notes_{{ k.id }}" value="{{ k.notes }}" placeholder="Optional notes" style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:4px;font-size:0.78rem;width:100%;box-sizing:border-box;"></td>
                 </tr>
-
-                <!-- AMC Clinical Hand Book -->
-                <tr>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="amc_clinical_handbook_included" value="1" {% if onboarding.amc_clinical_handbook_sent_date or onboarding.amc_clinical_handbook_method %}checked{% endif %}>
-                    </td>
-                    <td style="font-weight:600;">AMC Clinical Hand Book</td>
-                    <td><input type="date" name="amc_clinical_handbook_sent_date" value="{{ onboarding.amc_clinical_handbook_sent_date or '' }}" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;"></td>
-                    <td>
-                        <select name="amc_clinical_handbook_method" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;background:#fff;">
-                            <option value="">—</option>
-                            <option value="Postal from Office"  {% if onboarding.amc_clinical_handbook_method == 'Postal from Office' %}selected{% endif %}>Postal from Office</option>
-                            <option value="Couriered"           {% if onboarding.amc_clinical_handbook_method == 'Couriered' %}selected{% endif %}>Couriered</option>
-                            <option value="In Office Delivered" {% if onboarding.amc_clinical_handbook_method == 'In Office Delivered' %}selected{% endif %}>In Office Delivered</option>
-                            <option value="Digital / Soft Copy" {% if onboarding.amc_clinical_handbook_method == 'Digital / Soft Copy' %}selected{% endif %}>Digital / Soft Copy</option>
-                        </select>
-                    </td>
-                </tr>
-
-                <!-- Brochure & Policy items (free text list, shown below) -->
-                <tr>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="brochure_policy_included" value="1" {% if onboarding.brochure_policy_items %}checked{% endif %}>
-                    </td>
-                    <td>
-                        <div style="font-weight:600;">Brochure &amp; Policy</div>
-                        <input type="text" name="brochure_policy_items" value="{{ onboarding.brochure_policy_items or '' }}"
-                               placeholder="Comma-separated, e.g. Australia Brochure, CEO Letter, Refund Policy, Service Level Agreement"
-                               style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:4px;font-size:0.78rem;width:100%;box-sizing:border-box;margin-top:4px;">
-                        {% if onboarding.brochure_policy_items %}
-                        <div class="pill-row" style="margin-top:6px;">
-                            {% for item in onboarding.brochure_policy_items.split(',') %}
-                                {% if item.strip() %}<span class="pill" style="padding:2px 8px;font-size:0.68rem;">{{ item.strip() }}</span>{% endif %}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td style="color:var(--gray-400);font-size:0.78rem;">Same as kit</td>
-                    <td>
-                        <input type="text" name="sla_copy_method" value="{{ onboarding.sla_copy_method or '' }}" placeholder="SLA method (optional)" style="padding:6px 8px;border:1px solid #D1D5DB;border-radius:4px;font-size:0.82rem;width:100%;box-sizing:border-box;">
-                    </td>
-                </tr>
-
-                <!-- Additional Goodies -->
-                <tr>
-                    <td style="text-align:center;">
-                        <input type="checkbox" name="additional_goodies_included" value="1" {% if onboarding.additional_goodies %}checked{% endif %}>
-                    </td>
-                    <td>
-                        <div style="font-weight:600;">Additional Goodies</div>
-                        <input type="text" name="additional_goodies" value="{{ onboarding.additional_goodies or '' }}"
-                               placeholder="Comma-separated, e.g. Pen, Diary, Laptop Bag, Stickers"
-                               style="padding:6px 8px;border:1px solid #E5E7EB;border-radius:4px;font-size:0.78rem;width:100%;box-sizing:border-box;margin-top:4px;">
-                        {% if onboarding.additional_goodies %}
-                        <div class="pill-row" style="margin-top:6px;">
-                            {% for item in onboarding.additional_goodies.split(',') %}
-                                {% if item.strip() %}<span class="pill" style="padding:2px 8px;font-size:0.68rem;">{{ item.strip() }}</span>{% endif %}
-                            {% endfor %}
-                        </div>
-                        {% endif %}
-                    </td>
-                    <td style="color:var(--gray-400);font-size:0.78rem;">Same as kit</td>
-                    <td style="color:var(--gray-400);font-size:0.78rem;">Same as kit</td>
-                </tr>
+                {% endfor %}
             </tbody>
         </table>
+        {% else %}
+        <div style="background:#F9FAFB;border:1px dashed #D1D5DB;border-radius:8px;padding:18px;text-align:center;color:var(--gray-500);font-size:0.85rem;">
+            No kit items defined for AMC pathway yet. <a href="/admin/welcome-kit" style="color:var(--orange);font-weight:600;">Configure items →</a>
+        </div>
+        {% endif %}
     </div>
 </div>
 

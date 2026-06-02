@@ -15018,10 +15018,45 @@ def ops_au_onboarding_detail(client_id):
         flash('AMC client not found.', 'error')
         return redirect(url_for('ops_au_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+
+    # Kit items: pull the AMC (australia) product's master template from
+    # /admin/welcome-kit, plus this client's per-item progress.
+    amc_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'australia' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    kit_items = []
+    if amc_prod:
+        templ = conn.execute(
+            "SELECT id, item_name, item_type, sort_order "
+            " FROM welcome_kit_items WHERE product_id = ? AND is_active = 1 "
+            " ORDER BY sort_order, id",
+            (amc_prod['id'],),
+        ).fetchall()
+        # Existing per-client status for these items (legacy AMC clients
+        # link via client_id; v2 client_registrations use registration_id).
+        progress = {
+            r['kit_item_id']: r for r in conn.execute(
+                "SELECT kit_item_id, status, sent_date, completed_at, notes "
+                " FROM client_welcome_kit WHERE client_id = ?",
+                (client_id,),
+            ).fetchall()
+        }
+        for t in templ:
+            p = progress.get(t['id'])
+            kit_items.append({
+                'id': t['id'],
+                'item_name': t['item_name'],
+                'item_type': t['item_type'] or 'task',
+                'sort_order': t['sort_order'] or 0,
+                'included': bool(p and p['status'] == 'done'),
+                'sent_date': (p['sent_date'] if p else '') or '',
+                'notes': (p['notes'] if p else '') or '',
+            })
     conn.close()
     return render_template(
         'ops_australia_onboarding_detail.html',
-        client=client, onboarding=onb,
+        client=client, onboarding=onb, kit_items=kit_items,
         active_ops_page='australia-onboarding', active_pathway='australia',
         active_section='operations',
     )
@@ -15030,6 +15065,7 @@ def ops_au_onboarding_detail(client_id):
 @app.route('/operations/australia/onboarding/<int:client_id>/update', methods=['POST'])
 @admin_required
 def ops_au_onboarding_update(client_id):
+    user = get_user()
     conn = get_db()
     client = conn.execute(
         "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
@@ -15046,10 +15082,6 @@ def ops_au_onboarding_update(client_id):
               welcome_call_date = ?, welcome_call_by = ?,
               welcome_call_confirmed = ?, welcome_call_notes = ?,
               welcome_kit_method = ?, welcome_kit_sent_date = ?,
-              amc_handbook_method = ?, amc_handbook_sent_date = ?,
-              amc_clinical_handbook_method = ?, amc_clinical_handbook_sent_date = ?,
-              brochure_policy_items = ?, sla_copy_method = ?,
-              additional_goodies = ?,
               updated_at = CURRENT_TIMESTAMP
             WHERE id = ?""",
         (
@@ -15057,14 +15089,64 @@ def ops_au_onboarding_update(client_id):
             1 if f.get('welcome_call_confirmed') else 0,
             f.get('welcome_call_notes', ''),
             f.get('welcome_kit_method', ''),  f.get('welcome_kit_sent_date', ''),
-            f.get('amc_handbook_method', ''), f.get('amc_handbook_sent_date', ''),
-            f.get('amc_clinical_handbook_method', ''),
-            f.get('amc_clinical_handbook_sent_date', ''),
-            f.get('brochure_policy_items', ''), f.get('sla_copy_method', ''),
-            f.get('additional_goodies', ''),
             onb['id'],
         ),
     )
+
+    # Per-item kit checklist -- now stored in client_welcome_kit, driven
+    # by the admin-configured items in /admin/welcome-kit.
+    amc_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'australia' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    if amc_prod:
+        items = conn.execute(
+            "SELECT id, item_name, item_type FROM welcome_kit_items "
+            " WHERE product_id = ? AND is_active = 1",
+            (amc_prod['id'],),
+        ).fetchall()
+        for it in items:
+            included = bool(f.get(f"kit_included_{it['id']}"))
+            sent_date = (f.get(f"kit_sent_date_{it['id']}") or '').strip()
+            notes = (f.get(f"kit_notes_{it['id']}") or '').strip()
+            row = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, it['id']),
+            ).fetchone()
+            if included or sent_date:
+                if row:
+                    conn.execute(
+                        "UPDATE client_welcome_kit SET "
+                        " status = 'done', sent_date = ?, notes = ?, "
+                        " completed_by = ?, "
+                        " completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP) "
+                        " WHERE id = ?",
+                        (sent_date, notes, user['id'] if user else None, row['id']),
+                    )
+                else:
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_welcome_kit "
+                            "(client_id, kit_item_id, item_name, item_type, "
+                            " status, sent_date, notes, completed_by, completed_at) "
+                            "VALUES (?, ?, ?, ?, 'done', ?, ?, ?, CURRENT_TIMESTAMP)",
+                            (client_id, it['id'], it['item_name'], it['item_type'],
+                             sent_date, notes, user['id'] if user else None),
+                        )
+                    except Exception as e:
+                        logging.warning(f"au onb update insert cwk: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            elif row:
+                # Unticked: revert to pending and clear the completion.
+                conn.execute(
+                    "UPDATE client_welcome_kit SET "
+                    " status = 'pending', sent_date = NULL, "
+                    " completed_by = NULL, completed_at = NULL, notes = ? "
+                    " WHERE id = ?",
+                    (notes, row['id']),
+                )
     # Re-compute simple onboarding status from filled-ness of key items.
     fresh = dict(conn.execute(
         "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
@@ -27195,6 +27277,18 @@ def ensure_welcome_kit_tables():
             UNIQUE (registration_id, kit_item_id)
         )''')
         conn.commit()
+        # 2026-06-02: extra columns so the legacy plab_clients-based
+        # onboarding pages (PLAB + AMC) can share the same per-item
+        # checklist table. Both ALTERs are idempotent on PG.
+        for ddl in (
+            "ALTER TABLE client_welcome_kit ADD COLUMN sent_date TEXT",
+            "ALTER TABLE client_welcome_kit ADD COLUMN client_id INTEGER",
+        ):
+            try:
+                conn.execute(ddl); conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         conn.close()
     except Exception as e:
         logging.error(f"ensure_welcome_kit_tables: {e}")
@@ -27204,29 +27298,63 @@ ensure_welcome_kit_tables()
 
 
 def seed_default_welcome_kit_items_once():
-    """Seed a baseline welcome-kit template for the canonical PLAB and AMC
-    products so /admin/welcome-kit isn't blank when admin opens it.
+    """Seed PHYSICAL ITEMS that go into each pathway's welcome kit.
 
-    Idempotent via marker welcome_kit_seeded = v1. Per-product items are
-    added ONLY if the product currently has zero welcome_kit_items, so
-    admin edits / additions are never overwritten.
+    Each pathway's canonical product gets the list of things actually
+    shipped to a new client. Operations ticks them off in the onboarding
+    section -- the same list shown in /admin/welcome-kit is the same
+    list a client's onboarding row checks against.
+
+    v1 (deprecated) used process-step labels ("Send welcome email",
+    "Schedule onboarding call", "30-day check-in call") which confused
+    the kit with the onboarding workflow. v2 replaces those with
+    physical items.
+
+    Bump from v1: delete the v1 auto-generated items (by exact label
+    match against KNOWN_V1_LABELS), then INSERT-IF-ABSENT the v2
+    items. Anything an admin added between v1 and v2 is preserved.
     """
     MARKER_KEY = 'welcome_kit_seeded'
-    MARKER_VAL = 'v1'
+    MARKER_VAL = 'v2'
 
-    DEFAULT_ITEMS = [
-        ('Send welcome email with portal credentials', 'communication', 10),
-        ('Send welcome WhatsApp message',              'communication', 20),
-        ('Add client to cohort WhatsApp group',         'communication', 30),
-        ('Schedule onboarding call',                   'meeting',       40),
-        ('Onboarding call completed',                  'meeting',       50),
-        ('Send goodie kit (pen, diary, stickers, bag)','goodie',        60),
-        ('Confirm goodie kit delivery',                'goodie',        70),
-        ('30-day check-in call',                       'meeting',       80),
-    ]
-    PATHWAY_TO_PRODUCT = {
-        'plab':      'UK PGCP',
-        'australia': 'AUS PGCP',
+    # Items inserted by v1 -- to be cleaned up when transitioning to v2.
+    KNOWN_V1_LABELS = {
+        'Send welcome email with portal credentials',
+        'Send welcome WhatsApp message',
+        'Add client to cohort WhatsApp group',
+        'Schedule onboarding call',
+        'Onboarding call completed',
+        'Send goodie kit (pen, diary, stickers, bag)',
+        'Confirm goodie kit delivery',
+        '30-day check-in call',
+    }
+
+    # Pathway -> (canonical product name, [(item_name, type, sort_order), ...])
+    PATHWAY_TO_KIT = {
+        'plab': ('UK PGCP', [
+            ('PLAB Brochure',               'document', 10),
+            ('CEO Letter',                  'document', 20),
+            ('Refund Policy',               'document', 30),
+            ('Service Agreement',           'document', 40),
+            ('English Book',                'book',     50),
+            ('Oxford Book',                 'book',     60),
+            ('Pen',                         'goodie',   70),
+            ('Diary',                       'goodie',   80),
+            ('Laptop Bag',                  'goodie',   90),
+            ('Stickers',                    'goodie',  100),
+        ]),
+        'australia': ('AUS PGCP', [
+            ('AMC Hand Book',               'book',     10),
+            ('AMC Clinical Hand Book',      'book',     20),
+            ('Australia Brochure',          'document', 30),
+            ('CEO Letter',                  'document', 40),
+            ('Refund Policy',               'document', 50),
+            ('Service Level Agreement',     'document', 60),
+            ('Pen',                         'goodie',   70),
+            ('Diary',                       'goodie',   80),
+            ('Laptop Bag',                  'goodie',   90),
+            ('Stickers',                    'goodie',  100),
+        ]),
     }
 
     conn = None
@@ -27245,8 +27373,12 @@ def seed_default_welcome_kit_items_once():
         if marker and marker['value'] == MARKER_VAL:
             return
 
+        cleaned = 0
         seeded = 0
-        for pathway, product_name in PATHWAY_TO_PRODUCT.items():
+        # v1 -> v2: per pathway, delete the auto-generated v1 process-step
+        # items, then INSERT-IF-ABSENT each v2 physical item. Anything
+        # admin-created stays untouched.
+        for pathway, (product_name, items) in PATHWAY_TO_KIT.items():
             try:
                 prow = conn.execute(
                     "SELECT id FROM products_services WHERE name = ?",
@@ -27255,13 +27387,29 @@ def seed_default_welcome_kit_items_once():
                 if not prow:
                     continue
                 pid = prow['id']
-                existing = conn.execute(
-                    "SELECT COUNT(*) AS c FROM welcome_kit_items WHERE product_id = ?",
-                    (pid,),
-                ).fetchone()
-                if existing and existing['c'] > 0:
-                    continue
-                for name, kind, order in DEFAULT_ITEMS:
+                # 1) Drop the known v1 process-step items (only by exact name
+                # match, so admin-added items survive).
+                for label in KNOWN_V1_LABELS:
+                    try:
+                        result = conn.execute(
+                            "DELETE FROM welcome_kit_items "
+                            " WHERE product_id = ? AND item_name = ?",
+                            (pid, label),
+                        )
+                        cleaned += max(0, getattr(result, 'rowcount', 0) or 0)
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                conn.commit()
+                # 2) INSERT-IF-ABSENT the v2 physical items.
+                for name, kind, order in items:
+                    existing = conn.execute(
+                        "SELECT id FROM welcome_kit_items "
+                        " WHERE product_id = ? AND item_name = ?",
+                        (pid, name),
+                    ).fetchone()
+                    if existing:
+                        continue
                     try:
                         conn.execute(
                             "INSERT INTO welcome_kit_items "
@@ -27301,8 +27449,11 @@ def seed_default_welcome_kit_items_once():
             except Exception as e:
                 logging.warning(f"seed_default_welcome_kit marker write: {e}")
 
-        if seeded:
-            logging.info(f"Default welcome-kit items seeded: {seeded} row(s)")
+        if cleaned or seeded:
+            logging.info(
+                f"Welcome-kit items v2: cleaned {cleaned} v1 row(s), "
+                f"seeded {seeded} new physical-item row(s)"
+            )
     except Exception as e:
         logging.warning(f"seed_default_welcome_kit_items_once: {e}")
         try:
@@ -27316,6 +27467,153 @@ def seed_default_welcome_kit_items_once():
 
 seed_default_welcome_kit_items_once()
 seed_amc_onboarding_from_xlsx_once()
+
+
+def migrate_amc_onboarding_to_kit_items_once():
+    """One-shot: copy AMC clients' hardcoded onboarding columns into
+    per-item client_welcome_kit rows so the new admin-driven checklist
+    UI reflects already-recorded data.
+
+    For each AMC client_onboarding row, map:
+        amc_handbook_sent_date           -> 'AMC Hand Book'
+        amc_clinical_handbook_sent_date  -> 'AMC Clinical Hand Book'
+        brochure_policy_items (CSV)      -> each item ('Australia Brochure',
+                                            'CEO Letter', 'Refund Policy',
+                                            'Service Level Agreement', ...)
+        additional_goodies   (CSV)       -> each item ('Pen', 'Diary',
+                                            'Laptop Bag', 'Stickers', ...)
+    Idempotent via marker amc_kit_items_migrated=v1 and via the
+    INSERT-IF-ABSENT logic.
+    """
+    MARKER_KEY = 'amc_kit_items_migrated'
+    MARKER_VAL = 'v1'
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        amc_prod = conn.execute(
+            "SELECT id FROM products_services WHERE pathway = 'australia' "
+            " ORDER BY id LIMIT 1"
+        ).fetchone()
+        if not amc_prod:
+            return
+        items = conn.execute(
+            "SELECT id, item_name FROM welcome_kit_items WHERE product_id = ?",
+            (amc_prod['id'],),
+        ).fetchall()
+        by_name = {(r['item_name'] or '').strip().lower(): r['id'] for r in items}
+
+        def _seed_row(client_id, kit_item_id, item_name, sent_date):
+            if not kit_item_id:
+                return
+            exists = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, kit_item_id),
+            ).fetchone()
+            if exists:
+                return
+            try:
+                conn.execute(
+                    "INSERT INTO client_welcome_kit "
+                    "(client_id, kit_item_id, item_name, item_type, status, "
+                    " sent_date, completed_at) "
+                    "VALUES (?, ?, ?, 'kit_item', 'done', ?, "
+                    "        CASE WHEN ?<>'' THEN ?::timestamp ELSE NULL END)",
+                    (client_id, kit_item_id, item_name,
+                     sent_date or None, sent_date or '', sent_date or None),
+                )
+            except Exception as e:
+                logging.warning(f"amc kit migrate row insert: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
+        amc_rows = conn.execute(
+            "SELECT co.client_id, co.amc_handbook_sent_date, "
+            "       co.amc_clinical_handbook_sent_date, "
+            "       co.brochure_policy_items, co.additional_goodies, "
+            "       co.welcome_kit_sent_date "
+            "  FROM client_onboarding co "
+            "  JOIN plab_clients p ON p.id = co.client_id "
+            " WHERE COALESCE(p.pathway,'plab') = 'australia'"
+        ).fetchall()
+
+        migrated = 0
+        for r in amc_rows:
+            cid = r['client_id']
+            default_dt = (r['welcome_kit_sent_date'] or '').strip()
+
+            if (r['amc_handbook_sent_date'] or '').strip() or 'amc hand book' in by_name:
+                _seed_row(cid, by_name.get('amc hand book'), 'AMC Hand Book',
+                          (r['amc_handbook_sent_date'] or default_dt))
+                migrated += 1
+            if (r['amc_clinical_handbook_sent_date'] or '').strip() or 'amc clinical hand book' in by_name:
+                if (r['amc_clinical_handbook_sent_date'] or '').strip():
+                    _seed_row(cid, by_name.get('amc clinical hand book'),
+                              'AMC Clinical Hand Book',
+                              r['amc_clinical_handbook_sent_date'])
+                    migrated += 1
+            for piece in (r['brochure_policy_items'] or '').split(','):
+                key = piece.strip().lower()
+                if not key:
+                    continue
+                kit_id = by_name.get(key)
+                if kit_id:
+                    _seed_row(cid, kit_id, piece.strip(), default_dt)
+                    migrated += 1
+            for piece in (r['additional_goodies'] or '').split(','):
+                key = piece.strip().lower()
+                if not key:
+                    continue
+                kit_id = by_name.get(key)
+                if kit_id:
+                    _seed_row(cid, kit_id, piece.strip(), default_dt)
+                    migrated += 1
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"amc kit migrate marker: {e}")
+
+        if migrated:
+            logging.info(f"AMC kit-item migration: {migrated} row(s) seeded")
+    except Exception as e:
+        logging.warning(f"migrate_amc_onboarding_to_kit_items_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+migrate_amc_onboarding_to_kit_items_once()
 
 
 def seed_onboarding_completion_once():
