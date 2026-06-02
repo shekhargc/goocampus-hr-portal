@@ -78,9 +78,12 @@
 <!-- Progress Steps -->
 {% set steps = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
 {% set current_idx = steps.index(status) if status in steps else 0 %}
+{% set is_completed = (status == 'Completed') %}
 <div class="steps-track">
     {% for s in steps %}
-    <div class="step {% if loop.index0 < current_idx %}done{% elif loop.index0 == current_idx %}active{% endif %}">
+    {# When status='Completed', mark every step (including the last)
+       as 'done' so the green tick shows on the final node. #}
+    <div class="step {% if is_completed or loop.index0 < current_idx %}done{% elif loop.index0 == current_idx %}active{% endif %}">
         <div class="step-dot"></div>
         <div class="step-label">{{ s }}</div>
     </div>

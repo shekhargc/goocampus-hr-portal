@@ -15259,6 +15259,65 @@ def ops_au_onboarding_update(client_id):
     return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
 
 
+@app.route('/operations/australia/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
+@admin_required
+def ops_au_onboarding_send_welcome_email(client_id):
+    """Mirror of ops_onboarding_send_welcome_email for AMC pathway."""
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway,'plab')='australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    if not client['email']:
+        conn.close()
+        flash('Client has no email address.', 'error')
+        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    email_tpl = conn.execute(
+        "SELECT * FROM email_templates WHERE template_key = 'welcome_email'"
+    ).fetchone()
+    if not email_tpl:
+        conn.close()
+        flash('Welcome email template not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+    client_name = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
+    reg_display = format_reg_filter(client['registration_number'])
+    subject = email_tpl['subject'].replace('{{client_name}}', client_name)
+    body = email_tpl['body_html'].replace('{{client_name}}', client_name)
+    body = body.replace('{{registration_number}}', reg_display)
+    body = body.replace('{{plan_type}}', client['plan_type'] or 'N/A')
+    body = body.replace('{{registration_date}}', client['registration_date'] or '')
+    try:
+        from email_utils import send_email
+        success = send_email([client['email']], subject, body)
+        if success:
+            conn.execute(
+                """UPDATE client_onboarding SET
+                     welcome_email_sent = 1,
+                     welcome_email_sent_at = CURRENT_TIMESTAMP,
+                     welcome_email_sent_by = ?,
+                     onboarding_status = CASE
+                       WHEN onboarding_status = 'Pending' THEN 'Email Sent'
+                       ELSE onboarding_status END,
+                     updated_at = CURRENT_TIMESTAMP
+                   WHERE id = ?""",
+                (session.get('user_id'), onb['id']),
+            )
+            conn.commit()
+            flash(f'Welcome email sent to {client["email"]}', 'success')
+        else:
+            flash('Failed to send email. Check Resend API key.', 'error')
+    except Exception as e:
+        logging.error(f"ops_au_onboarding_send_welcome_email: {e}")
+        flash(f'Error sending email: {e}', 'error')
+    conn.close()
+    return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+
+
 def seed_amc_onboarding_from_xlsx_once():
     """One-shot seed: upsert AMC onboarding statuses from
     imports/amc_onboarding_seed.json (parsed earlier from the Zoho
@@ -27817,6 +27876,135 @@ def migrate_plab_kit_items_to_welcome_kit_once():
 
 
 migrate_plab_kit_items_to_welcome_kit_once()
+
+
+def backfill_completed_kit_dispatch_dates_once():
+    """For every Completed PLAB/AMC client whose kit-dispatch date is
+    missing, set it to (registration_date + 7 days). Falls back to
+    today - 30 days when the registration_date can't be parsed.
+
+    Touches client_onboarding (kit_delivered_date for PLAB,
+    welcome_kit_sent_date for AMC) and also propagates the date to
+    client_welcome_kit rows that are marked 'done' but have no
+    sent_date set.
+
+    Idempotent via marker completed_kit_dates_backfilled = v1.
+    """
+    MARKER_KEY = 'completed_kit_dates_backfilled'
+    MARKER_VAL = 'v1'
+
+    from datetime import datetime, date, timedelta
+
+    def _parse_date(s):
+        if not s: return None
+        s = str(s).split('T')[0].split(' ')[0]
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y'):
+            try: return datetime.strptime(s, fmt).date()
+            except ValueError: continue
+        return None
+
+    def _seven_days_after(reg_s):
+        d = _parse_date(reg_s) or (date.today() - timedelta(days=30))
+        return (d + timedelta(days=7)).isoformat()
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        rows = conn.execute(
+            "SELECT co.id, co.client_id, p.registration_date, "
+            "       COALESCE(p.pathway,'plab') AS pathway, "
+            "       co.kit_delivered_date, co.welcome_kit_sent_date "
+            "  FROM client_onboarding co "
+            "  JOIN plab_clients p ON p.id = co.client_id "
+            " WHERE co.onboarding_status = 'Completed'"
+        ).fetchall()
+
+        plab_fixed = amc_fixed = cwk_fixed = 0
+        for r in rows:
+            new_date = _seven_days_after(r['registration_date'])
+            if r['pathway'] == 'plab':
+                if not (r['kit_delivered_date'] or '').strip():
+                    conn.execute(
+                        "UPDATE client_onboarding SET kit_delivered_date = ? "
+                        " WHERE id = ?",
+                        (new_date, r['id']),
+                    )
+                    plab_fixed += 1
+                    target_date = new_date
+                else:
+                    target_date = r['kit_delivered_date']
+            else:
+                if not (r['welcome_kit_sent_date'] or '').strip():
+                    conn.execute(
+                        "UPDATE client_onboarding SET welcome_kit_sent_date = ? "
+                        " WHERE id = ?",
+                        (new_date, r['id']),
+                    )
+                    amc_fixed += 1
+                    target_date = new_date
+                else:
+                    target_date = r['welcome_kit_sent_date']
+            try:
+                result = conn.execute(
+                    "UPDATE client_welcome_kit "
+                    "   SET sent_date = ?, "
+                    "       completed_at = COALESCE(completed_at, ?::timestamp) "
+                    " WHERE client_id = ? AND status = 'done' "
+                    "   AND (sent_date IS NULL OR sent_date = '')",
+                    (target_date, target_date, r['client_id']),
+                )
+                cwk_fixed += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"backfill cwk dates: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"backfill kit dates marker: {e}")
+
+        logging.info(
+            f"Completed kit-dispatch date backfill: PLAB={plab_fixed} "
+            f"AMC={amc_fixed} cwk_rows={cwk_fixed}"
+        )
+    except Exception as e:
+        logging.warning(f"backfill_completed_kit_dispatch_dates_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+backfill_completed_kit_dispatch_dates_once()
 
 
 def seed_onboarding_completion_once():
