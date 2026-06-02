@@ -334,6 +334,45 @@
                 <div class="step-label">Step {{ reg.current_step }} of 4</div>
             </div>
 
+            {# ── Item D: "Your onboarding journey" -- 5-step live
+                timeline of the client's onboarding progress. Visible
+                once a registration_number exists (i.e. they've passed
+                sign-up). Steps go grey -> orange-with-✓ as Ops marks
+                each milestone in the operations onboarding screen. ── #}
+            {% if reg.registration_number and reg.timeline %}
+            <div style="margin-top:1rem;padding:1.1rem 1.1rem 0.9rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;">
+                <h6 style="margin:0 0 1rem;font-size:0.85rem;font-weight:700;color:#0F172A;">
+                    <i class="bi bi-signpost-2-fill me-1" style="color:#F97316;"></i> Your onboarding journey
+                </h6>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+                    {% for step in reg.timeline %}
+                    <div style="flex:1;text-align:center;position:relative;padding:0 4px;min-width:0;">
+                        {# connector line to the next step -- coloured orange when this step is done #}
+                        {% if not loop.last %}
+                        <div style="position:absolute;top:14px;left:50%;width:100%;height:3px;background:{% if step.done %}#F97316{% else %}#E5E7EB{% endif %};z-index:0;"></div>
+                        {% endif %}
+                        {# milestone dot #}
+                        <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 0.45rem;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+                            {% if step.done %}background:#F97316;color:white;
+                            {% elif step.current %}background:white;border:3px solid #F97316;color:#F97316;
+                            {% else %}background:#E5E7EB;color:transparent;{% endif %}">
+                            {% if step.done %}✓{% endif %}
+                        </div>
+                        <div style="font-size:0.7rem;font-weight:600;line-height:1.2;color:{% if step.done or step.current %}#0F172A{% else %}#94A3B8{% endif %};">{{ step.label }}</div>
+                        {% if step.date %}
+                        <div style="font-size:0.62rem;color:#64748B;margin-top:0.2rem;">{{ step.date }}</div>
+                        {% elif step.current and not step.done %}
+                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;">Up next</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <p style="margin:0.8rem 0 0;font-size:0.68rem;color:#64748B;text-align:center;">
+                    <i class="bi bi-info-circle me-1"></i>Your counsellor and the operations team update each step as it happens.
+                </p>
+            </div>
+            {% endif %}
+
             {# ── Item C-2: "What you signed up for" -- read-only summary
                 of plan / package / installments + counsellor contact,
                 visible only if Sales captured them upfront. ── #}

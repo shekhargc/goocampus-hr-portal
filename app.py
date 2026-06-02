@@ -1080,6 +1080,34 @@ def client_dashboard():
         WHERE cr.account_id = ?
         ORDER BY cr.created_at DESC
     ''', (acct_id,)).fetchall()
+    # Item D: pre-fetch onboarding milestones for every registration
+    # number, joined via plab_clients (which holds the ops-side record
+    # both PLAB and AMC flows write into). Keyed by registration_number
+    # so we can attach per-reg below without a per-row query.
+    reg_nums = [r['registration_number'] for r in registrations_raw if r['registration_number']]
+    onboarding_by_reg = {}
+    if reg_nums:
+        placeholders = ','.join(['?' for _ in reg_nums])
+        try:
+            onb_rows = conn.execute(f"""
+                SELECT pc.registration_number,
+                       co.welcome_email_sent, co.welcome_email_sent_at,
+                       co.welcome_call_confirmed, co.welcome_call_date,
+                       co.kit_delivered_date, co.welcome_kit_sent_date,
+                       co.onboarding_status, co.updated_at as onb_updated_at
+                FROM plab_clients pc
+                LEFT JOIN client_onboarding co ON co.client_id = pc.id
+                WHERE pc.registration_number IN ({placeholders})
+            """, reg_nums).fetchall()
+            for row in onb_rows:
+                reg_num = row['registration_number']
+                if reg_num and reg_num not in onboarding_by_reg:
+                    onboarding_by_reg[reg_num] = dict(row)
+        except Exception:
+            # Defensive: if join fails for any reason just show empty
+            # timelines rather than 500 the dashboard.
+            onboarding_by_reg = {}
+
     # Convert to dicts so the template can attach a pre-computed
     # installments list without complicating the SELECT.
     registrations = []
@@ -1100,6 +1128,13 @@ def client_dashboard():
         # Only keep installments that have an amount or date set so we
         # don't render four empty rows for a single-installment plan.
         d['installments'] = [it for it in d['installments'] if it['amount'] or it['date']]
+
+        # Item D: build the 5-step client-facing onboarding timeline.
+        # onb is None for any client who hasn't been pushed into
+        # client_onboarding yet; helper handles that by returning all
+        # steps as 'upcoming'.
+        d['timeline'] = _build_client_timeline(
+            onboarding_by_reg.get(d.get('registration_number')))
         registrations.append(d)
 
     # Get doc requests for all registrations
@@ -14793,6 +14828,81 @@ def _compute_onboarding_status(onb, kit_items):
     if onb.get('kit_delivery_method'):
         return 'Kit Dispatched'
     return 'Call Done'
+
+
+def _build_client_timeline(onb):
+    """Item D: build the 5-step client-facing onboarding timeline.
+
+    Returns a list of dicts, one per milestone:
+        {key, label, done, current, date}
+    `done` is True once Ops has marked the milestone complete.
+    `current` is True for the first not-yet-done step (so the UI can
+    light it up as the next thing to expect).
+    `date` is an ISO-style date string (YYYY-MM-DD) or '' when unset.
+
+    `onb` may be None — when the client has no client_onboarding row
+    yet (e.g. they just signed up and Ops hasn't created the record),
+    all 5 steps come back as upcoming.
+    """
+    o = onb or {}
+
+    def _d(v):
+        if not v:
+            return ''
+        s = str(v)
+        # Keep just the date portion of TIMESTAMPs (welcome_email_sent_at)
+        # while preserving plain TEXT dates that already look right.
+        return s[:10] if len(s) >= 10 else s
+
+    kit_date = o.get('kit_delivered_date') or o.get('welcome_kit_sent_date')
+    onboarded = (o.get('onboarding_status') or '').strip().lower() == 'completed'
+
+    steps = [
+        {
+            'key':   'email',
+            'label': 'Welcome Email',
+            'done':  bool(o.get('welcome_email_sent')),
+            'date':  _d(o.get('welcome_email_sent_at')),
+        },
+        {
+            'key':   'call',
+            'label': 'Welcome Call',
+            'done':  bool(o.get('welcome_call_confirmed')),
+            'date':  _d(o.get('welcome_call_date')),
+        },
+        {
+            'key':   'kit',
+            'label': 'Welcome Kit',
+            'done':  bool(kit_date),
+            'date':  _d(kit_date),
+        },
+        {
+            'key':   'onboarded',
+            'label': 'Onboarded',
+            'done':  onboarded,
+            # Show the last-updated timestamp when Completed so the
+            # client can see when it actually happened.
+            'date':  _d(o.get('onb_updated_at')) if onboarded else '',
+        },
+        {
+            # No DB tracking yet — appears as upcoming until Item F
+            # (working-day scheduler) wires in the actual check-in date.
+            'key':   'checkin',
+            'label': '30-day Check-in',
+            'done':  False,
+            'date':  '',
+        },
+    ]
+
+    # First step that isn't done becomes 'current' (visually distinct).
+    for s in steps:
+        s['current'] = False
+    for s in steps:
+        if not s['done']:
+            s['current'] = True
+            break
+
+    return steps
 
 
 def _ensure_client_onboarding(conn, client_id, reg_num):
