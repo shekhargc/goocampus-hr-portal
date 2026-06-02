@@ -60,7 +60,7 @@
         <tr style="border-bottom:1px solid var(--gray-100);">
           <td style="padding:0.65rem 1rem;">
             <div style="font-weight:600;color:var(--navy);">{{ c.display_name }}</div>
-            <div style="font-size:0.74rem;color:var(--gray-500);">{{ c.registration_number or '—' }}{% if c.mobile %} · {{ c.mobile }}{% endif %}</div>
+            <div style="font-size:0.74rem;color:var(--gray-500);">{{ c.registration_number|format_reg }}{% if c.mobile %} · {{ c.mobile }}{% endif %}</div>
           </td>
           <td style="padding:0.65rem 1rem;color:#374151;">{{ c.product_name or '—' }}</td>
           <td style="padding:0.65rem 1rem;color:var(--gray-600);font-size:0.82rem;">

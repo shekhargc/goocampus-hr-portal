@@ -13,7 +13,7 @@
             {% if record.first_name or record.last_name %}
               Candidate: {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
             {% endif %}
-            {% if record.registration_number %}&middot; Reg #{{ record.registration_number }}{% endif %}
+            {% if record.registration_number %}&middot; Reg #{{ record.registration_number|format_reg }}{% endif %}
         </p>
 
         <form method="POST" action="{{ url_for('ops_australia_payments_edit_save', rid=record.id) }}">

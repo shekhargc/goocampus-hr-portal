@@ -22,7 +22,7 @@
           {% else %}
             (client missing)
           {% endif %}
-          {% if record.registration_number %}&middot; Reg #{{ record.registration_number }}{% endif %}
+          {% if record.registration_number %}&middot; Reg #{{ record.registration_number|format_reg }}{% endif %}
         </p>
         {% if record.payment_date %}
         <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
@@ -85,7 +85,7 @@
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Payment Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.payment_date or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Instalment:</span><span style="color:var(--navy);font-weight:600;">{{ record.instalment or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Payment Method:</span><span style="color:var(--navy);font-weight:600;">{{ record.payment_method or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
         </div>
       </div>
 
@@ -98,7 +98,7 @@
               {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
             {% else %}—{% endif %}
           </span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Reg No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Reg No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
         </div>
       </div>
 

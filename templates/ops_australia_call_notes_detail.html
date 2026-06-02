@@ -25,7 +25,7 @@
             <span style="color:var(--gray-400)">(client missing)</span>
           {% endif %}
           {% if record.registration_number %}
-            &middot; Registration #{{ record.registration_number }}
+            &middot; Registration #{{ record.registration_number|format_reg }}
           {% endif %}
         </p>
         {% if record.call_date %}
@@ -85,7 +85,7 @@
               {% else %}—{% endif %}
             </span>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration No.:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;">{{ record.registration_number|format_reg }}</span></div>
         </div>
       </div>
 

@@ -1,5 +1,5 @@
 {% extends "ops_sidebar_base.html" %}
-{% block title %}Edit Subscription - {{ record.online_subscription or record.registration_number }}{% endblock %}
+{% block title %}Edit Subscription - {{ record.online_subscription or record.registration_number|format_reg }}{% endblock %}
 {% block ops_content %}
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">

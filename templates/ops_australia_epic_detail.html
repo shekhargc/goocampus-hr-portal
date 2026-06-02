@@ -23,7 +23,7 @@
           {% endif %}
         </h1>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
-          Reg #{{ record.registration_number or '—' }}
+          Reg #{{ record.registration_number|format_reg }}
           {% if record.epic_id_number %} &middot; EPIC ID: {{ record.epic_id_number }}{% endif %}
         </p>
         {% if record.registration_date %}
@@ -119,7 +119,7 @@
       <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration #:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration #:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Candidate Name:</span>
             <span style="color:var(--navy);font-weight:600;">
               {% if record.first_name or record.last_name %}

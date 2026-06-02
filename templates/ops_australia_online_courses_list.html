@@ -194,7 +194,7 @@
         <tbody>
         {% for r in records %}
             <tr class="clickable-row" id="row-{{ r.id }}" onclick="openAuOcDetail({{ r.id }})">
-                <td><span class="reg">{{ r.registration_number or '—' }}</span></td>
+                <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}
                         {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}

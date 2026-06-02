@@ -23,7 +23,7 @@
           {% else %}
             <span style="color:var(--gray-400)">(candidate missing)</span>
           {% endif %}
-          {% if record.registration_number %} &middot; Reg #{{ record.registration_number }}{% endif %}
+          {% if record.registration_number %} &middot; Reg #{{ record.registration_number|format_reg }}{% endif %}
         </p>
         {% if record.exam_date %}
         <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">

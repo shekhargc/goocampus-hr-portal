@@ -11,7 +11,7 @@
         <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
             Update AMC Pathway test booking details, exam status, and results.
             {% if record.registration_number %}
-                <br>Reg #{{ record.registration_number }}
+                <br>Reg #{{ record.registration_number|format_reg }}
                 {% if record.first_name or record.last_name %}
                     &middot; {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
                 {% endif %}

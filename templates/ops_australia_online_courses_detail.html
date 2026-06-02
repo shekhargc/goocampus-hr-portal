@@ -1,6 +1,6 @@
 {% extends "ops_sidebar_base.html" %}
 
-{% block title %}Online Course Subscription - {{ record.online_subscription or record.registration_number }}{% endblock %}
+{% block title %}Online Course Subscription - {{ record.online_subscription or record.registration_number|format_reg }}{% endblock %}
 
 {% block ops_content %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
@@ -23,7 +23,7 @@
             {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
             &middot;
           {% endif %}
-          Registration #{{ record.registration_number or '—' }}
+          Registration #{{ record.registration_number|format_reg }}
         </p>
         {% if record.issued_date %}
         <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
@@ -84,7 +84,7 @@
               {% endif %}
             </span>
           </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;">{{ record.registration_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;">{{ record.registration_number|format_reg }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Email:</span>
             {% if record.client_email %}

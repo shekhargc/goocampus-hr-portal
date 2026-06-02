@@ -60,9 +60,18 @@ def format_date_filter(value):
 
 @app.template_filter('format_reg')
 def format_reg_filter(value):
-    """Normalize registration number to GCUKIP/YY-YY/NNN format.
-    Converts GCUKIP/2022/042 → GCUKIP/22-23/042
-    Leaves GCUKIP/22-23/042 or GCUKIP/25-26/009 as-is.
+    """Normalize registration numbers to a single canonical display:
+        GCUKIP/YY-YY/NNN    (PLAB)
+        GCAUSIP/YY-YY/NNN   (AMC)
+    Handles both source formats and pads the trailing number to at
+    least 3 digits.
+
+      GCUKIP/2022/42      ->  GCUKIP/22-23/042
+      GCUKIP/24-25/06     ->  GCUKIP/24-25/006
+      GCAUSIP/2023/9      ->  GCAUSIP/23-24/009
+      GCAUSIP/26-27/04    ->  GCAUSIP/26-27/004
+      GCAUSIP/25-26/039   ->  GCAUSIP/25-26/039   (unchanged)
+    Unknown shapes are returned as-is. Empty / None becomes '—'.
     """
     if not value or not isinstance(value, str):
         return value or '—'
@@ -70,16 +79,41 @@ def format_reg_filter(value):
     if not value:
         return '—'
     import re as _re
-    # Match GCUKIP/YYYY/NNN (4-digit year)
-    m = _re.match(r'^(GCUKIP)/(\d{4})/(\d+)$', value)
-    if m:
-        prefix, year_str, num = m.group(1), m.group(2), m.group(3)
-        year = int(year_str)
+
+    def _pad(n):
+        try:
+            return f"{int(n):03d}"
+        except (ValueError, TypeError):
+            return n
+
+    # Match either prefix with either middle form.
+    # Group 1 prefix; group 2 either YYYY or YY-YY; group 3 trailing number.
+    m = _re.match(r'^(GCUKIP|GCAUSIP)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
+                  value, _re.IGNORECASE)
+    if not m:
+        return value
+    prefix = m.group(1).upper()
+    middle = m.group(2)
+    num    = _pad(m.group(3))
+
+    if _re.match(r'^\d{4}$', middle):
+        # 4-digit year -> convert to YY-(YY+1)
+        year = int(middle)
         yy = year % 100
         next_yy = (yy + 1) % 100
-        return f"{prefix}/{yy:02d}-{next_yy:02d}/{num}"
-    # Already in YY-YY format or other — return as-is
-    return value
+        middle = f"{yy:02d}-{next_yy:02d}"
+    elif _re.match(r'^\d{2}-\d{2}$', middle):
+        pass  # already canonical
+    elif _re.match(r'^\d{2,4}-\d{2,4}$', middle):
+        # Mixed widths -- coerce both halves to 2 digits if 4-digit years.
+        a, b = middle.split('-')
+        try:
+            a2 = int(a) % 100
+            b2 = int(b) % 100
+            middle = f"{a2:02d}-{b2:02d}"
+        except ValueError:
+            pass
+    return f"{prefix}/{middle}/{num}"
 
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')

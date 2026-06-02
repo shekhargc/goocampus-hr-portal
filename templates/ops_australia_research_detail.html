@@ -1,6 +1,6 @@
 {% extends "ops_sidebar_base.html" %}
 
-{% block title %}Research Record - {{ record.research_topic or record.registration_number or 'Australia' }}{% endblock %}
+{% block title %}Research Record - {{ record.research_topic or record.registration_number|format_reg }}{% endblock %}
 
 {% block ops_content %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
@@ -19,7 +19,7 @@
           {{ record.research_topic or 'Research Record' }}
         </h1>
         <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
-          Registration #{{ record.registration_number or '—' }}
+          Registration #{{ record.registration_number|format_reg }}
           {% if record.first_name or record.last_name %}
             &middot; {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
           {% endif %}
@@ -65,7 +65,7 @@
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Registration No.:</span>
-            <span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number or '—' }}</span>
+            <span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span>
           </div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Name:</span>
