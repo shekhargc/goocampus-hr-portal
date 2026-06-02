@@ -12427,6 +12427,26 @@ def ensure_ops_tables():
             delivered INTEGER DEFAULT 0,
             notes TEXT
         )''')
+        # AMC-specific onboarding columns (2026-06-02). Added via ALTER for
+        # back-compat with existing rows; each wrapped in try/except so
+        # re-runs are idempotent on PG.
+        for ddl in (
+            "ALTER TABLE client_onboarding ADD COLUMN welcome_kit_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN welcome_kit_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_handbook_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_handbook_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_clinical_handbook_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_clinical_handbook_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN brochure_policy_items TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN sla_copy_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN additional_goodies TEXT",
+        ):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
 
         # ── Welcome Email Template ──
         conn.execute('''CREATE TABLE IF NOT EXISTS email_templates (
@@ -14862,6 +14882,344 @@ def ops_onboarding_update(client_id):
     conn.close()
     flash('Onboarding updated.', 'success')
     return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+
+
+# ── AMC Pathway Onboarding (2026-06-02): same UI/structure as PLAB,
+#    backed by plab_clients WHERE pathway='australia' + client_onboarding
+#    extended with AMC-specific columns. Seeded once from the Zoho Excel
+#    export -- see seed_amc_onboarding_from_xlsx_once below. ────────
+
+@app.route('/operations/australia/onboarding')
+@admin_required
+def ops_au_onboarding_list():
+    """AMC pathway onboarding list (kanban + table). Mirror of
+    ops_onboarding_list but filtered to australia pathway."""
+    conn = get_db()
+    status_filter = request.args.get('status', '')
+    search = request.args.get('search', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = 50
+
+    base_select = """SELECT p.id, p.registration_number, p.first_name, p.last_name,
+                            p.email, p.mobile, p.plan_type, p.current_stage,
+                            p.account_status, p.registration_date,
+                            COALESCE(o.onboarding_status, 'Pending') as onboarding_status,
+                            o.welcome_email_sent, o.welcome_email_sent_at,
+                            o.welcome_call_date, o.welcome_call_by, o.welcome_call_confirmed,
+                            o.welcome_kit_method, o.welcome_kit_sent_date,
+                            o.amc_handbook_method, o.amc_handbook_sent_date,
+                            o.amc_clinical_handbook_method, o.amc_clinical_handbook_sent_date,
+                            o.brochure_policy_items, o.sla_copy_method,
+                            o.additional_goodies,
+                            o.id as onboarding_id"""
+    base_from = (" FROM plab_clients p "
+                 " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+                 " WHERE COALESCE(p.pathway, 'plab') = 'australia' ")
+    where, params = [], []
+    if status_filter:
+        if status_filter == 'Pending':
+            where.append("(o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')")
+        else:
+            where.append("o.onboarding_status = ?")
+            params.append(status_filter)
+    if search:
+        where.append("(p.first_name ILIKE ? OR p.last_name ILIKE ? "
+                     " OR p.registration_number ILIKE ? OR p.email ILIKE ?)")
+        params.extend([f'%{search}%'] * 4)
+    where_sql = (' AND ' + ' AND '.join(where)) if where else ''
+
+    total = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM plab_clients p "
+        " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+        " WHERE COALESCE(p.pathway, 'plab') = 'australia'" + where_sql,
+        params,
+    ).fetchone()['cnt']
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_clients = conn.execute(kanban_sql, params).fetchall()
+    table_sql = kanban_sql + " LIMIT ? OFFSET ?"
+    table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()
+
+    kanban_counts = {}
+    for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
+        if st == 'Pending':
+            c = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM plab_clients p "
+                " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+                " WHERE COALESCE(p.pathway, 'plab') = 'australia' "
+                "   AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')"
+            ).fetchone()['cnt']
+        else:
+            c = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM client_onboarding co "
+                " JOIN plab_clients p ON p.id = co.client_id "
+                " WHERE COALESCE(p.pathway, 'plab') = 'australia' AND co.onboarding_status = ?",
+                (st,),
+            ).fetchone()['cnt']
+        kanban_counts[st] = c
+    conn.close()
+
+    return render_template(
+        'ops_australia_onboarding.html',
+        clients=table_clients, kanban_clients=kanban_clients,
+        page=page, total_pages=total_pages, total=total,
+        status_filter=status_filter, search=search,
+        kanban_counts=kanban_counts,
+        active_ops_page='australia-onboarding', active_pathway='australia',
+        active_section='operations',
+    )
+
+
+@app.route('/operations/australia/onboarding/<int:client_id>')
+@admin_required
+def ops_au_onboarding_detail(client_id):
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    conn.close()
+    return render_template(
+        'ops_australia_onboarding_detail.html',
+        client=client, onboarding=onb,
+        active_ops_page='australia-onboarding', active_pathway='australia',
+        active_section='operations',
+    )
+
+
+@app.route('/operations/australia/onboarding/<int:client_id>/update', methods=['POST'])
+@admin_required
+def ops_au_onboarding_update(client_id):
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    f = request.form
+    conn.execute(
+        """UPDATE client_onboarding SET
+              welcome_call_date = ?, welcome_call_by = ?,
+              welcome_call_confirmed = ?, welcome_call_notes = ?,
+              welcome_kit_method = ?, welcome_kit_sent_date = ?,
+              amc_handbook_method = ?, amc_handbook_sent_date = ?,
+              amc_clinical_handbook_method = ?, amc_clinical_handbook_sent_date = ?,
+              brochure_policy_items = ?, sla_copy_method = ?,
+              additional_goodies = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?""",
+        (
+            f.get('welcome_call_date', ''),  f.get('welcome_call_by', ''),
+            1 if f.get('welcome_call_confirmed') else 0,
+            f.get('welcome_call_notes', ''),
+            f.get('welcome_kit_method', ''),  f.get('welcome_kit_sent_date', ''),
+            f.get('amc_handbook_method', ''), f.get('amc_handbook_sent_date', ''),
+            f.get('amc_clinical_handbook_method', ''),
+            f.get('amc_clinical_handbook_sent_date', ''),
+            f.get('brochure_policy_items', ''), f.get('sla_copy_method', ''),
+            f.get('additional_goodies', ''),
+            onb['id'],
+        ),
+    )
+    # Re-compute simple onboarding status from filled-ness of key items.
+    fresh = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone())
+    status = 'Pending'
+    if fresh.get('welcome_email_sent'):
+        status = 'Email Sent'
+    if fresh.get('welcome_call_confirmed'):
+        status = 'Call Done'
+    if fresh.get('welcome_kit_sent_date') or fresh.get('welcome_kit_method'):
+        status = 'Kit Dispatched'
+    # Completed = all four AMC kit pieces have a sent date
+    if all(fresh.get(k) for k in (
+        'welcome_kit_sent_date', 'amc_handbook_sent_date',
+        'amc_clinical_handbook_sent_date',
+    )) and fresh.get('welcome_call_confirmed'):
+        status = 'Completed'
+    conn.execute(
+        "UPDATE client_onboarding SET onboarding_status = ? WHERE id = ?",
+        (status, onb['id']),
+    )
+    conn.commit()
+    conn.close()
+    flash('AMC onboarding updated.', 'success')
+    return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+
+
+def seed_amc_onboarding_from_xlsx_once():
+    """One-shot seed: upsert AMC onboarding statuses from
+    imports/amc_onboarding_seed.json (parsed earlier from the Zoho
+    export). Idempotent via marker amc_onboarding_seeded = v1.
+    Matches Excel rows to plab_clients by registration_number; rows
+    that don't match a client are skipped (logged).
+    """
+    MARKER_KEY = 'amc_onboarding_seeded'
+    MARKER_VAL = 'v1'
+    import json, os
+    seed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'imports', 'amc_onboarding_seed.json')
+    if not os.path.isfile(seed_path):
+        return  # no seed file shipped with this deploy
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        with open(seed_path, 'r', encoding='utf-8') as fp:
+            seeds = json.load(fp)
+
+        upserted, no_match = 0, 0
+        for s in seeds:
+            reg = s.get('reg_no') or ''
+            if not reg:
+                continue
+            client = conn.execute(
+                "SELECT id, registration_number FROM plab_clients "
+                " WHERE registration_number = ? "
+                "   AND COALESCE(pathway, 'plab') = 'australia' LIMIT 1",
+                (reg,),
+            ).fetchone()
+            if not client:
+                no_match += 1
+                continue
+            # Ensure a client_onboarding row exists.
+            row = conn.execute(
+                "SELECT id FROM client_onboarding WHERE client_id = ?",
+                (client['id'],),
+            ).fetchone()
+            if not row:
+                try:
+                    conn.execute(
+                        "INSERT INTO client_onboarding "
+                        "(client_id, registration_number) VALUES (?, ?)",
+                        (client['id'], client['registration_number']),
+                    )
+                    conn.commit()
+                    row = conn.execute(
+                        "SELECT id FROM client_onboarding WHERE client_id = ?",
+                        (client['id'],),
+                    ).fetchone()
+                except Exception as e:
+                    logging.warning(
+                        f"amc_seed: create onboarding row failed "
+                        f"({reg}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+                    continue
+            # Upsert AMC fields. Only overwrites NULL/empty so a manual
+            # edit later isn't clobbered if the seed re-runs (it won't,
+            # because of the marker, but defensive).
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_call_by   = COALESCE(NULLIF(welcome_call_by,''),   ?),
+                          welcome_call_date = COALESCE(NULLIF(welcome_call_date,''), ?),
+                          welcome_kit_method     = COALESCE(NULLIF(welcome_kit_method,''),     ?),
+                          welcome_kit_sent_date  = COALESCE(NULLIF(welcome_kit_sent_date,''),  ?),
+                          amc_handbook_method    = COALESCE(NULLIF(amc_handbook_method,''),    ?),
+                          amc_handbook_sent_date = COALESCE(NULLIF(amc_handbook_sent_date,''), ?),
+                          amc_clinical_handbook_method    = COALESCE(NULLIF(amc_clinical_handbook_method,''),    ?),
+                          amc_clinical_handbook_sent_date = COALESCE(NULLIF(amc_clinical_handbook_sent_date,''), ?),
+                          brochure_policy_items = COALESCE(NULLIF(brochure_policy_items,''), ?),
+                          sla_copy_method       = COALESCE(NULLIF(sla_copy_method,''),       ?),
+                          additional_goodies    = COALESCE(NULLIF(additional_goodies,''),    ?),
+                          updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?""",
+                    (
+                        s.get('welcome_call_by',''),
+                        s.get('welcome_call_date',''),
+                        s.get('welcome_kit_method',''),
+                        s.get('welcome_kit_sent_date',''),
+                        s.get('amc_handbook_method',''),
+                        s.get('amc_handbook_sent_date',''),
+                        s.get('amc_clinical_handbook_method',''),
+                        s.get('amc_clinical_handbook_sent_date',''),
+                        s.get('brochure_policy_items',''),
+                        s.get('sla_copy_method',''),
+                        s.get('additional_goodies',''),
+                        row['id'],
+                    ),
+                )
+                # Recompute status now that fields are set.
+                conn.execute(
+                    """UPDATE client_onboarding SET onboarding_status =
+                       CASE
+                         WHEN (welcome_kit_sent_date IS NOT NULL AND welcome_kit_sent_date <> ''
+                               AND amc_handbook_sent_date IS NOT NULL AND amc_handbook_sent_date <> ''
+                               AND amc_clinical_handbook_sent_date IS NOT NULL AND amc_clinical_handbook_sent_date <> '')
+                           THEN 'Completed'
+                         WHEN (welcome_kit_sent_date IS NOT NULL AND welcome_kit_sent_date <> '')
+                           THEN 'Kit Dispatched'
+                         WHEN (welcome_call_date IS NOT NULL AND welcome_call_date <> '')
+                           THEN 'Call Done'
+                         WHEN welcome_email_sent = 1
+                           THEN 'Email Sent'
+                         ELSE 'Pending'
+                       END
+                     WHERE id = ?""",
+                    (row['id'],),
+                )
+                upserted += 1
+            except Exception as e:
+                logging.warning(f"amc_seed: upsert failed ({reg}): {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"amc_seed marker write: {e}")
+
+        logging.info(
+            f"AMC onboarding seed: upserted {upserted} client(s); "
+            f"{no_match} reg# without matching plab_clients row"
+        )
+    except Exception as e:
+        logging.warning(f"seed_amc_onboarding_from_xlsx_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
 
 
 @app.route('/operations/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
@@ -26923,6 +27281,7 @@ def seed_default_welcome_kit_items_once():
 
 
 seed_default_welcome_kit_items_once()
+seed_amc_onboarding_from_xlsx_once()
 
 
 # Phase 5 baseline must run AFTER the table is guaranteed to exist.

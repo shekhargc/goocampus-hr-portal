@@ -1,0 +1,172 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}AMC Client Onboarding - Operations{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+    .onb-header { display:flex; justify-content:space-between; align-items:center; margin-bottom:20px; flex-wrap:wrap; gap:12px; }
+    .onb-header h1 { margin:0; font-size:1.35rem; font-weight:700; color:var(--navy); }
+    .view-toggle { display:flex; background:#F3F4F6; border-radius:8px; overflow:hidden; }
+    .view-toggle button { padding:8px 16px; border:none; background:transparent; font-size:0.82rem; font-weight:600; cursor:pointer; color:#6B7280; }
+    .view-toggle button.active { background:var(--orange); color:white; }
+
+    .onb-filters { display:flex; gap:10px; margin-bottom:20px; align-items:center; flex-wrap:wrap; }
+    .onb-filters input, .onb-filters select { padding:8px 12px; border:1px solid #D1D5DB; border-radius:6px; font-size:0.82rem; }
+    .onb-filters input { width:240px; }
+
+    .status-badge { display:inline-block; padding:3px 10px; border-radius:999px; font-size:0.72rem; font-weight:600; }
+    .status-pending { background:#FEF3C7; color:#92400E; }
+    .status-email-sent { background:#DBEAFE; color:#1E40AF; }
+    .status-call-done { background:#E0E7FF; color:#3730A3; }
+    .status-kit-dispatched { background:#FDE68A; color:#78350F; }
+    .status-completed { background:#D1FAE5; color:#065F46; }
+
+    .kanban-container { display:grid; grid-template-columns:repeat(5, 1fr); gap:12px; margin-bottom:24px; min-height:400px; }
+    .kanban-col { background:#F9FAFB; border-radius:10px; padding:12px; min-height:300px; }
+    .kanban-col-header { font-size:0.82rem; font-weight:700; color:var(--navy); margin-bottom:10px; display:flex; justify-content:space-between; align-items:center; }
+    .kanban-count { background:var(--orange); color:white; font-size:0.7rem; padding:2px 8px; border-radius:999px; }
+    .kanban-card { background:white; border-radius:8px; padding:12px; margin-bottom:8px; border:1px solid #E5E7EB; cursor:pointer; transition:box-shadow 0.15s; }
+    .kanban-card:hover { box-shadow:0 2px 8px rgba(0,0,0,0.1); }
+    .kanban-card-name { font-weight:700; font-size:0.85rem; color:var(--navy); margin-bottom:4px; }
+    .kanban-card-reg { font-size:0.75rem; color:var(--gray-400); }
+    .kanban-card-plan { font-size:0.72rem; color:var(--gray-500); margin-top:4px; }
+
+    .table-wrapper { overflow-x:auto; }
+    .data-table { width:100%; border-collapse:collapse; font-size:0.82rem; }
+    .data-table th { background:var(--navy); color:white; padding:10px 12px; text-align:left; font-size:0.72rem; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; white-space:nowrap; }
+    .data-table td { padding:10px 12px; border-bottom:1px solid #F3F4F6; }
+    .data-table tr:hover { background:#F9FAFB; }
+    .data-table a { color:var(--orange); text-decoration:none; font-weight:600; }
+    .data-table a:hover { text-decoration:underline; }
+
+    .pagination { display:flex; gap:6px; justify-content:center; margin-top:20px; align-items:center; }
+    .pagination a, .pagination span { padding:6px 12px; border-radius:6px; font-size:0.82rem; text-decoration:none; }
+    .pagination a { background:#F3F4F6; color:#374151; }
+    .pagination a:hover { background:var(--orange); color:white; }
+    .pagination .current { background:var(--orange); color:white; font-weight:600; }
+
+    @media (max-width: 1200px) { .kanban-container { grid-template-columns:repeat(3, 1fr); } }
+    @media (max-width: 768px) { .kanban-container { grid-template-columns:1fr; } }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="onb-header">
+    <h1>AMC Client Onboarding</h1>
+    <div class="view-toggle">
+        <button id="btnKanban" class="active" onclick="showView('kanban')">Board</button>
+        <button id="btnTable" onclick="showView('table')">Table</button>
+    </div>
+</div>
+
+<div class="onb-filters">
+    <input type="text" id="searchInput" placeholder="Search by name, reg number..." value="{{ search }}" onkeyup="debounceSearch(this.value)">
+    <select id="statusFilter" onchange="applyFilters()">
+        <option value="">All Statuses</option>
+        {% for st in ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+        <option value="{{ st }}" {% if status_filter == st %}selected{% endif %}>{{ st }}</option>
+        {% endfor %}
+    </select>
+    <span style="font-size:0.82rem;color:var(--gray-400);">{{ total }} client{{ 's' if total != 1 }}</span>
+</div>
+
+<div id="kanbanView" class="kanban-container">
+    {% set statuses = ['Pending','Email Sent','Call Done','Kit Dispatched','Completed'] %}
+    {% for st in statuses %}
+    <div class="kanban-col">
+        <div class="kanban-col-header">
+            {{ st }}
+            <span class="kanban-count">{{ kanban_counts.get(st, 0) }}</span>
+        </div>
+        {% for c in kanban_clients if c.onboarding_status == st %}
+        <a href="/operations/australia/onboarding/{{ c.id }}" class="kanban-card" style="display:block;text-decoration:none;">
+            <div class="kanban-card-name">{{ c.first_name }} {{ c.last_name or '' }}</div>
+            <div class="kanban-card-reg">{{ (c.registration_number or '')|format_reg }}</div>
+            <div class="kanban-card-plan">{{ c.plan_type or '' }}</div>
+        </a>
+        {% endfor %}
+    </div>
+    {% endfor %}
+</div>
+
+<div id="tableView" style="display:none;">
+    <div class="table-wrapper">
+        <table class="data-table">
+            <thead>
+                <tr>
+                    <th>Reg #</th>
+                    <th>Client Name</th>
+                    <th>Status</th>
+                    <th>Welcome Call</th>
+                    <th>Welcome Kit</th>
+                    <th>AMC Handbook</th>
+                    <th>AMC Clinical Handbook</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in clients %}
+                <tr>
+                    <td>{{ (c.registration_number or '')|format_reg }}</td>
+                    <td style="font-weight:600;">{{ c.first_name }} {{ c.last_name or '' }}</td>
+                    <td>
+                        {% set sc = {'Pending':'status-pending','Email Sent':'status-email-sent','Call Done':'status-call-done','Kit Dispatched':'status-kit-dispatched','Completed':'status-completed'} %}
+                        <span class="status-badge {{ sc.get(c.onboarding_status, 'status-pending') }}">{{ c.onboarding_status or 'Pending' }}</span>
+                    </td>
+                    <td>
+                        {% if c.welcome_call_date %}<span style="color:#059669;">{{ c.welcome_call_date|format_date }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}
+                    </td>
+                    <td>{% if c.welcome_kit_sent_date %}<span style="color:#059669;">{{ c.welcome_kit_sent_date|format_date }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}</td>
+                    <td>{% if c.amc_handbook_sent_date %}<span style="color:#059669;">{{ c.amc_handbook_sent_date|format_date }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}</td>
+                    <td>{% if c.amc_clinical_handbook_sent_date %}<span style="color:#059669;">{{ c.amc_clinical_handbook_sent_date|format_date }}</span>{% else %}<span style="color:#9CA3AF;">—</span>{% endif %}</td>
+                    <td><a href="/operations/australia/onboarding/{{ c.id }}">Manage</a></td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}<a href="/operations/australia/onboarding?page={{ page - 1 }}&status={{ status_filter }}&search={{ search }}">← Prev</a>{% endif %}
+        {% for p in range(1, total_pages + 1) %}
+            {% if p == page %}<span class="current">{{ p }}</span>
+            {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
+            <a href="/operations/australia/onboarding?page={{ p }}&status={{ status_filter }}&search={{ search }}">{{ p }}</a>
+            {% elif p == 4 or p == total_pages - 2 %}<span style="color:#9CA3AF;">...</span>{% endif %}
+        {% endfor %}
+        {% if page < total_pages %}<a href="/operations/australia/onboarding?page={{ page + 1 }}&status={{ status_filter }}&search={{ search }}">Next →</a>{% endif %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}
+
+{% block ops_extra_js %}
+<script>
+var searchTimer;
+function debounceSearch(val) {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(function() { applyFilters(); }, 350);
+}
+function applyFilters() {
+    var s = document.getElementById('searchInput').value;
+    var st = document.getElementById('statusFilter').value;
+    var url = '/operations/australia/onboarding?';
+    if (s) url += 'search=' + encodeURIComponent(s) + '&';
+    if (st) url += 'status=' + encodeURIComponent(st);
+    window.location.href = url;
+}
+function showView(v) {
+    document.getElementById('kanbanView').style.display = (v === 'kanban') ? 'grid' : 'none';
+    document.getElementById('tableView').style.display = (v === 'table') ? 'block' : 'none';
+    document.getElementById('btnKanban').classList.toggle('active', v === 'kanban');
+    document.getElementById('btnTable').classList.toggle('active', v === 'table');
+    try { localStorage.setItem('au_onb_view', v); } catch (e) {}
+}
+(function() {
+    try {
+        var saved = localStorage.getItem('au_onb_view');
+        if (saved === 'table') showView('table');
+    } catch (e) {}
+})();
+</script>
+{% endblock %}
