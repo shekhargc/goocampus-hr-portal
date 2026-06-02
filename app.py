@@ -983,10 +983,29 @@ def client_register(token):
         from core.registration import next_registration_number
         reg_num = next_registration_number(conn, product['name'] if product else None)
 
+        # 2026-06-02: counsellor auto-assign -- the sales rep who raised
+        # the invitation IS the counsellor. Look up their name so the
+        # client portal can show "Your counsellor: <name>" without any
+        # manual data entry. Free-text counsellor fields were retired
+        # in the form-config v2 cleanup.
+        counsellor_id = inv['invited_by']
+        counsellor_name = ''
+        if counsellor_id:
+            emp_row = conn.execute(
+                "SELECT name FROM employees WHERE id = ?",
+                (counsellor_id,),
+            ).fetchone()
+            if emp_row:
+                counsellor_name = emp_row['name'] or ''
         conn.execute('''INSERT INTO client_registrations
-            (account_id, invitation_id, product_id, registration_number, first_name, last_name, mobile, email, form_status, current_step)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)''',
-            (acct_id, inv['id'], inv['product_id'], reg_num, first_name, last_name, clean, inv['client_email'] or ''))
+            (account_id, invitation_id, product_id, registration_number,
+             first_name, last_name, mobile, email,
+             counsellor_id, counsellor_name,
+             form_status, current_step)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)''',
+            (acct_id, inv['id'], inv['product_id'], reg_num,
+             first_name, last_name, clean, inv['client_email'] or '',
+             counsellor_id, counsellor_name))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
         conn.close()
@@ -28247,6 +28266,224 @@ def seed_documents_step_once():
 
 
 seed_documents_step_once()
+
+
+def normalize_form_config_steps_once():
+    """Fix the UK PGCP step-number collision (Documents + Sales both at
+    step 3) and seed AUS PGCP -- which the original
+    seed_client_form_configs never populated -- with a parallel set of
+    Personal / Academic / Sales / Operations fields.
+
+    Target final layout (same for both products):
+        step 1  Personal Details
+        step 2  Academic Details
+        step 3  Documents
+        step 4  Sales Details
+        step 5  Operations
+
+    Idempotent via marker form_config_steps_normalised=v1. The
+    INSERT-IF-ABSENT logic + step-number-guarded renumber make
+    re-runs safe.
+    """
+    MARKER_KEY = 'form_config_steps_normalised'
+    MARKER_VAL = 'v1'
+
+    PERSONAL = [
+        ('prefix',         'Prefix',         'select', 'Dr.,Mr.,Mrs.,Ms.', 1, 10),
+        ('first_name',     'First Name',     'text',   '', 1, 20),
+        ('last_name',      'Last Name',      'text',   '', 0, 30),
+        ('mobile',         'Mobile',         'tel',    '', 1, 40),
+        ('whatsapp',       'WhatsApp 1',     'tel',    '', 0, 50),
+        ('whatsapp2',      'WhatsApp 2',     'tel',    '', 0, 60),
+        ('email',          'Email',          'email',  '', 1, 70),
+        ('dob',            'Date of Birth',  'date',   '', 0, 80),
+        ('state',          'State',          'select', 'db:states',  0, 90),
+        ('city',           'City',           'select', 'db:cities',  0, 100),
+        ('instagram',      'Instagram',      'text',   '', 0, 110),
+        ('facebook',       'Facebook',       'text',   '', 0, 120),
+        ('linkedin',       'LinkedIn',       'text',   '', 0, 130),
+        ('father_name',    'Father Name',    'text',   '', 0, 140),
+        ('father_phone',   'Father Phone',   'tel',    '', 0, 150),
+        ('mother_name',    'Mother Name',    'text',   '', 0, 160),
+        ('mother_phone',   'Mother Phone',   'tel',    '', 0, 170),
+        ('parents_email',  'Parents Email',  'email',  '', 0, 180),
+    ]
+    ACADEMIC = [
+        ('img_fmg',               'IMG / FMG',                 'select', 'db:img_fmg',           1, 10),
+        ('img_medical_college',   'IMG Medical College',       'text',   '',                    0, 20),
+        ('fmg_medical_college',   'FMG Medical College',       'text',   '',                    0, 30),
+        ('country',               'Country',                   'text',   '',                    0, 40),
+        ('mbbs_status',           'MBBS Status',               'select', 'db:mbbs_status',      1, 50),
+        ('mbbs_start_date',       'MBBS Start Date',           'date',   '',                    0, 60),
+        ('mbbs_end_date',         'MBBS End Date',             'date',   '',                    0, 70),
+        ('speciality_interest_1', 'Speciality Interest 1',     'text',   '',                    0, 80),
+        ('speciality_interest_2', 'Speciality Interest 2',     'text',   '',                    0, 90),
+        ('internship_status',     'Internship Status',         'select', 'db:internship_status',0, 100),
+        ('internship_hospital',   'Internship Hospital',       'text',   '',                    0, 110),
+        ('internship_location',   'Internship Location',       'text',   '',                    0, 120),
+        ('internship_hospital_2', 'Internship Hospital 2',     'text',   '',                    0, 130),
+        ('internship_location_2', 'Internship Location 2',     'text',   '',                    0, 140),
+        ('internship_start_date', 'Internship Start Date',     'date',   '',                    0, 150),
+        ('internship_end_date',   'Internship End Date',       'date',   '',                    0, 160),
+        ('internship_gap',        'Internship Gap',            'select', 'db:internship_gap',   0, 170),
+        ('gap_in_months',         'Gap in Months',             'text',   '',                    0, 180),
+        ('gap_reason',            'Gap Reason',                'textarea','',                   0, 190),
+        ('working_status',        'Working Status',            'select', 'db:working_status',   0, 200),
+        ('working_hospital_name', 'Working Hospital Name',     'text',   '',                    0, 210),
+        ('additional_info',       'Additional Info',           'textarea','',                   0, 220),
+    ]
+    SALES = [
+        ('joined_stage',             'Joined Stage',              'text',     '',  0, 10),
+        ('plan_type',                'Plan Type',                 'text',     '',  0, 20),
+        ('lead_source',              'Lead Source',               'text',     '',  0, 30),
+        ('referral_type',            'Referral Type',             'text',     '',  0, 40),
+        ('portfolio_referral',       'Portfolio Referral',        'text',     '',  0, 50),
+        ('australia_referral',       'Australia Referral',        'text',     '',  0, 60),
+        ('operations_referral',      'Operations Referral',       'text',     '',  0, 70),
+        ('package_amount',           'Package Amount',            'number',   '',  0, 80),
+        ('discount_allowed',         'Discount Allowed',          'number',   '',  0, 90),
+        ('additional_package_notes', 'Additional Package Notes',  'textarea', '',  0, 100),
+        ('final_package',            'Final Package',             'number',   '',  0, 110),
+        ('inst1_amount',             'Installment 1 Amount',      'number',   '',  0, 120),
+        ('inst1_date',               'Installment 1 Date',        'date',     '',  0, 130),
+        ('inst1_note',               'Installment 1 Note',        'text',     '',  0, 140),
+        ('inst2_amount',             'Installment 2 Amount',      'number',   '',  0, 150),
+        ('inst2_date',               'Installment 2 Date',        'date',     '',  0, 160),
+        ('inst2_note',               'Installment 2 Note',        'text',     '',  0, 170),
+        ('inst3_amount',             'Installment 3 Amount',      'number',   '',  0, 180),
+        ('inst3_date',               'Installment 3 Date',        'date',     '',  0, 190),
+        ('inst3_note',               'Installment 3 Note',        'text',     '',  0, 200),
+        ('inst4_amount',             'Installment 4 Amount',      'number',   '',  0, 210),
+        ('inst4_date',               'Installment 4 Date',        'date',     '',  0, 220),
+        ('inst4_note',               'Installment 4 Note',        'text',     '',  0, 230),
+    ]
+    OPERATIONS = [
+        ('account_status',           'Account Status',            'text',     '', 0, 10),
+        ('current_stage',            'Current Stage',             'text',     '', 0, 20),
+        ('dropped_date',             'Dropped Date',              'date',     '', 0, 30),
+        ('switched_program',         'Switched Program',          'text',     '', 0, 40),
+        ('upgraded_to',              'Upgraded To',               'text',     '', 0, 50),
+        ('additional_notes',         'Additional Notes',          'textarea', '', 0, 60),
+    ]
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        renumbered = inserted = 0
+
+        # 1) UK PGCP renumber: Sales 3 -> 4, Operations 4 -> 5.
+        uk_prod = conn.execute(
+            "SELECT id FROM products_services WHERE name = 'UK PGCP'"
+        ).fetchone()
+        if uk_prod:
+            try:
+                result = conn.execute(
+                    "UPDATE client_form_configs SET step_number = 5 "
+                    " WHERE product_id = ? AND step_name = 'Operations' "
+                    "   AND step_number = 4",
+                    (uk_prod['id'],),
+                )
+                renumbered += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"renumber UK Operations: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            try:
+                result = conn.execute(
+                    "UPDATE client_form_configs SET step_number = 4 "
+                    " WHERE product_id = ? AND step_name = 'Sales Details' "
+                    "   AND step_number = 3",
+                    (uk_prod['id'],),
+                )
+                renumbered += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"renumber UK Sales: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            conn.commit()
+
+        # 2) AUS PGCP seed: insert Personal/Academic/Sales/Ops if absent.
+        au_prod = conn.execute(
+            "SELECT id FROM products_services WHERE name = 'AUS PGCP'"
+        ).fetchone()
+        if au_prod:
+            for step_num, step_name, role, items in (
+                (1, 'Personal Details', 'client', PERSONAL),
+                (2, 'Academic Details', 'client', ACADEMIC),
+                (4, 'Sales Details',    'sales',  SALES),
+                (5, 'Operations',       'ops',    OPERATIONS),
+            ):
+                for fname, label, ftype, fopts, req, order in items:
+                    exists = conn.execute(
+                        "SELECT id FROM client_form_configs "
+                        " WHERE product_id = ? AND field_name = ?",
+                        (au_prod['id'], fname),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_form_configs "
+                            "(product_id, step_number, step_name, field_name, "
+                            " field_label, field_type, field_options, role, "
+                            " is_required, is_visible, display_order, "
+                            " placeholder, hint_text) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '')",
+                            (au_prod['id'], step_num, step_name, fname, label,
+                             ftype, fopts, role, req, order),
+                        )
+                        inserted += 1
+                    except Exception as e:
+                        logging.warning(f"seed AUS {fname}: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"form_config normalise marker: {e}")
+
+        logging.info(
+            f"Form config normalise: renumbered {renumbered} UK row(s), "
+            f"inserted {inserted} AUS row(s)"
+        )
+    except Exception as e:
+        logging.warning(f"normalize_form_config_steps_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+normalize_form_config_steps_once()
 
 
 # Also stop the form-config seed (seed_client_form_configs) from
