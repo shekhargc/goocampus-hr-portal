@@ -80,6 +80,12 @@ def register_operations_modules(app):
     from . import cs_amc
     cs_amc.register_routes(app)
 
+    # Standard Consulting — S-2c Mentorship Sessions. Clone of the
+    # PLAB Mentorship handlers (ops_mentorship_*) scoped to
+    # pathway='consulting'. Shared ops_mentorship table.
+    from . import cs_mentorship
+    cs_mentorship.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.

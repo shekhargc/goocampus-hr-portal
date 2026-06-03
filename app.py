@@ -30506,6 +30506,10 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_amc_add':                       _ap('consulting_pathway', 'amc_registration', 'edit'),
     'ops_consulting_amc_edit':                      _ap('consulting_pathway', 'amc_registration', 'edit'),
     'ops_consulting_amc_delete':                    _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_mentorship_list':               _ap('consulting_pathway', 'mentorship'),
+    'ops_consulting_mentorship_add':                _ap('consulting_pathway', 'mentorship', 'edit'),
+    'ops_consulting_mentorship_edit':               _ap('consulting_pathway', 'mentorship', 'edit'),
+    'ops_consulting_mentorship_delete':             _ap('consulting_pathway', 'mentorship', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
