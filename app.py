@@ -14858,7 +14858,9 @@ def ops_field_manager_reorder():
 #  VENDORS & PROVIDERS — Centralised Vendor Database
 # ─────────────────────────────────────────────────────────
 
-VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway']
+# X-4d: 'Standard Consulting' added so consulting vendors get their own
+# pathway scope on /operations/vendors-providers?pathway=consulting.
+VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
@@ -15109,6 +15111,10 @@ def ops_vendors_providers():
         'australia':  'AMC Pathway',
         'usmle':      'USMLE Pathway',
         'germany':    'Germany Pathway',
+        # X-4d: consulting added so its sidebar Vendors & Providers
+        # link filters to consulting-tagged vendors instead of showing
+        # everything.
+        'consulting': 'Standard Consulting',
     }
     country_filter = PATHWAY_TO_COUNTRY.get(pathway)
 
