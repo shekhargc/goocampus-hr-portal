@@ -91,9 +91,11 @@ def register_operations_modules(app):
     #   list (with drawer), detail page, edit form GET, edit save POST.
     from . import au_test_bookings, au_academic, au_epic, au_training
     from . import au_online_courses, au_payments, au_call_notes, au_research, au_webinars
+    from . import au_amc
     au_test_bookings.register_routes(app)
     au_academic.register_routes(app)
     au_epic.register_routes(app)
+    au_amc.register_routes(app)
     au_training.register_routes(app)
     au_online_courses.register_routes(app)
     au_payments.register_routes(app)

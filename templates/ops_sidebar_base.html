@@ -418,6 +418,12 @@
                 <span class="ops-nav-text">EPIC Registration</span>
             </a>
             {% endif %}
+            {% if can_access('australia_pathway','amc_registration','view') %}
+            <a href="/operations/australia/amc" class="ops-nav-item {% if active_ops_page == 'australia-amc' %}active{% endif %}" data-tooltip="AMC Registration">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span>
+                <span class="ops-nav-text">AMC Registration</span>
+            </a>
+            {% endif %}
 
             <!-- Academic & Research -->
             <div class="ops-nav-group-label">Academic &amp; Research</div>

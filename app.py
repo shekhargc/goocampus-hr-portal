@@ -24665,6 +24665,15 @@ try:
 except Exception as _cs_imp_err:
     logging.error(f"Consulting imports failed: {_cs_imp_err}")
 
+# ── X-2: One-time import for AMC Pathway AMC Registrations (152 rows) ──
+# Excel candidate names don't have embedded reg#; importer name-matches
+# against plab_clients WHERE pathway='australia'. Idempotent.
+try:
+    from import_au_amc_registrations import run_import_au_amc_registrations_once
+    run_import_au_amc_registrations_once(get_db)
+except Exception as _au_amc_err:
+    logging.error(f"AU AMC registrations import failed: {_au_amc_err}")
+
 # ── Auto-seed Australia vendors + vendor_service_map from imported ops_* data ──
 # User insight: the historical Excel imports already contain every training
 # vendor, online subscription, and research provider for Australia. Extract
@@ -27843,6 +27852,7 @@ ACCESS_SECTION_CATALOG = [
             ('test_bookings', 'Test Bookings',           'AMC MCQ / AMC Clinical / OET bookings'),
             ('online_courses','Online Courses',          'Australia online courses (MplusX, eMedici, etc.)'),
             ('epic',          'EPIC Registration',       'Australia EPIC tracking'),
+            ('amc_registration','AMC Registration',      'AHPRA / AMC registration tracking (X-2)'),
             ('academic',      'Academic Details',        'Australia academic records'),
             ('research',      'Research & Publication',  'Australia research project tracking'),
             ('webinars',      'Webinars & Conferences',  'Australia event attendance log'),
@@ -30605,6 +30615,11 @@ ACCESS_ROUTE_MAP = {
     'ops_australia_epic_detail':            _ap('australia_pathway', 'epic'),
     'ops_australia_epic_edit_page':         _ap('australia_pathway', 'epic', 'edit'),
     'ops_australia_epic_edit_save':         _ap('australia_pathway', 'epic', 'edit'),
+    # X-2: AMC Registration for the AMC pathway
+    'ops_australia_amc_list':               _ap('australia_pathway', 'amc_registration'),
+    'ops_australia_amc_add':                _ap('australia_pathway', 'amc_registration', 'edit'),
+    'ops_australia_amc_edit':               _ap('australia_pathway', 'amc_registration', 'edit'),
+    'ops_australia_amc_delete':             _ap('australia_pathway', 'amc_registration', 'edit'),
     'ops_australia_training_list':          _ap('australia_pathway', 'training'),
     'ops_australia_training_detail':        _ap('australia_pathway', 'training'),
     'ops_australia_training_edit_page':     _ap('australia_pathway', 'training', 'edit'),
