@@ -504,10 +504,9 @@
             </a>
             {% endif %}
             {% if can_access('consulting_pathway','payments','view') %}
-            <a href="/operations/consulting" class="ops-nav-item" data-tooltip="Payments (coming in S-1)">
+            <a href="/operations/consulting/payments" class="ops-nav-item {% if active_ops_page == 'consulting-payments' %}active{% endif %}" data-tooltip="Payments">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span>
                 <span class="ops-nav-text">Payments</span>
-                <span style="margin-left:auto;font-size:0.6rem;color:var(--gray-400);">soon</span>
             </a>
             {% endif %}
             {% if can_access('consulting_pathway','onboarding','view') %}
@@ -520,10 +519,9 @@
             <!-- Credentialing -->
             <div class="ops-nav-group-label">Credentialing</div>
             {% if can_access('consulting_pathway','epic_verification','view') %}
-            <a href="/operations/consulting" class="ops-nav-item" data-tooltip="EPIC Verification (coming in S-1)">
+            <a href="/operations/consulting/epic" class="ops-nav-item {% if active_ops_page == 'consulting-epic' %}active{% endif %}" data-tooltip="EPIC Verification">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></span>
                 <span class="ops-nav-text">EPIC Verification</span>
-                <span style="margin-left:auto;font-size:0.6rem;color:var(--gray-400);">soon</span>
             </a>
             {% endif %}
             {% if can_access('consulting_pathway','gmc_registration','view') %}
