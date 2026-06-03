@@ -30581,6 +30581,7 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_client_edit_page':              _ap('consulting_pathway', 'registration', 'edit'),
     'ops_consulting_client_edit_save':              _ap('consulting_pathway', 'registration', 'edit'),
     'ops_consulting_client_delete':                 _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_documents_list':                _ap('consulting_pathway', 'documents'),
     'ops_consulting_onboarding_list':               _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_detail':             _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_update':             _ap('consulting_pathway', 'onboarding', 'edit'),

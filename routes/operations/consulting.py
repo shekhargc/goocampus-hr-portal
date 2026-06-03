@@ -522,6 +522,81 @@ def ops_consulting_client_edit_save(client_id):
 
 
 @admin_required
+def ops_consulting_documents_list():
+    """Y-2: Documents overview for consulting clients. Clone of
+    ops_documents_list scoped to pathway='consulting'. The shared
+    plab_client_documents table holds rows for every pathway --
+    we just JOIN through plab_clients and filter on pathway."""
+    user = get_user()
+    conn = get_db()
+    search = (request.args.get('search') or '').strip()
+    status_filter = (request.args.get('status') or '')
+    page = max(1, int(request.args.get('page', 1) or 1))
+    per_page = 50
+
+    # Same PLAB-doc required list used by ops_documents_list -- the
+    # consulting checklist is identical until product-specific doc
+    # types are added (future work).
+    try:
+        from app import PLAB_ALL_REQUIRED_DOCS as REQUIRED_DOCS
+    except Exception:
+        REQUIRED_DOCS = []
+    total_required = len(REQUIRED_DOCS)
+
+    all_clients = []
+    try:
+        q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                      c.account_status, c.current_stage, c.created_at,
+                      COUNT(d.id) as doc_count,
+                      SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
+                 FROM plab_clients c
+            LEFT JOIN plab_client_documents d ON d.client_id = c.id
+                WHERE COALESCE(c.pathway, 'plab') = 'consulting' """
+        params = []
+        if search:
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?) "
+            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        q += """ GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                          c.account_status, c.current_stage, c.created_at
+                 ORDER BY c.created_at DESC NULLS LAST, c.id DESC"""
+        rows = conn.execute(q, params).fetchall()
+        for r in rows:
+            rd = dict(r)
+            rd['total_required'] = total_required
+            rd['name'] = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            if status_filter == 'complete' and rd['doc_count'] < total_required:
+                continue
+            if status_filter == 'incomplete' and rd['doc_count'] >= total_required:
+                continue
+            all_clients.append(rd)
+    except Exception as e:
+        logging.error(f"ops_consulting_documents_list: {e}")
+        all_clients = []
+    finally:
+        conn.close()
+
+    total = len(all_clients)
+    start = (page - 1) * per_page
+    page_clients = all_clients[start:start + per_page]
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    return render_template(
+        'ops_consulting_documents_list.html',
+        user=user,
+        clients=page_clients,
+        total=total,
+        page=page,
+        total_pages=total_pages,
+        per_page=per_page,
+        search=search,
+        status_filter=status_filter,
+        total_required=total_required,
+        active_ops_page='consulting-documents',
+        active_pathway='consulting',
+    )
+
+
+@admin_required
 def ops_consulting_client_delete(client_id):
     """Hard-delete a consulting client (pathway-gated)."""
     conn = get_db()
@@ -585,4 +660,11 @@ def register_routes(app):
         endpoint='ops_consulting_client_delete',
         view_func=ops_consulting_client_delete,
         methods=['POST'],
+    )
+    # Y-2: documents list
+    app.add_url_rule(
+        '/operations/consulting/documents',
+        endpoint='ops_consulting_documents_list',
+        view_func=ops_consulting_documents_list,
+        methods=['GET'],
     )
