@@ -24665,6 +24665,15 @@ try:
 except Exception as _cs_imp_err:
     logging.error(f"Consulting imports failed: {_cs_imp_err}")
 
+# ── X-4c: auto-seed consulting dropdowns (lookup_options) from imports ──
+# Runs AFTER the consulting imports so the distinct-value extraction has
+# fresh data to scan. Idempotent via marker cs_lookups_seed.
+try:
+    from seed_consulting_lookups import run_seed_consulting_lookups_once
+    run_seed_consulting_lookups_once(get_db)
+except Exception as _cs_lk_err:
+    logging.error(f"Consulting lookups seed failed: {_cs_lk_err}")
+
 # ── X-2: One-time import for AMC Pathway AMC Registrations (152 rows) ──
 # Excel candidate names don't have embedded reg#; importer name-matches
 # against plab_clients WHERE pathway='australia'. Idempotent.
