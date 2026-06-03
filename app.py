@@ -12486,6 +12486,35 @@ def ensure_ops_tables():
             updated_at TIMESTAMP
         )''')
 
+        # ── AMC Registration (S-2b) ──
+        # Same schema as ops_gmc_registration -- AMC is the Australian
+        # Medical Council equivalent of GMC. Currently used by the
+        # consulting pathway; will be retrofitted to PLAB / AMC pathways
+        # in a follow-up if needed. pathway column added on boot by
+        # ensure_pathway_columns_on_ops_tables (ops_amc_registration is
+        # in OPS_PATHWAY_TABLES).
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_amc_registration (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            amc_reference_number TEXT,
+            login_pwd TEXT,
+            secret_question TEXT,
+            secret_answer TEXT,
+            amc_setup TEXT,
+            registration_date TEXT,
+            english_exam TEXT,
+            exam_date TEXT,
+            english_result_expiry_date TEXT,
+            license TEXT,
+            license_received_date TEXT,
+            candidate_email TEXT,
+            mobile_number TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
+        )''')
+
         # ── Research & Publication ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_research_publication (
             id SERIAL PRIMARY KEY,
@@ -24172,6 +24201,7 @@ OPS_PATHWAY_TABLES = [
     'ops_english_logins',
     'ops_epic_registration',
     'ops_gmc_registration',
+    'ops_amc_registration',
     'ops_mentorship',
     'ops_ngo_activities',
     'ops_online_courses',
@@ -30472,6 +30502,10 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_gmc_add':                       _ap('consulting_pathway', 'gmc_registration', 'edit'),
     'ops_consulting_gmc_edit':                      _ap('consulting_pathway', 'gmc_registration', 'edit'),
     'ops_consulting_gmc_delete':                    _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_amc_list':                      _ap('consulting_pathway', 'amc_registration'),
+    'ops_consulting_amc_add':                       _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_amc_edit':                      _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_amc_delete':                    _ap('consulting_pathway', 'amc_registration', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),

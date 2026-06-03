@@ -531,10 +531,9 @@
             </a>
             {% endif %}
             {% if can_access('consulting_pathway','amc_registration','view') %}
-            <a href="/operations/consulting" class="ops-nav-item" data-tooltip="AMC Registration (coming in S-2)">
+            <a href="/operations/consulting/amc" class="ops-nav-item {% if active_ops_page == 'consulting-amc' %}active{% endif %}" data-tooltip="AMC Registration">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg></span>
                 <span class="ops-nav-text">AMC Registration</span>
-                <span style="margin-left:auto;font-size:0.6rem;color:var(--gray-400);">soon</span>
             </a>
             {% endif %}
 

@@ -74,6 +74,12 @@ def register_operations_modules(app):
     from . import cs_gmc
     cs_gmc.register_routes(app)
 
+    # Standard Consulting — S-2b AMC Registration. New section, new
+    # table ops_amc_registration, schema mirrors GMC. Module clones
+    # cs_gmc.py with gmc -> amc renames.
+    from . import cs_amc
+    cs_amc.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.
