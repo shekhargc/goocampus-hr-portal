@@ -30442,9 +30442,13 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
-    # ── Operations: Standard Consulting (S-0) ──────────────────────
-    'ops_consulting_pathway':               _ap('consulting_pathway', 'dashboard'),
-    'ops_consulting_clients_list':          _ap('consulting_pathway', 'registration'),
+    # ── Operations: Standard Consulting (S-0 + S-1a) ──────────────
+    'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
+    'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
+    'ops_consulting_onboarding_list':               _ap('consulting_pathway', 'onboarding'),
+    'ops_consulting_onboarding_detail':             _ap('consulting_pathway', 'onboarding'),
+    'ops_consulting_onboarding_update':             _ap('consulting_pathway', 'onboarding', 'edit'),
+    'ops_consulting_onboarding_send_welcome_email': _ap('consulting_pathway', 'onboarding', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),

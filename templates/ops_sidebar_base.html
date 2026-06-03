@@ -513,10 +513,9 @@
             </a>
             {% endif %}
             {% if can_access('consulting_pathway','onboarding','view') %}
-            <a href="/operations/consulting" class="ops-nav-item" data-tooltip="Onboarding (shared with PLAB / AMC via plab_clients)">
+            <a href="/operations/consulting/onboarding" class="ops-nav-item {% if active_ops_page == 'consulting-onboarding' %}active{% endif %}" data-tooltip="Onboarding (welcome flow per client)">
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="9 12 11 14 15 10"/></svg></span>
                 <span class="ops-nav-text">Onboarding</span>
-                <span style="margin-left:auto;font-size:0.6rem;color:var(--gray-400);">soon</span>
             </a>
             {% endif %}
 
