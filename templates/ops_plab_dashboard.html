@@ -22,8 +22,13 @@
              style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid var(--orange);box-shadow:0 2px 6px rgba(0,0,0,0.08);"
              onerror="this.style.display='none';">
         {% else %}
+        {# Z-1: better avatar -- if last_name empty, fall back to
+           first two letters of first_name (e.g. "Lakshmi" -> "LA"
+           not just "L"). #}
         <div style="width:96px;height:96px;border-radius:50%;background:#FFF7ED;border:3px solid #FED7AA;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#F97316;">
-          {{ (client.first_name or '?')[0]|upper }}{{ (client.last_name or '')[0]|upper }}
+          {% set fn = (client.first_name or '?')|string %}
+          {% set ln = (client.last_name or '')|string %}
+          {% if ln %}{{ fn[0]|upper }}{{ ln[0]|upper }}{% else %}{{ fn[:2]|upper }}{% endif %}
         </div>
         {% endif %}
       <div>

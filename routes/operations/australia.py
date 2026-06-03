@@ -524,6 +524,36 @@ def ops_australia_client_edit_save(client_id):
     return redirect(url_for('ops_australia_client_detail', client_id=client_id))
 
 
+@admin_required
+def ops_australia_client_delete(client_id):
+    """Z-1: hard-delete an Australia client. Mirror of
+    ops_plab_delete with a pathway='australia' safety check so PLAB
+    rows can't be deleted through this surface even if someone
+    crafts the URL by hand.
+    """
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM plab_clients "
+            " WHERE id = ? AND COALESCE(pathway,'plab') = 'australia'",
+            (client_id,),
+        ).fetchone()
+        if not existing:
+            flash('Australia client not found.', 'error')
+            return redirect(url_for('ops_australia_clients_list'))
+        conn.execute("DELETE FROM plab_clients WHERE id = ?", (client_id,))
+        conn.commit()
+        flash('Client deleted', 'success')
+    except Exception as e:
+        logging.error(f"ops_australia_client_delete: {e}")
+        flash(f'Error: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return redirect(url_for('ops_australia_clients_list'))
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app.
 
@@ -561,5 +591,12 @@ def register_routes(app):
         '/operations/australia/clients/<int:client_id>/edit',
         endpoint='ops_australia_client_edit_save',
         view_func=ops_australia_client_edit_save,
+        methods=['POST'],
+    )
+    # Z-1: Delete handler (POST)
+    app.add_url_rule(
+        '/operations/australia/clients/<int:client_id>/delete',
+        endpoint='ops_australia_client_delete',
+        view_func=ops_australia_client_delete,
         methods=['POST'],
     )
