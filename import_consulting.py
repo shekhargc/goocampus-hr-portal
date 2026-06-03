@@ -54,7 +54,7 @@ MARK_CLIENTS    = ('cs_clients_seeded',     'v2_fixed_columns')
 MARK_ACADEMIC   = ('cs_academic_seeded',    'v2_after_clients')
 MARK_CALL_NOTES = ('cs_call_notes_seeded',  'v2_after_clients')
 MARK_EPIC       = ('cs_epic_seeded',        'v2_after_clients')
-MARK_PAYMENTS   = ('cs_payments_seeded',    'v2_after_clients')
+MARK_PAYMENTS   = ('cs_payments_seeded',    'v3_name_fallback')
 MARK_AMC        = ('cs_amc_seeded',         'v3_table_created')
 MARK_MENTORSHIP = ('cs_mentorship_seeded',  'v2_after_clients')
 
@@ -814,25 +814,46 @@ def run_import_consulting_payments_once(get_db_fn):
 
         wb = _open_workbook(FILE_PAYMENTS)
         ws = wb.active
-        inserted = skipped = errors = 0
+        inserted = skipped = errors = recovered = 0
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not any(c is not None and c != '' for c in row):
                 continue
-            reg = _ss(row[PAYMENTS_COL['reg_number']])
-            if not reg or not reg.upper().startswith('GCCSS'):
-                # Try to extract from name as fallback
-                reg = _extract_reg(_ss(row[PAYMENTS_COL['name']])) or ''
-            if not reg:
-                skipped += 1
-                continue
-            try:
-                client = conn.execute(
-                    "SELECT id FROM plab_clients WHERE registration_number = ?",
-                    (reg,),
-                ).fetchone()
-            except Exception:
-                client = None
-            if not client:
+            col_b = _ss(row[PAYMENTS_COL['reg_number']])
+            name_reg = _extract_reg(_ss(row[PAYMENTS_COL['name']]))
+
+            # Try col B first (the explicit Registration Number column).
+            reg = col_b if col_b and col_b.upper().startswith('GCCSS') else None
+            client = None
+            if reg:
+                try:
+                    client = conn.execute(
+                        "SELECT id FROM plab_clients WHERE registration_number = ?",
+                        (reg,),
+                    ).fetchone()
+                except Exception:
+                    client = None
+
+            # Fallback: if col B didn't match a client, try the reg# embedded
+            # in the candidate name. Several rows in the source Excel have
+            # typos in col B (missing leading zero, off-by-one digit) where
+            # the name suffix is correct. Recover those rather than skipping.
+            if not client and name_reg and name_reg != reg:
+                try:
+                    client = conn.execute(
+                        "SELECT id FROM plab_clients WHERE registration_number = ?",
+                        (name_reg,),
+                    ).fetchone()
+                except Exception:
+                    client = None
+                if client:
+                    if reg:
+                        logging.info(
+                            f"payments fallback: col B '{reg}' had no match, "
+                            f"using name-suffix '{name_reg}' instead")
+                    reg = name_reg
+                    recovered += 1
+
+            if not reg or not client:
                 skipped += 1
                 continue
             try:
@@ -863,10 +884,12 @@ def run_import_consulting_payments_once(get_db_fn):
         conn.commit()
         _set_marker(conn, *MARK_PAYMENTS)
         logging.info(
-            f"Consulting payments import: inserted {inserted}, "
+            f"Consulting payments import: inserted {inserted} "
+            f"({recovered} via name-fallback), "
             f"skipped {skipped}, errors {errors}"
         )
-        return {'inserted': inserted, 'skipped': skipped, 'errors': errors}
+        return {'inserted': inserted, 'skipped': skipped,
+                'errors': errors, 'recovered': recovered}
     except Exception as e:
         logging.error(f"run_import_consulting_payments_once: {e}")
         try: conn.rollback()
