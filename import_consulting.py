@@ -54,7 +54,7 @@ MARK_CLIENTS    = ('cs_clients_seeded',     'v2_fixed_columns')
 MARK_ACADEMIC   = ('cs_academic_seeded',    'v2_after_clients')
 MARK_CALL_NOTES = ('cs_call_notes_seeded',  'v2_after_clients')
 MARK_EPIC       = ('cs_epic_seeded',        'v2_after_clients')
-MARK_PAYMENTS   = ('cs_payments_seeded',    'v3_name_fallback')
+MARK_PAYMENTS   = ('cs_payments_seeded',    'v4_dedupe_clean')
 MARK_AMC        = ('cs_amc_seeded',         'v3_table_created')
 MARK_MENTORSHIP = ('cs_mentorship_seeded',  'v2_after_clients')
 
