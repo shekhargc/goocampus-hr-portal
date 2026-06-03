@@ -815,6 +815,24 @@ def run_import_consulting_payments_once(get_db_fn):
         wb = _open_workbook(FILE_PAYMENTS)
         ws = wb.active
         inserted = skipped = errors = recovered = 0
+        # S-3 fix 3: since this is a marker-bump re-run, the previous
+        # 33 rows from v2 are already in ops_payments. Wipe pathway=
+        # 'consulting' rows first so the re-insert lands a clean
+        # 38-row set rather than duplicating the previous 33.
+        try:
+            del_result = conn.execute(
+                "DELETE FROM ops_payments "
+                " WHERE COALESCE(pathway,'plab') = 'consulting'"
+            )
+            conn.commit()
+            logging.info(
+                "payments fix3: cleared prior consulting payment rows "
+                "before re-import"
+            )
+        except Exception as e:
+            logging.warning(f"payments fix3 wipe: {e}")
+            try: conn.rollback()
+            except Exception: pass
         for row in ws.iter_rows(min_row=2, values_only=True):
             if not any(c is not None and c != '' for c in row):
                 continue
