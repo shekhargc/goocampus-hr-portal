@@ -30468,6 +30468,10 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_epic_detail':                   _ap('consulting_pathway', 'epic_verification'),
     'ops_consulting_epic_edit_page':                _ap('consulting_pathway', 'epic_verification', 'edit'),
     'ops_consulting_epic_edit_save':                _ap('consulting_pathway', 'epic_verification', 'edit'),
+    'ops_consulting_gmc_list':                      _ap('consulting_pathway', 'gmc_registration'),
+    'ops_consulting_gmc_add':                       _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_gmc_edit':                      _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_gmc_delete':                    _ap('consulting_pathway', 'gmc_registration', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
