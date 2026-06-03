@@ -30,6 +30,11 @@ except ImportError:
 from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email, send_leave_status_email
 
 app = Flask(__name__)
+# X-1 (2026-06-03): accept trailing slashes on every route so Google
+# Search Console + Bing Webmaster Tools verification on URL-prefix
+# properties (e.g. /georgia/) doesn't 404. Single switch, applies to
+# every route -- no per-route change needed.
+app.url_map.strict_slashes = False
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
 app.config['DEBUG'] = False
 
@@ -17406,19 +17411,25 @@ def ops_documents_list():
     page = max(1, int(request.args.get('page', 1)))
     per_page = 50
     try:
+        # X-1: pathway='plab' filter so /operations/documents stops
+        # showing AMC + Standard Consulting clients in the PLAB
+        # documents page. Each pathway will get its own documents
+        # surface (PLAB stays here; AMC + consulting in follow-up
+        # X-3 commits).
         q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
                       c.account_status, c.current_stage, c.created_at,
                       COUNT(d.id) as doc_count,
                       SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
                FROM plab_clients c
-               LEFT JOIN plab_client_documents d ON d.client_id = c.id"""
+               LEFT JOIN plab_client_documents d ON d.client_id = c.id
+               WHERE COALESCE(c.pathway, 'plab') = 'plab'"""
         params = []
         wheres = []
         if search:
             wheres.append("(c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)")
             params += [f'%{search}%', f'%{search}%', f'%{search}%']
         if wheres:
-            q += " WHERE " + " AND ".join(wheres)
+            q += " AND " + " AND ".join(wheres)
         q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
         # Latest first (user request 2026-06-01) — newer client docs on top.
         q += " ORDER BY c.created_at DESC NULLS LAST, c.id DESC"
