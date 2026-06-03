@@ -226,116 +226,107 @@ def ops_consulting_pathway():
 
 @admin_required
 def ops_consulting_clients_list():
-    """Standard Consulting clients list -- single shared list across all
-    4 products, with a Product column and product filter dropdown."""
+    """Standard Consulting clients list -- matches the AMC list template
+    (right-side drawer + standard fonts). Data shape mirrors the AMC
+    handler so the cloned template renders cleanly: provides search /
+    status / stage / counsellor filter pools plus the records list."""
     user = get_user()
     conn = get_db()
 
-    search = (request.args.get('search') or '').strip()
-    product_filter = (request.args.get('product') or '').strip()
-    status_filter = (request.args.get('status') or '').strip()
-    page = max(1, int(request.args.get('page', 1) or 1))
-    per_page = 50
+    search = (request.args.get('q', '') or request.args.get('search', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    stage_filter = (request.args.get('stage', '') or '').strip()
+    counsellor_filter = (request.args.get('counsellor', '') or '').strip()
 
-    where = ["pc.pathway = 'consulting'"]
-    params = []
-    if search:
-        where.append(
-            "(pc.first_name ILIKE ? OR pc.last_name ILIKE ? "
-            " OR pc.registration_number ILIKE ? OR pc.email ILIKE ?)"
-        )
-        params.extend([f'%{search}%'] * 4)
-    if product_filter:
-        where.append("ps.name = ?")
-        params.append(product_filter)
-    if status_filter:
-        where.append("pc.account_status = ?")
-        params.append(status_filter)
-    where_sql = " AND ".join(where)
-
-    products = []
-    statuses = []
-    clients = []
+    records = []
     total = 0
+    statuses = []
+    stages = []
+    counsellors = []
 
     try:
-        try:
-            total = conn.execute(
-                f"""SELECT COUNT(*) AS c
-                    FROM plab_clients pc
-                    LEFT JOIN products_services ps ON ps.id = pc.product_id
-                    WHERE {where_sql}""",
-                params,
-            ).fetchone()['c']
-        except Exception:
-            # product_id missing -- fall back to a simpler query.
-            where2 = [w for w in where if 'ps.name' not in w]
-            where2_sql = " AND ".join(where2) or "pc.pathway = 'consulting'"
-            total = conn.execute(
-                f"SELECT COUNT(*) AS c FROM plab_clients pc WHERE {where2_sql}",
-                [p for w, p in zip(where, params) if 'ps.name' not in w],
-            ).fetchone()['c']
+        where = ["COALESCE(pathway, 'plab') = 'consulting'"]
+        params = []
+        if search:
+            where.append(
+                "(first_name ILIKE ? OR last_name ILIKE ? "
+                " OR registration_number ILIKE ? OR mobile ILIKE ? "
+                " OR email ILIKE ?)"
+            )
+            params.extend([f'%{search}%'] * 5)
+        if status_filter:
+            where.append("account_status = ?")
+            params.append(status_filter)
+        if stage_filter:
+            where.append("current_stage = ?")
+            params.append(stage_filter)
+        if counsellor_filter:
+            where.append("counsellor = ?")
+            params.append(counsellor_filter)
+        where_sql = " AND ".join(where)
 
-        try:
-            clients = conn.execute(
-                f"""SELECT pc.id, pc.registration_number, pc.prefix,
-                          pc.first_name, pc.last_name, pc.mobile, pc.email,
-                          pc.account_status, pc.current_stage, pc.counsellor,
-                          pc.final_package, pc.registration_date,
-                          ps.name AS product_name
-                    FROM plab_clients pc
-                    LEFT JOIN products_services ps ON ps.id = pc.product_id
-                    WHERE {where_sql}
-                    ORDER BY pc.id DESC
-                    LIMIT {per_page} OFFSET {(page - 1) * per_page}""",
-                params,
+        total = conn.execute(
+            f"SELECT COUNT(*) AS c FROM plab_clients WHERE {where_sql}",
+            params,
+        ).fetchone()['c']
+
+        records = conn.execute(
+            f"""SELECT id, registration_number, prefix, first_name, last_name,
+                       mobile, email, account_status, current_stage, counsellor,
+                       package_amount, discount_allowed, final_package,
+                       registration_date, dob, city, state, plan_type,
+                       father_name, father_phone, mother_name, mother_phone,
+                       parents_email, counsellor_email, counsellor_number,
+                       lead_source
+                 FROM plab_clients
+                 WHERE {where_sql}
+                 ORDER BY id DESC""",
+            params,
+        ).fetchall()
+
+        # Filter dropdown pools
+        statuses = [
+            r['account_status'] for r in conn.execute(
+                """SELECT DISTINCT account_status FROM plab_clients
+                    WHERE COALESCE(pathway,'plab') = 'consulting'
+                      AND account_status IS NOT NULL AND account_status != ''
+                    ORDER BY account_status"""
             ).fetchall()
-        except Exception:
-            clients = []
-
-        # Filter dropdowns
-        try:
-            products = [
-                r['name'] for r in conn.execute(
-                    "SELECT name FROM products_services "
-                    "WHERE COALESCE(pathway, '') = 'consulting' "
-                    "  AND COALESCE(status, 'active') = 'active' "
-                    "ORDER BY name"
-                ).fetchall()
-            ]
-        except Exception:
-            products = []
-        try:
-            statuses = [
-                r['s'] for r in conn.execute(
-                    "SELECT DISTINCT COALESCE(NULLIF(TRIM(account_status),''),'Unknown') AS s "
-                    " FROM plab_clients WHERE pathway = 'consulting' "
-                    "ORDER BY s"
-                ).fetchall()
-            ]
-        except Exception:
-            statuses = []
+        ]
+        stages = [
+            r['current_stage'] for r in conn.execute(
+                """SELECT DISTINCT current_stage FROM plab_clients
+                    WHERE COALESCE(pathway,'plab') = 'consulting'
+                      AND current_stage IS NOT NULL AND current_stage != ''
+                    ORDER BY current_stage"""
+            ).fetchall()
+        ]
+        counsellors = [
+            r['counsellor'] for r in conn.execute(
+                """SELECT DISTINCT counsellor FROM plab_clients
+                    WHERE COALESCE(pathway,'plab') = 'consulting'
+                      AND counsellor IS NOT NULL AND counsellor != ''
+                    ORDER BY counsellor"""
+            ).fetchall()
+        ]
     except Exception as e:
         logging.error(f"ops_consulting_clients_list: {e}")
         flash(f'Error loading clients list: {e}', 'error')
     finally:
         conn.close()
 
-    total_pages = max(1, (total + per_page - 1) // per_page)
-
     return render_template(
         'ops_consulting_clients.html',
         user=user,
-        clients=clients,
-        products=products,
-        statuses=statuses,
-        search=search,
-        product_filter=product_filter,
-        status_filter=status_filter,
-        page=page,
-        per_page=per_page,
+        records=records,
         total=total,
-        total_pages=total_pages,
+        search=search,
+        status_filter=status_filter,
+        stage_filter=stage_filter,
+        counsellor_filter=counsellor_filter,
+        statuses=statuses,
+        stages=stages,
+        counsellors=counsellors,
         active_ops_page='consulting-clients',
         active_pathway='consulting',
     )
