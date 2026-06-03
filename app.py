@@ -63,6 +63,7 @@ def format_reg_filter(value):
     """Normalize registration numbers to a single canonical display:
         GCUKIP/YY-YY/NNN    (PLAB)
         GCAUSIP/YY-YY/NNN   (AMC)
+        GCCSS/YY-YY/NNN     (Standard Consulting -- S-3)
     Handles both source formats and pads the trailing number to at
     least 3 digits.
 
@@ -71,6 +72,7 @@ def format_reg_filter(value):
       GCAUSIP/2023/9      ->  GCAUSIP/23-24/009
       GCAUSIP/26-27/04    ->  GCAUSIP/26-27/004
       GCAUSIP/25-26/039   ->  GCAUSIP/25-26/039   (unchanged)
+      GCCSS/24-25/06      ->  GCCSS/24-25/006
     Unknown shapes are returned as-is. Empty / None becomes '—'.
     """
     if not value or not isinstance(value, str):
@@ -88,7 +90,7 @@ def format_reg_filter(value):
 
     # Match either prefix with either middle form.
     # Group 1 prefix; group 2 either YYYY or YY-YY; group 3 trailing number.
-    m = _re.match(r'^(GCUKIP|GCAUSIP)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
+    m = _re.match(r'^(GCUKIP|GCAUSIP|GCCSS)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
                   value, _re.IGNORECASE)
     if not m:
         return value
@@ -24587,6 +24589,15 @@ try:
     run_seed_australia_lookups_once(get_db)
 except Exception as _au_lk_err:
     logging.error(f"Australia lookups seed failed: {_au_lk_err}")
+
+# ── S-3: One-time import for Standard Consulting (7 files) ────────────
+# Files in imports/. Clients first, then dependent sections. Each
+# importer is idempotent and marker-versioned -- safe on every boot.
+try:
+    from import_consulting import run_all_consulting_imports_once
+    run_all_consulting_imports_once(get_db)
+except Exception as _cs_imp_err:
+    logging.error(f"Consulting imports failed: {_cs_imp_err}")
 
 # ── Auto-seed Australia vendors + vendor_service_map from imported ops_* data ──
 # User insight: the historical Excel imports already contain every training

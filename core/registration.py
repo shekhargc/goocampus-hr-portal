@@ -27,11 +27,14 @@ import re
 
 
 # Pathway -> reg prefix. Source of truth.
+# S-3 (2026-06-03): consulting prefix changed GCCONS -> GCCSS to match the
+# user's existing Zoho data (GC Consulting Standard Service). Any future
+# consulting signups now get GCCSS/<FY>/<NNN> consistent with imported rows.
 PATHWAY_REG_PREFIX = {
     'plab': 'GCUKIP',
     'australia': 'GCAUSIP',
     'uae': 'GCUAEIP',
-    'consulting': 'GCCONS',
+    'consulting': 'GCCSS',
 }
 
 
