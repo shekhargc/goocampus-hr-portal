@@ -24321,6 +24321,61 @@ ensure_pathway_column_on_lookup_options()
 ensure_pathway_column_on_plab_clients()
 
 
+def ensure_ops_amc_registration_table():
+    """S-2b/S-3 fix: standalone CREATE TABLE for ops_amc_registration.
+
+    The same CREATE TABLE statement lives inside the big ensure_ops_tables()
+    block, but that block runs as a single transaction -- if any earlier
+    statement aborted the transaction (column "rowid" does not exist, etc.),
+    every subsequent CREATE TABLE silently no-ops. This helper retries
+    ops_amc_registration in its own clean transaction so the consulting AMC
+    importer can rely on the table existing.
+    """
+    try:
+        conn = get_db()
+    except Exception:
+        return
+    try:
+        try: conn.rollback()
+        except Exception: pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ops_amc_registration (
+                id SERIAL PRIMARY KEY,
+                registration_number TEXT REFERENCES plab_clients(registration_number),
+                amc_reference_number TEXT,
+                login_pwd TEXT,
+                secret_question TEXT,
+                secret_answer TEXT,
+                amc_setup TEXT,
+                registration_date TEXT,
+                english_exam TEXT,
+                exam_date TEXT,
+                english_result_expiry_date TEXT,
+                license TEXT,
+                license_received_date TEXT,
+                candidate_email TEXT,
+                mobile_number TEXT,
+                notes TEXT,
+                pathway TEXT,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        conn.commit()
+        logging.info("ensure_ops_amc_registration_table: ready")
+    except Exception as e:
+        logging.error(f"ensure_ops_amc_registration_table: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+ensure_ops_amc_registration_table()
+
+
 def ensure_lookup_category_on_form_configs():
     """Migration: client_form_configs gets a `lookup_category` column.
 
