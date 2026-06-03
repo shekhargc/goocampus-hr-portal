@@ -135,14 +135,52 @@ def ops_consulting_pathway():
             # boot migration runs -- handled silently.
             stats['product_split'] = []
 
-        # ── This-FY new registrations (reg-number prefix GCCONS/<FY>/) ──
+        # ── This-FY new registrations (reg-number prefix GCCSS/<FY>/) ──
         from core.registration import indian_financial_year
         fy = indian_financial_year()
         stats['this_fy_new'] = conn.execute(
             "SELECT COUNT(*) AS c FROM plab_clients "
             "WHERE pathway = 'consulting' AND registration_number LIKE ?",
-            (f'GCCONS/{fy}/%',),
+            (f'GCCSS/{fy}/%',),
         ).fetchone()['c']
+
+        # ── X-4b: AMC-style section card counts (most are 0 for
+        # consulting -- those sections show 0 in the section grid). ──
+        CS = "COALESCE(pathway, 'plab') = 'consulting'"
+        def cnt(sql, *params):
+            try:
+                return conn.execute(sql, params).fetchone()['c']
+            except Exception:
+                return 0
+        # Sections consulting HAS data for:
+        stats['academic_total']     = cnt(f"SELECT COUNT(*) AS c FROM ops_academic_details WHERE {CS}")
+        stats['payments_total']     = cnt(f"SELECT COUNT(*) AS c FROM ops_payments WHERE {CS}")
+        try:
+            stats['payments_sum']   = float(conn.execute(
+                f"SELECT COALESCE(SUM(total_amount_paid), 0) AS s FROM ops_payments WHERE {CS}"
+            ).fetchone()['s'] or 0)
+        except Exception:
+            stats['payments_sum']   = 0.0
+        stats['epic_total']         = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {CS}")
+        stats['epic_in_process']    = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {CS} AND epic_status = 'In Process'")
+        stats['epic_completed']     = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {CS} AND epic_status = 'Completed'")
+        # Sections that AMC has but consulting doesn't -- 0 stub so the
+        # template loops don't error out.
+        for k in ('coaching_total', 'coaching_ongoing',
+                  'test_total', 'upcoming_tests',
+                  'amc_mcq_upcoming', 'amc_clin_upcoming',
+                  'amc1_upcoming', 'amc2_upcoming',
+                  'awaiting_results', 'recent_passes',
+                  'research_total', 'research_started',
+                  'research_completed', 'research_published',
+                  'oc_total', 'webinars_total'):
+            stats[k] = 0
+        stats['upcoming_exams']     = []
+        stats['section_counts']     = {
+            'academic': stats['academic_total'],
+            'payments': stats['payments_total'],
+            'epic':     stats['epic_total'],
+        }
 
         # ── Recent registrations (last 5) ───────────────────────────────
         try:

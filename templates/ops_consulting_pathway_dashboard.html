@@ -1,183 +1,571 @@
 {% extends "ops_sidebar_base.html" %}
 
-{% block title %}Standard Consulting Dashboard - GooCampus Portal{% endblock %}
+{% block title %}Standard Consulting Dashboard - GooCampus HR Portal{% endblock %}
 
 {% block ops_extra_css %}
 <style>
-    .dash-header { display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:1rem; margin-bottom:2rem; }
-    .dash-header h1 { font-size:1.75rem; font-weight:800; color:var(--navy); margin:0; letter-spacing:-0.02em; }
-    .dash-header h1 span { color:var(--orange); }
-    .dash-header .pill { background:#FFF7ED; color:#9A3412; padding:4px 12px; border-radius:999px; font-size:0.72rem; font-weight:700; letter-spacing:0.04em; text-transform:uppercase; }
+    /* ── Page header ── */
+    .dash-header {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .dash-header h1 {
+        font-size: 1.75rem;
+        font-weight: 800;
+        color: var(--navy);
+        margin: 0;
+        letter-spacing: -0.02em;
+    }
+    .dash-header h1 span { color: var(--orange); }
+    .dash-header-actions { display: flex; gap: 0.5rem; flex-wrap: wrap; }
+    .dash-header-actions a {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.5rem 1rem;
+        background: var(--navy);
+        color: white;
+        border-radius: 0.5rem;
+        font-size: 0.8rem;
+        font-weight: 600;
+        text-decoration: none;
+        transition: background 0.2s;
+    }
+    .dash-header-actions a:hover { background: var(--navy-light); }
+    .dash-header-actions a.btn-orange { background: var(--orange); }
+    .dash-header-actions a.btn-orange:hover { background: var(--orange-dark); }
 
-    .hero-stats { display:grid; grid-template-columns:repeat(auto-fit, minmax(200px, 1fr)); gap:1rem; margin-bottom:1.5rem; }
-    .hero-card { background:white; border:1px solid var(--gray-200); border-radius:0.75rem; padding:1.25rem 1.5rem; position:relative; overflow:hidden; }
-    .hero-card::before { content:''; position:absolute; top:0; left:0; width:4px; height:100%; }
-    .hero-card.orange::before { background:var(--orange); }
-    .hero-card.green::before  { background:#10B981; }
-    .hero-card.navy::before   { background:var(--navy); }
-    .hero-card.yellow::before { background:#F59E0B; }
-    .hero-card.red::before    { background:#EF4444; }
-    .hero-label { font-size:0.75rem; color:var(--gray-500); font-weight:600; text-transform:uppercase; letter-spacing:0.05em; }
-    .hero-value { font-size:2.25rem; font-weight:800; color:var(--navy); line-height:1; margin:0.4rem 0 0.2rem; }
-    .hero-sub   { font-size:0.75rem; color:var(--gray-500); }
+    /* ── Hero stat row ── */
+    .hero-stats {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .hero-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        position: relative;
+        overflow: hidden;
+    }
+    .hero-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0;
+        width: 4px; height: 100%;
+    }
+    .hero-card.orange::before { background: var(--orange); }
+    .hero-card.green::before  { background: #10B981; }
+    .hero-card.navy::before   { background: var(--navy); }
+    .hero-card.yellow::before { background: #F59E0B; }
+    .hero-label { font-size: 0.75rem; color: var(--gray-500); font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; }
+    .hero-value { font-size: 2.25rem; font-weight: 800; color: var(--navy); line-height: 1; margin: 0.4rem 0 0.2rem; }
+    .hero-sub   { font-size: 0.75rem; color: var(--gray-500); }
 
-    .panel { background:white; border:1px solid var(--gray-200); border-radius:0.75rem; padding:1.25rem 1.5rem; margin-bottom:1.5rem; }
-    .panel h3 { margin:0 0 0.8rem; font-size:0.95rem; font-weight:700; color:var(--navy); }
+    /* ── Pipeline strips ── */
+    .pipeline-strip {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 1.5rem;
+    }
+    .pipeline-strip h3 {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .pipeline-bar {
+        display: flex;
+        height: 28px;
+        border-radius: 6px;
+        overflow: hidden;
+        background: var(--gray-100);
+    }
+    .pipeline-seg {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        font-size: 0.78rem;
+        font-weight: 700;
+        min-width: 30px;
+    }
+    .seg-english { background: #6366F1; }
+    .seg-plab1   { background: var(--orange); }
+    .seg-plab2   { background: #F97316; }
+    .seg-job     { background: #0EA5E9; }
+    .seg-gmc     { background: #10B981; }
+    .seg-done    { background: var(--navy); }
+    .stg-english { background: #8B5CF6; }
+    .stg-plab1   { background: #EC4899; }
+    .stg-plab2   { background: #F59E0B; }
+    .stg-job     { background: #3B82F6; }
+    .stg-jobgc   { background: #0D9488; }
+    .stg-jobown  { background: #7C3AED; }
+    .pipeline-legend {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 1rem;
+        margin-top: 0.85rem;
+        font-size: 0.75rem;
+        color: var(--gray-600);
+    }
+    .legend-item { display: inline-flex; align-items: center; gap: 0.35rem; }
+    .legend-dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
 
-    .product-row { display:flex; align-items:center; justify-content:space-between; padding:0.55rem 0; border-bottom:1px solid var(--gray-100); }
-    .product-row:last-child { border-bottom:none; }
-    .product-name { font-size:0.88rem; color:var(--navy); font-weight:600; }
-    .product-count { font-size:0.86rem; color:var(--orange); font-weight:700; }
+    /* ── Section grid cards ── */
+    .section-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+        gap: 1rem;
+        margin-bottom: 2rem;
+    }
+    .sec-card {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        display: flex;
+        flex-direction: column;
+    }
+    .sec-card-head {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 1rem 1.25rem 0.85rem;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .sec-icon {
+        width: 36px; height: 36px;
+        border-radius: 0.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+    .sec-card-head h3 {
+        margin: 0;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+        flex: 1;
+    }
+    .sec-total {
+        font-size: 1.4rem;
+        font-weight: 800;
+        color: var(--navy);
+    }
+    .sec-card-body { padding: 1rem 1.25rem; flex: 1; }
+    .sec-stats {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0.6rem 0.85rem;
+    }
+    .sec-stat {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-size: 0.78rem;
+    }
+    .sec-stat .num {
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .sec-stat .lbl { color: var(--gray-500); }
+    .dot {
+        width: 8px; height: 8px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+    .dot-orange { background: var(--orange); }
+    .dot-green  { background: #10B981; }
+    .dot-blue   { background: #3B82F6; }
+    .dot-yellow { background: #F59E0B; }
+    .dot-navy   { background: var(--navy); }
+    .dot-red    { background: #EF4444; }
+    .sec-card-foot {
+        display: flex;
+        gap: 0.5rem;
+        padding: 0.75rem 1.25rem;
+        border-top: 1px solid var(--gray-100);
+        background: var(--gray-50);
+    }
+    .sec-card-foot a {
+        flex: 1;
+        text-align: center;
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-decoration: none;
+        color: var(--navy);
+        padding: 0.4rem 0;
+        border-radius: 0.35rem;
+        background: white;
+        border: 1px solid var(--gray-200);
+    }
+    .sec-card-foot a:hover { background: var(--orange); color: white; border-color: var(--orange); }
 
-    .empty-state { text-align:center; padding:32px 16px; color:var(--gray-400); font-size:0.86rem; }
-    .empty-state i { font-size:2.2rem; color:#D1D5DB; }
+    /* ── Upcoming exams ── */
+    .upcoming-section {
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.75rem;
+        padding: 1.25rem 1.5rem;
+        margin-bottom: 2rem;
+    }
+    .upcoming-section h3 {
+        margin: 0 0 1rem;
+        font-size: 0.9rem;
+        font-weight: 700;
+        color: var(--navy);
+    }
+    .upcoming-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 0.85rem;
+    }
+    .upcoming-table th {
+        text-align: left;
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        padding: 0.5rem 0.65rem;
+        border-bottom: 1px solid var(--gray-200);
+        text-transform: uppercase;
+        letter-spacing: 0.03em;
+    }
+    .upcoming-table td {
+        padding: 0.55rem 0.65rem;
+        color: var(--navy);
+        border-bottom: 1px solid var(--gray-100);
+    }
+    .upcoming-empty { padding: 1.5rem; text-align: center; color: var(--gray-500); font-size: 0.85rem; }
 
-    .recent-list { background:white; border:1px solid var(--gray-200); border-radius:0.75rem; overflow:hidden; }
-    .recent-row { display:flex; align-items:center; gap:14px; padding:12px 16px; border-bottom:1px solid var(--gray-100); font-size:0.86rem; }
-    .recent-row:last-child { border-bottom:none; }
-    .recent-name { font-weight:700; color:var(--navy); }
-    .recent-meta { color:var(--gray-500); font-size:0.78rem; }
-    .recent-reg { font-family:ui-monospace,'SF Mono',monospace; font-size:0.78rem; color:var(--orange); }
-
-    .blurb { background:#FFF7ED; border:1px solid #FED7AA; border-radius:0.6rem; padding:0.8rem 1rem; font-size:0.82rem; color:#9A3412; line-height:1.55; margin-bottom:1.5rem; }
+    /* ── Quick links ── */
+    .quick-links-title {
+        font-size: 0.75rem;
+        font-weight: 600;
+        color: var(--gray-500);
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        margin-bottom: 0.75rem;
+    }
+    .quick-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 0.5rem;
+    }
+    .quick-grid a {
+        padding: 0.6rem 0.85rem;
+        background: white;
+        border: 1px solid var(--gray-200);
+        border-radius: 0.5rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--navy);
+        text-decoration: none;
+        text-align: center;
+    }
+    .quick-grid a:hover { background: var(--orange); color: white; border-color: var(--orange); }
 </style>
 {% endblock %}
 
 {% block ops_content %}
 <div class="dash-header">
-    <div>
-        <h1>Standard <span>Consulting</span> Dashboard</h1>
-        <p style="color:var(--gray-500); font-size:0.86rem; margin:6px 0 0;">
-            Overview across all four consulting offerings.
-        </p>
+    <h1><span>Consulting</span> Pathway Dashboard</h1>
+    <div class="dash-header-actions">
+        <a href="{{ url_for('ops_consulting_clients_list') }}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            All Clients
+        </a>
     </div>
-    <span class="pill">{{ stats.this_fy_new or 0 }} new this FY</span>
 </div>
 
-{% with messages = get_flashed_messages(with_categories=true) %}
-    {% for category, message in messages %}
-        <div class="blurb" style="background:{% if category == 'error' %}#FEE2E2{% endif %};color:{% if category == 'error' %}#991B1B{% else %}#9A3412{% endif %};border-color:{% if category == 'error' %}#FCA5A5{% else %}#FED7AA{% endif %};">{{ message }}</div>
-    {% endfor %}
-{% endwith %}
-
-{% if stats.total_clients == 0 %}
-<div class="blurb">
-    <i class="bi bi-info-circle me-1"></i>
-    <strong>This pathway is fresh.</strong> Sales can already start raising invitations for any of the four consulting products. Existing clients can be imported later by dropping an Excel export into <code>imports/</code>. Sections (Call Notes, Documents, Payments, etc.) get wired up section-by-section in subsequent commits (S-1, S-2).
-</div>
-{% endif %}
-
-<!-- Hero stats -->
+<!-- ── Hero stats ── -->
 <div class="hero-stats">
     <div class="hero-card orange">
         <div class="hero-label">Total Clients</div>
-        <div class="hero-value">{{ stats.total_clients or 0 }}</div>
-        <div class="hero-sub">All consulting products</div>
+        <div class="hero-value">{{ stats.total_clients }}</div>
+        <div class="hero-sub">All registered</div>
     </div>
     <div class="hero-card green">
-        <div class="hero-label">Active</div>
-        <div class="hero-value">{{ stats.active_clients or 0 }}</div>
+        <div class="hero-label">Active Clients</div>
+        <div class="hero-value">{{ stats.active_clients }}</div>
         <div class="hero-sub">In Process</div>
     </div>
-    <div class="hero-card yellow">
-        <div class="hero-label">On Hold</div>
-        <div class="hero-value">{{ stats.on_hold_clients or 0 }}</div>
-        <div class="hero-sub">Paused engagements</div>
-    </div>
     <div class="hero-card navy">
-        <div class="hero-label">Completed</div>
-        <div class="hero-value">{{ stats.completed_clients or 0 }}</div>
-        <div class="hero-sub">Onboarded</div>
+        <div class="hero-label">Upcoming Tests</div>
+        <div class="hero-value">{{ stats.upcoming_tests }}</div>
+        <div class="hero-sub">AMC MCQ: {{ stats.amc_mcq_upcoming }} &middot; AMC Clinical: {{ stats.amc_clin_upcoming }}</div>
     </div>
-    <div class="hero-card red">
-        <div class="hero-label">Dropped</div>
-        <div class="hero-value">{{ stats.dropped_clients or 0 }}</div>
-        <div class="hero-sub">No longer engaged</div>
+    <div class="hero-card yellow">
+        <div class="hero-label">Awaiting Results</div>
+        <div class="hero-value">{{ stats.awaiting_results }}</div>
+        <div class="hero-sub">{{ stats.recent_passes }} passed (30 days)</div>
     </div>
 </div>
 
-<!-- Per-product split + counsellor breakdown -->
-<div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(320px, 1fr)); gap:1.25rem;">
-
-    <div class="panel">
-        <h3><i class="bi bi-bag-fill me-1" style="color:var(--orange);"></i> By Product</h3>
-        {% if stats.product_split %}
-            {% for name, count in stats.product_split %}
-            <div class="product-row">
-                <span class="product-name">{{ name }}</span>
-                <span class="product-count">{{ count }}</span>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <i class="bi bi-bag"></i>
-                <p style="margin:8px 0 0;">No clients yet across any consulting product.</p>
-            </div>
-        {% endif %}
+<!-- ── Client Status Pipeline ── -->
+{% set status_counts = stats.account_status %}
+<div class="pipeline-strip">
+    <h3>Client Status Overview</h3>
+    <div class="pipeline-bar">
+        {% set statuses = [
+            ('In Process', 'seg-english', status_counts.get('In Process', 0)),
+            ('Switched Program', 'seg-plab1', status_counts.get('Switched Program', 0)),
+            ('On Hold', 'seg-plab2', status_counts.get('On Hold', 0)),
+            ('Dropped and Refunded', 'seg-job', status_counts.get('Dropped and Refunded', 0)),
+            ('Dropped Out', 'seg-gmc', status_counts.get('Dropped Out', 0)),
+            ('Completed', 'seg-done', status_counts.get('Completed', 0))
+        ] %}
+        {% for label, cls, count in statuses %}
+            {% if count > 0 %}
+            <div class="pipeline-seg {{ cls }}" style="flex: {{ count }}" title="{{ label }}: {{ count }}">{{ count }}</div>
+            {% endif %}
+        {% endfor %}
     </div>
-
-    <div class="panel">
-        <h3><i class="bi bi-person-badge-fill me-1" style="color:var(--orange);"></i> Counsellor Load</h3>
-        {% if stats.counsellor_breakdown %}
-            {% for name, count in stats.counsellor_breakdown %}
-            <div class="product-row">
-                <span class="product-name">{{ name }}</span>
-                <span class="product-count">{{ count }}</span>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <i class="bi bi-person-badge"></i>
-                <p style="margin:8px 0 0;">No active clients have a counsellor assigned yet.</p>
-            </div>
-        {% endif %}
+    <div class="pipeline-legend">
+        <span class="legend-item"><span class="legend-dot" style="background:#6366F1"></span> In Process ({{ status_counts.get('In Process', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--orange)"></span> Switched Program ({{ status_counts.get('Switched Program', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#F97316"></span> On Hold ({{ status_counts.get('On Hold', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#0EA5E9"></span> Dropped &amp; Refunded ({{ status_counts.get('Dropped and Refunded', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:#10B981"></span> Dropped Out ({{ status_counts.get('Dropped Out', 0) }})</span>
+        <span class="legend-item"><span class="legend-dot" style="background:var(--navy)"></span> Completed ({{ status_counts.get('Completed', 0) }})</span>
     </div>
-
-    <div class="panel">
-        <h3><i class="bi bi-flag-fill me-1" style="color:var(--orange);"></i> Current Stage (Active only)</h3>
-        {% if stats.current_stage %}
-            {% for stg, count in stats.current_stage.items() %}
-            <div class="product-row">
-                <span class="product-name">{{ stg }}</span>
-                <span class="product-count">{{ count }}</span>
-            </div>
-            {% endfor %}
-        {% else %}
-            <div class="empty-state">
-                <i class="bi bi-flag"></i>
-                <p style="margin:8px 0 0;">No active clients yet.</p>
-            </div>
-        {% endif %}
-    </div>
-
 </div>
 
-<!-- Recent registrations -->
-<h3 style="font-size:1rem; font-weight:700; color:var(--navy); margin:1.5rem 0 0.8rem;">Recent Registrations</h3>
-{% if stats.recent_registrations %}
-<div class="recent-list">
-    {% for r in stats.recent_registrations %}
-    <div class="recent-row">
-        <div style="flex:1;">
-            <div class="recent-name">{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</div>
-            <div class="recent-meta">
-                <span class="recent-reg">{{ (r.registration_number or '')|format_reg }}</span>
-                {% if r.product_name %} &middot; {{ r.product_name }}{% endif %}
-                {% if r.account_status %} &middot; {{ r.account_status }}{% endif %}
-                {% if r.counsellor %} &middot; Counsellor: {{ r.counsellor }}{% endif %}
+<!-- ── Active Client Stage Breakdown ── -->
+{% set stage_counts = stats.current_stage %}
+<div class="pipeline-strip">
+    <h3>Active Clients &mdash; Current Stage</h3>
+    <div class="pipeline-bar">
+        {% for stage_name, count in stage_counts.items() %}
+            {% if count > 0 %}
+            <div class="pipeline-seg stg-english" style="flex: {{ count }}; background: hsl({{ loop.index * 47 % 360 }}, 65%, 50%);" title="{{ stage_name }}: {{ count }}">{{ count }}</div>
+            {% endif %}
+        {% endfor %}
+    </div>
+    <div class="pipeline-legend">
+        {% for stage_name, count in stage_counts.items() %}
+        <span class="legend-item"><span class="legend-dot" style="background: hsl({{ loop.index * 47 % 360 }}, 65%, 50%);"></span> {{ stage_name }} ({{ count }})</span>
+        {% endfor %}
+        {% if not stage_counts %}<span style="color: var(--gray-500); font-style: italic;">No active clients yet.</span>{% endif %}
+    </div>
+</div>
+
+<!-- ── Section cards ── -->
+<div class="section-grid">
+
+    <!-- Training (Coaching) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <h3>Training</h3>
+            <div class="sec-total">{{ stats.coaching_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.coaching_ongoing }}</span><span class="lbl">Ongoing</span></div>
+                <div class="sec-stat"><div class="dot dot-navy"></div><span class="num">{{ stats.coaching_total - stats.coaching_ongoing }}</span><span class="lbl">Completed</span></div>
             </div>
         </div>
-        <div style="font-size:0.76rem; color:var(--gray-500);">{{ r.registration_date or '' }}</div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_pathway') }}">View All</a>
+        </div>
     </div>
-    {% endfor %}
+
+    <!-- Test Bookings -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFF7ED;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            </div>
+            <h3>Test Bookings</h3>
+            <div class="sec-total">{{ stats.test_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.amc_mcq_upcoming }}</span><span class="lbl">AMC MCQ upcoming</span></div>
+                <div class="sec-stat"><div class="dot dot-yellow"></div><span class="num">{{ stats.amc_clin_upcoming }}</span><span class="lbl">AMC Clinical</span></div>
+                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.awaiting_results }}</span><span class="lbl">Awaiting results</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.recent_passes }}</span><span class="lbl">Passed (30d)</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_pathway') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- EPIC Registration -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #F0FDF4;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <h3>EPIC Registration</h3>
+            <div class="sec-total">{{ stats.epic_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.epic_in_process }}</span><span class="lbl">In Process</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.epic_completed }}</span><span class="lbl">Completed</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_epic_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Research & Publication -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF3C7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <h3>Research &amp; Publication</h3>
+            <div class="sec-total">{{ stats.research_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.research_started }}</span><span class="lbl">Started</span></div>
+                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.research_completed }}</span><span class="lbl">Completed</span></div>
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.research_published }}</span><span class="lbl">Published</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_pathway') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Academic Details -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FCE7F3;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DB2777" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
+            </div>
+            <h3>Academic Details</h3>
+            <div class="sec-total">{{ stats.academic_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.academic_total }}</span><span class="lbl">Records on file</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_academic_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Online Courses & Subscriptions -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EDE9FE;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+            </div>
+            <h3>Online Courses</h3>
+            <div class="sec-total">{{ stats.oc_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.oc_total }}</span><span class="lbl">Subscriptions</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_pathway') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Payments -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #DCFCE7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <h3>Payments</h3>
+            <div class="sec-total">{{ stats.payments_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">&#8377;{{ '{:,.0f}'.format(stats.payments_sum) }}</span><span class="lbl">Total collected</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_payments_list') }}">View All</a>
+        </div>
+    </div>
+
+    <!-- Webinars & Conferences -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFE4E6;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <h3>Webinars &amp; Conferences</h3>
+            <div class="sec-total">{{ stats.webinars_total }}</div>
+        </div>
+        <div class="sec-card-body">
+            <div class="sec-stats">
+                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.webinars_total }}</span><span class="lbl">Recorded events</span></div>
+            </div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_consulting_pathway') }}">View All</a>
+        </div>
+    </div>
+
 </div>
-<div style="text-align:right; margin-top:10px;">
-    <a href="/operations/consulting/clients" style="font-size:0.85rem; color:var(--orange); text-decoration:none; font-weight:600;">View all clients <i class="bi bi-arrow-right"></i></a>
+
+<!-- ── Upcoming Exams ── -->
+<div class="upcoming-section">
+    <h3>Upcoming Exams (next 5)</h3>
+    {% if stats.upcoming_exams %}
+    <table class="upcoming-table">
+        <thead>
+            <tr>
+                <th>Candidate</th>
+                <th>Exam</th>
+                <th>Exam Date</th>
+                <th>Country</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for r in stats.upcoming_exams %}
+            <tr>
+                <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
+                <td>{{ r.exam or '—' }}</td>
+                <td>{{ r.exam_date or '—' }}</td>
+                <td>{{ r.country or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="upcoming-empty">No upcoming exams booked.</div>
+    {% endif %}
 </div>
-{% else %}
-<div class="empty-state panel">
-    <i class="bi bi-person-plus"></i>
-    <p style="margin:8px 0 0;">No registrations yet. Raise the first invitation from <a href="/admin/client-invitations" style="color:var(--orange); font-weight:600;">/admin/client-invitations</a>.</p>
+
+<!-- ── Quick Links ── -->
+<div class="quick-links-title">Quick Links — All Consulting Operations</div>
+<div class="quick-grid">
+    <a href="{{ url_for('ops_consulting_clients_list') }}">Registration</a>
+    <a href="{{ url_for('ops_consulting_pathway') }}">Test Bookings</a>
+    <a href="{{ url_for('ops_consulting_pathway') }}">Training</a>
+    <a href="{{ url_for('ops_consulting_academic_list') }}">Academic Details</a>
+    <a href="{{ url_for('ops_consulting_epic_list') }}">EPIC Registration</a>
+    <a href="{{ url_for('ops_consulting_pathway') }}">Online Courses</a>
+    <a href="{{ url_for('ops_consulting_payments_list') }}">Payments</a>
+    <a href="{{ url_for('ops_consulting_call_notes_list') }}">Call Notes</a>
+    <a href="{{ url_for('ops_consulting_pathway') }}">Research</a>
+    <a href="{{ url_for('ops_consulting_pathway') }}">Webinars</a>
 </div>
-{% endif %}
+
 {% endblock %}
