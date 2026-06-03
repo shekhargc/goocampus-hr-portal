@@ -47,13 +47,16 @@ FILE_MENTORSHIP = 'All Mentorship Sessions.xlsx'
 
 
 # ── Marker keys (bumped together when re-import is needed) ─────────────
-MARK_CLIENTS    = ('cs_clients_seeded',     'v1_initial_56')
-MARK_ACADEMIC   = ('cs_academic_seeded',    'v1_initial_56')
-MARK_CALL_NOTES = ('cs_call_notes_seeded',  'v1_initial_199')
-MARK_EPIC       = ('cs_epic_seeded',        'v1_initial_15')
-MARK_PAYMENTS   = ('cs_payments_seeded',    'v1_initial_38')
-MARK_AMC        = ('cs_amc_seeded',         'v1_initial_14')
-MARK_MENTORSHIP = ('cs_mentorship_seeded',  'v1_initial_5')
+MARK_CLIENTS    = ('cs_clients_seeded',     'v2_fixed_columns')
+# Dependent sections all bumped to v2 too -- on the v1 run nothing was
+# imported (no clients existed yet, so the FK gate skipped every row).
+# v2 re-runs them after the clients importer above has done its work.
+MARK_ACADEMIC   = ('cs_academic_seeded',    'v2_after_clients')
+MARK_CALL_NOTES = ('cs_call_notes_seeded',  'v2_after_clients')
+MARK_EPIC       = ('cs_epic_seeded',        'v2_after_clients')
+MARK_PAYMENTS   = ('cs_payments_seeded',    'v2_after_clients')
+MARK_AMC        = ('cs_amc_seeded',         'v2_after_clients')
+MARK_MENTORSHIP = ('cs_mentorship_seeded',  'v2_after_clients')
 
 
 # ── Shared cell-value helpers ──────────────────────────────────────────
@@ -319,14 +322,13 @@ def run_import_consulting_clients_once(get_db_fn):
                 'first_name':        fname or '(missing)',
                 'last_name':         lname,
                 'mobile':            _ss(cell(row, 'mobile')),
-                'whatsapp1':         _ss(cell(row, 'whatsapp')),
                 'email':             _ss(cell(row, 'email')),
                 'dob':               _sd(cell(row, 'dob')),
                 'city':              _ss(cell(row, 'city')),
                 'state':             _ss(cell(row, 'state')),
                 'registration_date': _sd(cell(row, 'reg_date')),
                 'plan_type':         plan_type,
-                'package':           _sf(cell(row, 'package')),
+                'package_amount':    _sf(cell(row, 'package')),
                 'final_package':     _sf(cell(row, 'final_package')),
                 'discount_allowed':  _sf(cell(row, 'discount')),
                 'account_status':    _ss(cell(row, 'account_status')) or 'In Process',
@@ -344,13 +346,13 @@ def run_import_consulting_clients_once(get_db_fn):
                 'parents_email':     _ss(cell(row, 'parents_email')),
                 'counsellor_number': _ss(cell(row, 'counsellor_number')),
                 'counsellor_email':  _ss(cell(row, 'counsellor_email')),
-                'inst1_amt':         _sf(cell(row, 'inst1_amt')),
+                'inst1_amount':      _sf(cell(row, 'inst1_amt')),
                 'inst1_date':        _sd(cell(row, 'inst1_date')),
                 'inst1_note':        _ss(cell(row, 'inst1_note')),
-                'inst2_amt':         _sf(cell(row, 'inst2_amt')),
+                'inst2_amount':      _sf(cell(row, 'inst2_amt')),
                 'inst2_date':        _sd(cell(row, 'inst2_date')),
                 'inst2_note':        _ss(cell(row, 'inst2_note')),
-                'notes':             _ss(cell(row, 'notes')),
+                'additional_notes':  _ss(cell(row, 'notes')),
                 'pathway':           'consulting',
                 'product_id':        product_id,
             }
@@ -361,21 +363,19 @@ def run_import_consulting_clients_once(get_db_fn):
                     (reg,),
                 ).fetchone()
                 if exists:
-                    # Update non-NULL fields only via COALESCE-style merge.
                     conn.execute("""
                         UPDATE plab_clients SET
                             prefix            = ?,
                             first_name        = ?,
                             last_name         = ?,
                             mobile            = ?,
-                            whatsapp1         = ?,
                             email             = ?,
                             dob               = ?,
                             city              = ?,
                             state             = ?,
                             registration_date = ?,
                             plan_type         = ?,
-                            package           = ?,
+                            package_amount    = ?,
                             final_package     = ?,
                             discount_allowed  = ?,
                             account_status    = ?,
@@ -393,16 +393,22 @@ def run_import_consulting_clients_once(get_db_fn):
                             parents_email     = ?,
                             counsellor_number = ?,
                             counsellor_email  = ?,
-                            notes             = ?,
+                            inst1_amount      = ?,
+                            inst1_date        = ?,
+                            inst1_note        = ?,
+                            inst2_amount      = ?,
+                            inst2_date        = ?,
+                            inst2_note        = ?,
+                            additional_notes  = ?,
                             pathway           = 'consulting',
                             product_id        = COALESCE(?, product_id)
                         WHERE id = ?
                     """, (
                         data['prefix'], data['first_name'], data['last_name'],
-                        data['mobile'], data['whatsapp1'], data['email'],
+                        data['mobile'], data['email'],
                         data['dob'], data['city'], data['state'],
                         data['registration_date'], data['plan_type'],
-                        data['package'], data['final_package'],
+                        data['package_amount'], data['final_package'],
                         data['discount_allowed'], data['account_status'],
                         data['counsellor'], data['current_stage'],
                         data['joined_stage'], data['lead_source'],
@@ -410,7 +416,10 @@ def run_import_consulting_clients_once(get_db_fn):
                         data['father_name'], data['father_phone'],
                         data['mother_name'], data['mother_phone'],
                         data['parents_email'], data['counsellor_number'],
-                        data['counsellor_email'], data['notes'],
+                        data['counsellor_email'],
+                        data['inst1_amount'], data['inst1_date'], data['inst1_note'],
+                        data['inst2_amount'], data['inst2_date'], data['inst2_note'],
+                        data['additional_notes'],
                         data['product_id'], exists['id'],
                     ))
                     updated += 1
@@ -418,22 +427,24 @@ def run_import_consulting_clients_once(get_db_fn):
                     conn.execute("""
                         INSERT INTO plab_clients (
                             registration_number, prefix, first_name, last_name,
-                            mobile, whatsapp1, email, dob, city, state,
-                            registration_date, plan_type, package, final_package,
+                            mobile, email, dob, city, state,
+                            registration_date, plan_type, package_amount, final_package,
                             discount_allowed, account_status, counsellor,
                             current_stage, joined_stage, lead_source,
                             instagram, facebook, linkedin,
                             father_name, father_phone, mother_name, mother_phone,
                             parents_email, counsellor_number, counsellor_email,
-                            notes, pathway, product_id
-                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'consulting',?)
+                            inst1_amount, inst1_date, inst1_note,
+                            inst2_amount, inst2_date, inst2_note,
+                            additional_notes, pathway, product_id
+                        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'consulting',?)
                     """, (
                         data['registration_number'], data['prefix'],
                         data['first_name'], data['last_name'],
-                        data['mobile'], data['whatsapp1'], data['email'],
+                        data['mobile'], data['email'],
                         data['dob'], data['city'], data['state'],
                         data['registration_date'], data['plan_type'],
-                        data['package'], data['final_package'],
+                        data['package_amount'], data['final_package'],
                         data['discount_allowed'], data['account_status'],
                         data['counsellor'], data['current_stage'],
                         data['joined_stage'], data['lead_source'],
@@ -441,7 +452,10 @@ def run_import_consulting_clients_once(get_db_fn):
                         data['father_name'], data['father_phone'],
                         data['mother_name'], data['mother_phone'],
                         data['parents_email'], data['counsellor_number'],
-                        data['counsellor_email'], data['notes'],
+                        data['counsellor_email'],
+                        data['inst1_amount'], data['inst1_date'], data['inst1_note'],
+                        data['inst2_amount'], data['inst2_date'], data['inst2_note'],
+                        data['additional_notes'],
                         data['product_id'],
                     ))
                     inserted += 1
