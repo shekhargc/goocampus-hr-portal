@@ -303,6 +303,221 @@ def ops_consulting_clients_list():
     )
 
 
+# ── X-4a: per-client detail + edit + delete (PLAB/AMC parity) ──────────
+CS_EDITABLE_COLUMNS = [
+    # Personal
+    'prefix', 'first_name', 'last_name', 'mobile', 'whatsapp1', 'whatsapp2',
+    'email', 'dob', 'city', 'state',
+    'instagram', 'facebook', 'linkedin',
+    'father_name', 'father_phone', 'mother_name', 'mother_phone', 'parents_email',
+    # Service
+    'plan_type', 'account_status', 'current_stage', 'switched_program',
+    'counsellor', 'counsellor_email', 'counsellor_number',
+    'lead_source', 'registration_date',
+    # Financials
+    'package_amount', 'discount_allowed', 'final_package',
+    'inst1_amount', 'inst1_date', 'inst1_note',
+    'inst2_amount', 'inst2_date', 'inst2_note',
+    'inst3_amount', 'inst3_date', 'inst3_note',
+    'inst4_amount', 'inst4_date', 'inst4_note',
+]
+# Numeric fields get coerced to float on save.
+CS_NUMERIC_COLUMNS = {
+    'package_amount', 'discount_allowed', 'final_package',
+    'inst1_amount', 'inst2_amount', 'inst3_amount', 'inst4_amount',
+}
+
+
+def _cs_payment_totals_for(conn, reg_num):
+    """Sum (amount_paid, gst_paid, total_paid) for ONE consulting client
+    from ops_payments. Pathway-scoped so PLAB / AMC payments can't
+    leak."""
+    try:
+        row = conn.execute(
+            """SELECT COALESCE(SUM(amount_paid), 0)        AS amt,
+                      COALESCE(SUM(gst_paid), 0)           AS gst,
+                      COALESCE(SUM(total_amount_paid), 0)  AS tot
+                 FROM ops_payments
+                WHERE registration_number = ?
+                  AND COALESCE(pathway, 'plab') = 'consulting'""",
+            (reg_num,),
+        ).fetchone()
+        return (float(row['amt'] or 0),
+                float(row['gst'] or 0),
+                float(row['tot'] or 0))
+    except Exception:
+        return 0.0, 0.0, 0.0
+
+
+@admin_required
+def ops_consulting_client_detail(client_id):
+    """Full consulting client profile -- view + linked-section panels.
+
+    Mirror of ops_australia_client_detail scoped to pathway='consulting'.
+    Only fetches sections that consulting actually uses (academic,
+    call_notes, EPIC, payments, AMC registration, mentorship); skips
+    AMC-specific training/test_bookings/research/webinars/online_courses.
+    """
+    user = get_user()
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients "
+        " WHERE id = ? AND COALESCE(pathway, 'plab') = 'consulting'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('Consulting client not found.', 'error')
+        return redirect(url_for('ops_consulting_clients_list'))
+
+    reg = client['registration_number']
+    amount_paid, gst_paid, total_paid = _cs_payment_totals_for(conn, reg)
+    final_pkg = float(client['final_package'] or 0) or (
+        float(client['package_amount'] or 0) - float(client['discount_allowed'] or 0)
+    )
+    balance = final_pkg - amount_paid
+    pct = (amount_paid / final_pkg * 100) if final_pkg > 0 else 0
+
+    def fetch(table, order=None):
+        try:
+            sql = (
+                f"SELECT * FROM {table} "
+                f"WHERE registration_number = ? "
+                f"  AND COALESCE(pathway, 'plab') = 'consulting' "
+            )
+            if order:
+                sql += f" ORDER BY {order} "
+            return conn.execute(sql, (reg,)).fetchall()
+        except Exception:
+            return []
+
+    sections = {
+        'academic':   fetch('ops_academic_details', 'created_at DESC'),
+        'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'epic':       fetch('ops_epic_registration', 'created_at DESC'),
+        'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
+        # Consulting-specific sections that AMC pathway doesn't have:
+        'amc_registration': fetch('ops_amc_registration', 'created_at DESC'),
+        'mentorship':       fetch('ops_mentorship', 'created_at DESC'),
+        # AMC-only sections stubbed to empty so the template loops still work.
+        'test_bookings':    [],
+        'training':         [],
+        'online_courses':   [],
+        'research':         [],
+        'webinars':         [],
+    }
+    conn.close()
+
+    return render_template(
+        'ops_consulting_client_detail.html',
+        user=user,
+        client=client,
+        sections=sections,
+        amount_paid=amount_paid,
+        gst_paid=gst_paid,
+        total_paid=total_paid,
+        final_pkg=final_pkg,
+        balance=balance,
+        payment_pct=pct,
+        pathway_name='Standard Consulting',
+        active_ops_page='consulting-clients',
+        active_pathway='consulting',
+    )
+
+
+@admin_required
+def ops_consulting_client_edit_page(client_id):
+    """GET -- render the edit form for a consulting client."""
+    user = get_user()
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients "
+        " WHERE id = ? AND COALESCE(pathway, 'plab') = 'consulting'",
+        (client_id,),
+    ).fetchone()
+    conn.close()
+    if not client:
+        flash('Consulting client not found.', 'error')
+        return redirect(url_for('ops_consulting_clients_list'))
+    return render_template(
+        'ops_consulting_client_edit_form.html',
+        user=user,
+        client=client,
+        pathway_name='Standard Consulting',
+        active_ops_page='consulting-clients',
+        active_pathway='consulting',
+    )
+
+
+@admin_required
+def ops_consulting_client_edit_save(client_id):
+    """POST -- save edits to a consulting client's editable fields."""
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM plab_clients "
+            " WHERE id = ? AND COALESCE(pathway,'plab') = 'consulting'",
+            (client_id,),
+        ).fetchone()
+        if not existing:
+            flash('Consulting client not found.', 'error')
+            return redirect(url_for('ops_consulting_clients_list'))
+        sets = []
+        params = []
+        for col in CS_EDITABLE_COLUMNS:
+            if col in request.form:
+                val = request.form.get(col, '').strip()
+                if col in CS_NUMERIC_COLUMNS:
+                    try: val = float(val) if val else 0
+                    except ValueError: val = 0
+                sets.append(f"{col} = ?")
+                params.append(val)
+        if sets:
+            params.append(client_id)
+            conn.execute(
+                f"UPDATE plab_clients SET {', '.join(sets)} WHERE id = ?",
+                params,
+            )
+            conn.commit()
+            flash('Client details saved.', 'success')
+        else:
+            flash('No changes to save.', 'info')
+    except Exception as e:
+        logging.error(f"ops_consulting_client_edit_save: {e}")
+        flash(f'Error saving client: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return redirect(url_for('ops_consulting_client_detail', client_id=client_id))
+
+
+@admin_required
+def ops_consulting_client_delete(client_id):
+    """Hard-delete a consulting client (pathway-gated)."""
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM plab_clients "
+            " WHERE id = ? AND COALESCE(pathway,'plab') = 'consulting'",
+            (client_id,),
+        ).fetchone()
+        if not existing:
+            flash('Consulting client not found.', 'error')
+            return redirect(url_for('ops_consulting_clients_list'))
+        conn.execute("DELETE FROM plab_clients WHERE id = ?", (client_id,))
+        conn.commit()
+        flash('Client deleted', 'success')
+    except Exception as e:
+        logging.error(f"ops_consulting_client_delete: {e}")
+        flash(f'Error: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+    return redirect(url_for('ops_consulting_clients_list'))
+
+
 def register_routes(app):
     """Register Standard Consulting routes with the Flask app."""
     app.add_url_rule(
@@ -316,4 +531,29 @@ def register_routes(app):
         endpoint='ops_consulting_clients_list',
         view_func=ops_consulting_clients_list,
         methods=['GET'],
+    )
+    # X-4a: per-client detail + edit + delete
+    app.add_url_rule(
+        '/operations/consulting/clients/<int:client_id>',
+        endpoint='ops_consulting_client_detail',
+        view_func=ops_consulting_client_detail,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/consulting/clients/<int:client_id>/edit',
+        endpoint='ops_consulting_client_edit_page',
+        view_func=ops_consulting_client_edit_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/consulting/clients/<int:client_id>/edit',
+        endpoint='ops_consulting_client_edit_save',
+        view_func=ops_consulting_client_edit_save,
+        methods=['POST'],
+    )
+    app.add_url_rule(
+        '/operations/consulting/clients/<int:client_id>/delete',
+        endpoint='ops_consulting_client_delete',
+        view_func=ops_consulting_client_delete,
+        methods=['POST'],
     )

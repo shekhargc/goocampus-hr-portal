@@ -85,7 +85,8 @@
     <tbody>
         {% if clients %}
             {% for c in clients %}
-            <tr>
+            {# X-4a: row clickable -> detail page #}
+            <tr onclick="window.location='/operations/consulting/clients/{{ c.id }}'" style="cursor:pointer;">
                 <td><span class="reg-mono">{{ (c.registration_number or '')|format_reg }}</span></td>
                 <td>
                     <div style="font-weight:700;">{{ c.prefix or '' }} {{ c.first_name or '' }} {{ c.last_name or '' }}</div>

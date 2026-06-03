@@ -30562,6 +30562,10 @@ ACCESS_ROUTE_MAP = {
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
+    'ops_consulting_client_detail':                 _ap('consulting_pathway', 'registration'),
+    'ops_consulting_client_edit_page':              _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_client_edit_save':              _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_client_delete':                 _ap('consulting_pathway', 'registration', 'edit'),
     'ops_consulting_onboarding_list':               _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_detail':             _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_update':             _ap('consulting_pathway', 'onboarding', 'edit'),
