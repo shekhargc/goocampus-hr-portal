@@ -56,6 +56,13 @@ def register_operations_modules(app):
     from . import cs_onboarding
     cs_onboarding.register_routes(app)
 
+    # Standard Consulting — S-1b Academic Details + Call Notes.
+    # Clones of au_academic + au_call_notes scoped to
+    # pathway='consulting'.
+    from . import cs_academic, cs_call_notes
+    cs_academic.register_routes(app)
+    cs_call_notes.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.

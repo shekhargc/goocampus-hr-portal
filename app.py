@@ -30442,13 +30442,24 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
-    # ── Operations: Standard Consulting (S-0 + S-1a) ──────────────
+    # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
     'ops_consulting_onboarding_list':               _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_detail':             _ap('consulting_pathway', 'onboarding'),
     'ops_consulting_onboarding_update':             _ap('consulting_pathway', 'onboarding', 'edit'),
     'ops_consulting_onboarding_send_welcome_email': _ap('consulting_pathway', 'onboarding', 'edit'),
+    'ops_consulting_academic_list':                 _ap('consulting_pathway', 'academic'),
+    'ops_consulting_academic_detail':               _ap('consulting_pathway', 'academic'),
+    'ops_consulting_academic_edit_page':            _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_academic_edit_save':            _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_call_notes_list':               _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_tracker':            _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_not_contacted':      _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_detail':             _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_edit_page':          _ap('consulting_pathway', 'call_notes', 'edit'),
+    'ops_consulting_call_notes_edit_save':          _ap('consulting_pathway', 'call_notes', 'edit'),
+    'ops_consulting_call_notes_add':                _ap('consulting_pathway', 'call_notes', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),

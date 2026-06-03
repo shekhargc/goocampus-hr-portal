@@ -1,0 +1,703 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Call Notes{% endblock %}
+{% block ops_content %}
+<style>
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:520px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-emp{display:flex;align-items:center;gap:14px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--gray-200)}
+.emp-avatar-lg-ph{width:56px;height:56px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;flex-shrink:0}
+.drawer-emp .name{font-size:16px;font-weight:700;color:var(--navy);margin:0}
+.drawer-emp .meta{font-size:13px;color:var(--gray-500);margin-top:2px}
+.drawer-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px 24px}
+.drawer-field .label{font-size:13px;font-weight:600;color:var(--gray-500);margin-bottom:5px}
+.drawer-field .value{font-size:14px;color:var(--navy);font-weight:600;padding:6px 8px;background:var(--gray-50);border-radius:6px;border:1px solid var(--gray-100)}
+.drawer-field.full{grid-column:1/-1}
+.drawer-section{margin-top:24px;padding-top:20px;border-top:1px solid var(--gray-200)}
+.drawer-section h4{font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 14px 0}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+.pagination{display:flex;justify-content:center;gap:10px;padding:20px;align-items:center}
+.pagination a{padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;color:var(--navy);font-weight:600;font-size:14px}
+.pagination a:hover{background:var(--gray-50)}
+.pagination span{padding:8px 12px;color:var(--gray-600);font-size:14px}
+
+/* Tab Styles */
+.tab-buttons{display:flex;gap:0;border-bottom:2px solid var(--gray-200);}
+.tab-button{padding:12px 20px;background:var(--gray-50);border:none;cursor:pointer;font-weight:600;font-size:14px;color:var(--gray-600);border-bottom:3px solid transparent;margin-bottom:-2px;}
+.tab-button.active{color:var(--navy);border-bottom-color:var(--orange);}
+.tab-button:hover{background:var(--gray-100);}
+
+/* Tracker-specific styles */
+.tracker-summary{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px;margin-bottom:16px;}
+.summary-card{padding:14px 12px;border-radius:8px;text-align:center;cursor:pointer;transition:transform .2s,box-shadow .2s;border:1px solid var(--gray-200);}
+.summary-card:hover{transform:translateY(-2px);box-shadow:0 4px 12px rgba(0,0,0,0.08);}
+.summary-card.never{background:#f9fafb;border-top:4px solid #374151;}
+.summary-card.critical{background:#fef2f2;border-top:4px solid #ef4444;}
+.summary-card.overdue{background:#fff7ed;border-top:4px solid #f97316;}
+.summary-card.attention{background:#fefce8;border-top:4px solid #eab308;}
+.summary-card.ok{background:#eff6ff;border-top:4px solid #3b82f6;}
+.summary-card.recent{background:#f0fdf4;border-top:4px solid #22c55e;}
+.summary-card-value{font-size:24px;font-weight:700;margin-bottom:2px;}
+.summary-card.never .summary-card-value{color:#374151;}
+.summary-card.critical .summary-card-value{color:#ef4444;}
+.summary-card.overdue .summary-card-value{color:#f97316;}
+.summary-card.attention .summary-card-value{color:#854d0e;}
+.summary-card.ok .summary-card-value{color:#3b82f6;}
+.summary-card.recent .summary-card-value{color:#22c55e;}
+.summary-card-label{font-size:11px;font-weight:600;color:var(--gray-600);}
+
+.tracker-filters{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;align-items:center;}
+.filter-badge{padding:5px 10px;border-radius:20px;cursor:pointer;font-weight:600;font-size:11px;transition:all .2s;border:1px solid transparent;}
+.filter-badge.never{background:#f3f4f6;color:#374151;border-color:#9ca3af;}
+.filter-badge.critical{background:#fef2f2;color:#dc2626;border-color:#fca5a5;}
+.filter-badge.overdue{background:#fff7ed;color:#ea580c;border-color:#fdba74;}
+.filter-badge.attention{background:#fefce8;color:#a16207;border-color:#fde047;}
+.filter-badge.ok{background:#eff6ff;color:#2563eb;border-color:#93c5fd;}
+.filter-badge.recent{background:#f0fdf4;color:#16a34a;border-color:#86efac;}
+.filter-badge.all-btn{background:var(--gray-100);color:var(--gray-600);border-color:var(--gray-300);}
+.filter-badge.active.never{background:#374151;color:white;}
+.filter-badge.active.critical{background:#ef4444;color:white;}
+.filter-badge.active.overdue{background:#f97316;color:white;}
+.filter-badge.active.attention{background:#eab308;color:white;}
+.filter-badge.active.ok{background:#3b82f6;color:white;}
+.filter-badge.active.recent{background:#22c55e;color:white;}
+
+.tracker-table tr{border-left:4px solid transparent;}
+.tracker-table tr.cat-never{border-left-color:#374151;}
+.tracker-table tr.cat-critical{border-left-color:#ef4444;background:rgba(239,68,68,0.03);}
+.tracker-table tr.cat-overdue{border-left-color:#f97316;background:rgba(249,115,22,0.03);}
+.tracker-table tr.cat-attention{border-left-color:#eab308;background:rgba(234,179,8,0.03);}
+.tracker-table tr.cat-ok{border-left-color:#3b82f6;background:rgba(59,130,246,0.03);}
+.tracker-table tr.cat-recent{border-left-color:#22c55e;background:rgba(34,197,94,0.03);}
+
+.status-badge{display:inline-block;padding:4px 8px;border-radius:4px;font-size:11px;font-weight:600;color:white;text-transform:uppercase;}
+.status-badge.never{background:#374151;}
+.status-badge.critical{background:#ef4444;}
+.status-badge.overdue{background:#f97316;}
+.status-badge.attention{background:#eab308;color:#1e3a5f;}
+.status-badge.ok{background:#3b82f6;}
+.status-badge.recent{background:#22c55e;}
+
+.timeline{margin-top:16px;}
+.timeline-item{display:flex;gap:12px;margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--gray-200);}
+.timeline-item:last-child{border-bottom:none;}
+.timeline-dot{width:8px;height:8px;border-radius:50%;background:var(--orange);flex-shrink:0;margin-top:4px;}
+.timeline-content{flex:1;}
+.timeline-date{font-size:12px;color:var(--gray-500);font-weight:600;}
+.timeline-note{font-size:13px;color:var(--navy);margin-top:4px;white-space:pre-wrap;word-break:break-word;}
+.timeline-by{font-size:12px;color:var(--gray-500);margin-top:4px;}
+
+.tracker-empty{padding:40px 20px;text-align:center;color:var(--gray-500);}
+</style>
+
+<div style="padding:16px 24px 24px;background:var(--gray-50);min-height:100vh;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:10px;">
+        <div>
+            <h1 style="margin:0;font-size:22px;font-weight:700;color:var(--navy);">Call Notes</h1>
+        </div>
+        <a href="/operations/consulting/call-notes/add" style="padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:13px;">
+            + Add Call Note
+        </a>
+    </div>
+
+    <!-- Tab Buttons -->
+    <div style="margin-bottom:0;background:white;border-radius:12px 12px 0 0;padding:0;border-bottom:2px solid var(--gray-200);">
+        <div class="tab-buttons">
+            <button class="tab-button {% if active_tab == 'tracker' %}active{% endif %}" onclick="window.location.href='/operations/consulting/call-notes/tracker'">
+                Follow-up Tracker
+            </button>
+            <button class="tab-button {% if active_tab == 'not_contacted' %}active{% endif %}" onclick="window.location.href='/operations/consulting/call-notes/not-contacted'">
+                Not Contacted
+            </button>
+            <button class="tab-button {% if active_tab == 'notes' %}active{% endif %}" onclick="window.location.href='/operations/consulting/call-notes?tab=notes'">
+                Notes
+            </button>
+        </div>
+    </div>
+
+    <!-- CALL NOTES TAB -->
+    {% if active_tab == 'notes' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
+            <div class="autocomplete-wrap">
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search by Name</label>
+                <input type="text" name="client_name" id="cnSearch" placeholder="Type candidate name..." value="{{ client_name or '' }}" autocomplete="off" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+                <div id="cnSuggestions" class="suggestions-dropdown"></div>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Added By</label>
+                <select name="added_by" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;background:white;box-sizing:border-box;">
+                    <option value="">All Users</option>
+                    {% for opt in added_by_options %}
+                    <option value="{{ opt }}" {% if added_by_filter == opt %}selected{% endif %}>{{ opt }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:12px;color:var(--gray-600);margin-bottom:6px;">Search Notes</label>
+                <input type="text" name="note_search" placeholder="Search within notes..." value="{{ note_search or '' }}" style="width:100%;padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;box-sizing:border-box;" />
+            </div>
+            <div style="display:flex;gap:8px;">
+                <button type="submit" style="flex:1;padding:8px 16px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">
+                    Apply Filters
+                </button>
+                <a href="/operations/consulting/call-notes" style="padding:8px 16px;background:var(--gray-200);color:var(--gray-700);border:none;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none;display:inline-block;">
+                    Clear
+                </a>
+            </div>
+        </form>
+    </div>
+
+    <div style="background:white;border-radius:0 0 12px 12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
+        {% if records %}
+        <div style="overflow-x:auto;">
+            <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Contacted</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Type</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Added By</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for record in records %}
+                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openCnDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ (record.registration_number or '')|format_reg }}</td>
+                        <td style="padding:12px 16px;">{{ record.call_date|format_date }}</td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            {% if (record.contacted_status or 'Yes') == 'Yes' %}
+                            <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#f0fdf4;color:#16a34a;">Yes</span>
+                            {% else %}
+                            <span style="display:inline-block;padding:3px 8px;border-radius:4px;font-size:11px;font-weight:600;background:#fef2f2;color:#dc2626;">No</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.contact_type or 'Call' if (record.contacted_status or 'Yes') == 'Yes' else '—' }}</td>
+                        <td style="padding:12px 16px;color:var(--gray-600);font-size:13px;">{{ (record.call_note or '')[:80] }}{% if (record.call_note or '')|length > 80 %}...{% endif %}</td>
+                        <td style="padding:12px 16px;">{{ record.added_by or '—' }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div style="padding:40px 20px;text-align:center;">
+            <p style="margin:0;color:var(--gray-500);font-size:15px;">No call notes found.</p>
+            <a href="/operations/consulting/call-notes/add" style="color:var(--orange);text-decoration:none;font-weight:600;">Add the first one</a>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if total_pages > 1 %}
+    <div class="pagination">
+        {% if page > 1 %}
+        <a href="/operations/consulting/call-notes?tab=notes&page={{ page - 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">← Previous</a>
+        {% endif %}
+        <span>Page {{ page }} of {{ total_pages }} ({{ total_count }} notes)</span>
+        {% if page < total_pages %}
+        <a href="/operations/consulting/call-notes?tab=notes&page={{ page + 1 }}{% if client_name %}&client_name={{ client_name }}{% endif %}{% if added_by_filter %}&added_by={{ added_by_filter }}{% endif %}{% if note_search %}&note_search={{ note_search }}{% endif %}">Next →</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    {% endif %}
+
+    <!-- FOLLOW-UP TRACKER TAB -->
+    {% if active_tab == 'tracker' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+
+        <!-- Stage Filter Row -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            <span style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Stage:</span>
+            <span class="filter-badge all-btn {% if not stage_filter %}active{% endif %}" onclick="filterByStage('tracker','')">All</span>
+            {% for stg, days in stage_intervals.items() %}
+            <span class="filter-badge {% if stage_filter == stg %}active ok{% else %}ok{% endif %}" onclick="filterByStage('tracker','{{ stg }}')" style="cursor:pointer;">
+                {{ stg }} <span style="font-size:10px;opacity:.7;">({{ days }}d)</span>
+                {% if stage_counts.get(stg) %}<span style="font-size:10px;opacity:.7;margin-left:2px;">&middot; {{ stage_counts[stg] }}</span>{% endif %}
+            </span>
+            {% endfor %}
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="tracker-summary">
+            <div class="summary-card never" onclick="filterByGap('never')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.never }}</div>
+                <div class="summary-card-label">Never</div>
+            </div>
+            <div class="summary-card critical" onclick="filterByGap('critical')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.critical }}</div>
+                <div class="summary-card-label">Critical (2x+)</div>
+            </div>
+            <div class="summary-card overdue" onclick="filterByGap('overdue')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.overdue }}</div>
+                <div class="summary-card-label">Overdue (1.5x)</div>
+            </div>
+            <div class="summary-card attention" onclick="filterByGap('attention')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.attention }}</div>
+                <div class="summary-card-label">Due (1x)</div>
+            </div>
+            <div class="summary-card ok" onclick="filterByGap('ok')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.ok }}</div>
+                <div class="summary-card-label">OK</div>
+            </div>
+            <div class="summary-card recent" onclick="filterByGap('recent')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.recent }}</div>
+                <div class="summary-card-label">Recent</div>
+            </div>
+        </div>
+
+        <!-- Priority Filter Badges + Search -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+            <span class="filter-badge never {% if gap_filter == 'never' %}active{% endif %}" onclick="filterByGap('never')">Never</span>
+            <span class="filter-badge critical {% if gap_filter == 'critical' %}active{% endif %}" onclick="filterByGap('critical')">Critical</span>
+            <span class="filter-badge overdue {% if gap_filter == 'overdue' %}active{% endif %}" onclick="filterByGap('overdue')">Overdue</span>
+            <span class="filter-badge attention {% if gap_filter == 'attention' %}active{% endif %}" onclick="filterByGap('attention')">Due</span>
+            <span class="filter-badge ok {% if gap_filter == 'ok' %}active{% endif %}" onclick="filterByGap('ok')">OK</span>
+            <span class="filter-badge recent {% if gap_filter == 'recent' %}active{% endif %}" onclick="filterByGap('recent')">Recent</span>
+            {% if gap_filter %}
+            <span class="filter-badge all-btn" onclick="filterByGap('')">All</span>
+            {% endif %}
+            <form method="GET" action="/operations/consulting/call-notes/tracker" style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+                {% if gap_filter %}<input type="hidden" name="gap" value="{{ gap_filter }}" />{% endif %}
+                {% if stage_filter %}<input type="hidden" name="stage" value="{{ stage_filter }}" />{% endif %}
+                <input type="text" name="q" placeholder="Search client..." value="{{ search_q or '' }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;width:180px;" />
+                <button type="submit" style="padding:6px 12px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Search</button>
+                {% if search_q or gap_filter or stage_filter %}
+                <a href="/operations/consulting/call-notes/tracker" style="padding:6px 12px;background:var(--gray-200);color:var(--gray-600);border-radius:6px;font-weight:600;font-size:12px;text-decoration:none;">Clear</a>
+                {% endif %}
+            </form>
+            <span style="font-size:11px;color:var(--gray-500);font-weight:600;">{{ tracker_data|length }}{% if gap_filter or stage_filter %} filtered{% endif %}</span>
+        </div>
+
+        <!-- Tracker Table -->
+        {% if tracker_data %}
+        <div style="overflow-x:auto;">
+            <table class="tracker-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Client Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Stage</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Contact</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Days</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Cycle</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Notes</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tracker_data %}
+                    <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number|format_reg }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
+                            {{ item.stage or '—' }}
+                            <br><span style="font-size:10px;color:var(--gray-400);">every {{ item.followup_interval }}d</span>
+                        </td>
+                        <td style="padding:12px 16px;font-size:13px;">
+                            {{ item.last_call_date|format_date if item.last_call_date else '—' }}
+                            {% if item.last_contact_type %}<br><span style="font-size:11px;color:var(--gray-500);">via {{ item.last_contact_type }}</span>{% endif %}
+                        </td>
+                        <td style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">{% if item.days_since != None %}{{ item.days_since }}{% else %}—{% endif %}</td>
+                        <td style="padding:12px 16px;text-align:center;font-size:12px;color:var(--gray-500);">{{ item.followup_interval }}d</td>
+                        <td style="padding:12px 16px;text-align:center;color:var(--gray-600);">{{ item.note_count }}</td>
+                        <td style="padding:12px 16px;text-align:center;"><span class="status-badge {{ item.category }}">{{ item.category|upper }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tracker-empty">
+            <p>No clients found matching your criteria.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    <!-- NOT CONTACTED TAB -->
+    {% if active_tab == 'not_contacted' %}
+    <div style="background:white;border-radius:0 0 12px 12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <p style="font-size:13px;color:var(--gray-500);margin:0 0 16px 0;">Clients with failed contact attempts. Priority based on stage-specific follow-up cycle since last <strong>successful</strong> contact.</p>
+
+        <!-- Stage Filter Row -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:14px;">
+            <span style="font-size:11px;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-right:4px;">Stage:</span>
+            <span class="filter-badge all-btn {% if not stage_filter %}active{% endif %}" onclick="filterByStage('not-contacted','')">All</span>
+            {% for stg, days in stage_intervals.items() %}
+            <span class="filter-badge {% if stage_filter == stg %}active ok{% else %}ok{% endif %}" onclick="filterByStage('not-contacted','{{ stg }}')" style="cursor:pointer;">
+                {{ stg }} <span style="font-size:10px;opacity:.7;">({{ days }}d)</span>
+                {% if stage_counts.get(stg) %}<span style="font-size:10px;opacity:.7;margin-left:2px;">&middot; {{ stage_counts[stg] }}</span>{% endif %}
+            </span>
+            {% endfor %}
+        </div>
+
+        <!-- Summary Cards -->
+        <div class="tracker-summary">
+            <div class="summary-card never" onclick="filterNotContacted('never')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.never }}</div>
+                <div class="summary-card-label">Never Reached</div>
+            </div>
+            <div class="summary-card critical" onclick="filterNotContacted('critical')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.critical }}</div>
+                <div class="summary-card-label">Critical (2x+)</div>
+            </div>
+            <div class="summary-card overdue" onclick="filterNotContacted('overdue')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.overdue }}</div>
+                <div class="summary-card-label">Overdue (1.5x)</div>
+            </div>
+            <div class="summary-card attention" onclick="filterNotContacted('attention')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.attention }}</div>
+                <div class="summary-card-label">Due (1x)</div>
+            </div>
+            <div class="summary-card ok" onclick="filterNotContacted('ok')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.ok }}</div>
+                <div class="summary-card-label">OK</div>
+            </div>
+            <div class="summary-card recent" onclick="filterNotContacted('recent')" style="cursor:pointer;">
+                <div class="summary-card-value">{{ summary.recent }}</div>
+                <div class="summary-card-label">Recent</div>
+            </div>
+        </div>
+
+        <!-- Filter Badges + Search -->
+        <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin-bottom:16px;">
+            <span class="filter-badge never {% if gap_filter == 'never' %}active{% endif %}" onclick="filterNotContacted('never')">Never</span>
+            <span class="filter-badge critical {% if gap_filter == 'critical' %}active{% endif %}" onclick="filterNotContacted('critical')">Critical</span>
+            <span class="filter-badge overdue {% if gap_filter == 'overdue' %}active{% endif %}" onclick="filterNotContacted('overdue')">Overdue</span>
+            <span class="filter-badge attention {% if gap_filter == 'attention' %}active{% endif %}" onclick="filterNotContacted('attention')">Due</span>
+            <span class="filter-badge ok {% if gap_filter == 'ok' %}active{% endif %}" onclick="filterNotContacted('ok')">OK</span>
+            <span class="filter-badge recent {% if gap_filter == 'recent' %}active{% endif %}" onclick="filterNotContacted('recent')">Recent</span>
+            {% if gap_filter %}
+            <span class="filter-badge all-btn" onclick="filterNotContacted('')">All</span>
+            {% endif %}
+            <form method="GET" action="/operations/consulting/call-notes/not-contacted" style="display:flex;gap:6px;margin-left:auto;align-items:center;">
+                {% if gap_filter %}<input type="hidden" name="gap" value="{{ gap_filter }}" />{% endif %}
+                {% if stage_filter %}<input type="hidden" name="stage" value="{{ stage_filter }}" />{% endif %}
+                <input type="text" name="q" placeholder="Search client..." value="{{ search_q or '' }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:12px;width:180px;" />
+                <button type="submit" style="padding:6px 12px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:600;font-size:12px;cursor:pointer;">Search</button>
+                {% if search_q or gap_filter or stage_filter %}
+                <a href="/operations/consulting/call-notes/not-contacted" style="padding:6px 12px;background:var(--gray-200);color:var(--gray-600);border-radius:6px;font-weight:600;font-size:12px;text-decoration:none;">Clear</a>
+                {% endif %}
+            </form>
+            <span style="font-size:11px;color:var(--gray-500);font-weight:600;">{{ tracker_data|length }}{% if gap_filter or stage_filter %} filtered{% endif %}</span>
+        </div>
+
+        <!-- Not Contacted Table -->
+        {% if tracker_data %}
+        <div style="overflow-x:auto;">
+            <table class="tracker-table" style="width:100%;border-collapse:collapse;font-size:14px;">
+                <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                    <tr>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Client Name</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Stage</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Contact</th>
+                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Attempt</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Days</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Cycle</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Attempts</th>
+                        <th style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">Priority</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for item in tracker_data %}
+                    <tr class="clickable-row cat-{{ item.category }}" onclick="openTrackerDetail('{{ item.registration_number }}')" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ item.name }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ item.registration_number|format_reg }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">
+                            {{ item.stage or '—' }}
+                            <br><span style="font-size:10px;color:var(--gray-400);">every {{ item.followup_interval }}d</span>
+                        </td>
+                        <td style="padding:12px 16px;font-size:13px;">{{ item.last_call_date|format_date if item.last_call_date else 'Never' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:#dc2626;">{{ item.last_attempt_date|format_date if item.last_attempt_date else '—' }}</td>
+                        <td style="padding:12px 16px;text-align:center;font-weight:600;color:var(--navy);">{% if item.days_since != None %}{{ item.days_since }}{% else %}—{% endif %}</td>
+                        <td style="padding:12px 16px;text-align:center;font-size:12px;color:var(--gray-500);">{{ item.followup_interval }}d</td>
+                        <td style="padding:12px 16px;text-align:center;color:#dc2626;font-weight:600;">{{ item.not_contacted_count }}</td>
+                        <td style="padding:12px 16px;text-align:center;"><span class="status-badge {{ item.category }}">{{ item.category|upper }}</span></td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% else %}
+        <div class="tracker-empty">
+            <p>No clients with failed contact attempts found.</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<div class="drawer-backdrop" id="cnBackdrop" onclick="closeCnDetail()"></div>
+<aside class="drawer" id="cnDrawer" aria-hidden="true">
+    <div class="drawer-head">
+        <h3 id="drawerTitle">Call Note Details</h3>
+        <button class="drawer-close" type="button" onclick="closeCnDetail()" aria-label="Close">&times;</button>
+    </div>
+    <div class="drawer-body" id="cnDrawerBody"></div>
+    <div class="drawer-actions" id="cnDrawerActions"></div>
+</aside>
+
+<script>
+const CN_RECORDS = {
+    {% if active_tab == 'notes' %}
+    {% for record in records %}
+    {{ record.id }}: {
+        id: {{ record.id }},
+        name: {{ (((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim)|tojson }},
+        registration_number: {{ (record.registration_number or '')|tojson }},
+        formatted_reg: {{ (record.registration_number or '')|format_reg|tojson }},
+        call_date: {{ (record.call_date or '')|format_date|tojson }},
+        call_note: {{ (record.call_note or '')|tojson }},
+        added_by: {{ (record.added_by or '')|tojson }},
+        contacted_status: {{ (record.contacted_status or 'Yes')|tojson }},
+        contact_type: {{ (record.contact_type or 'Call')|tojson }}
+    },
+    {% endfor %}
+    {% endif %}
+};
+
+let activeRowId = null;
+
+function field(label, value) {
+    return `<div class="drawer-field"><div class="label">${label}</div><div class="value">${value || '<span style="color:var(--gray-400);">—</span>'}</div></div>`;
+}
+
+function openCnDetail(id) {
+    const r = CN_RECORDS[id];
+    if (!r) return;
+
+    if (activeRowId) {
+        const prev = document.getElementById('row-' + activeRowId);
+        if (prev) prev.classList.remove('active-row');
+    }
+    activeRowId = id;
+    const row = document.getElementById('row-' + id);
+    if (row) row.classList.add('active-row');
+
+    const initials = r.name.trim().split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${r.name}</p>
+            <div class="meta">${r.formatted_reg}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        ${field('Date', r.call_date)}
+        ${field('Added By', r.added_by)}
+        ${field('Contacted', r.contacted_status === 'Yes' ? '<span style="color:#16a34a;font-weight:700;">Yes</span>' : '<span style="color:#dc2626;font-weight:700;">No</span>')}
+        ${field('Contact Type', r.contacted_status === 'Yes' ? r.contact_type : '—')}
+    </div>
+
+    <div class="drawer-field full" style="margin-top:24px;">
+        <div class="label">Note</div>
+        <div class="value" style="white-space:pre-wrap;word-break:break-word;">${r.call_note || '<span style="color:var(--gray-400);">—</span>'}</div>
+    </div>`;
+
+    document.getElementById('cnDrawerBody').innerHTML = html;
+    document.getElementById('cnDrawerActions').innerHTML = `
+        <a href="/operations/consulting/call-notes/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/consulting/clients/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
+    document.getElementById('cnDrawer').classList.add('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('cnBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+function closeCnDetail() {
+    document.getElementById('cnDrawer').classList.remove('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'true');
+    document.getElementById('cnBackdrop').classList.remove('open');
+    document.body.style.overflow = '';
+    if (activeRowId) {
+        const row = document.getElementById('row-' + activeRowId);
+        if (row) row.classList.remove('active-row');
+        activeRowId = null;
+    }
+}
+
+document.addEventListener('keydown', function(e) { if (e.key === 'Escape') closeCnDetail(); });
+
+function filterByGap(gap) {
+    const params = new URLSearchParams(window.location.search);
+    if (gap) params.set('gap', gap); else params.delete('gap');
+    params.delete('q');  // reset search when changing priority filter
+    window.location.href = '/operations/consulting/call-notes/tracker' + (params.toString() ? '?' + params.toString() : '');
+}
+
+function filterNotContacted(gap) {
+    const params = new URLSearchParams(window.location.search);
+    if (gap) params.set('gap', gap); else params.delete('gap');
+    params.delete('q');
+    window.location.href = '/operations/consulting/call-notes/not-contacted' + (params.toString() ? '?' + params.toString() : '');
+}
+
+function filterByStage(tab, stage) {
+    const base = tab === 'tracker' ? '/operations/consulting/call-notes/tracker' : '/operations/consulting/call-notes/not-contacted';
+    const params = new URLSearchParams();
+    if (stage) params.set('stage', stage);
+    // preserve gap filter
+    const currentGap = new URLSearchParams(window.location.search).get('gap');
+    if (currentGap) params.set('gap', currentGap);
+    window.location.href = base + (params.toString() ? '?' + params.toString() : '');
+}
+
+function openTrackerDetail(reg) {
+    fetch('/operations/api/tracker-details?reg=' + encodeURIComponent(reg))
+        .then(r => r.json())
+        .then(data => {
+            if (data.error) {
+                alert('Error loading details: ' + data.error);
+                return;
+            }
+            renderTrackerDetail(data);
+        })
+        .catch(err => {
+            console.error('Error:', err);
+            alert('Failed to load details');
+        });
+}
+
+function renderTrackerDetail(data) {
+    const initials = data.name.split(' ').map(w => w[0]).join('').substring(0, 2).toUpperCase();
+
+    let notesHtml = '';
+    if (data.notes && data.notes.length > 0) {
+        notesHtml = '<div class="drawer-section"><h4>Contact History</h4><div class="timeline">';
+        for (const note of data.notes) {
+            const isContacted = note.contacted_status === 'Yes';
+            const dotColor = isContacted ? 'var(--orange)' : '#ef4444';
+            const statusLabel = isContacted
+                ? `<span style="color:#16a34a;font-size:11px;font-weight:600;">Contacted via ${note.contact_type || 'Call'}</span>`
+                : '<span style="color:#dc2626;font-size:11px;font-weight:600;">Not Contacted</span>';
+            notesHtml += `
+                <div class="timeline-item">
+                    <div class="timeline-dot" style="background:${dotColor};"></div>
+                    <div class="timeline-content">
+                        <div class="timeline-date">${note.date || '—'} &nbsp; ${statusLabel}</div>
+                        <div class="timeline-note">${note.text || '(No note text)'}</div>
+                        <div class="timeline-by">${note.added_by ? 'by ' + note.added_by : '—'}</div>
+                    </div>
+                </div>
+            `;
+        }
+        notesHtml += '</div></div>';
+    } else {
+        notesHtml = '<div class="drawer-section"><h4>Contact History</h4><p style="color:var(--gray-500);font-size:13px;">No notes yet</p></div>';
+    }
+
+    let html = `
+    <div class="drawer-emp">
+        <div class="emp-avatar-lg-ph">${initials}</div>
+        <div>
+            <p class="name">${data.name}</p>
+            <div class="meta">${data.formatted_reg || data.registration_number}</div>
+        </div>
+    </div>
+
+    <div class="drawer-grid">
+        <div class="drawer-field"><div class="label">Current Stage</div><div class="value">${data.stage || '—'}</div></div>
+        <div class="drawer-field"><div class="label">Total Notes</div><div class="value">${data.total_notes}</div></div>
+        <div class="drawer-field"><div class="label">Mobile</div><div class="value">${data.mobile || '—'}</div></div>
+        <div class="drawer-field"><div class="label">Email</div><div class="value" style="font-size:12px;">${data.email || '—'}</div></div>
+    </div>
+
+    ${notesHtml}
+    `;
+
+    document.getElementById('drawerTitle').textContent = 'Client Details';
+    document.getElementById('cnDrawerBody').innerHTML = html;
+    document.getElementById('cnDrawerActions').innerHTML = `
+        <a href="/operations/consulting/call-notes/add?client=${encodeURIComponent(data.registration_number)}" style="background:var(--orange);color:white;">+ Add Note</a>
+        <a href="/operations/consulting/clients/dashboard/${encodeURIComponent(data.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+    `;
+
+    document.getElementById('cnDrawer').classList.add('open');
+    document.getElementById('cnDrawer').setAttribute('aria-hidden', 'false');
+    document.getElementById('cnBackdrop').classList.add('open');
+    document.body.style.overflow = 'hidden';
+}
+
+(function() {
+    const input = document.getElementById('cnSearch');
+    const dropdown = document.getElementById('cnSuggestions');
+    if (!input || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+
+    input.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    input.addEventListener('keydown', function(e) {
+        if (!dropdown.classList.contains('visible')) return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!input.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?pathway=consulting&q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div class="suggestion-item" data-idx="' + i + '">' +
+                    '<span class="suggestion-name">' + esc(d.name) + '</span>' +
+                    '<span class="suggestion-reg">' + esc(d.display_reg || d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('.suggestion-item').forEach(el => {
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
+                });
+                dropdown.classList.add('visible');
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) {
+        input.value = item.name;
+        hide();
+        input.closest('form').submit();
+    }
+
+    function hide() { dropdown.classList.remove('visible'); dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() { dropdown.querySelectorAll('.suggestion-item').forEach((el, i) => el.classList.toggle('highlighted', i === highlightIdx)); }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+{% endblock %}
