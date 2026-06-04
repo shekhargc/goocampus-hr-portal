@@ -17560,14 +17560,47 @@ def api_plab_client_docs(client_id):
     return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs, 'missing': missing, 'total_required': len(all_required)})
 
 
+def _r2_object_key_or_none(file_path):
+    """Y-4: detect whether a doc row's file_path is an R2 object key vs a
+    legacy file_data BYTEA row. R2 keys look like 'plab/REG/DocType/file.jpg'
+    (no leading slash, no URL scheme). Legacy paths may start with /
+    or already be URLs."""
+    if not file_path:
+        return None
+    s = str(file_path).strip()
+    if not s or s.startswith('/') or '://' in s:
+        return None
+    return s
+
+
 @app.route('/operations/plab/doc/<int:doc_id>/file')
 @admin_required
 def ops_plab_serve_doc(doc_id):
-    """Serve a PLAB client document file from DB (BYTEA)."""
+    """Serve a PLAB client document. Y-4: redirects to a 15-min
+    presigned R2 URL when file_path is an R2 key; falls back to
+    streaming from BYTEA for legacy rows."""
     conn = get_db()
-    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    doc = conn.execute(
+        "SELECT file_name, file_data, content_type, file_path "
+        "  FROM plab_client_documents WHERE id = ?",
+        (doc_id,),
+    ).fetchone()
     conn.close()
-    if not doc or not doc['file_data']:
+    if not doc:
+        return "Document not found", 404
+    # R2 path
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(r2_key)
+            if url:
+                return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"ops_plab_serve_doc R2 presign: {e}")
+        return "Document temporarily unavailable", 503
+    # Legacy BYTEA fallback
+    if not doc['file_data']:
         return "Document not found", 404
     file_data = doc['file_data']
     if isinstance(file_data, memoryview):
@@ -17579,11 +17612,30 @@ def ops_plab_serve_doc(doc_id):
 @app.route('/operations/plab/doc/<int:doc_id>/download')
 @admin_required
 def ops_plab_download_doc(doc_id):
-    """Download a PLAB client document file from DB."""
+    """Download a PLAB client document. Y-4: R2 presigned URL with
+    Content-Disposition: attachment when on R2; legacy BYTEA stream
+    fallback."""
     conn = get_db()
-    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    doc = conn.execute(
+        "SELECT file_name, file_data, content_type, file_path "
+        "  FROM plab_client_documents WHERE id = ?",
+        (doc_id,),
+    ).fetchone()
     conn.close()
-    if not doc or not doc['file_data']:
+    if not doc:
+        return "Document not found", 404
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(
+                r2_key, filename_for_download=doc['file_name'])
+            if url:
+                return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"ops_plab_download_doc R2 presign: {e}")
+        return "Document temporarily unavailable", 503
+    if not doc['file_data']:
         return "Document not found", 404
     file_data = doc['file_data']
     if isinstance(file_data, memoryview):
@@ -17595,16 +17647,26 @@ def ops_plab_download_doc(doc_id):
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
 @admin_required
 def ops_plab_delete_doc(doc_id):
-    """Delete a PLAB client document."""
+    """Delete a PLAB client document. Y-4: removes the R2 object too
+    when file_path is an R2 key; legacy file_path on disk handled as
+    before for back-compat."""
     conn = get_db()
     doc = conn.execute("SELECT * FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
     if not doc:
         conn.close()
         return jsonify({'error': 'Document not found'}), 404
-    import os
-    fpath = os.path.join(app.root_path, doc['file_path'].lstrip('/'))
-    if os.path.exists(fpath):
-        os.remove(fpath)
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            storage.delete_object(r2_key)
+        except Exception as e:
+            logging.warning(f"ops_plab_delete_doc R2 delete: {e}")
+    else:
+        import os
+        fpath = os.path.join(app.root_path, (doc['file_path'] or '').lstrip('/'))
+        if fpath and os.path.exists(fpath):
+            os.remove(fpath)
     conn.execute("DELETE FROM plab_client_documents WHERE id = ?", (doc_id,))
     conn.commit()
     conn.close()

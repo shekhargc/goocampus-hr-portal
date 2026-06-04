@@ -1,14 +1,12 @@
 """
 bulk_import_documents.py -- run LOCALLY (not on Render) to bulk-import
-PLAB and AMC client documents from local folders into the staging
-Postgres plab_client_documents table.
+PLAB and AMC client documents from local folders.
 
-Why local-only:
-  Each pathway folder is ~300-800 MB. Committing 1.1GB of binary
-  files to git is not viable. Instead this script reads files
-  straight from the user's Downloads, connects to the staging
-  Postgres via DATABASE_URL, and INSERTs the bytes into the BYTEA
-  column file_data on plab_client_documents.
+After Y-4: files now go to Cloudflare R2 (object storage), and only a
+small row goes into plab_client_documents.file_path pointing at the R2
+object key. Y-3 hit the basic_1gb Postgres ceiling because we were
+storing 1.1GB of doc bytes in Postgres BYTEA -- the new path stores ~30
+bytes per doc in Postgres instead of ~1-5 MB.
 
 Usage:
     DATABASE_URL=postgresql://... python3 bulk_import_documents.py \
@@ -238,8 +236,21 @@ def main():
     if not args.dry_run:
         conn = _connect(db_url)
 
-    # 1. Wipe existing rows for this pathway
+    # 1. Wipe existing rows for this pathway (DB + R2)
     if conn and not args.no_wipe:
+        # First: clear R2 objects under this pathway prefix so we don't
+        # accumulate orphans in the bucket. Only meaningful if R2 is
+        # configured -- otherwise no-op.
+        try:
+            from core import storage
+            if storage.is_configured():
+                keys = storage.list_objects(prefix=f"{args.pathway}/")
+                logging.info(f"Wiping {len(keys)} existing R2 objects under {args.pathway}/")
+                for k in keys:
+                    storage.delete_object(k)
+        except Exception as e:
+            logging.warning(f"R2 wipe step skipped: {e}")
+        # Then: clear the Postgres rows.
         cur = conn.cursor()
         cur.execute(
             "DELETE FROM plab_client_documents "
@@ -248,7 +259,7 @@ def main():
             (args.pathway,))
         wiped = cur.rowcount
         cur.close()
-        logging.info(f"Wiped {wiped} existing {args.pathway} document rows")
+        logging.info(f"Wiped {wiped} existing {args.pathway} document rows from DB")
 
     summary = {
         'parsed': 0, 'unparsed_filenames': [],
@@ -295,6 +306,15 @@ def main():
             summary['errors'] += 1
             continue
 
+        # Y-4: upload to R2 first; only the object key goes into Postgres.
+        from core import storage
+        r2_key = storage.make_doc_key(args.pathway, reg, doc_type, fname)
+        content_type = EXT_TO_MIME.get('.' + ext.lower(), 'application/octet-stream')
+        if not storage.upload_bytes(r2_key, data, content_type):
+            logging.warning(f"  R2 upload failed {fname}")
+            summary['errors'] += 1
+            continue
+
         # Insert with up to 3 reconnect attempts on connection errors.
         for attempt in range(3):
             try:
@@ -302,17 +322,19 @@ def main():
                 if not client_id:
                     if len(summary['unmatched_reg']) < 10:
                         summary['unmatched_reg'].append(reg)
+                    # Roll back the R2 upload so the bucket doesn't
+                    # accumulate orphans pointing at non-existent clients.
+                    storage.delete_object(r2_key)
                     break  # not retriable
-                content_type = EXT_TO_MIME.get('.' + ext.lower(), 'application/octet-stream')
                 cur = conn.cursor()
                 cur.execute(
                     """INSERT INTO plab_client_documents
                            (client_id, doc_type, doc_category, file_name, file_path,
-                            file_size, file_data, content_type, status, uploaded_by)
-                       VALUES (%s, %s, %s, %s, %s, %s, %s, %s, 'uploaded', 'bulk_import_2026_06_03')
+                            file_size, content_type, status, uploaded_by)
+                       VALUES (%s, %s, %s, %s, %s, %s, %s, 'uploaded', 'bulk_import_r2_2026_06_04')
                        RETURNING id""",
-                    (client_id, doc_type, doc_category, fname, f"{args.pathway}/{fname}",
-                     len(data), psycopg2.Binary(data), content_type))
+                    (client_id, doc_type, doc_category, fname, r2_key,
+                     len(data), content_type))
                 doc_id = cur.fetchone()[0]
                 summary['inserted'] += 1
                 if doc_type == 'Photograph':
