@@ -275,6 +275,72 @@ def ops_australia_webinars_edit_save(rid):
     return redirect(url_for('ops_australia_webinars_detail', rid=rid))
 
 
+@admin_required
+def ops_australia_webinars_add_page():
+    """GET — render the empty add form (reuses the edit template)."""
+    user = get_user()
+    empty_record = {col: None for col in AU_WEBINARS_EDITABLE_COLUMNS}
+    empty_record['id'] = None
+    empty_record['registration_number'] = ''
+    empty_record['first_name'] = ''
+    empty_record['last_name'] = ''
+    empty_record['prefix'] = ''
+    return render_template(
+        'ops_australia_webinars_edit.html',
+        user=user,
+        record=empty_record,
+        is_new=True,
+        pathway_name='AMC Pathway',
+        active_ops_page='australia-webinars',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_webinars_add_save():
+    """POST — insert a new Australia webinar / conference row."""
+    conn = get_db()
+    try:
+        reg = (request.form.get('registration_number') or '').strip()
+        if not reg:
+            flash('Registration number is required.', 'error')
+            return redirect(url_for('ops_australia_webinars_add_page'))
+        cols = ['registration_number', 'pathway']
+        vals = [reg, 'australia']
+        for col in AU_WEBINARS_EDITABLE_COLUMNS:
+            if col in request.form:
+                v = (request.form.get(col) or '').strip()
+                if col in _NUMERIC_COLUMNS:
+                    if not v:
+                        v = None
+                    else:
+                        try:
+                            v = float(v)
+                        except ValueError:
+                            v = None
+                elif v == '':
+                    v = None
+                cols.append(col)
+                vals.append(v)
+        placeholders = ', '.join(['?'] * len(cols))
+        cur = conn.execute(
+            f"INSERT INTO ops_webinars_conferences ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
+            vals,
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        flash('Webinar / conference record added.', 'success')
+        return redirect(url_for('ops_australia_webinars_detail', rid=new_id))
+    except Exception as e:
+        logging.error(f"ops_australia_webinars_add_save: {e}")
+        flash(f'Error: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+        return redirect(url_for('ops_australia_webinars_list'))
+    finally:
+        conn.close()
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app."""
     app.add_url_rule(
@@ -288,6 +354,18 @@ def register_routes(app):
         endpoint='ops_australia_webinars_detail',
         view_func=ops_australia_webinars_detail,
         methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/webinars/add',
+        endpoint='ops_australia_webinars_add_page',
+        view_func=ops_australia_webinars_add_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/webinars/add',
+        endpoint='ops_australia_webinars_add_save',
+        view_func=ops_australia_webinars_add_save,
+        methods=['POST'],
     )
     app.add_url_rule(
         '/operations/australia/webinars/<int:rid>/edit',

@@ -290,6 +290,79 @@ def ops_australia_research_edit_save(rid):
     return redirect(url_for('ops_australia_research_detail', rid=rid))
 
 
+@admin_required
+def ops_australia_research_add_page():
+    """GET — render the empty add form (reuses the edit template)."""
+    user = get_user()
+    empty_record = {col: None for col in AU_RESEARCH_EDITABLE_COLUMNS}
+    empty_record['id'] = None
+    empty_record['registration_number'] = ''
+    empty_record['first_name'] = ''
+    empty_record['last_name'] = ''
+    empty_record['prefix'] = ''
+    return render_template(
+        'ops_australia_research_edit.html',
+        user=user,
+        record=empty_record,
+        is_new=True,
+        pathway_name='AMC Pathway',
+        active_ops_page='australia-research',
+        active_pathway='australia',
+    )
+
+
+@admin_required
+def ops_australia_research_add_save():
+    """POST — insert a new Australia research / publication row."""
+    conn = get_db()
+    try:
+        reg = (request.form.get('registration_number') or '').strip()
+        if not reg:
+            flash('Registration number is required.', 'error')
+            return redirect(url_for('ops_australia_research_add_page'))
+        # Discover live columns (older schemas may not have upload_published_copy).
+        try:
+            db_cols = {
+                row['name'] for row in conn.execute(
+                    "PRAGMA table_info(ops_research_publication)"
+                ).fetchall()
+            }
+        except Exception:
+            db_cols = set(AU_RESEARCH_EDITABLE_COLUMNS)
+        cols = ['registration_number', 'pathway']
+        vals = [reg, 'australia']
+        for col in AU_RESEARCH_EDITABLE_COLUMNS:
+            if col not in request.form:
+                continue
+            if db_cols and col not in db_cols:
+                continue
+            v = (request.form.get(col) or '').strip() or None
+            if col in AU_RESEARCH_NUMERIC_COLUMNS:
+                try:
+                    v = float(v) if v else None
+                except ValueError:
+                    v = None
+            cols.append(col)
+            vals.append(v)
+        placeholders = ', '.join(['?'] * len(cols))
+        cur = conn.execute(
+            f"INSERT INTO ops_research_publication ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
+            vals,
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        flash('Research record added.', 'success')
+        return redirect(url_for('ops_australia_research_detail', rid=new_id))
+    except Exception as e:
+        logging.error(f"ops_australia_research_add_save: {e}")
+        flash(f'Error: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+        return redirect(url_for('ops_australia_research_list'))
+    finally:
+        conn.close()
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app."""
     app.add_url_rule(
@@ -303,6 +376,19 @@ def register_routes(app):
         endpoint='ops_australia_research_detail',
         view_func=ops_australia_research_detail,
         methods=['GET'],
+    )
+    # Add (GET form + POST save)
+    app.add_url_rule(
+        '/operations/australia/research/add',
+        endpoint='ops_australia_research_add_page',
+        view_func=ops_australia_research_add_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/australia/research/add',
+        endpoint='ops_australia_research_add_save',
+        view_func=ops_australia_research_add_save,
+        methods=['POST'],
     )
     # Edit page (GET) — renders the form
     app.add_url_rule(

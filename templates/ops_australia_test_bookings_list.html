@@ -141,7 +141,10 @@
         <h1>Test Bookings <span class="badge">AMC</span></h1>
         <div class="sub">{{ total }} booking{{ '' if total == 1 else 's' }} for AMC Pathway clients</div>
     </div>
-    <div>
+    <div style="display:flex;gap:10px;align-items:center;">
+        <a href="{{ url_for('ops_australia_test_bookings_add_page') }}" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+            + Add Test Booking
+        </a>
         <a href="{{ url_for('ops_australia_pathway') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none">
             &larr; Back to dashboard
         </a>
