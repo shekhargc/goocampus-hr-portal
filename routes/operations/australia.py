@@ -554,6 +554,92 @@ def ops_australia_client_delete(client_id):
     return redirect(url_for('ops_australia_clients_list'))
 
 
+@admin_required
+def ops_australia_documents_list():
+    """Documents overview for Australia (AMC) clients.
+
+    Same shape as ops_documents_list (PLAB) and
+    ops_consulting_documents_list — JOIN plab_clients +
+    plab_client_documents filtered to pathway='australia'. After Y-4
+    each row's file_path is an R2 object key, but this list only
+    counts docs per client; no R2 calls happen here.
+    """
+    user = get_user()
+    conn = get_db()
+    search = (request.args.get('search') or '').strip()
+    status_filter = (request.args.get('status') or '')
+    page = max(1, int(request.args.get('page', 1) or 1))
+    per_page = 50
+
+    # Use the same PLAB checklist for now -- AMC-specific required
+    # docs can be carved out later via lookup_options.
+    try:
+        from app import PLAB_ALL_REQUIRED_DOCS as REQUIRED_DOCS
+    except Exception:
+        REQUIRED_DOCS = []
+    total_required = len(REQUIRED_DOCS)
+
+    all_clients = []
+    try:
+        q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                      c.account_status, c.current_stage, c.created_at,
+                      COUNT(d.id) as doc_count,
+                      SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
+                 FROM plab_clients c
+            LEFT JOIN plab_client_documents d ON d.client_id = c.id
+                WHERE COALESCE(c.pathway, 'plab') = 'australia' """
+        params = []
+        if search:
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?) "
+            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        q += """ GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                          c.account_status, c.current_stage, c.created_at
+                 ORDER BY c.created_at DESC NULLS LAST, c.id DESC"""
+        rows = conn.execute(q, params).fetchall()
+        for r in rows:
+            rd = dict(r)
+            rd['total_required'] = total_required
+            rd['name'] = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            if status_filter == 'complete' and rd['doc_count'] < total_required:
+                continue
+            if status_filter == 'incomplete' and rd['doc_count'] >= total_required:
+                continue
+            if status_filter == 'none' and rd['doc_count'] > 0:
+                continue
+            all_clients.append(rd)
+    except Exception as e:
+        logging.error(f"ops_australia_documents_list: {e}")
+        all_clients = []
+    finally:
+        conn.close()
+
+    total_clients = len(all_clients)
+    complete_count = sum(1 for c in all_clients if c.get('doc_count', 0) >= total_required)
+    total_documents = sum(c.get('doc_count', 0) for c in all_clients)
+    total_pages = max(1, (total_clients + per_page - 1) // per_page)
+    page = min(page, total_pages)
+    start = (page - 1) * per_page
+    page_clients = all_clients[start:start + per_page]
+
+    return render_template(
+        'ops_australia_documents_list.html',
+        user=user,
+        clients=page_clients,
+        total_clients=total_clients,
+        complete_count=complete_count,
+        total_documents=total_documents,
+        page=page,
+        total_pages=total_pages,
+        per_page=per_page,
+        search=search,
+        status_filter=status_filter,
+        total_required=total_required,
+        start_index=start if page_clients else 0,
+        active_ops_page='australia-documents',
+        active_pathway='australia',
+    )
+
+
 def register_routes(app):
     """Attach this sub-area's URL rules to the Flask app.
 
@@ -599,4 +685,12 @@ def register_routes(app):
         endpoint='ops_australia_client_delete',
         view_func=ops_australia_client_delete,
         methods=['POST'],
+    )
+    # Y-5: Documents list (clone of ops_consulting_documents_list,
+    # scoped to pathway='australia')
+    app.add_url_rule(
+        '/operations/australia/documents',
+        endpoint='ops_australia_documents_list',
+        view_func=ops_australia_documents_list,
+        methods=['GET'],
     )

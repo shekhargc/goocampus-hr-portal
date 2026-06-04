@@ -27923,6 +27923,7 @@ ACCESS_SECTION_CATALOG = [
         'sub_sections': [
             ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
             ('registration',  'Registration',            'Australia client registration list + full profile'),
+            ('documents',     'Documents',               'Australia client document upload + verification'),
             ('call_notes',    'Call Notes',              'Australia call notes + tracker + not-contacted view'),
             ('payments',      'Payments',                'Australia payment records'),
             ('training',      'Training',                'Australia training (AMC MCQ Mock, English, etc.)'),
@@ -30686,6 +30687,7 @@ ACCESS_ROUTE_MAP = {
     'ops_australia_client_edit_page':       _ap('australia_pathway', 'registration', 'edit'),
     'ops_australia_client_edit_save':       _ap('australia_pathway', 'registration', 'edit'),
     'ops_australia_client_delete':          _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_documents_list':         _ap('australia_pathway', 'documents'),
     'ops_australia_test_bookings_list':     _ap('australia_pathway', 'test_bookings'),
     'ops_australia_test_bookings_detail':   _ap('australia_pathway', 'test_bookings'),
     'ops_australia_test_bookings_edit_page':_ap('australia_pathway', 'test_bookings', 'edit'),

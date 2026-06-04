@@ -568,6 +568,8 @@ def ops_consulting_documents_list():
                 continue
             if status_filter == 'incomplete' and rd['doc_count'] >= total_required:
                 continue
+            if status_filter == 'none' and rd['doc_count'] > 0:
+                continue
             all_clients.append(rd)
     except Exception as e:
         logging.error(f"ops_consulting_documents_list: {e}")
@@ -575,22 +577,31 @@ def ops_consulting_documents_list():
     finally:
         conn.close()
 
-    total = len(all_clients)
+    # Stats before pagination — template needs total_clients,
+    # total_documents, complete_count (matches the PLAB documents
+    # template contract — fixes 500 'total_clients undefined').
+    total_clients = len(all_clients)
+    complete_count = sum(1 for c in all_clients if c.get('doc_count', 0) >= total_required)
+    total_documents = sum(c.get('doc_count', 0) for c in all_clients)
+    total_pages = max(1, (total_clients + per_page - 1) // per_page)
+    page = min(page, total_pages)
     start = (page - 1) * per_page
     page_clients = all_clients[start:start + per_page]
-    total_pages = max(1, (total + per_page - 1) // per_page)
 
     return render_template(
         'ops_consulting_documents_list.html',
         user=user,
         clients=page_clients,
-        total=total,
+        total_clients=total_clients,
+        complete_count=complete_count,
+        total_documents=total_documents,
         page=page,
         total_pages=total_pages,
         per_page=per_page,
         search=search,
         status_filter=status_filter,
         total_required=total_required,
+        start_index=start if page_clients else 0,
         active_ops_page='consulting-documents',
         active_pathway='consulting',
     )

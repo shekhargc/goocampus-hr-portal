@@ -49,7 +49,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
         <div>
             <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Documents</h1>
-            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Track client document uploads and verification status &middot; Click a row to view documents</p>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Track AMC client document uploads and verification status &middot; Click a row to view documents</p>
         </div>
     </div>
 
@@ -75,7 +75,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
 
     <!-- Filters -->
     <div style="background:white;border-radius:10px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
-        <form method="GET" action="/operations/consulting/documents" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;" id="docFilterForm">
+        <form method="GET" action="/operations/australia/documents" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;" id="docFilterForm">
             <div class="autocomplete-wrap" style="flex:1;min-width:200px;">
                 <input type="text" name="search" value="{{ search }}" placeholder="Search by name or registration number..."
                        style="width:100%;padding:10px 14px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;" id="docSearch" autocomplete="off">
@@ -89,7 +89,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
             </select>
             <button type="submit" style="padding:10px 20px;background:var(--navy);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Search</button>
             {% if search or status_filter %}
-            <a href="/operations/consulting/documents" style="padding:10px 16px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;color:var(--gray-600);text-decoration:none;">Reset</a>
+            <a href="/operations/australia/documents" style="padding:10px 16px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;color:var(--gray-600);text-decoration:none;">Reset</a>
             {% endif %}
         </form>
     </div>
@@ -297,8 +297,8 @@ function openDrawer(clientId) {
     if (activeRow) activeRow.classList.add('active-row');
 
     // Set links
-    document.getElementById('btnViewProfile').href = `/operations/consulting/clients/${clientId}`;
-    document.getElementById('btnEditClient').href = `/operations/consulting/clients/${clientId}/edit`;
+    document.getElementById('btnViewProfile').href = `/operations/australia/clients/${clientId}`;
+    document.getElementById('btnEditClient').href = `/operations/australia/clients/${clientId}/edit`;
 
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Loading documents...</div>';
     backdrop.classList.add('open');
