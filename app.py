@@ -17482,9 +17482,20 @@ def ops_documents_list():
 @app.route('/operations/plab/<int:client_id>/upload-doc', methods=['POST'])
 @admin_required
 def ops_plab_upload_doc(client_id):
-    """Upload document for a PLAB client."""
+    """Upload a document for ANY client (PLAB / AMC / Consulting).
+
+    Route is named ops_plab_* historically — the table
+    plab_client_documents is shared across pathways, so this endpoint
+    serves every pathway by client_id. After Y-4 file bytes go to
+    Cloudflare R2 (file_path stores the R2 key); BYTEA is only used
+    as a fallback if R2 isn't configured.
+    """
     conn = get_db()
-    client = conn.execute("SELECT id FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    client = conn.execute(
+        "SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway"
+        "   FROM plab_clients WHERE id = ?",
+        (client_id,),
+    ).fetchone()
     if not client:
         conn.close()
         return jsonify({'error': 'Client not found'}), 404
@@ -17494,14 +17505,44 @@ def ops_plab_upload_doc(client_id):
     if not file or not file.filename:
         conn.close()
         return jsonify({'error': 'No file selected'}), 400
-    import os, uuid
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
-    # Detect content type from extension
     ct_map = {'pdf': 'application/pdf', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
     content_type = ct_map.get(ext, 'application/octet-stream')
-    # Read file binary for DB storage
     file_bytes = file.read()
     file_size = len(file_bytes)
+    # Cap size at 12 MB to match bulk_import_documents.py and keep
+    # the Postgres row payload small even on the BYTEA fallback.
+    if file_size > 12 * 1024 * 1024:
+        conn.close()
+        return jsonify({'error': 'File too large (max 12 MB)'}), 400
+
+    # R2 path (default) -- bytes go to R2, file_path stores the key.
+    from core import storage
+    if storage.is_configured():
+        r2_key = storage.make_doc_key(
+            client['pathway'], client['registration_number'] or f'client_{client_id}',
+            doc_type, file.filename,
+        )
+        if not storage.upload_bytes(r2_key, file_bytes, content_type):
+            conn.close()
+            return jsonify({'error': 'Upload to R2 failed'}), 500
+        cur = conn.execute(
+            "INSERT INTO plab_client_documents "
+            "  (client_id, doc_type, doc_category, file_name, file_path, "
+            "   file_size, uploaded_by, content_type, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploaded') RETURNING id",
+            (client_id, doc_type, doc_category, file.filename, r2_key,
+             file_size, 'ops_team', content_type),
+        )
+        doc_id = cur.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+
+    # Legacy BYTEA fallback (R2 not configured -- shouldn't happen on
+    # staging or prod after Y-4 deploy, but keep so local dev works
+    # without R2 env vars).
+    import uuid
     fname = f"plab_{client_id}_{uuid.uuid4().hex[:8]}.{ext}"
     conn.execute(
         "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by, file_data, content_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
