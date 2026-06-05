@@ -22,7 +22,7 @@ skipped so this works on fresh staging environments too.
 import logging
 
 
-IMPORT_VERSION = 'cs_lookups_v2_extra_categories'
+IMPORT_VERSION = 'cs_lookups_v3_force_reseed_after_data_imported'
 
 
 # Each entry: (lookup_options.category, source_table, source_column).
