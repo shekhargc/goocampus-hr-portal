@@ -35,6 +35,8 @@ from flask import render_template, flash, request
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the Consulting Registration edit form.
+from routes.operations._form_lookups import section_client_lookups
 
 
 @admin_required
@@ -475,6 +477,10 @@ def ops_consulting_client_edit_page(client_id):
         pathway_name='Standard Consulting',
         active_ops_page='consulting-clients',
         active_pathway='consulting',
+        # Dropdown options for Plan Type, Account Status, Current Stage,
+        # Switched Program, Counsellor, Lead Source. Sourced from
+        # lookup_options where pathway='consulting'.
+        **section_client_lookups('consulting'),
     )
 
 

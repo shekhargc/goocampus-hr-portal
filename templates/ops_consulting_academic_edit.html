@@ -47,7 +47,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">IMG / FMG</label>
-                    <input type="text" name="img_fmg" value="{{ record.img_fmg or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="img_fmg" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for o in img_fmg_options %}
+                        <option value="{{ o }}" {% if record.img_fmg == o %}selected{% endif %}>{{ o }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Country</label>
@@ -70,7 +75,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">MBBS Status</label>
-                    <input type="text" name="mbbs_status" value="{{ record.mbbs_status or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="mbbs_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for s in mbbs_statuses %}
+                        <option value="{{ s }}" {% if record.mbbs_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">MBBS Start Date</label>
@@ -99,7 +109,12 @@
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Internship</h3>
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Internship Status</label>
-                <input type="text" name="internship_status" value="{{ record.internship_status or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                <select name="internship_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">—</option>
+                    {% for s in internship_statuses %}
+                    <option value="{{ s }}" {% if record.internship_status == s %}selected{% endif %}>{{ s }}</option>
+                    {% endfor %}
+                </select>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
@@ -137,7 +152,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Internship Gap</label>
-                    <input type="text" name="internship_gap" value="{{ record.internship_gap or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="internship_gap" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for g in internship_gap_options %}
+                        <option value="{{ g }}" {% if record.internship_gap == g %}selected{% endif %}>{{ g }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Gap in Months</label>
@@ -154,7 +174,12 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Working Status</label>
-                    <input type="text" name="working_status" value="{{ record.working_status or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="working_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for s in working_statuses %}
+                        <option value="{{ s }}" {% if record.working_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Working Hospital Name</label>

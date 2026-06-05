@@ -42,11 +42,21 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Research Status</label>
-                    <input type="text" name="research_status" value="{{ record.research_status or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="research_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for s in research_statuses %}
+                        <option value="{{ s }}" {% if record.research_status == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Research Provider</label>
-                    <input type="text" name="research_provider" value="{{ record.research_provider or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="research_provider" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for rp in research_providers %}
+                        <option value="{{ rp }}" {% if record.research_provider == rp %}selected{% endif %}>{{ rp }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
@@ -80,7 +90,12 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Author Position</label>
-                    <input type="text" name="author_position" value="{{ record.author_position or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="author_position" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for p in author_positions %}
+                        <option value="{{ p }}" {% if record.author_position == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             <div style="margin-bottom:1.1rem;">

@@ -248,32 +248,50 @@
     }
     .upcoming-empty { padding: 1.5rem; text-align: center; color: var(--gray-500); font-size: 0.85rem; }
 
-    /* ── Quick links ── */
+    /* ── Quick links grid (mirrors PLAB dashboard style) ── */
     .quick-links-title {
-        font-size: 0.75rem;
-        font-weight: 600;
-        color: var(--gray-500);
+        font-size: 0.85rem;
+        font-weight: 700;
+        color: var(--navy);
         text-transform: uppercase;
-        letter-spacing: 0.05em;
-        margin-bottom: 0.75rem;
+        letter-spacing: 0.4px;
+        margin-bottom: 1rem;
     }
     .quick-grid {
         display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
-        gap: 0.5rem;
+        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+        gap: 0.75rem;
+        margin-bottom: 2rem;
     }
-    .quick-grid a {
-        padding: 0.6rem 0.85rem;
+    .quick-link {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        padding: 0.85rem 1rem;
         background: white;
         border: 1px solid var(--gray-200);
-        border-radius: 0.5rem;
-        font-size: 0.78rem;
-        font-weight: 600;
-        color: var(--navy);
+        border-radius: 0.6rem;
         text-decoration: none;
-        text-align: center;
+        color: var(--gray-700);
+        font-size: 0.82rem;
+        font-weight: 600;
+        transition: border-color 0.2s, box-shadow 0.2s;
     }
-    .quick-grid a:hover { background: var(--orange); color: white; border-color: var(--orange); }
+    .quick-link:hover {
+        border-color: var(--orange);
+        box-shadow: 0 2px 8px rgba(245,130,32,0.12);
+        color: var(--orange);
+    }
+    .quick-link svg {
+        flex-shrink: 0;
+        stroke: var(--gray-400);
+        transition: stroke 0.2s;
+    }
+    .quick-link:hover svg { stroke: var(--orange); }
+
+    @media (max-width: 768px) {
+        .quick-grid { grid-template-columns: repeat(2, 1fr); }
+    }
 </style>
 {% endblock %}
 
@@ -553,19 +571,54 @@
     {% endif %}
 </div>
 
-<!-- ── Quick Links ── -->
+<!-- ── Quick Links ──
+     Mirrors the Standard Consulting sidebar exactly (see
+     templates/ops_sidebar_base.html, active_pathway == 'consulting'
+     branch). If you add or remove a sidebar entry there, update this
+     block to match. Icon-style cards match the PLAB dashboard so the
+     look is consistent across pathways. -->
 <div class="quick-links-title">Quick Links — All Consulting Operations</div>
 <div class="quick-grid">
-    <a href="{{ url_for('ops_consulting_clients_list') }}">Registration</a>
-    <a href="{{ url_for('ops_consulting_pathway') }}">Test Bookings</a>
-    <a href="{{ url_for('ops_consulting_pathway') }}">Training</a>
-    <a href="{{ url_for('ops_consulting_academic_list') }}">Academic Details</a>
-    <a href="{{ url_for('ops_consulting_epic_list') }}">EPIC Registration</a>
-    <a href="{{ url_for('ops_consulting_pathway') }}">Online Courses</a>
-    <a href="{{ url_for('ops_consulting_payments_list') }}">Payments</a>
-    <a href="{{ url_for('ops_consulting_call_notes_list') }}">Call Notes</a>
-    <a href="{{ url_for('ops_consulting_pathway') }}">Research</a>
-    <a href="{{ url_for('ops_consulting_pathway') }}">Webinars</a>
+    <a href="{{ url_for('ops_consulting_clients_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Registration
+    </a>
+    <a href="{{ url_for('ops_consulting_academic_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
+        Academic Details
+    </a>
+    <a href="{{ url_for('ops_consulting_documents_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        Documents
+    </a>
+    <a href="{{ url_for('ops_consulting_call_notes_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+        Call Notes
+    </a>
+    <a href="{{ url_for('ops_consulting_payments_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+        Payments
+    </a>
+    <a href="{{ url_for('ops_consulting_onboarding_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+        Onboarding
+    </a>
+    <a href="{{ url_for('ops_consulting_epic_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg>
+        EPIC Verification
+    </a>
+    <a href="{{ url_for('ops_consulting_gmc_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        GMC Registration
+    </a>
+    <a href="{{ url_for('ops_consulting_amc_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
+        AMC Registration
+    </a>
+    <a href="{{ url_for('ops_consulting_mentorship_list') }}" class="quick-link">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+        Mentorship Sessions
+    </a>
 </div>
 
 {% endblock %}

@@ -19,6 +19,9 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the Consulting Payments edit form
+# (Plan Type / Instalment / Payment Method <select>s).
+from routes.operations._form_lookups import section_payment_lookups
 
 
 # ── Editable columns on ops_payments (pathway='consulting' scope) ──
@@ -192,6 +195,8 @@ def ops_consulting_payments_edit_page(rid):
         pathway_name='Standard Consulting',
         active_ops_page='consulting-payments',
         active_pathway='consulting',
+        # Dropdown options sourced from lookup_options where pathway='consulting'.
+        **section_payment_lookups('consulting'),
     )
 
 

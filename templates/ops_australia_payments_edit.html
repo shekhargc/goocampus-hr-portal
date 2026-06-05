@@ -40,13 +40,23 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instalment</label>
-                    <input type="text" name="instalment" value="{{ record.instalment or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="instalment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for inst in instalment_options %}
+                        <option value="{{ inst }}" {% if record.instalment == inst %}selected{% endif %}>{{ inst }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Method</label>
-                    <input type="text" name="payment_method" value="{{ record.payment_method or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="payment_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for method in payment_methods %}
+                        <option value="{{ method }}" {% if record.payment_method == method %}selected{% endif %}>{{ method }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div></div>
             </div>

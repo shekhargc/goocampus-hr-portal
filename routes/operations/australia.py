@@ -19,6 +19,11 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the AMC Registration edit form so the
+# Plan Type / Account Status / Current Stage / Counsellor / Lead Source
+# <select>s render the same options PLAB uses (sourced from the AMC tab
+# of Field Manager).
+from routes.operations._form_lookups import section_client_lookups
 
 
 @admin_required
@@ -468,6 +473,10 @@ def ops_australia_client_edit_page(client_id):
         client=client,
         active_ops_page='australia-clients',
         active_pathway='australia',
+        # Dropdown options for Plan Type, Account Status, Current Stage,
+        # Switched Program, Counsellor, Lead Source. Sourced from
+        # lookup_options where pathway='australia'.
+        **section_client_lookups('australia'),
     )
 
 

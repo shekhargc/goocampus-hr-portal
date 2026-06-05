@@ -22,7 +22,7 @@ skipped so this works on fresh staging environments too.
 import logging
 
 
-IMPORT_VERSION = 'cs_lookups_v1_initial'
+IMPORT_VERSION = 'cs_lookups_v2_extra_categories'
 
 
 # Each entry: (lookup_options.category, source_table, source_column).
@@ -73,7 +73,14 @@ LOOKUP_SOURCES = [
     ('img_fmg',            'ops_academic_details', 'img_fmg'),
     ('mbbs_status',        'ops_academic_details', 'mbbs_status'),
     ('internship_status',  'ops_academic_details', 'internship_status'),
+    ('internship_gap',     'ops_academic_details', 'internship_gap'),
     ('working_status',     'ops_academic_details', 'working_status'),
+
+    # ── EPIC Documents Stage Status ──
+    ('doc_stage_status',   'ops_epic_registration', 'document_stage_status'),
+
+    # ── Test Bookings: revaluation ──
+    ('revaluation',        'ops_test_bookings', 'revaluation'),
 
     # ── Client-level (account/stage) ──
     ('account_status',     'plab_clients', 'account_status'),

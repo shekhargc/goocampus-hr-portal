@@ -15,6 +15,8 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the Consulting EPIC Verification edit form.
+from routes.operations._form_lookups import section_epic_lookups
 
 
 # Allowlist of columns that the edit form is permitted to write to.
@@ -218,6 +220,8 @@ def ops_consulting_epic_edit_page(rid):
         pathway_name='Standard Consulting',
         active_ops_page='consulting-epic',
         active_pathway='consulting',
+        # Dropdown options sourced from lookup_options where pathway='consulting'.
+        **section_epic_lookups('consulting'),
     )
 
 
@@ -293,6 +297,8 @@ def ops_consulting_epic_add_page():
         pathway_name='Standard Consulting',
         active_ops_page='consulting-epic',
         active_pathway='consulting',
+        # Dropdown options sourced from lookup_options where pathway='consulting'.
+        **section_epic_lookups('consulting'),
     )
 
 

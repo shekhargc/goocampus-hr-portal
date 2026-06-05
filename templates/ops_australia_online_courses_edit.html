@@ -42,11 +42,21 @@
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Online Subscription / Course</label>
-                    <input type="text" name="online_subscription" value="{{ record.online_subscription or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="online_subscription" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for s in subscription_types %}
+                        <option value="{{ s }}" {% if record.online_subscription == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Activation Type</label>
-                    <input type="text" name="activation_type" value="{{ record.activation_type or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="activation_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for a in activation_types %}
+                        <option value="{{ a }}" {% if record.activation_type == a %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
@@ -56,7 +66,12 @@
                 </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Booked By</label>
-                    <input type="text" name="booked_by" value="{{ record.booked_by or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for b in booked_by_options %}
+                        <option value="{{ b }}" {% if record.booked_by == b %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
                 </div>
             </div>
 

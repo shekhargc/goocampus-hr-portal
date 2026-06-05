@@ -23,6 +23,8 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the AMC Test Bookings edit form.
+from routes.operations._form_lookups import section_test_bookings_lookups
 
 
 # ── Editable columns on ops_test_bookings (Australia scope) ─────────────────
@@ -224,6 +226,8 @@ def ops_australia_test_bookings_edit_page(rid):
         pathway_name='AMC Pathway',
         active_ops_page='australia-test-bookings',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_test_bookings_lookups('australia'),
     )
 
 
@@ -319,6 +323,8 @@ def ops_australia_test_bookings_add_page():
         pathway_name='AMC Pathway',
         active_ops_page='australia-test-bookings',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_test_bookings_lookups('australia'),
     )
 
 

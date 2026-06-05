@@ -14309,18 +14309,61 @@ MENTORSHIP_CONFIRMATION = ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled']
 CAB_VENDORS = ['Imran', 'Other']
 
 
-def get_lookup_options(category):
-    """Fetch active lookup options for a category from the database."""
+def get_lookup_options(category, pathway=None):
+    """Fetch active lookup options for a category from the database.
+
+    Args:
+        category: lookup_options.category (e.g. 'plan_type', 'epic_status').
+        pathway:  Optional pathway slug ('plab', 'australia', 'consulting').
+                  When provided, results are scoped to that pathway so the
+                  PLAB and AMC dropdowns stay isolated. When omitted the
+                  legacy union-of-pathways behaviour is preserved so existing
+                  PLAB callers don't change. New AMC/Consulting handlers
+                  should always pass the pathway slug so admins editing
+                  Field Manager for that pathway see their values render
+                  in the section forms.
+
+    If the pathway-scoped query returns zero rows we fall back to the PLAB
+    set so brand-new pathways inherit sensible defaults instead of empty
+    dropdowns. Field Manager admins can still override per-pathway.
+    """
     try:
         conn = get_db()
-        rows = conn.execute(
-            "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
-            (category,)
-        ).fetchall()
+        if pathway:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options "
+                "WHERE category = ? AND is_active = TRUE "
+                "  AND COALESCE(pathway, 'plab') = ? "
+                "ORDER BY sort_order, id",
+                (category, pathway)
+            ).fetchall()
+            # Fallback: if nothing seeded for this pathway yet, return the
+            # PLAB set so the admin still sees a non-empty dropdown. Field
+            # Manager can override later.
+            if not rows and pathway != 'plab':
+                rows = conn.execute(
+                    "SELECT value FROM lookup_options "
+                    "WHERE category = ? AND is_active = TRUE "
+                    "  AND COALESCE(pathway, 'plab') = 'plab' "
+                    "ORDER BY sort_order, id",
+                    (category,)
+                ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
+                (category,)
+            ).fetchall()
         conn.close()
-        return [r['value'] for r in rows]
+        # De-dupe while preserving order in case fallback duplicated values.
+        seen, out = set(), []
+        for r in rows:
+            v = r['value']
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+        return out
     except Exception as e:
-        logging.error(f"get_lookup_options({category}): {e}")
+        logging.error(f"get_lookup_options({category}, pathway={pathway}): {e}")
         return []
 
 

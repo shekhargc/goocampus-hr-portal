@@ -20,6 +20,8 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the AMC Webinars & Conferences edit form.
+from routes.operations._form_lookups import section_webinars_lookups
 
 
 # ── Editable columns on ops_webinars_conferences (pathway='australia') ─
@@ -212,6 +214,8 @@ def ops_australia_webinars_edit_page(rid):
         pathway_name='AMC Pathway',
         active_ops_page='australia-webinars',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_webinars_lookups('australia'),
     )
 
 
@@ -293,6 +297,8 @@ def ops_australia_webinars_add_page():
         pathway_name='AMC Pathway',
         active_ops_page='australia-webinars',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_webinars_lookups('australia'),
     )
 
 

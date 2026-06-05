@@ -19,6 +19,10 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the AMC Payments edit form so the
+# Plan Type / Instalment / Payment Method <select>s render the same
+# options PLAB uses (sourced from the AMC tab of Field Manager).
+from routes.operations._form_lookups import section_payment_lookups
 
 
 # ── Editable columns on ops_payments (pathway='australia' scope) ──
@@ -192,6 +196,9 @@ def ops_australia_payments_edit_page(rid):
         pathway_name='AMC Pathway',
         active_ops_page='australia-payments',
         active_pathway='australia',
+        # Dropdown options for Plan Type, Instalment, Payment Method.
+        # Sourced from lookup_options where pathway='australia'.
+        **section_payment_lookups('australia'),
     )
 
 

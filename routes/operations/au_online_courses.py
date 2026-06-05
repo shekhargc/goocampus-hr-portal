@@ -20,6 +20,8 @@ from flask import render_template, flash, request, redirect, url_for
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Pathway-scoped dropdown options for the AMC Online Courses edit form.
+from routes.operations._form_lookups import section_online_courses_lookups
 
 
 # ── Editable columns on ops_online_subscriptions (pathway='australia') ──
@@ -224,6 +226,8 @@ def ops_australia_online_courses_edit_page(rid):
         pathway_name='AMC Pathway',
         active_ops_page='australia-online-courses',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_online_courses_lookups('australia'),
     )
 
 
@@ -300,6 +304,8 @@ def ops_australia_online_courses_add_page():
         pathway_name='AMC Pathway',
         active_ops_page='australia-online-courses',
         active_pathway='australia',
+        # Dropdown options sourced from lookup_options where pathway='australia'.
+        **section_online_courses_lookups('australia'),
     )
 
 
