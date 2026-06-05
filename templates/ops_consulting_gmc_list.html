@@ -251,7 +251,7 @@ function openGmcDetail(id) {
     document.getElementById('gmcDrawerBody').innerHTML = html;
     document.getElementById('gmcDrawerActions').innerHTML = `
         <a href="/operations/consulting/gmc/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/consulting/gmc/${r.id}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('gmcDrawer').classList.add('open');

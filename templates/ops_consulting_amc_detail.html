@@ -1,0 +1,158 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}AMC Registration - {{ (record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or '') }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_consulting_amc_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to AMC Registration
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
+          {% if record.first_name or record.last_name %}
+            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+          {% else %}
+            AMC Registration
+          {% endif %}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ record.registration_number|format_reg }}
+          {% if record.amc_reference_number %}
+            &middot; AMC Ref: {{ record.amc_reference_number }}
+          {% endif %}
+        </p>
+        {% if record.registration_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Registered: {{ record.registration_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        {% set s = (record.amc_setup or '')|lower %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if 'complet' in s %}
+            background:#DCFCE7;color:#166534;
+          {% elif 'progress' in s or 'ongoing' in s %}
+            background:#DBEAFE;color:#1D4ED8;
+          {% elif 'pending' in s or 'scheduled' in s %}
+            background:#FEF3C7;color:#92400E;
+          {% elif 'cancel' in s or 'drop' in s %}
+            background:#FEE2E2;color:#B91C1C;
+          {% else %}
+            background:#F3F4F6;color:#4B5563;
+          {% endif %}
+        ">
+          {{ record.amc_setup or 'Unknown' }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_consulting_amc_edit', gid=record.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Record
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Registration Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Registration Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">AMC Reference Number:</span><span style="color:var(--navy);font-weight:600;">{{ record.amc_reference_number or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">AMC Setup Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.amc_setup or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.registration_date or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Login Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Login Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Login Password:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.login_pwd or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Secret Question:</span><span style="color:var(--navy);font-weight:600;">{{ record.secret_question or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Secret Answer:</span><span style="color:var(--navy);font-weight:600;">{{ record.secret_answer or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- License Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">License</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">License Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.license or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">License Received Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.license_received_date or '—' }}</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- English Exam & Dates Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">English Exam &amp; Dates</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">English Exam:</span><span style="color:var(--navy);font-weight:600;">{{ record.english_exam or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Exam Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Result Expiry Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.english_result_expiry_date or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Candidate Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Name:</span><span style="color:var(--navy);font-weight:600;">
+            {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+          </span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Candidate Email:</span>
+            {% if record.candidate_email %}<a href="mailto:{{ record.candidate_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.candidate_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile Number:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile_number or record.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Client Email:</span>
+            {% if record.email %}<a href="mailto:{{ record.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Notes Card -->
+      {% if record.notes %}
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Notes</h3>
+        <p style="margin:0;font-size:14px;color:var(--navy);line-height:1.6;white-space:pre-wrap;">{{ record.notes }}</p>
+      </div>
+      {% endif %}
+
+    </div>
+  </div>
+
+  <!-- ── Action Bar ── -->
+  <div style="display:flex;justify-content:space-between;align-items:center;background:white;border-radius:12px;padding:16px 20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <a href="{{ url_for('ops_consulting_amc_list') }}" style="color:var(--gray-600);text-decoration:none;font-weight:500;font-size:14px;">
+      &larr; Back to AMC Registration
+    </a>
+    <a href="{{ url_for('ops_consulting_amc_edit', gid=record.id) }}"
+       style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
+      Edit Record
+    </a>
+  </div>
+
+</div>
+{% endblock %}

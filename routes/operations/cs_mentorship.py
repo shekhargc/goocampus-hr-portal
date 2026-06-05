@@ -192,6 +192,50 @@ def ops_consulting_mentorship_edit(rid):
 
 
 @admin_required
+def ops_consulting_mentorship_detail(rid):
+    """Read-only detail view for one Consulting mentorship session row.
+
+    LEFT JOIN plab_clients via registration_number so we can render the
+    candidate's name + contact in the header. Mirrors the PLAB-style
+    detail layout (header card + two-column grid + Edit Record action).
+    Pathway-scoped to consulting so PLAB / Australia rows are not
+    accessible through this surface.
+    """
+    user = get_user()
+    conn = get_db()
+    try:
+        record = conn.execute(
+            """SELECT m.*, p.first_name, p.last_name, p.prefix,
+                      p.mobile, p.email
+                 FROM ops_mentorship m
+            LEFT JOIN plab_clients p
+                   ON m.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'consulting'
+                WHERE m.id = ?
+                  AND COALESCE(m.pathway, 'plab') = 'consulting' """,
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_consulting_mentorship_detail: {e}")
+        record = None
+    finally:
+        conn.close()
+
+    if not record:
+        flash('Mentorship session not found.', 'error')
+        return redirect(url_for('ops_consulting_mentorship_list'))
+
+    return render_template(
+        'ops_consulting_mentorship_detail.html',
+        user=user,
+        record=record,
+        pathway_name='Standard Consulting',
+        active_ops_page='consulting-mentorship',
+        active_pathway='consulting',
+    )
+
+
+@admin_required
 def ops_consulting_mentorship_delete(rid):
     conn = get_db()
     try:
@@ -223,6 +267,12 @@ def register_routes(app):
         endpoint='ops_consulting_mentorship_add',
         view_func=ops_consulting_mentorship_add,
         methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/operations/consulting/mentorship/<int:rid>',
+        endpoint='ops_consulting_mentorship_detail',
+        view_func=ops_consulting_mentorship_detail,
+        methods=['GET'],
     )
     app.add_url_rule(
         '/operations/consulting/mentorship/<int:rid>/edit',

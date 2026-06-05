@@ -219,6 +219,50 @@ def ops_consulting_amc_edit(gid):
 
 
 @admin_required
+def ops_consulting_amc_detail(gid):
+    """Read-only detail view for one Consulting AMC registration row.
+
+    LEFT JOIN plab_clients via registration_number so we can render the
+    candidate's name + contact in the header. Mirrors the PLAB-style
+    detail layout (header card + two-column grid + Edit Record action).
+    Pathway-scoped to consulting so PLAB / Australia rows are not
+    accessible through this surface.
+    """
+    user = get_user()
+    conn = get_db()
+    try:
+        record = conn.execute(
+            """SELECT g.*, p.first_name, p.last_name, p.prefix,
+                      p.mobile, p.email
+                 FROM ops_amc_registration g
+            LEFT JOIN plab_clients p
+                   ON g.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'consulting'
+                WHERE g.id = ?
+                  AND COALESCE(g.pathway, 'plab') = 'consulting' """,
+            (gid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_consulting_amc_detail: {e}")
+        record = None
+    finally:
+        conn.close()
+
+    if not record:
+        flash('AMC registration record not found.', 'error')
+        return redirect(url_for('ops_consulting_amc_list'))
+
+    return render_template(
+        'ops_consulting_amc_detail.html',
+        user=user,
+        record=record,
+        pathway_name='Standard Consulting',
+        active_ops_page='consulting-amc',
+        active_pathway='consulting',
+    )
+
+
+@admin_required
 def ops_consulting_amc_delete(gid):
     """Delete a consulting AMC registration record. Pathway gated."""
     conn = get_db()
@@ -252,6 +296,12 @@ def register_routes(app):
         endpoint='ops_consulting_amc_add',
         view_func=ops_consulting_amc_add,
         methods=['GET', 'POST'],
+    )
+    app.add_url_rule(
+        '/operations/consulting/amc/<int:gid>',
+        endpoint='ops_consulting_amc_detail',
+        view_func=ops_consulting_amc_detail,
+        methods=['GET'],
     )
     app.add_url_rule(
         '/operations/consulting/amc/<int:gid>/edit',
