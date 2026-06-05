@@ -204,8 +204,8 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading...</div>
     </div>
     <div class="drawer-actions" id="drawerActions">
-        <a href="#" id="btnViewProfile" style="background:var(--navy);color:white;">View Profile</a>
-        <a href="#" id="btnEditClient" style="background:var(--orange);color:white;">Edit Client</a>
+        <a href="#" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="#" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     </div>
 </div>
 
@@ -297,8 +297,8 @@ function openDrawer(clientId) {
     if (activeRow) activeRow.classList.add('active-row');
 
     // Set links
+    document.getElementById('btnEditRecord').href = `/operations/plab/${clientId}/edit`;
     document.getElementById('btnViewProfile').href = `/operations/plab/${clientId}`;
-    document.getElementById('btnEditClient').href = `/operations/plab/${clientId}/edit`;
 
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Loading documents...</div>';
     backdrop.classList.add('open');

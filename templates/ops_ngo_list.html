@@ -181,8 +181,8 @@ function openNgoDetail(id) {
 
     document.getElementById('ngoDrawerBody').innerHTML = html;
     document.getElementById('ngoDrawerActions').innerHTML = `
-        <a href="/operations/ngo-activities/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+        <a href="/operations/ngo-activities/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('ngoDrawer').classList.add('open');

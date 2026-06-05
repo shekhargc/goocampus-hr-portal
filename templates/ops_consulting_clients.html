@@ -346,7 +346,8 @@
 
       document.getElementById('csDrawerBody').innerHTML = html;
       document.getElementById('csDrawerActions').innerHTML =
-          '<a href="/operations/consulting/clients/' + r.id + '" style="background:var(--orange);color:white;">View &amp; Edit Full Profile</a>';
+          '<a href="/operations/consulting/clients/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
+        + '<a href="/operations/consulting/clients/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
 
       document.getElementById('csDrawer').classList.add('open');
       document.getElementById('csDrawer').setAttribute('aria-hidden', 'false');

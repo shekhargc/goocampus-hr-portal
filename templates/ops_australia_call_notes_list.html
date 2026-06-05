@@ -522,8 +522,8 @@ function openCnDetail(id) {
 
     document.getElementById('cnDrawerBody').innerHTML = html;
     document.getElementById('cnDrawerActions').innerHTML = `
-        <a href="/operations/australia/call-notes/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/australia/clients/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+        <a href="/operations/australia/call-notes/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/australia/clients/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('cnDrawer').classList.add('open');
@@ -636,8 +636,8 @@ function renderTrackerDetail(data) {
     document.getElementById('drawerTitle').textContent = 'Client Details';
     document.getElementById('cnDrawerBody').innerHTML = html;
     document.getElementById('cnDrawerActions').innerHTML = `
-        <a href="/operations/australia/call-notes/add?client=${encodeURIComponent(data.registration_number)}" style="background:var(--orange);color:white;">+ Add Note</a>
-        <a href="/operations/australia/clients/dashboard/${encodeURIComponent(data.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+        <a href="/operations/australia/call-notes/add?client=${encodeURIComponent(data.registration_number)}" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/australia/clients/dashboard/${encodeURIComponent(data.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('cnDrawer').classList.add('open');

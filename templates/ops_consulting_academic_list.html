@@ -376,7 +376,8 @@
 
       document.getElementById('auAcadDrawerBody').innerHTML = html;
       document.getElementById('auAcadDrawerActions').innerHTML =
-          '<a href="/operations/consulting/academic-details/' + r.id + '" style="background:var(--orange);color:white;">View Full Profile</a>';
+          '<a href="/operations/consulting/academic-details/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
+        + '<a href="/operations/consulting/academic-details/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
 
       document.getElementById('auAcadDrawer').classList.add('open');
       document.getElementById('auAcadDrawer').setAttribute('aria-hidden', 'false');

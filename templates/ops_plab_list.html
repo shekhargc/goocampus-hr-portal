@@ -817,12 +817,9 @@
           '</div></div>';
 
       document.getElementById('plabDrawerBody').innerHTML = html;
-      // Z-1: dropped the broken "PLAB Dashboard" button (route
-      // /operations/plab/dashboard/<reg#> does not exist -- it 404s).
-      // Single "View & Edit Full Profile" button matches the AMC
-      // drawer for cross-pathway consistency.
       document.getElementById('plabDrawerActions').innerHTML =
-          '<a href="/operations/plab/' + r.id + '" style="background:var(--orange);color:white;">View &amp; Edit Full Profile</a>';
+          '<a href="/operations/plab/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
+        + '<a href="/operations/plab/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
       document.getElementById('plabDrawer').classList.add('open');
       document.getElementById('plabDrawer').setAttribute('aria-hidden', 'false');
       document.getElementById('plabBackdrop').classList.add('open');

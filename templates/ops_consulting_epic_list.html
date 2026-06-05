@@ -358,8 +358,8 @@
 
       document.getElementById('auDrawerBody').innerHTML = html;
       document.getElementById('auDrawerActions').innerHTML =
-          '<a href="/operations/consulting/epic/' + r.id + '" style="background:white;color:var(--navy);border:1px solid var(--gray-300);">View Full Profile</a>'
-          + '<a href="/operations/consulting/epic/' + r.id + '/edit" style="background:var(--orange);color:white;">Edit</a>';
+          '<a href="/operations/consulting/epic/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
+          + '<a href="/operations/consulting/epic/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
 
       document.getElementById('auDrawer').classList.add('open');
       document.getElementById('auDrawer').setAttribute('aria-hidden', 'false');
