@@ -161,8 +161,14 @@ def ops_australia_amc_edit(gid):
     mutated through this surface."""
     conn = get_db()
     record = conn.execute(
-        "SELECT * FROM ops_amc_registration "
-        " WHERE id = ? AND COALESCE(pathway,'plab') = 'australia'",
+        """SELECT t.*, p.first_name, p.last_name, p.prefix,
+                  p.mobile, p.email
+             FROM ops_amc_registration t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'australia'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'australia' """,
         (gid,),
     ).fetchone()
     if not record:

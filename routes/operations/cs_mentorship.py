@@ -136,10 +136,14 @@ def ops_consulting_mentorship_add():
 def ops_consulting_mentorship_edit(rid):
     conn = get_db()
     record = conn.execute(
-        "SELECT m.*, p.first_name, p.last_name, p.prefix "
-        "  FROM ops_mentorship m "
-        "  LEFT JOIN plab_clients p ON m.registration_number = p.registration_number "
-        " WHERE m.id = ? AND COALESCE(m.pathway,'plab') = 'consulting'",
+        """SELECT t.*, p.first_name, p.last_name, p.prefix,
+                  p.mobile, p.email
+             FROM ops_mentorship t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'consulting'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'consulting' """,
         (rid,),
     ).fetchone()
     if not record:
