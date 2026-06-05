@@ -18271,7 +18271,16 @@ def ops_coaching_add():
 def ops_coaching_edit(record_id):
     """Edit coaching/training record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_coaching WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_coaching t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -18478,7 +18487,16 @@ def ops_english_logins_add():
 @admin_required
 def ops_english_logins_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_english_logins WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT e.*, p.first_name, p.last_name, p.prefix
+             FROM ops_english_logins e
+        LEFT JOIN plab_clients p
+               ON e.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE e.id = ?
+              AND COALESCE(e.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -18602,7 +18620,16 @@ def ops_test_bookings_add():
 @admin_required
 def ops_test_bookings_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_test_bookings WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_test_bookings t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -19227,7 +19254,16 @@ def ops_call_notes_add():
 @admin_required
 def ops_call_notes_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_call_notes WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT n.*, p.first_name, p.last_name, p.prefix
+             FROM ops_call_notes n
+        LEFT JOIN plab_clients p
+               ON n.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE n.id = ?
+              AND COALESCE(n.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -19399,7 +19435,16 @@ def ops_payments_add():
 @admin_required
 def ops_payments_edit(record_id):
     conn = get_db()
-    record = conn.execute('SELECT * FROM ops_payments WHERE id = ?', (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_payments t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Payment record not found', 'error')
@@ -19539,7 +19584,16 @@ def ops_epic_add():
 def ops_epic_edit(eid):
     """Edit EPIC registration record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_epic_registration WHERE id = ?", (eid,)).fetchone()
+    record = conn.execute(
+        """SELECT e.*, p.first_name, p.last_name, p.prefix
+             FROM ops_epic_registration e
+        LEFT JOIN plab_clients p
+               ON e.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE e.id = ?
+              AND COALESCE(e.pathway, 'plab') = 'plab' """,
+        (eid,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -19669,7 +19723,16 @@ def ops_gmc_add():
 def ops_gmc_edit(gid):
     """Edit GMC registration record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_gmc_registration WHERE id = ?", (gid,)).fetchone()
+    record = conn.execute(
+        """SELECT g.*, p.first_name, p.last_name, p.prefix
+             FROM ops_gmc_registration g
+        LEFT JOIN plab_clients p
+               ON g.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE g.id = ?
+              AND COALESCE(g.pathway, 'plab') = 'plab' """,
+        (gid,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')

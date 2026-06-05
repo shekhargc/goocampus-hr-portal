@@ -493,9 +493,13 @@ def ops_australia_call_notes_edit_page(rid):
     user = get_user()
     conn = get_db()
     record = conn.execute(
-        """SELECT * FROM ops_call_notes
-            WHERE id = ?
-              AND COALESCE(pathway, 'plab') = 'australia' """,
+        """SELECT n.*, p.first_name, p.last_name, p.prefix
+             FROM ops_call_notes n
+        LEFT JOIN plab_clients p
+               ON n.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'australia'
+            WHERE n.id = ?
+              AND COALESCE(n.pathway, 'plab') = 'australia' """,
         (rid,),
     ).fetchone()
     conn.close()
