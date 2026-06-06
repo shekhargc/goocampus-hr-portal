@@ -424,6 +424,9 @@
                     {% if has_sales_access %}
                     <li><a href="/sales" class="{% if active_section == 'sales' %}active{% endif %}">Sales</a></li>
                     {% endif %}
+                    {% if has_operations_access %}
+                    <li><a href="{{ operations_landing_url }}" class="{% if active_section == 'operations' %}active{% endif %}">Operations</a></li>
+                    {% endif %}
                     <li><a href="/holidays" class="{% if active_section == 'company' %}active{% endif %}">Company</a></li>
                 {% endif %}
 

@@ -152,15 +152,56 @@ def get_monthly_alloc(month_num):
 
 @app.context_processor
 def inject_manager_status():
-    """Make is_manager, pending_team_count, and has_sales_access available in all templates"""
+    """Make is_manager, pending_team_count, has_sales_access, and
+    has_operations_access + operations_landing_url available in all
+    templates.
+
+    Operations access is granted to any user with view permission on
+    at least one pathway dashboard OR any operations_shared sub-area.
+    The landing URL is the first pathway dashboard they have access
+    to (PLAB > Australia > Consulting), so a Consulting-only user
+    lands on /operations/consulting instead of 403'ing on
+    /operations/uk-pathway.
+    """
     if 'user_id' in session:
         user_id = session['user_id']
         user = get_user()
         mgr = is_manager(user_id)
         pending_team = get_pending_team_count(user_id) if mgr else 0
         sales_access = has_section_permission(user, 'sales', 'meetings', 'view') if user else False
-        return {'is_manager': mgr, 'pending_team_count': pending_team, 'has_sales_access': sales_access}
-    return {'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False}
+
+        # has_operations_access — any of the 3 pathway dashboards, or
+        # any operations_shared sub-area (reports / field_manager /
+        # vendors_providers). Admins always see Operations.
+        plab_ok = has_section_permission(user, 'plab_pathway', 'dashboard', 'view') if user else False
+        aus_ok  = has_section_permission(user, 'australia_pathway', 'dashboard', 'view') if user else False
+        cons_ok = has_section_permission(user, 'consulting_pathway', 'dashboard', 'view') if user else False
+        shared_ok = any(has_section_permission(user, 'operations_shared', s, 'view')
+                        for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
+        ops_access = plab_ok or aus_ok or cons_ok or shared_ok
+
+        # Smart landing URL — first pathway the user has access to.
+        if plab_ok:
+            ops_landing = '/operations/uk-pathway'
+        elif aus_ok:
+            ops_landing = '/operations/australia-pathway'
+        elif cons_ok:
+            ops_landing = '/operations/consulting'
+        else:
+            # operations_shared only -> Reports is the safest default
+            ops_landing = '/operations/reports'
+
+        return {
+            'is_manager': mgr,
+            'pending_team_count': pending_team,
+            'has_sales_access': sales_access,
+            'has_operations_access': ops_access,
+            'operations_landing_url': ops_landing,
+        }
+    return {
+        'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
+        'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
+    }
 
 def calculate_monthly_balance(employee_id, year, month):
     """Calculate running balance for a given month"""
