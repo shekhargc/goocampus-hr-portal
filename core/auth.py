@@ -41,7 +41,30 @@ def login_required(f):
 
 
 def admin_required(f):
-    """Require the logged-in employee to be flagged is_admin=1."""
+    """Allow the request through if the logged-in employee is either:
+      (a) flagged is_admin=1, or
+      (b) holds at least one Access Master grant (user_section_permissions
+          row with can_view=1).
+
+    Background. The portal originally had two roles: admin (sees
+    everything) and employee (sees their own HR/KRA). The Access Master
+    system (rolled out in 6 phases ending 2026-06-01) introduced
+    fine-grained per-section grants so a non-admin like a service-
+    delivery specialist can be granted Operations access without
+    becoming a full admin.
+
+    Without (b), @admin_required rejected those users at the decorator
+    layer, before the per-request access_master_request_audit could
+    grant them access. That broke Alfiya's Operations access on
+    2026-06-05 even though she had 61 matching grants.
+
+    The real per-section enforcement happens in app.py's
+    @app.before_request access_master_request_audit, which runs
+    ACCESS_MASTER_ENFORCE=True against ACCESS_ROUTE_MAP and redirects
+    users to the dashboard for sections they don't have. So at the
+    decorator layer we only need the coarse check "is this user
+    authorized for ANY internal section?".
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if 'user_id' not in session:
@@ -51,11 +74,21 @@ def admin_required(f):
             'SELECT is_admin FROM employees WHERE id = ?',
             (session['user_id'],)
         ).fetchone()
+        if user and user['is_admin'] == 1:
+            conn.close()
+            return f(*args, **kwargs)
+        # Non-admin: allow if they hold at least one Access Master grant.
+        # Per-route enforcement runs after this in @app.before_request.
+        grant_row = conn.execute(
+            "SELECT 1 FROM user_section_permissions "
+            "WHERE employee_id = ? AND can_view = 1 LIMIT 1",
+            (session['user_id'],),
+        ).fetchone()
         conn.close()
-        if not user or user['is_admin'] != 1:
-            flash('Admin access required', 'error')
-            return redirect(url_for('dashboard'))
-        return f(*args, **kwargs)
+        if grant_row:
+            return f(*args, **kwargs)
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
     return decorated_function
 
 
