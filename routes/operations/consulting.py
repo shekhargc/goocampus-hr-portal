@@ -683,7 +683,7 @@ def register_routes(app):
     )
     # Lookup-by-registration-number helper for section drawers
     app.add_url_rule(
-        '/operations/consulting/clients/by-reg/<reg>',
+        '/operations/consulting/clients/by-reg/<path:reg>',
         endpoint='ops_consulting_client_by_reg',
         view_func=ops_consulting_client_by_reg,
         methods=['GET'],

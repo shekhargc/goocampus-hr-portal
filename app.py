@@ -17216,7 +17216,7 @@ def ops_plab_dashboard(client_id):
                            active_ops_page='plab')
 
 
-@app.route('/operations/plab/by-reg/<reg>')
+@app.route('/operations/plab/by-reg/<path:reg>')
 @admin_required
 def ops_plab_by_reg(reg):
     """Resolve a PLAB client by registration_number and redirect to detail.
