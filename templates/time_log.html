@@ -458,16 +458,10 @@
                                 {% elif dtype == 'weekend' %}
                                     <span class="att-status weekly-off">Weekend</span>
                                 {% elif dtype == 'half_leave' %}
-                                    {# Half-day leave — show both present status and leave tag #}
-                                    {% if ptag == 'full' %}
-                                        <span class="att-status present">Present</span>
-                                    {% elif ptag == 'no_out' %}
-                                        <span class="att-status no-punch">No Out</span>
-                                    {% elif ptag == 'no_in' %}
-                                        <span class="att-status no-punch">No In</span>
-                                    {% endif %}
-                                    <span class="att-status leave" style="margin-left: 0.25rem;">½ {{ day.leave_type }}</span>
-                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.15rem;">({{ day.leave_portion|replace('_', ' ')|title }})</span>
+                                    {# Half-day leave — show "½ Day" pill in green for the worked half,
+                                       plus a small footnote with the leave type + which half. #}
+                                    <span class="att-status present" style="background:#dcfce7;color:#166534;">½ Day</span>
+                                    <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.35rem;">{{ day.leave_type }} ({{ day.leave_portion|replace('_', ' ')|title }})</span>
                                 {% elif dtype == 'leave' %}
                                     <span class="att-status leave">On Leave</span>
                                     <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}</span>
@@ -487,7 +481,7 @@
                                 {% elif 'Absent' in st %}
                                     {% if day.manual_present %}
                                         <span class="att-status present">Present</span>
-                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Manual</span>
+                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
                                     {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
@@ -496,11 +490,11 @@
                                     {% else %}
                                         <span class="att-status absent">No In &amp; No Out</span>
                                     {% endif %}
-                                    {% if is_admin_view and not day.is_wfh and not day.leave_type %}
+                                    {% if is_admin_view and not day.is_wfh and not day.leave_type and not day.manual_present %}
                                         <button type="button" class="btn-mark-present"
-                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', {{ 'false' if day.manual_present else 'true' }}, this)"
-                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid {{ '#dc2626' if day.manual_present else '#16a34a' }};background:white;color:{{ '#dc2626' if day.manual_present else '#16a34a' }};cursor:pointer;">
-                                            {% if day.manual_present %}Undo{% else %}+ Present{% endif %}
+                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', true, this)"
+                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid #16a34a;background:white;color:#16a34a;cursor:pointer;">
+                                            + Present
                                         </button>
                                     {% endif %}
                                 {% elif st == 'WeeklyOff' %}
@@ -510,7 +504,7 @@
                                 {% else %}
                                     {% if day.manual_present %}
                                         <span class="att-status present">Present</span>
-                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Manual</span>
+                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
                                     {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
@@ -521,11 +515,11 @@
                                     {% else %}
                                         <span style="color: var(--gray-400);">—</span>
                                     {% endif %}
-                                    {% if is_admin_view and dtype == 'weekday' and not day.is_wfh and not day.leave_type %}
+                                    {% if is_admin_view and dtype == 'weekday' and not day.is_wfh and not day.leave_type and not day.manual_present %}
                                         <button type="button" class="btn-mark-present"
-                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', {{ 'false' if day.manual_present else 'true' }}, this)"
-                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid {{ '#dc2626' if day.manual_present else '#16a34a' }};background:white;color:{{ '#dc2626' if day.manual_present else '#16a34a' }};cursor:pointer;">
-                                            {% if day.manual_present %}Undo{% else %}+ Present{% endif %}
+                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', true, this)"
+                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid #16a34a;background:white;color:#16a34a;cursor:pointer;">
+                                            + Present
                                         </button>
                                     {% endif %}
                                 {% endif %}
