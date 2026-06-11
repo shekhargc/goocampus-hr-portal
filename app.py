@@ -25442,6 +25442,63 @@ def upload_attendance():
                     active_section='hr')
 
 
+@app.route('/api/attendance/toggle-manual-present', methods=['POST'])
+@admin_required
+def api_toggle_manual_present():
+    """HR-admin override: mark a specific (employee, date) as Present
+    even when biometric shows no punch -- eg. device offline, employee
+    was in office. Toggles the flag on existing attendance_logs rows,
+    or inserts a placeholder row if the day was missing entirely.
+    """
+    user = get_user()
+    employee_id = request.form.get('employee_id', type=int)
+    date_str    = (request.form.get('date') or '').strip()
+    target_val  = (request.form.get('value') or 'true').lower() == 'true'
+    note        = (request.form.get('note') or '').strip() or 'HR-confirmed present (biometric missed)'
+
+    if not employee_id or not date_str:
+        return jsonify({'error': 'employee_id and date required'}), 400
+
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM attendance_logs WHERE employee_id=? AND attendance_date=?",
+            (employee_id, date_str),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE attendance_logs SET manual_present=?, manual_present_note=?, "
+                "  manual_present_by=?, manual_present_at=NOW() "
+                "WHERE id=?",
+                (target_val, note if target_val else None,
+                 user['id'] if target_val else None,
+                 existing['id']),
+            )
+        else:
+            # Insert a placeholder row so the day shows in the calendar
+            conn.execute(
+                "INSERT INTO attendance_logs "
+                " (employee_id, attendance_date, shift, scheduled_in, scheduled_out, "
+                "  actual_in, actual_out, work_duration, overtime, total_duration, "
+                "  late_by, early_going_by, status, punch_records, "
+                "  manual_present, manual_present_note, manual_present_by, manual_present_at) "
+                "VALUES (?,?,'GS','','','','','','','','','',"
+                "  'Absent','',?, ?, ?, NOW())",
+                (employee_id, date_str, target_val,
+                 note if target_val else None,
+                 user['id'] if target_val else None),
+            )
+        conn.commit()
+        return jsonify({'success': True, 'manual_present': target_val})
+    except Exception as e:
+        logging.error(f"api_toggle_manual_present: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/time-log')
 @login_required
 def time_log():
@@ -25631,6 +25688,18 @@ def time_log():
             if day_type == 'half_leave' and not att:
                 s['half_days'] += 1
                 s['present_days'] += 0.5
+
+            # ── Manual present override (HR-admin marks a day as
+            # present even though the biometric missed the punch — eg.
+            # device offline, employee in office). Stored on
+            # attendance_logs.manual_present. Skip the credit if the
+            # employee also has any punch on that day (the normal
+            # present_days path will count them).
+            if att and att.get('manual_present') and day_type not in ('weekend','holiday','leave','half_leave','wfh'):
+                _ai2 = ((att.get('actual_in')  or '')).strip()
+                _ao2 = ((att.get('actual_out') or '')).strip()
+                if not (_ai2 and _ai2 != '—') and not (_ao2 and _ao2 != '—'):
+                    s['present_days'] += 1
 
             # Build day record
             if att:

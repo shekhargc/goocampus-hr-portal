@@ -485,7 +485,10 @@
                                     <span class="att-status no-punch" style="margin-left: 0.25rem;">No In</span>
                                     {% if day.is_wfh %}<span class="att-status wfh" style="margin-left: 0.25rem;">WFH</span>{% endif %}
                                 {% elif 'Absent' in st %}
-                                    {% if day.is_wfh %}
+                                    {% if day.manual_present %}
+                                        <span class="att-status present">Present</span>
+                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Manual</span>
+                                    {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
                                         <span class="att-status leave">{% if 'sick' in (day.leave_type|lower) %}Sick{% else %}On Leave{% endif %}</span>
@@ -493,12 +496,22 @@
                                     {% else %}
                                         <span class="att-status absent">No In &amp; No Out</span>
                                     {% endif %}
+                                    {% if is_admin_view and not day.is_wfh and not day.leave_type %}
+                                        <button type="button" class="btn-mark-present"
+                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', {{ 'false' if day.manual_present else 'true' }}, this)"
+                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid {{ '#dc2626' if day.manual_present else '#16a34a' }};background:white;color:{{ '#dc2626' if day.manual_present else '#16a34a' }};cursor:pointer;">
+                                            {% if day.manual_present %}Undo{% else %}+ Present{% endif %}
+                                        </button>
+                                    {% endif %}
                                 {% elif st == 'WeeklyOff' %}
                                     <span class="att-status weekly-off">Weekend</span>
                                 {% elif st %}
                                     <span class="att-status" style="background: var(--gray-100); color: var(--gray-600);">{{ st }}</span>
                                 {% else %}
-                                    {% if day.is_wfh %}
+                                    {% if day.manual_present %}
+                                        <span class="att-status present">Present</span>
+                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Manual</span>
+                                    {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
                                         <span class="att-status leave">{% if 'sick' in (day.leave_type|lower) %}Sick{% else %}On Leave{% endif %}</span>
@@ -507,6 +520,13 @@
                                         <span class="att-status absent">No In &amp; No Out</span>
                                     {% else %}
                                         <span style="color: var(--gray-400);">—</span>
+                                    {% endif %}
+                                    {% if is_admin_view and dtype == 'weekday' and not day.is_wfh and not day.leave_type %}
+                                        <button type="button" class="btn-mark-present"
+                                                onclick="toggleManualPresent({{ s.employee_id }}, '{{ day.attendance_date }}', {{ 'false' if day.manual_present else 'true' }}, this)"
+                                                style="margin-left:.4rem;padding:2px 8px;font-size:.65rem;border-radius:8px;border:1px solid {{ '#dc2626' if day.manual_present else '#16a34a' }};background:white;color:{{ '#dc2626' if day.manual_present else '#16a34a' }};cursor:pointer;">
+                                            {% if day.manual_present %}Undo{% else %}+ Present{% endif %}
+                                        </button>
                                     {% endif %}
                                 {% endif %}
                             </td>
@@ -542,6 +562,31 @@
 function toggleSection(empId) {
     const el = document.getElementById('emp-' + empId);
     if (el) el.classList.toggle('collapsed');
+}
+
+// HR-admin manual present override for a specific (employee, date).
+// Used when the biometric missed an in-office day (device down, etc.).
+function toggleManualPresent(empId, dateStr, newVal, btn) {
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const old = btn.textContent;
+    btn.textContent = '...';
+    const fd = new FormData();
+    fd.append('employee_id', empId);
+    fd.append('date', dateStr);
+    fd.append('value', newVal);
+    fetch('/api/attendance/toggle-manual-present', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                // Reload to recompute the summary cards + chips.
+                location.reload();
+            } else {
+                alert(data.error || 'Update failed');
+                btn.disabled = false; btn.textContent = old;
+            }
+        })
+        .catch(() => { alert('Update failed'); btn.disabled = false; btn.textContent = old; });
 }
 </script>
 {% endblock %}
