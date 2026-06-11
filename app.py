@@ -25611,6 +25611,18 @@ def time_log():
             else:
                 day_type = 'weekday'
 
+            # ── Policy: WFH counts toward Present in the summary cards.
+            # Employees on approved WFH aren't expected at the office, so
+            # the absence of a fingerprint punch should not flag them as
+            # Absent. Only credit if they didn't also happen to punch in
+            # — the normal punch-driven present_days logic below would
+            # otherwise double-count them.
+            if day_type == 'wfh':
+                _ai = ((att.get('actual_in') if att else '') or '').strip()
+                _ao = ((att.get('actual_out') if att else '') or '').strip()
+                if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
+                    s['present_days'] += 1
+
             # Build day record
             if att:
                 day_rec = dict(att)
