@@ -359,9 +359,9 @@
                 <div class="meta">{{ s.emp_code }} · {{ s.department or '—' }}</div>
             </div>
             <div class="stats">
-                <span class="stat-chip present">{{ s.present_days|int }} Present</span>
-                {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ s.absent_days }} Absent</span>{% endif %}
-                {% if s.leave_days > 0 %}<span class="stat-chip leave">{{ s.leave_days|int }} Leave</span>{% endif %}
+                <span class="stat-chip present">{{ '%g' % s.present_days }} Present</span>
+                {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ '%g' % s.absent_days }} Absent</span>{% endif %}
+                {% if s.leave_days > 0 %}<span class="stat-chip leave">{{ '%g' % s.leave_days }} Leave</span>{% endif %}
                 {% if s.wfh_days > 0 %}<span class="stat-chip wfh">{{ s.wfh_days }} WFH</span>{% endif %}
                 <span class="stat-chip hours">{{ s.total_work_hrs }}</span>
             </div>
@@ -391,11 +391,11 @@
                     <div class="sc-label">Avg Hours (In&Out)</div>
                 </div>
                 <div class="summary-card present">
-                    <div class="sc-value">{{ s.present_days }}</div>
+                    <div class="sc-value">{{ '%g' % s.present_days }}</div>
                     <div class="sc-label">Present Days</div>
                 </div>
                 <div class="summary-card absent">
-                    <div class="sc-value">{{ s.absent_days }}</div>
+                    <div class="sc-value">{{ '%g' % s.absent_days }}</div>
                     <div class="sc-label">Absent Days</div>
                 </div>
                 <div class="summary-card in-out">
@@ -411,7 +411,7 @@
                     <div class="sc-label">No Out</div>
                 </div>
                 <div class="summary-card leave">
-                    <div class="sc-value">{{ s.leave_days|int }}</div>
+                    <div class="sc-value">{{ '%g' % s.leave_days }}</div>
                     <div class="sc-label">Leave Days</div>
                 </div>
                 <div class="summary-card wfh">
