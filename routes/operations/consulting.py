@@ -30,7 +30,7 @@ Endpoint names
 """
 
 import logging
-from flask import render_template, flash, request
+from flask import render_template, flash, request, redirect, url_for
 
 from core.auth import admin_required
 from core.users import get_user
@@ -457,6 +457,27 @@ def ops_consulting_client_detail(client_id):
 
 
 @admin_required
+def ops_consulting_client_by_reg(reg):
+    """Resolve a Consulting client by registration_number → detail redirect.
+
+    Used by section drawers (Call Notes, Payments, AMC, GMC, etc.) whose
+    "View Client Profile" button only knows the registration_number, not
+    the numeric client_id required by /operations/consulting/clients/<id>.
+    """
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM plab_clients WHERE registration_number = ? "
+        "AND COALESCE(pathway, 'plab') = 'consulting' LIMIT 1",
+        (reg,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash(f'Consulting client {reg} not found.', 'error')
+        return redirect(url_for('ops_consulting_clients_list'))
+    return redirect(url_for('ops_consulting_client_detail', client_id=row['id']))
+
+
+@admin_required
 def ops_consulting_client_edit_page(client_id):
     """GET -- render the edit form for a consulting client."""
     user = get_user()
@@ -658,6 +679,13 @@ def register_routes(app):
         '/operations/consulting/clients/<int:client_id>',
         endpoint='ops_consulting_client_detail',
         view_func=ops_consulting_client_detail,
+        methods=['GET'],
+    )
+    # Lookup-by-registration-number helper for section drawers
+    app.add_url_rule(
+        '/operations/consulting/clients/by-reg/<reg>',
+        endpoint='ops_consulting_client_by_reg',
+        view_func=ops_consulting_client_by_reg,
         methods=['GET'],
     )
     app.add_url_rule(

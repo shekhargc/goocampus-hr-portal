@@ -523,7 +523,7 @@ function openCnDetail(id) {
     document.getElementById('cnDrawerBody').innerHTML = html;
     document.getElementById('cnDrawerActions').innerHTML = `
         <a href="/operations/consulting/call-notes/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/consulting/clients/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/consulting/clients/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('cnDrawer').classList.add('open');
@@ -637,7 +637,7 @@ function renderTrackerDetail(data) {
     document.getElementById('cnDrawerBody').innerHTML = html;
     document.getElementById('cnDrawerActions').innerHTML = `
         <a href="/operations/consulting/call-notes/add?client=${encodeURIComponent(data.registration_number)}" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/consulting/clients/dashboard/${encodeURIComponent(data.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/consulting/clients/by-reg/${encodeURIComponent(data.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('cnDrawer').classList.add('open');

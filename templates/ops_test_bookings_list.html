@@ -244,7 +244,7 @@ function openTbDetail(id) {
     document.getElementById('tbDrawerBody').innerHTML = html;
     document.getElementById('tbDrawerActions').innerHTML = `
         <a href="/operations/test-bookings/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('tbDrawer').classList.add('open');

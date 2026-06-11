@@ -359,7 +359,7 @@
       document.getElementById('auDrawerBody').innerHTML = html;
       document.getElementById('auDrawerActions').innerHTML =
           '<a href="/operations/australia/epic/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
-          + '<a href="/operations/australia/epic/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
+          + '<a href="/operations/australia/clients/by-reg/' + encodeURIComponent(r.registration_number) + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
 
       document.getElementById('auDrawer').classList.add('open');
       document.getElementById('auDrawer').setAttribute('aria-hidden', 'false');

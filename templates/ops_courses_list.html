@@ -212,7 +212,7 @@ function openCoursesDetail(id) {
     document.getElementById('coursesDrawerBody').innerHTML = html;
     document.getElementById('coursesDrawerActions').innerHTML = `
         <a href="/operations/online-courses/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('coursesDrawer').classList.add('open');

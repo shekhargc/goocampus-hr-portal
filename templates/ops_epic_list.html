@@ -257,7 +257,7 @@ function openEpicDetail(id) {
     document.getElementById('epicDrawerBody').innerHTML = html;
     document.getElementById('epicDrawerActions').innerHTML = `
         <a href="/operations/epic/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('epicDrawer').classList.add('open');

@@ -450,6 +450,27 @@ def ops_australia_client_detail(client_id):
 
 
 @admin_required
+def ops_australia_client_by_reg(reg):
+    """Resolve an Australia client by registration_number → detail redirect.
+
+    Used by section drawers (Call Notes, Payments, Test Bookings, etc.)
+    whose "View Client Profile" button only knows the registration_number,
+    not the numeric client_id required by /operations/australia/clients/<id>.
+    """
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM plab_clients WHERE registration_number = ? "
+        "AND COALESCE(pathway, 'plab') = 'australia' LIMIT 1",
+        (reg,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash(f'Australia client {reg} not found.', 'error')
+        return redirect(url_for('ops_australia_clients_list'))
+    return redirect(url_for('ops_australia_client_detail', client_id=row['id']))
+
+
+@admin_required
 def ops_australia_client_edit_page(client_id):
     """GET — render the edit form for an Australia client.
 
@@ -672,6 +693,13 @@ def register_routes(app):
         '/operations/australia/clients/<int:client_id>',
         endpoint='ops_australia_client_detail',
         view_func=ops_australia_client_detail,
+        methods=['GET'],
+    )
+    # Lookup-by-registration-number helper for section drawers
+    app.add_url_rule(
+        '/operations/australia/clients/by-reg/<reg>',
+        endpoint='ops_australia_client_by_reg',
+        view_func=ops_australia_client_by_reg,
         methods=['GET'],
     )
     # Edit page (GET) — renders the form

@@ -201,7 +201,7 @@ function openMentorshipDetail(id) {
     document.getElementById('mentorshipDrawerBody').innerHTML = html;
     document.getElementById('mentorshipDrawerActions').innerHTML = `
         <a href="/operations/mentorship/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('mentorshipDrawer').classList.add('open');

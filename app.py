@@ -17216,6 +17216,28 @@ def ops_plab_dashboard(client_id):
                            active_ops_page='plab')
 
 
+@app.route('/operations/plab/by-reg/<reg>')
+@admin_required
+def ops_plab_by_reg(reg):
+    """Resolve a PLAB client by registration_number and redirect to detail.
+
+    Used by section drawers (Coaching, Payments, Call Notes, etc.) whose
+    "View Client Profile" button only knows the registration_number, not
+    the numeric client_id required by /operations/plab/<int:client_id>.
+    """
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM plab_clients WHERE registration_number = ? "
+        "AND COALESCE(pathway, 'plab') = 'plab' LIMIT 1",
+        (reg,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash(f'PLAB client {reg} not found.', 'error')
+        return redirect(url_for('ops_plab_list'))
+    return redirect(url_for('ops_plab_dashboard', client_id=row['id']))
+
+
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
 @admin_required
 def ops_plab_add():

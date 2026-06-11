@@ -325,7 +325,7 @@
       document.getElementById('auOcDrawerBody').innerHTML = html;
       document.getElementById('auOcDrawerActions').innerHTML =
           '<a href="/operations/australia/online-courses/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
-          + '<a href="/operations/australia/online-courses/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
+          + '<a href="/operations/australia/clients/by-reg/' + encodeURIComponent(r.registration_number) + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
 
       document.getElementById('auOcDrawer').classList.add('open');
       document.getElementById('auOcDrawer').setAttribute('aria-hidden', 'false');
