@@ -25623,6 +25623,15 @@ def time_log():
                 if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
                     s['present_days'] += 1
 
+            # ── Policy: half-day leave credits the *worked* half toward
+            # Present even when there's no fingerprint punch for that
+            # half. The inner punch-driven block below also credits 0.5
+            # when att exists, so we only fire here when att is missing
+            # to avoid double-counting.
+            if day_type == 'half_leave' and not att:
+                s['half_days'] += 1
+                s['present_days'] += 0.5
+
             # Build day record
             if att:
                 day_rec = dict(att)

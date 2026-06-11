@@ -360,7 +360,7 @@
             </div>
             <div class="stats">
                 <span class="stat-chip present">{{ '%g' % s.present_days }} Present</span>
-                {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ '%g' % s.absent_days }} Absent</span>{% endif %}
+                {% if s.absent_days > 0 %}<span class="stat-chip absent">{{ '%g' % s.absent_days }} No In &amp; No Out</span>{% endif %}
                 {% if s.leave_days > 0 %}<span class="stat-chip leave">{{ '%g' % s.leave_days }} Leave</span>{% endif %}
                 {% if s.wfh_days > 0 %}<span class="stat-chip wfh">{{ s.wfh_days }} WFH</span>{% endif %}
                 <span class="stat-chip hours">{{ s.total_work_hrs }}</span>
@@ -396,7 +396,7 @@
                 </div>
                 <div class="summary-card absent">
                     <div class="sc-value">{{ '%g' % s.absent_days }}</div>
-                    <div class="sc-label">Absent Days</div>
+                    <div class="sc-label">No In &amp; No Out</div>
                 </div>
                 <div class="summary-card in-out">
                     <div class="sc-value">{{ s.in_out_days }}</div>
@@ -488,10 +488,10 @@
                                     {% if day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
-                                        <span class="att-status leave">On Leave</span>
+                                        <span class="att-status leave">{% if 'sick' in (day.leave_type|lower) %}Sick{% else %}On Leave{% endif %}</span>
                                         <span style="font-size: 0.7rem; color: #1E40AF; margin-left: 0.25rem;">{{ day.leave_type }}</span>
                                     {% else %}
-                                        <span class="att-status absent">Absent</span>
+                                        <span class="att-status absent">No In &amp; No Out</span>
                                     {% endif %}
                                 {% elif st == 'WeeklyOff' %}
                                     <span class="att-status weekly-off">Weekend</span>
@@ -501,7 +501,10 @@
                                     {% if day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
-                                        <span class="att-status leave">On Leave</span>
+                                        <span class="att-status leave">{% if 'sick' in (day.leave_type|lower) %}Sick{% else %}On Leave{% endif %}</span>
+                                    {% elif dtype == 'weekday' %}
+                                        {# Weekday with no att record + no leave/WFH/holiday/weekend → No In & No Out. #}
+                                        <span class="att-status absent">No In &amp; No Out</span>
                                     {% else %}
                                         <span style="color: var(--gray-400);">—</span>
                                     {% endif %}
