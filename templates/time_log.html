@@ -481,7 +481,7 @@
                                 {% elif 'Absent' in st %}
                                     {% if day.manual_present %}
                                         <span class="att-status present">Present</span>
-                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
+                                        <span class="att-status no-punch" style="margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
                                     {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
@@ -504,7 +504,7 @@
                                 {% else %}
                                     {% if day.manual_present %}
                                         <span class="att-status present">Present</span>
-                                        <span class="att-status" style="background:#dbeafe;color:#1d4ed8;margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
+                                        <span class="att-status no-punch" style="margin-left:.25rem;" title="HR-confirmed present (biometric missed)">Not Punched</span>
                                     {% elif day.is_wfh %}
                                         <span class="att-status wfh">WFH</span>
                                     {% elif day.leave_type %}
