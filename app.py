@@ -5000,6 +5000,13 @@ def manage_employees():
         emp_code = request.form.get('emp_code', '').strip()
         email = request.form.get('email', '').strip()
         department = request.form.get('department', '').strip()
+        # Phase A lifecycle fields. Default behaviour preserved -- if
+        # the user submits no employment_status, treat as active.
+        employment_status = (request.form.get('employment_status') or 'active').strip().lower()
+        joining_date = (request.form.get('joining_date') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+        last_working_day = (request.form.get('last_working_day') or '').strip() or None
+        exit_reason = (request.form.get('exit_reason') or '').strip() or None
+        exit_notes = (request.form.get('exit_notes') or '').strip() or None
 
         if not name or not emp_code or not department:
             flash('Required fields missing', 'error')
@@ -5011,16 +5018,57 @@ def manage_employees():
             flash('Employee code already exists', 'error')
             return redirect(url_for('manage_employees'))
 
+        # Non-active employment_status flips is_active=0 so login is
+        # blocked + per-section access checks fail safely.
+        is_active = 1 if employment_status == 'active' else 0
+
         conn.execute('''
-            INSERT INTO employees (name, emp_code, password, department, is_active, joining_date, created_at)
-            VALUES (?, ?, ?, ?, 1, ?, ?)
-        ''', (name, emp_code, hash_password(name.split()[0].lower()), department, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            INSERT INTO employees (
+                name, emp_code, password, department, email,
+                is_active, joining_date, created_at,
+                employment_status, last_working_day, exit_reason, exit_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            name, emp_code,
+            hash_password(name.split()[0].lower()),
+            department, email or None,
+            is_active,
+            joining_date,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            employment_status, last_working_day, exit_reason, exit_notes,
+        ))
         conn.commit()
 
-        flash('Employee added successfully', 'success')
-        return redirect(url_for('manage_employees'))
+        label = 'Past employee added' if employment_status != 'active' else 'Employee added successfully'
+        flash(label, 'success')
+        return redirect(url_for('manage_employees', show=request.form.get('return_to') or 'active'))
 
-    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY department, name").fetchall()
+    # Filter view: ?show=active | past | all  (default = active)
+    show = (request.args.get('show') or 'active').strip().lower()
+    if show == 'past':
+        emp_filter = "COALESCE(employment_status,'active') != 'active'"
+    elif show == 'all':
+        emp_filter = "1=1"
+    else:
+        show = 'active'
+        emp_filter = "(COALESCE(employment_status,'active') = 'active' OR is_active = 1)"
+
+    employees = conn.execute(
+        f"SELECT * FROM employees WHERE {emp_filter} AND emp_code != 'admin' "
+        f"ORDER BY department, name"
+    ).fetchall()
+
+    # Counts for the tab badges -- always shows totals regardless of
+    # which tab is active.
+    counts = {
+        'active': conn.execute(
+            "SELECT COUNT(*) AS c FROM employees WHERE COALESCE(employment_status,'active') = 'active' AND emp_code != 'admin'"
+        ).fetchone()['c'],
+        'past': conn.execute(
+            "SELECT COUNT(*) AS c FROM employees WHERE COALESCE(employment_status,'active') != 'active' AND emp_code != 'admin'"
+        ).fetchone()['c'],
+    }
+    counts['all'] = counts['active'] + counts['past']
 
     # Group employees by department
     dept_employees = {}
@@ -5039,6 +5087,8 @@ def manage_employees():
                          employees=employees,
                          dept_employees=dept_employees,
                          departments=departments,
+                         show=show,
+                         counts=counts,
                     active_section='hr')
 
 @app.route('/admin/delete-employee/<int:emp_id>', methods=['POST'])
