@@ -7055,6 +7055,22 @@ def ensure_crm_tables():
                 rejection_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
+            # On Official Travel (OOT) — mirrors WFH but tracks a city
+            # the employee is travelling to and a longer description.
+            # The user can backdate up to 45 days, similar to late leave.
+            '''CREATE TABLE IF NOT EXISTS official_travel_requests (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                from_date TEXT NOT NULL,
+                to_date TEXT NOT NULL,
+                city TEXT,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_by INTEGER REFERENCES employees(id),
+                approved_at TIMESTAMP,
+                rejection_reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
             '''CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -7694,6 +7710,388 @@ def approve_wfh(wfh_id):
 
     flash(f'WFH request {status_text}', 'success')
     return redirect(url_for('wfh_approvals'))
+
+
+# ─── On Official Travel (OOT) Routes ───
+# OOT mirrors the WFH flow: an employee applies for one or more days they will
+# be out of the office on official business, the manager/admin approves, and
+# approved dates are then credited as Present in the Time Log (the employee
+# won't be at the office to hit the biometric).
+#
+# Differences from WFH:
+#   • The form has an extra `city` dropdown sourced from the `cities` table.
+#   • The reason field is a longer `description`.
+#   • A 45-day backdate cap is enforced server-side.
+
+@app.route('/official-travel/apply', methods=['GET', 'POST'])
+@app.route('/apply-official-travel', methods=['GET', 'POST'])
+@login_required
+def apply_official_travel():
+    user = get_user()
+
+    # Admin control account cannot apply for OOT
+    if user['emp_code'] == 'admin':
+        flash('Admin account cannot apply for Official Travel.', 'error')
+        return redirect(url_for('official_travel_approvals'))
+
+    conn = get_db()
+
+    if request.method == 'POST':
+        from_date = request.form.get('from_date')
+        to_date = request.form.get('to_date')
+        city = (request.form.get('city') or '').strip()
+        description = (request.form.get('description') or '').strip()
+
+        if not from_date or not to_date:
+            flash('From and To dates are required', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if not city:
+            flash('Please select a city', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if not description:
+            flash('Description is required', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if to_date < from_date:
+            flash('To date cannot be before from date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # 45-day backdate cap
+        try:
+            from_dt = datetime.strptime(from_date, '%Y-%m-%d')
+        except Exception:
+            flash('Invalid from date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        today_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if (today_dt - from_dt).days > 45:
+            flash('Cannot apply for dates older than 45 days. Please contact HR for older entries.', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # Auto-cancel overlapping leave records (mirror WFH apply)
+        try:
+            to_dt = datetime.strptime(to_date, '%Y-%m-%d')
+        except Exception:
+            flash('Invalid to date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        leave_cancelled = 0
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            overlapping_leaves = conn.execute(
+                "SELECT id, leave_group_id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('approved','pending')",
+                (user['id'], date_str)).fetchall()
+            for lv in overlapping_leaves:
+                conn.execute("UPDATE leave_records SET status = 'cancelled' WHERE id = ?", (lv['id'],))
+                leave_cancelled += 1
+            current += timedelta(days=1)
+
+        # Check for overlapping OOT (approved/pending) — block
+        existing_oot = conn.execute(
+            "SELECT id FROM official_travel_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+            (user['id'], to_date, from_date)).fetchall()
+        if existing_oot:
+            flash('You already have an Official Travel request overlapping this date range', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # Check for overlapping WFH (approved/pending) — block
+        existing_wfh = conn.execute(
+            "SELECT id FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+            (user['id'], to_date, from_date)).fetchall()
+        if existing_wfh:
+            flash('You already have a WFH request overlapping this date range', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        conn.execute('''
+            INSERT INTO official_travel_requests (employee_id, from_date, to_date, city, description)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user['id'], from_date, to_date, city, description))
+        conn.commit()
+
+        # Notify admins
+        admins = conn.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1').fetchall()
+        for admin in admins:
+            if admin['id'] != user['id']:
+                create_notification(conn, admin['id'],
+                    f"Official Travel Request from {user['name']}",
+                    f"{user['name']} has requested Official Travel to {city} from {from_date} to {to_date}.",
+                    'leave_request', '/official-travel/approvals')
+        conn.commit()
+        conn.close()
+
+        msg = 'Official Travel request submitted successfully'
+        if leave_cancelled:
+            msg += f'. {leave_cancelled} overlapping leave record(s) auto-cancelled.'
+        flash(msg, 'success')
+        return redirect(url_for('my_official_travel_requests'))
+
+    # GET — load cities list for the dropdown
+    cities_rows = conn.execute('SELECT id, name FROM cities ORDER BY name').fetchall()
+    cities_list = [dict(c) for c in cities_rows]
+    conn.close()
+    return render_template('apply_official_travel.html', user=user, cities=cities_list,
+                    active_section='hr')
+
+
+@app.route('/official-travel/my-requests')
+@login_required
+def my_official_travel_requests():
+    user = get_user()
+
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('official_travel_approvals'))
+
+    conn = get_db()
+    requests_list = conn.execute('''
+        SELECT o.*, a.name as approver_name
+        FROM official_travel_requests o
+        LEFT JOIN employees a ON o.approved_by = a.id
+        WHERE o.employee_id = ?
+        ORDER BY o.created_at DESC
+    ''', (user['id'],)).fetchall()
+    conn.close()
+    return render_template('my_official_travel_requests.html', user=user, requests=requests_list,
+                    active_section='hr')
+
+
+@app.route('/official-travel/approvals')
+@login_required
+def official_travel_approvals():
+    user = get_user()
+    conn = get_db()
+
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+    is_admin_user = user['is_admin'] == 1
+
+    # Filters
+    f_employee = (request.args.get('employee') or '').strip()
+    f_department = (request.args.get('department') or '').strip()
+    f_status = (request.args.get('status') or '').strip()
+
+    base_select = '''
+        SELECT o.id, o.employee_id, o.from_date, o.to_date, o.city, o.description, o.status,
+               o.approved_by, o.approved_at, o.rejection_reason, o.created_at,
+               e.name          AS employee_name,
+               e.emp_code      AS emp_code,
+               e.department    AS department,
+               e.designation   AS designation,
+               e.email         AS email,
+               e.phone         AS mobile,
+               e.photo_url     AS photo_url,
+               a.name          AS approver_name
+        FROM official_travel_requests o
+        JOIN employees e ON o.employee_id = e.id
+        LEFT JOIN employees a ON o.approved_by = a.id
+    '''
+
+    where_clauses = []
+    params = []
+
+    if not is_admin_user and not is_mgmt:
+        direct_report_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM employees WHERE reporting_to = ? AND is_active = 1', (user['id'],)
+        ).fetchall()]
+        if not direct_report_ids:
+            flash('No team members to manage', 'error')
+            conn.close()
+            return redirect(url_for('dashboard'))
+        placeholders = ','.join('?' * len(direct_report_ids))
+        where_clauses.append(f'o.employee_id IN ({placeholders})')
+        params.extend(direct_report_ids)
+
+    if f_employee:
+        where_clauses.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        params.extend([like, like])
+    if f_department:
+        where_clauses.append('LOWER(e.department) LIKE ?')
+        params.append(f'%{f_department.lower()}%')
+    if f_status:
+        where_clauses.append('o.status = ?')
+        params.append(f_status)
+
+    sql = base_select
+    if where_clauses:
+        sql += ' WHERE ' + ' AND '.join(where_clauses)
+    sql += ' ORDER BY o.created_at DESC'
+
+    requests_list = conn.execute(sql, tuple(params)).fetchall()
+
+    enriched = []
+    for r in requests_list:
+        d = dict(r)
+        p = d.get('photo_url') or ''
+        if p:
+            d['photo_src'] = p if p.startswith('http') else f'/static/photos/{p}'
+        else:
+            d['photo_src'] = ''
+        enriched.append(d)
+
+    # Stat counts
+    count_sql_base = '''
+        SELECT o.status AS st, COUNT(*) AS c
+        FROM official_travel_requests o
+        JOIN employees e ON o.employee_id = e.id
+    '''
+    count_where = []
+    count_params = []
+    if not is_admin_user and not is_mgmt:
+        placeholders = ','.join('?' * len(direct_report_ids))
+        count_where.append(f'o.employee_id IN ({placeholders})')
+        count_params.extend(direct_report_ids)
+    if f_employee:
+        count_where.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        count_params.extend([like, like])
+    if f_department:
+        count_where.append('LOWER(e.department) LIKE ?')
+        count_params.append(f'%{f_department.lower()}%')
+    count_sql = count_sql_base
+    if count_where:
+        count_sql += ' WHERE ' + ' AND '.join(count_where)
+    count_sql += ' GROUP BY o.status'
+    rows = conn.execute(count_sql, tuple(count_params)).fetchall()
+    counts_by_status = {r['st']: r['c'] for r in rows}
+    pending_count = counts_by_status.get('pending', 0)
+    approved_count = counts_by_status.get('approved', 0)
+    rejected_count = counts_by_status.get('rejected', 0)
+    cancelled_count = counts_by_status.get('cancelled', 0)
+    total_count = pending_count + approved_count + rejected_count + cancelled_count
+
+    conn.close()
+    return render_template('official_travel_approvals.html', user=user, requests=enriched,
+                           f_employee=f_employee, f_department=f_department, f_status=f_status,
+                           total_count=total_count, pending_count=pending_count,
+                           approved_count=approved_count, rejected_count=rejected_count,
+                    active_section='hr')
+
+
+@app.route('/official-travel/approve/<int:oot_id>', methods=['POST'])
+@login_required
+def approve_official_travel(oot_id):
+    user = get_user()
+    action = request.form.get('action')  # 'approve' or 'reject'
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    if oot['status'] != 'pending':
+        flash('This request has already been processed', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn.execute('''
+        UPDATE official_travel_requests SET status = ?, approved_by = ?, approved_at = ?, rejection_reason = ?
+        WHERE id = ?
+    ''', (new_status, user['id'], now, rejection_reason if action == 'reject' else None, oot_id))
+
+    status_text = 'approved' if action == 'approve' else 'rejected'
+    msg = f"Your Official Travel request ({oot['from_date']} to {oot['to_date']}) has been {status_text} by {user['name']}."
+    if action == 'reject' and rejection_reason:
+        msg += f" Reason: {rejection_reason}"
+    create_notification(conn, oot['employee_id'],
+        f"Official Travel Request {status_text.title()}", msg,
+        'success' if action == 'approve' else 'danger', '/official-travel/my-requests')
+
+    conn.commit()
+    conn.close()
+
+    flash(f'Official Travel request {status_text}', 'success')
+    return redirect(url_for('official_travel_approvals'))
+
+
+@app.route('/official-travel/reject/<int:oot_id>', methods=['POST'])
+@login_required
+def reject_official_travel(oot_id):
+    """Convenience alias — same logic as approve_official_travel with action=reject."""
+    user = get_user()
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    if oot['status'] != 'pending':
+        flash('This request has already been processed', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute('''
+        UPDATE official_travel_requests SET status = 'rejected', approved_by = ?, approved_at = ?, rejection_reason = ?
+        WHERE id = ?
+    ''', (user['id'], now, rejection_reason or None, oot_id))
+
+    msg = f"Your Official Travel request ({oot['from_date']} to {oot['to_date']}) has been rejected by {user['name']}."
+    if rejection_reason:
+        msg += f" Reason: {rejection_reason}"
+    create_notification(conn, oot['employee_id'],
+        "Official Travel Request Rejected", msg, 'danger', '/official-travel/my-requests')
+
+    conn.commit()
+    conn.close()
+
+    flash('Official Travel request rejected', 'success')
+    return redirect(url_for('official_travel_approvals'))
+
+
+@app.route('/official-travel/cancel/<int:oot_id>', methods=['POST'])
+@login_required
+def cancel_official_travel(oot_id):
+    """An employee can cancel their own pending OOT request.
+    Admins / management can cancel any request."""
+    user = get_user()
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    is_owner = oot['employee_id'] == user['id']
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+    is_admin_user = user.get('is_admin') == 1
+    if not (is_owner or is_mgmt or is_admin_user):
+        flash('You are not allowed to cancel this request', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    if oot['status'] not in ('pending', 'approved'):
+        flash('Only pending or approved requests can be cancelled', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    conn.execute("UPDATE official_travel_requests SET status='cancelled' WHERE id = ?", (oot_id,))
+    conn.commit()
+    conn.close()
+
+    flash('Official Travel request cancelled', 'success')
+    if is_owner and not (is_mgmt or is_admin_user):
+        return redirect(url_for('my_official_travel_requests'))
+    return redirect(url_for('official_travel_approvals'))
 
 
 # ─── Projects Routes ───
@@ -25673,6 +26071,31 @@ def time_log():
         except Exception:
             pass
 
+    # ── Fetch approved On Official Travel (OOT) for this month ──
+    # Same pattern as WFH — approved-only, expanded into a per-date set so the
+    # day-by-day loop below can check membership in O(1).
+    try:
+        oot_rows = conn.execute("""
+            SELECT employee_id, from_date, to_date
+            FROM official_travel_requests
+            WHERE status='approved' AND from_date <= ? AND to_date >= ?
+        """, (date_to, date_from)).fetchall()
+    except Exception:
+        # Table may not yet exist on a freshly migrated DB — fail safe.
+        oot_rows = []
+    oot_set = set()
+    for r in oot_rows:
+        try:
+            cur_d = datetime.strptime(r['from_date'], '%Y-%m-%d')
+            end_d = datetime.strptime(r['to_date'], '%Y-%m-%d')
+            while cur_d <= end_d:
+                ds = cur_d.strftime('%Y-%m-%d')
+                if date_from <= ds <= date_to:
+                    oot_set.add((r['employee_id'], ds))
+                cur_d += timedelta(days=1)
+        except Exception:
+            pass
+
     # ── Build attendance lookup by (employee_id, date) ──
     logs_list = [dict(r) for r in logs]
     att_lookup = {}
@@ -25704,7 +26127,7 @@ def time_log():
             'total_work_mins': 0,
             'present_days': 0, 'absent_days': 0, 'late_days': 0,
             'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
-            'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
+            'leave_days': 0, 'wfh_days': 0, 'travel_days': 0, 'holiday_days': 0,
             'in_out_days': 0, 'no_in_days': 0, 'no_out_days': 0,
             'full_days_work_mins': 0,  # work mins only for days with both in & out
             'full_days_total_mins': 0,  # total duration mins only for days with both in & out
@@ -25721,9 +26144,13 @@ def time_log():
             att = att_lookup.get((eid, date_str))
             leave_info = leaves_map.get((eid, date_str))
             is_wfh = (eid, date_str) in wfh_set
+            is_oot = (eid, date_str) in oot_set
             holiday_info = holidays_map.get(date_str)
 
-            # Determine the day_type for coloring
+            # Determine the day_type for coloring.
+            # Priority: holiday > weekend > leave > wfh > travel > weekday.
+            # WFH wins over OOT on the rare case both are approved for the
+            # same date — the user has flagged this as acceptable.
             if holiday_info:
                 day_type = 'holiday'
                 s['holiday_days'] += 1
@@ -25737,6 +26164,9 @@ def time_log():
             elif is_wfh:
                 day_type = 'wfh'
                 s['wfh_days'] += 1
+            elif is_oot:
+                day_type = 'travel'
+                s['travel_days'] += 1
             else:
                 day_type = 'weekday'
 
@@ -25747,6 +26177,15 @@ def time_log():
             # — the normal punch-driven present_days logic below would
             # otherwise double-count them.
             if day_type == 'wfh':
+                _ai = ((att.get('actual_in') if att else '') or '').strip()
+                _ao = ((att.get('actual_out') if att else '') or '').strip()
+                if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
+                    s['present_days'] += 1
+
+            # ── Policy: same as WFH — approved Official Travel days
+            # credit toward Present unless the employee also punched
+            # the biometric (in which case the punch path counts them).
+            if day_type == 'travel':
                 _ai = ((att.get('actual_in') if att else '') or '').strip()
                 _ao = ((att.get('actual_out') if att else '') or '').strip()
                 if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
@@ -25767,7 +26206,7 @@ def time_log():
             # attendance_logs.manual_present. Skip the credit if the
             # employee also has any punch on that day (the normal
             # present_days path will count them).
-            if att and att.get('manual_present') and day_type not in ('weekend','holiday','leave','half_leave','wfh'):
+            if att and att.get('manual_present') and day_type not in ('weekend','holiday','leave','half_leave','wfh','travel'):
                 _ai2 = ((att.get('actual_in')  or '')).strip()
                 _ao2 = ((att.get('actual_out') or '')).strip()
                 if not (_ai2 and _ai2 != '—') and not (_ao2 and _ao2 != '—'):
@@ -25794,6 +26233,7 @@ def time_log():
             day_rec['leave_type'] = leave_info['leave_type'].capitalize() if leave_info else ''
             day_rec['leave_portion'] = leave_info['day_portion'] if leave_info else ''
             day_rec['is_wfh'] = is_wfh
+            day_rec['is_oot'] = is_oot
 
             s['days'].append(day_rec)
 
@@ -25830,11 +26270,11 @@ def time_log():
                     elif has_in or has_out:
                         # They showed up (even if missing one punch)
                         s['present_days'] += 1
-                    elif leave_info or is_wfh:
-                        pass  # On leave/WFH, already counted
+                    elif leave_info or is_wfh or is_oot:
+                        pass  # On leave/WFH/Travel, already counted
                     elif 'Absent' in status:
                         s['absent_days'] += 1
-                    # No attendance record and no leave/WFH → will be blank row
+                    # No attendance record and no leave/WFH/travel → will be blank row
 
                 # ── Calculate Total Hours from actual in/out times ──
                 FULL_DAY_MINS = 540   # 9 hours = standard working day
@@ -28343,6 +28783,7 @@ ACCESS_SECTION_CATALOG = [
             ('bulk_leave',       'Bulk Leave Entry',    'Admin bulk leave entry'),
             ('attendance',       'Attendance / Time Log','Check-in / check-out records'),
             ('wfh',              'Work From Home',      'WFH applications + approvals'),
+            ('official_travel',  'On Official Travel',  'Apply for + approve official-travel days'),
             ('employees',        'Employee Directory',  'Active employee list + profiles'),
             ('id_cards',         'ID Cards',            'ID card requests + generation'),
             ('letters',          'Letters',             'HR letter templates + generation'),
@@ -31156,6 +31597,14 @@ ACCESS_ROUTE_MAP = {
     'admin_bulk_leave':             _ap('hr', 'bulk_leave', 'add'),
     'wfh_request':                  _ap('hr', 'wfh', 'add'),
     'attendance_log':               _ap('hr', 'attendance'),
+
+    # ── HR: On Official Travel (OOT) ─────────────────────────────────────
+    'apply_official_travel':              _ap('hr', 'official_travel', 'add'),
+    'my_official_travel_requests':        _ap('hr', 'official_travel'),
+    'official_travel_approvals':          _ap('hr', 'official_travel'),
+    'approve_official_travel':            _ap('hr', 'official_travel', 'edit'),
+    'reject_official_travel':             _ap('hr', 'official_travel', 'edit'),
+    'cancel_official_travel':             _ap('hr', 'official_travel', 'edit'),
 
     # ── Company ───────────────────────────────────────────────────────────
     'access_master':                _ap('company', 'access_master'),

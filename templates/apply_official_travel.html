@@ -1,0 +1,129 @@
+{% extends "hr_sidebar_base.html" %}
+
+{% block title %}Apply for Official Travel - GooCampus HR Portal{% endblock %}
+
+{% block section_extra_css %}
+<style>
+    .page-title { font-size: 2rem; font-weight: 700; color: var(--navy); margin-bottom: 2.5rem; }
+    .oot-form { max-width: 720px; }
+    .date-row { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    .date-summary {
+        display: none; padding: 1rem 1.25rem; background: var(--blue-light); border-radius: 0.6rem;
+        border: 1px solid var(--blue); margin-bottom: 1.5rem; font-size: 0.95rem; color: var(--blue-dark);
+    }
+    .date-summary.visible { display: flex; align-items: center; gap: 0.75rem; }
+    .date-summary .count { font-weight: 700; font-size: 1.2rem; }
+    .hint-note {
+        margin-top: 0.4rem; font-size: 0.8rem; color: var(--gray-500);
+    }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<h1 class="page-title">Apply for Official Travel</h1>
+<div class="card">
+
+    <form method="POST" class="oot-form">
+        <div class="date-row">
+            <div class="form-group">
+                <label for="from_date">From Date</label>
+                <input type="date" id="from_date" name="from_date" required onchange="updateDateSummary()">
+                <div class="hint-note">Backdated requests are allowed only within the last 45 days.</div>
+            </div>
+            <div class="form-group">
+                <label for="to_date">To Date</label>
+                <input type="date" id="to_date" name="to_date" required onchange="updateDateSummary()">
+            </div>
+        </div>
+
+        <div class="date-summary" id="dateSummary">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+            <span id="summaryText"></span>
+        </div>
+
+        <div class="form-group">
+            <label for="city">City</label>
+            <select id="city" name="city" required>
+                <option value="">— Select city you are travelling to —</option>
+                {% for c in cities %}
+                <option value="{{ c.name }}">{{ c.name }}</option>
+                {% endfor %}
+            </select>
+        </div>
+
+        <div class="form-group">
+            <label for="description">Description</label>
+            <textarea id="description" name="description" required rows="5"
+                      placeholder="Describe the purpose of your travel: meetings, partner visits, events, etc."></textarea>
+        </div>
+
+        <div style="display: flex; gap: 1.25rem; margin-top: 2.5rem;">
+            <button type="submit" class="button">Submit Request</button>
+            <a href="/dashboard" class="button button-secondary">Cancel</a>
+        </div>
+    </form>
+
+    <div style="margin-top: 3rem; padding: 1.75rem; background: var(--blue-light); border-radius: 0.6rem; border-left: 4px solid var(--blue);">
+        <p style="font-size: 0.95rem; color: var(--blue-dark);"><strong style="font-weight: 600;">Note:</strong> Official Travel requests require approval from your reporting manager. Approved travel days count as Present in the Time Log even when you can't punch the biometric. Requests older than 45 days are not accepted online — please contact HR for older entries.</p>
+    </div>
+</div>
+
+<script>
+function updateDateSummary() {
+    const fromDate = document.getElementById('from_date').value;
+    const toDate = document.getElementById('to_date').value;
+    const summary = document.getElementById('dateSummary');
+    const summaryText = document.getElementById('summaryText');
+
+    summary.classList.remove('visible');
+
+    if (!fromDate || !toDate) return;
+
+    const from = new Date(fromDate);
+    const to = new Date(toDate);
+
+    if (to < from) {
+        summaryText.textContent = 'To date cannot be before from date';
+        summary.classList.add('visible');
+        summary.style.background = 'var(--danger-light)';
+        summary.style.borderColor = 'var(--danger)';
+        summary.style.color = '#991b1b';
+        return;
+    }
+
+    summary.style.background = 'var(--blue-light)';
+    summary.style.borderColor = 'var(--blue)';
+    summary.style.color = 'var(--blue-dark)';
+
+    let days = 0;
+    let current = new Date(from);
+    while (current <= to) {
+        days++;
+        current.setDate(current.getDate() + 1);
+    }
+
+    summaryText.textContent = days + ' day(s) selected';
+    summary.classList.add('visible');
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    // Cap the From date picker at today (so the browser nudges users away
+    // from future dates that look like leave) and 45 days back (server
+    // enforces this too — UI hint only).
+    const today = new Date();
+    const minDate = new Date();
+    minDate.setDate(today.getDate() - 45);
+    const fmt = d => d.toISOString().split('T')[0];
+    // We don't lock the From date to past-only because OOT often gets
+    // applied in advance — just give the lower bound hint via min.
+    document.getElementById('from_date').setAttribute('min', fmt(minDate));
+
+    document.getElementById('from_date').addEventListener('change', function() {
+        document.getElementById('to_date').setAttribute('min', this.value);
+        if (document.getElementById('to_date').value && document.getElementById('to_date').value < this.value) {
+            document.getElementById('to_date').value = '';
+        }
+    });
+});
+</script>
+{% endblock %}
