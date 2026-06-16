@@ -7237,6 +7237,10 @@ def ensure_crm_tables():
             ('b2b_meetings', 'next_followup_note',  'TEXT'),
             ('b2b_meetings', 'parent_meeting_id',   'INTEGER'),
             ('b2b_meetings', 'handler_employee_id', 'INTEGER'),
+            # 2026-06-16: hard link client -> employee for closure stats
+            # by counsellor (product/pathway-wise). Backfilled by name
+            # in resync_client_counsellor_ids_once() below.
+            ('plab_clients', 'counsellor_id',       'INTEGER'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -7522,6 +7526,51 @@ def seed_kra_categories():
         conn.close()
     except Exception as e:
         logging.error(f"seed_kra_categories: {e}")
+
+
+def resync_client_counsellor_ids_once():
+    """Backfill plab_clients.counsellor_id from the text counsellor name.
+
+    The legacy bulk-imported clients only store the counsellor as a name
+    string. This links each to the real employees.id so closure stats
+    can group by employee (and join product/pathway/plan_type). Runs
+    every boot but only touches rows where counsellor_id IS NULL, so it
+    is cheap + idempotent and auto-links any newly imported/edited rows.
+
+    Matching: exact full-name first, then a unique first-name match
+    (skips a first name shared by >1 employee to avoid mis-attribution).
+    """
+    try:
+        conn = get_db()
+        def norm(s): return ' '.join((s or '').strip().lower().split())
+        emp_exact = {}; emp_first = {}
+        for row in conn.execute("SELECT id, name FROM employees").fetchall():
+            nn = norm(row['name'])
+            if not nn:
+                continue
+            emp_exact[nn] = row['id']
+            emp_first.setdefault(nn.split()[0], []).append(row['id'])
+        pending = conn.execute(
+            "SELECT id, counsellor FROM plab_clients "
+            "WHERE counsellor_id IS NULL AND TRIM(COALESCE(counsellor,'')) <> ''"
+        ).fetchall()
+        linked = 0
+        for r in pending:
+            nn = norm(r['counsellor']); f = nn.split()[0] if nn else ''
+            eid = None
+            if nn in emp_exact:
+                eid = emp_exact[nn]
+            elif f in emp_first and len(emp_first[f]) == 1:
+                eid = emp_first[f][0]
+            if eid:
+                conn.execute("UPDATE plab_clients SET counsellor_id = ? WHERE id = ?", (eid, r['id']))
+                linked += 1
+        if linked:
+            conn.commit()
+            logging.info(f"resync_client_counsellor_ids: linked {linked} clients to employees")
+        conn.close()
+    except Exception as e:
+        logging.error(f"resync_client_counsellor_ids_once: {e}")
 
 
 def seed_default_meeting_types():
@@ -26055,6 +26104,7 @@ _backfill_switched_program()
 
 seed_kra_categories()
 seed_default_meeting_types()
+resync_client_counsellor_ids_once()
 seed_budget_categories()
 # Backfill finance revenue categories from sales streams at boot
 try:
