@@ -9033,7 +9033,7 @@ def add_b2b_trip():
                 flash('For off-site meetings, From date and To date are required', 'error')
                 projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
                 meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
-                cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
+                cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE ORDER BY name").fetchall()
                 conn.close()
                 return render_template('add_meeting.html', user=user, projects=projects,
                         meeting_clients=meeting_clients, cities=cities, active_section='sales')
@@ -9042,7 +9042,7 @@ def add_b2b_trip():
             flash('Please add at least one meeting with a date', 'error')
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
             meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
-            cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
+            cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE ORDER BY name").fetchall()
             conn.close()
             return render_template('add_meeting.html', user=user, projects=projects,
                     meeting_clients=meeting_clients, cities=cities, active_section='sales')
@@ -9089,7 +9089,7 @@ def add_b2b_trip():
 
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
-    cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
+    cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE ORDER BY name").fetchall()
     conn.close()
     return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
                     cities=cities, active_section='sales')
