@@ -253,7 +253,46 @@
                                 <input type="tel" name="contact_phone[]" class="mtg-phone" placeholder="Phone number">
                             </div>
                         </div>
-                        <div class="form-grid">
+                        <div class="form-grid-3">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Contact Type</label>
+                                <select name="contact_type[]" class="mtg-contacttype">
+                                    <option value="">-- Select --</option>
+                                    <option value="Online meeting">Online meeting</option>
+                                    <option value="Face to face meeting">Face to face meeting</option>
+                                    <option value="Walk in">Walk in</option>
+                                    <option value="Meeting fixed">Meeting fixed</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Status / Outcome</label>
+                                <select name="status[]" class="mtg-status">
+                                    <option value="">-- Select --</option>
+                                    <option value="Discussion stage">Discussion stage</option>
+                                    <option value="Interested">Interested</option>
+                                    <option value="Follow up">Follow up</option>
+                                    <option value="Demo done">Demo done</option>
+                                    <option value="Not interested">Not interested</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Handled By</label>
+                                <select name="handler_employee_id[]" class="mtg-handler">
+                                    {% for emp in employees %}
+                                    <option value="{{ emp.id }}" {% if emp.id == user.id %}selected{% endif %}>{{ emp.name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-grid-3">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Follow-up Date</label>
+                                <input type="date" name="next_followup_date[]" class="mtg-fudate">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Follow-up Note</label>
+                                <input type="text" name="next_followup_note[]" class="mtg-funote" placeholder="What to follow up on">
+                            </div>
                             <div class="form-group" style="margin-bottom:0;">
                                 <label>Location / Notes</label>
                                 <input type="text" name="meeting_location[]" placeholder="Meeting location or note">
@@ -367,7 +406,7 @@ function addMeeting() {
     const list = document.getElementById('meetings-list');
     const first = list.querySelector('.meeting-card');
     const clone = first.cloneNode(true);
-    clone.querySelectorAll('input, select, textarea').forEach(el => el.value = '');
+    clone.querySelectorAll('input, textarea').forEach(el => el.value = '');
     // Reset the cascade in the clone back to its empty state.
     const withSel = clone.querySelector('.mtg-with');
     if (withSel && withSel.tagName === 'SELECT') {
@@ -376,6 +415,16 @@ function addMeeting() {
     }
     const mc = clone.querySelector('.mtg-client');
     if (mc) mc.selectedIndex = 0;
+    // Reset new CRM selects: contact type + status back to placeholder,
+    // handler back to the current user default (the selected option).
+    const ct = clone.querySelector('.mtg-contacttype'); if (ct) ct.selectedIndex = 0;
+    const st = clone.querySelector('.mtg-status'); if (st) st.selectedIndex = 0;
+    const hd = clone.querySelector('.mtg-handler');
+    if (hd) {
+        for (let i = 0; i < hd.options.length; i++) {
+            if (hd.options[i].defaultSelected) { hd.selectedIndex = i; break; }
+        }
+    }
     meetingCount++;
     clone.querySelector('.meeting-card-num').innerHTML = '<span>' + meetingCount + '</span> Meeting';
     clone.querySelector('.btn-remove').style.display = '';

@@ -7227,6 +7227,16 @@ def ensure_crm_tables():
             ('b2b_trips',    'city',         'TEXT'),
             ('b2b_meetings', 'meeting_time', 'TEXT'),
             ('b2b_meetings', 'entity_id',    'INTEGER'),
+            # Unified meeting CRM upgrade (2026-06-16): status pipeline,
+            # contact type, follow-up scheduling, follow-up chaining and
+            # per-meeting handler. Schema already applied on staging; these
+            # ALTERs make fresh deploys match.
+            ('b2b_meetings', 'status',              'TEXT'),
+            ('b2b_meetings', 'contact_type',        'TEXT'),
+            ('b2b_meetings', 'next_followup_date',  'TEXT'),
+            ('b2b_meetings', 'next_followup_note',  'TEXT'),
+            ('b2b_meetings', 'parent_meeting_id',   'INTEGER'),
+            ('b2b_meetings', 'handler_employee_id', 'INTEGER'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -7234,6 +7244,23 @@ def ensure_crm_tables():
             except Exception:
                 try: conn.rollback()
                 except Exception: pass
+        # Meeting edit audit trail (2026-06-16): records old/new value for
+        # each changed field so the unified CRM has a change history.
+        try:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS b2b_meeting_audit (
+                    id SERIAL PRIMARY KEY,
+                    meeting_id INTEGER,
+                    field TEXT,
+                    old_value TEXT,
+                    new_value TEXT,
+                    changed_by INTEGER,
+                    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         # Add product_cost column to products_services (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN product_cost NUMERIC(14,2) DEFAULT 0")
@@ -9063,18 +9090,20 @@ def add_b2b_trip():
                 projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
                 meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
                 cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+                employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
                 conn.close()
                 return render_template('add_meeting.html', user=user, projects=projects,
-                        meeting_clients=meeting_clients, cities=cities, active_section='sales')
+                        meeting_clients=meeting_clients, cities=cities, employees=employees, active_section='sales')
 
         if not from_date or not to_date:
             flash('Please add at least one meeting with a date', 'error')
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
             meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
             cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+            employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
             conn.close()
             return render_template('add_meeting.html', user=user, projects=projects,
-                    meeting_clients=meeting_clients, cities=cities, active_section='sales')
+                    meeting_clients=meeting_clients, cities=cities, employees=employees, active_section='sales')
 
         conn.execute('''
             INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, city, project_id, notes)
@@ -9096,6 +9125,15 @@ def add_b2b_trip():
         meeting_contacts = request.form.getlist('contact_person[]')
         meeting_phones = request.form.getlist('contact_phone[]')
         meeting_project_ids = request.form.getlist('meeting_project_id[]')
+        meeting_contact_types = request.form.getlist('contact_type[]')
+        meeting_statuses = request.form.getlist('status[]')
+        meeting_followup_dates = request.form.getlist('next_followup_date[]')
+        meeting_followup_notes = request.form.getlist('next_followup_note[]')
+        meeting_handlers = request.form.getlist('handler_employee_id[]')
+
+        def _at(lst, i):
+            """Safe index access for parallel meeting field lists."""
+            return lst[i] if i < len(lst) else ''
 
         for i in range(len(meeting_dates)):
             if meeting_dates[i] and meeting_withs[i]:
@@ -9103,13 +9141,21 @@ def add_b2b_trip():
                 m_type_id = meeting_type_ids[i] if i < len(meeting_type_ids) and meeting_type_ids[i] else None
                 m_time = meeting_times[i] if i < len(meeting_times) else ''
                 m_entity = meeting_entity_ids[i] if i < len(meeting_entity_ids) and meeting_entity_ids[i] else None
+                m_handler = _at(meeting_handlers, i)
+                m_handler = int(m_handler) if str(m_handler).isdigit() else user['id']
                 conn.execute('''
-                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, meeting_time, entity_id, project_id, location, contact_person, contact_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, meeting_time, entity_id, project_id, location, contact_person, contact_phone,
+                                              status, contact_type, next_followup_date, next_followup_note, handler_employee_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i], m_time or None, m_entity,
-                      m_project_id, meeting_locations[i] if i < len(meeting_locations) else '',
-                      meeting_contacts[i] if i < len(meeting_contacts) else '',
-                      meeting_phones[i] if i < len(meeting_phones) else ''))
+                      m_project_id, _at(meeting_locations, i),
+                      _at(meeting_contacts, i),
+                      _at(meeting_phones, i),
+                      _at(meeting_statuses, i) or None,
+                      _at(meeting_contact_types, i) or None,
+                      _at(meeting_followup_dates, i) or None,
+                      _at(meeting_followup_notes, i) or None,
+                      m_handler))
 
         conn.commit()
         conn.close()
@@ -9119,9 +9165,10 @@ def add_b2b_trip():
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
     cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
     conn.close()
     return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
-                    cities=cities, active_section='sales')
+                    cities=cities, employees=employees, active_section='sales')
 
 
 @app.route('/api/meeting-entities')
@@ -9207,10 +9254,12 @@ def b2b_trip_detail(trip_id):
         return redirect(url_for('b2b_trips_list'))
 
     meetings = conn.execute('''
-        SELECT m.*, mt.name as meeting_type_name, p.name as project_name
+        SELECT m.*, mt.name as meeting_type_name, p.name as project_name,
+               e.name as handler_name
         FROM b2b_meetings m
         LEFT JOIN meeting_types mt ON m.meeting_type_id = mt.id
         LEFT JOIN projects p ON m.project_id = p.id
+        LEFT JOIN employees e ON m.handler_employee_id = e.id
         WHERE m.trip_id = ?
         ORDER BY m.meeting_date, m.id
     ''', (trip_id,)).fetchall()
@@ -9263,6 +9312,12 @@ def add_meeting_to_trip(trip_id):
 @login_required
 @sales_access_required
 def update_meeting_outcome(meeting_id):
+    """Legacy outcome endpoint — kept so old buttons still work.
+
+    The minimal outcome form only posted outcome + notes. The unified CRM
+    now uses the full edit flow (with audit + follow-up chaining), so this
+    persists the two legacy fields with an audit trail and redirects back.
+    """
     user = get_user()
     conn = get_db()
 
@@ -9275,12 +9330,149 @@ def update_meeting_outcome(meeting_id):
     outcome = request.form.get('outcome', '').strip()
     notes = request.form.get('notes', '').strip()
 
+    old = dict(meeting)
+    for field, new_val in (('outcome', outcome), ('notes', notes)):
+        old_val = old.get(field)
+        if (old_val or '') != (new_val or ''):
+            conn.execute(
+                "INSERT INTO b2b_meeting_audit (meeting_id, field, old_value, new_value, changed_by) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meeting_id, field, old_val, new_val, user['id'])
+            )
     conn.execute('UPDATE b2b_meetings SET outcome = ?, notes = ? WHERE id = ?',
                 (outcome, notes, meeting_id))
     conn.commit()
     conn.close()
     flash('Meeting outcome updated', 'success')
     return redirect(url_for('b2b_trip_detail', trip_id=meeting['trip_id']))
+
+
+@app.route('/b2b/meeting/<int:meeting_id>/edit', methods=['GET'])
+@login_required
+@sales_access_required
+def edit_b2b_meeting(meeting_id):
+    """Full edit form for a single b2b meeting (unified CRM)."""
+    user = get_user()
+    conn = get_db()
+    meeting = conn.execute(
+        "SELECT m.*, mt.name AS meeting_type_name "
+        "FROM b2b_meetings m "
+        "LEFT JOIN meeting_types mt ON m.meeting_type_id = mt.id "
+        "WHERE m.id = ?",
+        (meeting_id,)
+    ).fetchone()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+    employees = conn.execute(
+        "SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return render_template(
+        'b2b_meeting_edit.html', user=user, meeting=meeting,
+        employees=employees,
+        contact_type_options=['Online meeting', 'Face to face meeting', 'Walk in', 'Meeting fixed'],
+        status_options=['Discussion stage', 'Interested', 'Follow up', 'Demo done', 'Not interested'],
+        active_section='sales'
+    )
+
+
+@app.route('/b2b/meeting/<int:meeting_id>/edit', methods=['POST'])
+@login_required
+@sales_access_required
+def edit_b2b_meeting_save(meeting_id):
+    """Save edits with an audit trail + spawn a linked follow-up meeting.
+
+    When a NEW follow-up date is scheduled (different from what was there
+    before), we create a child b2b_meetings row carrying forward the same
+    school/partner context, so the follow-up keeps its lineage.
+    """
+    user = get_user()
+    conn = get_db()
+    meeting = conn.execute('SELECT * FROM b2b_meetings WHERE id = ?', (meeting_id,)).fetchone()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+
+    old = dict(meeting)
+
+    def g(k):
+        return (request.form.get(k) or '').strip()
+
+    new_vals = {
+        'meeting_date':       g('meeting_date') or None,
+        'meeting_time':       g('meeting_time') or None,
+        'contact_type':       g('contact_type') or None,
+        'status':             g('status') or None,
+        'notes':              g('notes') or None,
+        'contact_person':     g('contact_person') or None,
+        'contact_phone':      g('contact_phone') or None,
+        'next_followup_date': g('next_followup_date') or None,
+        'next_followup_note': g('next_followup_note') or None,
+    }
+    handler_raw = g('handler_employee_id')
+    new_vals['handler_employee_id'] = int(handler_raw) if handler_raw.isdigit() else old.get('handler_employee_id')
+
+    old_followup = old.get('next_followup_date') or None
+    new_followup = new_vals['next_followup_date']
+    # A genuinely new follow-up was scheduled (set + changed from before).
+    spawn_followup = bool(new_followup) and (str(new_followup) != str(old_followup or ''))
+
+    # Audit each changed field.
+    for field, new_val in new_vals.items():
+        old_val = old.get(field)
+        if str(old_val if old_val is not None else '') != str(new_val if new_val is not None else ''):
+            conn.execute(
+                "INSERT INTO b2b_meeting_audit (meeting_id, field, old_value, new_value, changed_by) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meeting_id,
+                 field,
+                 str(old_val) if old_val is not None else None,
+                 str(new_val) if new_val is not None else None,
+                 user['id'])
+            )
+
+    if spawn_followup:
+        # The parent's follow-up has been actioned into a child row, so
+        # clear it on the parent (cleaner — avoids double-counting in the
+        # follow-ups-due card).
+        parent_followup_to_store = None
+    else:
+        parent_followup_to_store = new_followup
+
+    conn.execute(
+        "UPDATE b2b_meetings SET "
+        "  meeting_date = ?, meeting_time = ?, contact_type = ?, status = ?, "
+        "  notes = ?, contact_person = ?, contact_phone = ?, "
+        "  next_followup_date = ?, next_followup_note = ?, handler_employee_id = ? "
+        "WHERE id = ?",
+        (new_vals['meeting_date'], new_vals['meeting_time'], new_vals['contact_type'],
+         new_vals['status'], new_vals['notes'], new_vals['contact_person'],
+         new_vals['contact_phone'], parent_followup_to_store,
+         new_vals['next_followup_note'], new_vals['handler_employee_id'], meeting_id)
+    )
+
+    if spawn_followup:
+        # Create the carried-forward follow-up meeting as a child row.
+        conn.execute(
+            "INSERT INTO b2b_meetings "
+            "(trip_id, meeting_type_id, meeting_with, entity_id, project_id, location, "
+            " contact_person, contact_phone, handler_employee_id, "
+            " meeting_date, status, notes, next_followup_date, parent_meeting_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Follow up', ?, NULL, ?)",
+            (old.get('trip_id'), old.get('meeting_type_id'), old.get('meeting_with'),
+             old.get('entity_id'), old.get('project_id'), old.get('location'),
+             new_vals['contact_person'], new_vals['contact_phone'],
+             new_vals['handler_employee_id'],
+             new_followup, new_vals['next_followup_note'], meeting_id)
+        )
+
+    conn.commit()
+    conn.close()
+    flash('Meeting updated' + (' — follow-up scheduled' if spawn_followup else ''), 'success')
+    return redirect(url_for('b2b_trip_detail', trip_id=old.get('trip_id')))
 
 
 # ─── Meeting Types Management (Admin) ───
@@ -35988,30 +36180,44 @@ def sales_twelfthplus_dashboard():
         my_schools = conn.execute(
             "SELECT COUNT(*) AS c FROM schools WHERE assigned_to = ?", (user['id'],)
         ).fetchone()['c']
-        # Meetings this week: meeting_date BETWEEN start_of_week (Mon) AND end_of_week (Sun)
+        # Meetings now live in the unified b2b_meetings table. The 12thPlus
+        # dashboard reads from there so it reflects the single CRM. Each
+        # block is defensive so an empty/missing table never 500s.
         today = date.today()
         week_start = today - timedelta(days=today.weekday())
         week_end = week_start + timedelta(days=6)
-        meetings_this_week = conn.execute(
-            "SELECT COUNT(*) AS c FROM school_meetings WHERE meeting_date BETWEEN ? AND ?",
-            (week_start.isoformat(), week_end.isoformat())
-        ).fetchone()['c']
-        followups_due = conn.execute(
-            "SELECT COUNT(*) AS c FROM school_meetings "
-            "WHERE next_followup_date IS NOT NULL "
-            "  AND next_followup_date <> '' "
-            "  AND next_followup_date <= ?",
-            (today.isoformat(),)
-        ).fetchone()['c']
+        try:
+            meetings_this_week = conn.execute(
+                "SELECT COUNT(*) AS c FROM b2b_meetings WHERE meeting_date BETWEEN ? AND ?",
+                (week_start.isoformat(), week_end.isoformat())
+            ).fetchone()['c']
+        except Exception:
+            meetings_this_week = 0
+        # Follow-ups due across all entity types in the unified CRM
+        # (b2b_meetings is the source of truth going forward).
+        try:
+            followups_due = conn.execute(
+                "SELECT COUNT(*) AS c FROM b2b_meetings "
+                "WHERE next_followup_date IS NOT NULL "
+                "  AND next_followup_date <> '' "
+                "  AND next_followup_date <= ?",
+                (today.isoformat(),)
+            ).fetchone()['c']
+        except Exception:
+            followups_due = 0
 
-        recent_meetings = conn.execute(
-            "SELECT sm.*, s.name AS school_name, e.name AS handler_name "
-            "FROM school_meetings sm "
-            "JOIN schools s ON sm.school_id = s.id "
-            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
-            "ORDER BY sm.meeting_date DESC, sm.id DESC "
-            "LIMIT 10"
-        ).fetchall()
+        try:
+            recent_meetings = conn.execute(
+                "SELECT bm.*, COALESCE(bm.meeting_with, mt.name) AS school_name, "
+                "       e.name AS handler_name, bm.trip_id AS trip_id "
+                "FROM b2b_meetings bm "
+                "LEFT JOIN meeting_types mt ON bm.meeting_type_id = mt.id "
+                "LEFT JOIN employees e ON bm.handler_employee_id = e.id "
+                "ORDER BY bm.meeting_date DESC, bm.id DESC "
+                "LIMIT 10"
+            ).fetchall()
+        except Exception:
+            recent_meetings = []
     finally:
         conn.close()
 
@@ -36179,11 +36385,27 @@ def sales_twelfthplus_school_detail(sid):
             "ORDER BY sm.meeting_date DESC, sm.id DESC",
             (sid,)
         ).fetchall()
+        # Unified meeting CRM: meetings logged against this school via the
+        # b2b meeting system (entity_id + category 'School').
+        try:
+            crm_meetings = conn.execute(
+                "SELECT bm.*, mt.name AS category, e.name AS handler_name, t.city AS trip_city "
+                "FROM b2b_meetings bm "
+                "LEFT JOIN meeting_types mt ON bm.meeting_type_id = mt.id "
+                "LEFT JOIN employees e ON bm.handler_employee_id = e.id "
+                "LEFT JOIN b2b_trips t ON bm.trip_id = t.id "
+                "WHERE bm.entity_id = ? AND LOWER(mt.name) = 'school' "
+                "ORDER BY bm.meeting_date DESC, bm.id DESC",
+                (sid,)
+            ).fetchall()
+        except Exception as e:
+            logging.error(f"school_detail crm_meetings({sid}): {e}")
+            crm_meetings = []
     finally:
         conn.close()
     return render_template(
         'sales_twelfthplus_school_detail.html',
-        user=user, school=school, meetings=meetings,
+        user=user, school=school, meetings=meetings, crm_meetings=crm_meetings,
         active_section='sales',
     )
 
