@@ -7071,6 +7071,48 @@ def ensure_crm_tables():
                 rejection_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
+            # 12thPlus Schools CRM — sales-side school outreach DB.
+            # Each school can have many meetings; meetings carry an optional
+            # next-followup date that the (future) reminder cron will read.
+            '''CREATE TABLE IF NOT EXISTS schools (
+                id SERIAL PRIMARY KEY,
+                name             TEXT NOT NULL,
+                website          TEXT,
+                area             TEXT,
+                principal_name   TEXT,
+                contact_number   TEXT,
+                email            TEXT,
+                address          TEXT,
+                school_type      TEXT,
+                student_strength INTEGER,
+                assigned_to      INTEGER REFERENCES employees(id),
+                status           TEXT DEFAULT 'active',
+                notes            TEXT,
+                created_by       INTEGER REFERENCES employees(id),
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE INDEX IF NOT EXISTS idx_schools_assigned ON schools(assigned_to)''',
+            '''CREATE INDEX IF NOT EXISTS idx_schools_area     ON schools(area)''',
+            '''CREATE TABLE IF NOT EXISTS school_meetings (
+                id SERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+                meeting_date TEXT NOT NULL,
+                meeting_time TEXT,
+                contact_type TEXT,
+                status TEXT,
+                notes TEXT,
+                next_followup_date TEXT,
+                next_followup_note TEXT,
+                handler_employee_id INTEGER REFERENCES employees(id),
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reminder_sent_at TIMESTAMP
+            )''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_school   ON school_meetings(school_id)''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_handler  ON school_meetings(handler_employee_id)''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_followup ON school_meetings(next_followup_date)''',
             '''CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -28762,14 +28804,16 @@ ACCESS_SECTION_CATALOG = [
         'label': 'Sales',
         'description': 'Lead, deal, and sales-team-side workflows.',
         'sub_sections': [
-            ('meetings',         'Meetings',             'Sales meeting log'),
-            ('projects',         'Projects',             'Sales projects'),
-            ('products',         'Products & Services',  'Product / service catalog'),
-            ('partners',         'Partners',             'Channel / referral partners'),
-            ('news',             'Sales News',           'Internal sales news feed'),
-            ('clients_pipeline', 'Clients Pipeline',     'Client deal pipeline'),
-            ('reports',          'Sales Reports',        'Sales analytics + reports'),
-            ('settings',         'Sales Settings',       'Sales-team-specific settings'),
+            ('meetings',             'Meetings',             'Sales meeting log'),
+            ('projects',             'Projects',             'Sales projects'),
+            ('products',             'Products & Services',  'Product / service catalog'),
+            ('partners',             'Partners',             'Channel / referral partners'),
+            ('news',                 'Sales News',           'Internal sales news feed'),
+            ('clients_pipeline',     'Clients Pipeline',     'Client deal pipeline'),
+            ('reports',              'Sales Reports',        'Sales analytics + reports'),
+            ('settings',             'Sales Settings',       'Sales-team-specific settings'),
+            ('twelfthplus_schools',  '12thPlus Schools',     'School database CRM for 12thPlus outreach'),
+            ('twelfthplus_meetings', '12thPlus Meetings',    'Track school meetings + follow-ups'),
         ],
     },
     # ── HR (employee-facing + admin tools) ────────────────────────────────
@@ -29320,6 +29364,173 @@ def ensure_user_section_permissions_table():
 
 
 ensure_user_section_permissions_table()
+
+
+def grant_twelfthplus_to_active_employees_once():
+    """One-shot bulk grant: give every active employee view+edit+add on the
+    new 12thPlus Schools and 12thPlus Meetings sub-sections.
+
+    Needed because the baseline seeder (seed_access_master_baseline_once)
+    is marker-gated and has already run on staging/prod; without this,
+    existing employees would have no Access Master row for the new keys
+    and the per-request audit would deny them.
+
+    Idempotent via marker 'access_master_twelfthplus_granted'.
+    """
+    MARKER_KEY = 'access_master_twelfthplus_granted'
+    MARKER_VAL = 'v1'
+    SUBS = [('sales', 'twelfthplus_schools'), ('sales', 'twelfthplus_meetings')]
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+        try:
+            employees = conn.execute(
+                "SELECT id FROM employees WHERE is_active = 1"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+        granted = 0
+        for emp in employees:
+            emp_id = emp['id']
+            for main, sub in SUBS:
+                try:
+                    exists = conn.execute(
+                        "SELECT id FROM user_section_permissions "
+                        "WHERE subject_type='employee' AND subject_id = ? "
+                        "  AND main_section = ? AND sub_section = ?",
+                        (emp_id, main, sub),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES (?, 'employee', ?, ?, ?, 1, 1, 1)",
+                        (emp_id, emp_id, main, sub),
+                    )
+                    granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"twelfthplus grant skipped (emp={emp_id}, {main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        if granted:
+            logging.info(
+                f"Access Master: bulk-granted 12thPlus sub-sections "
+                f"({granted} row(s) across {len(employees)} active employees)"
+            )
+    except Exception as e:
+        logging.warning(f"grant_twelfthplus_to_active_employees_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+grant_twelfthplus_to_active_employees_once()
+
+
+def seed_twelfthplus_lookup_options_once():
+    """Seed cochin_area + school_type lookup_options for the 12thPlus CRM.
+    Idempotent: skips any value that already exists in lookup_options.
+
+    Categories are global (pathway = NULL).
+    """
+    COCHIN_AREAS = [
+        'Edappally', 'Kakkanad', 'Kaloor', 'Vyttila', 'Aluva',
+        'Tripunithura', 'Palarivattom', 'Panampilly Nagar', 'Marine Drive',
+        'Fort Kochi', 'Kalamassery', 'Thrikkakara', 'Maradu', 'Vennala', 'Other',
+    ]
+    SCHOOL_TYPES = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other']
+    conn = None
+    try:
+        conn = get_db()
+        # Check if lookup_options has the pathway column (it does on prod;
+        # ensure_pathway_column_on_lookup_options adds it on older DBs).
+        has_pathway = False
+        try:
+            conn.execute("SELECT pathway FROM lookup_options LIMIT 1")
+            has_pathway = True
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            has_pathway = False
+        inserted = 0
+        for category, values in (('cochin_area', COCHIN_AREAS), ('school_type', SCHOOL_TYPES)):
+            for sort_idx, val in enumerate(values, 1):
+                try:
+                    exists = conn.execute(
+                        "SELECT id FROM lookup_options WHERE category = ? AND value = ?",
+                        (category, val),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    if has_pathway:
+                        conn.execute(
+                            "INSERT INTO lookup_options "
+                            "(category, label, value, sort_order, is_active, pathway) "
+                            "VALUES (?, ?, ?, ?, TRUE, NULL)",
+                            (category, val, val, sort_idx),
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO lookup_options "
+                            "(category, label, value, sort_order, is_active) "
+                            "VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx),
+                        )
+                    inserted += 1
+                except Exception as e:
+                    logging.warning(f"twelfthplus lookup seed ({category}/{val}): {e}")
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+        if inserted:
+            logging.info(f"Seeded {inserted} 12thPlus lookup row(s)")
+    except Exception as e:
+        logging.warning(f"seed_twelfthplus_lookup_options_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_twelfthplus_lookup_options_once()
 
 
 def ensure_welcome_kit_tables():
@@ -31590,6 +31801,27 @@ ACCESS_ROUTE_MAP = {
     'products_list':                _ap('sales', 'products'),
     'partners':                     _ap('sales', 'partners'),
     'sales_news':                   _ap('sales', 'news'),
+
+    # ── Sales · 12thPlus Schools CRM ──────────────────────────────────────
+    'sales_twelfthplus_dashboard':              _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_schools_list':           _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_school_add_page':        _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_add_save':        _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_detail':          _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_school_edit_page':       _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_edit_save':       _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_delete':          _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_import_page':    _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_import_submit':  _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_template':       _ap('sales', 'twelfthplus_schools'),
+    # ── Sales · 12thPlus Meetings ─────────────────────────────────────────
+    'sales_twelfthplus_meeting_add_page':       _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_add_save':       _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_detail':         _ap('sales', 'twelfthplus_meetings'),
+    'sales_twelfthplus_meeting_edit_page':      _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_edit_save':      _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_delete':         _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_followups_list':         _ap('sales', 'twelfthplus_meetings'),
 
     # ── HR ────────────────────────────────────────────────────────────────
     'apply_leave':                  _ap('hr', 'leave_management', 'add'),
@@ -35559,6 +35791,754 @@ def wa_webhook():
 @login_required
 def landing_pages():
     return render_template('landing_pages.html', active_section='company')
+
+
+# ─────────────────────────────────────────────────────────
+#  12thPlus Schools CRM (Sales section)
+#  School outreach CRM for the 12thPlus team. Tables: schools +
+#  school_meetings (boot-migrated in ensure_crm_tables). Reminder
+#  cron + email sending intentionally deferred to a follow-up pass;
+#  meeting.next_followup_date and meeting.reminder_sent_at are
+#  written here so the reminder system can read them later.
+# ─────────────────────────────────────────────────────────
+def _twelfthplus_lookup_options(category):
+    """Fetch active lookup_options for a category (pathway NULL or 'plab' fallback).
+    Used for school_type + cochin_area dropdowns."""
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT value FROM lookup_options "
+            "WHERE category = ? AND is_active = TRUE "
+            "ORDER BY sort_order, id",
+            (category,)
+        ).fetchall()
+        conn.close()
+        seen, out = set(), []
+        for r in rows:
+            v = r['value']
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+        return out
+    except Exception as e:
+        logging.error(f"_twelfthplus_lookup_options({category}): {e}")
+        return []
+
+
+def _twelfthplus_active_employees(conn):
+    return conn.execute(
+        "SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name"
+    ).fetchall()
+
+
+def _twelfthplus_school_or_404(conn, sid):
+    return conn.execute(
+        "SELECT s.*, e1.name AS assigned_name, e2.name AS created_by_name "
+        "FROM schools s "
+        "LEFT JOIN employees e1 ON s.assigned_to = e1.id "
+        "LEFT JOIN employees e2 ON s.created_by = e2.id "
+        "WHERE s.id = ?",
+        (sid,)
+    ).fetchone()
+
+
+@app.route('/sales/12thplus')
+@admin_required
+def sales_twelfthplus_dashboard():
+    from datetime import date
+    user = get_user()
+    conn = get_db()
+    try:
+        total_schools = conn.execute("SELECT COUNT(*) AS c FROM schools").fetchone()['c']
+        my_schools = conn.execute(
+            "SELECT COUNT(*) AS c FROM schools WHERE assigned_to = ?", (user['id'],)
+        ).fetchone()['c']
+        # Meetings this week: meeting_date BETWEEN start_of_week (Mon) AND end_of_week (Sun)
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        meetings_this_week = conn.execute(
+            "SELECT COUNT(*) AS c FROM school_meetings WHERE meeting_date BETWEEN ? AND ?",
+            (week_start.isoformat(), week_end.isoformat())
+        ).fetchone()['c']
+        followups_due = conn.execute(
+            "SELECT COUNT(*) AS c FROM school_meetings "
+            "WHERE next_followup_date IS NOT NULL "
+            "  AND next_followup_date <> '' "
+            "  AND next_followup_date <= ?",
+            (today.isoformat(),)
+        ).fetchone()['c']
+
+        recent_meetings = conn.execute(
+            "SELECT sm.*, s.name AS school_name, e.name AS handler_name "
+            "FROM school_meetings sm "
+            "JOIN schools s ON sm.school_id = s.id "
+            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+            "ORDER BY sm.meeting_date DESC, sm.id DESC "
+            "LIMIT 10"
+        ).fetchall()
+    finally:
+        conn.close()
+
+    return render_template(
+        'sales_twelfthplus_dashboard.html',
+        user=user,
+        total_schools=total_schools,
+        my_schools=my_schools,
+        meetings_this_week=meetings_this_week,
+        followups_due=followups_due,
+        recent_meetings=recent_meetings,
+        active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools')
+@admin_required
+def sales_twelfthplus_schools_list():
+    user = get_user()
+    q = (request.args.get('q') or '').strip()
+    area_f = (request.args.get('area') or '').strip()
+    assigned_f = (request.args.get('assigned') or '').strip()
+    type_f = (request.args.get('school_type') or '').strip()
+
+    sql = (
+        "SELECT s.*, e.name AS assigned_name "
+        "FROM schools s LEFT JOIN employees e ON s.assigned_to = e.id "
+        "WHERE 1=1"
+    )
+    params = []
+    if q:
+        sql += " AND (LOWER(s.name) LIKE ? OR LOWER(COALESCE(s.principal_name,'')) LIKE ?)"
+        params += [f"%{q.lower()}%", f"%{q.lower()}%"]
+    if area_f:
+        sql += " AND s.area = ?"
+        params.append(area_f)
+    if type_f:
+        sql += " AND s.school_type = ?"
+        params.append(type_f)
+    if assigned_f:
+        try:
+            sql += " AND s.assigned_to = ?"
+            params.append(int(assigned_f))
+        except ValueError:
+            pass
+    sql += " ORDER BY s.name"
+
+    conn = get_db()
+    try:
+        records = conn.execute(sql, tuple(params)).fetchall()
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        'sales_twelfthplus_schools_list.html',
+        user=user,
+        records=records,
+        employees=employees,
+        areas=_twelfthplus_lookup_options('cochin_area'),
+        school_types=_twelfthplus_lookup_options('school_type'),
+        filters={'q': q, 'area': area_f, 'assigned': assigned_f, 'school_type': type_f},
+        active_section='sales',
+    )
+
+
+def _twelfthplus_form_context(conn, record=None):
+    return {
+        'record': record,
+        'employees': _twelfthplus_active_employees(conn),
+        'areas': _twelfthplus_lookup_options('cochin_area'),
+        'school_types': _twelfthplus_lookup_options('school_type'),
+        'active_section': 'sales',
+    }
+
+
+def _twelfthplus_collect_school_form():
+    f = request.form
+    def s(k):
+        return (f.get(k) or '').strip() or None
+    student_strength = f.get('student_strength', '').strip()
+    try:
+        student_strength = int(student_strength) if student_strength else None
+    except ValueError:
+        student_strength = None
+    assigned_to = f.get('assigned_to', '').strip()
+    try:
+        assigned_to = int(assigned_to) if assigned_to else None
+    except ValueError:
+        assigned_to = None
+    return {
+        'name': s('name'),
+        'website': s('website'),
+        'area': s('area'),
+        'principal_name': s('principal_name'),
+        'contact_number': s('contact_number'),
+        'email': s('email'),
+        'address': s('address'),
+        'school_type': s('school_type'),
+        'student_strength': student_strength,
+        'assigned_to': assigned_to,
+        'status': s('status') or 'active',
+        'notes': s('notes'),
+    }
+
+
+@app.route('/sales/12thplus/schools/add', methods=['GET'])
+@admin_required
+def sales_twelfthplus_school_add_page():
+    user = get_user()
+    conn = get_db()
+    try:
+        ctx = _twelfthplus_form_context(conn)
+    finally:
+        conn.close()
+    return render_template('sales_twelfthplus_school_form.html', user=user, **ctx)
+
+
+@app.route('/sales/12thplus/schools/add', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_add_save():
+    user = get_user()
+    data = _twelfthplus_collect_school_form()
+    if not data['name']:
+        flash('School name is required', 'error')
+        return redirect(url_for('sales_twelfthplus_school_add_page'))
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO schools "
+            "(name, website, area, principal_name, contact_number, email, address, "
+            " school_type, student_strength, assigned_to, status, notes, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (
+                data['name'], data['website'], data['area'], data['principal_name'],
+                data['contact_number'], data['email'], data['address'],
+                data['school_type'], data['student_strength'], data['assigned_to'],
+                data['status'], data['notes'], user['id'],
+            ),
+        )
+        new_id = cur.fetchone()['id']
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School added', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=new_id))
+
+
+@app.route('/sales/12thplus/schools/<int:sid>')
+@admin_required
+def sales_twelfthplus_school_detail(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        meetings = conn.execute(
+            "SELECT sm.*, e.name AS handler_name "
+            "FROM school_meetings sm "
+            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+            "WHERE sm.school_id = ? "
+            "ORDER BY sm.meeting_date DESC, sm.id DESC",
+            (sid,)
+        ).fetchall()
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_school_detail.html',
+        user=user, school=school, meetings=meetings,
+        active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/edit', methods=['GET'])
+@admin_required
+def sales_twelfthplus_school_edit_page(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        ctx = _twelfthplus_form_context(conn, record=school)
+    finally:
+        conn.close()
+    return render_template('sales_twelfthplus_school_form.html', user=user, **ctx)
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/edit', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_edit_save(sid):
+    data = _twelfthplus_collect_school_form()
+    if not data['name']:
+        flash('School name is required', 'error')
+        return redirect(url_for('sales_twelfthplus_school_edit_page', sid=sid))
+    conn = get_db()
+    try:
+        exists = conn.execute("SELECT id FROM schools WHERE id = ?", (sid,)).fetchone()
+        if not exists:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        conn.execute(
+            "UPDATE schools SET name=?, website=?, area=?, principal_name=?, "
+            "  contact_number=?, email=?, address=?, school_type=?, "
+            "  student_strength=?, assigned_to=?, status=?, notes=?, "
+            "  updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (
+                data['name'], data['website'], data['area'], data['principal_name'],
+                data['contact_number'], data['email'], data['address'],
+                data['school_type'], data['student_strength'], data['assigned_to'],
+                data['status'], data['notes'], sid,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School updated', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/delete', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_delete(sid):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM schools WHERE id = ?", (sid,))
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School deleted', 'success')
+    return redirect(url_for('sales_twelfthplus_schools_list'))
+
+
+# ───── Excel import / template ─────
+_TWELFTHPLUS_IMPORT_HEADERS = [
+    'School Name', 'Website', 'Area in Cochin', 'Principal Name',
+    'Contact Number', 'Email ID', 'Address', 'School Type',
+    'Student Strength', 'Assigned To',
+]
+
+
+def _twelfthplus_norm(s):
+    return (str(s or '')).strip()
+
+
+def _twelfthplus_norm_header(h):
+    return _twelfthplus_norm(h).lower().replace('_', ' ')
+
+
+@app.route('/sales/12thplus/schools/template.xlsx')
+@admin_required
+def sales_twelfthplus_schools_template():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Schools'
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='0F1B33', end_color='0F1B33', fill_type='solid')
+    for col_idx, h in enumerate(_TWELFTHPLUS_IMPORT_HEADERS, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+    sample = [
+        'Bharatiya Vidya Bhavan',
+        'https://bhavansedappally.org',
+        'Edappally',
+        'Mrs. Sunitha Menon',
+        '9876543210',
+        'principal@bhavansedappally.org',
+        'Edappally Toll Junction, Kochi',
+        'CBSE',
+        1450,
+        '',  # leave Assigned To blank in template
+    ]
+    for col_idx, val in enumerate(sample, 1):
+        ws.cell(row=2, column=col_idx, value=val)
+    for col_idx in range(1, len(_TWELFTHPLUS_IMPORT_HEADERS) + 1):
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = 22
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='12thplus_schools_template.xlsx',
+    )
+
+
+@app.route('/sales/12thplus/schools/import', methods=['GET'])
+@admin_required
+def sales_twelfthplus_schools_import_page():
+    user = get_user()
+    return render_template(
+        'sales_twelfthplus_schools_import.html',
+        user=user,
+        sample_headers=_TWELFTHPLUS_IMPORT_HEADERS,
+        active_section='sales',
+        summary=None,
+    )
+
+
+@app.route('/sales/12thplus/schools/import', methods=['POST'])
+@admin_required
+def sales_twelfthplus_schools_import_submit():
+    user = get_user()
+    data_file = request.files.get('xlsx_file')
+    if not data_file or not data_file.filename:
+        flash('Please upload an .xlsx file', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+    if not data_file.filename.lower().endswith('.xlsx'):
+        flash('Please upload an .xlsx file (CSV not supported here)', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(data_file.stream, read_only=True, data_only=True)
+    except Exception as e:
+        flash(f'Could not read workbook: {e}', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        flash('Workbook is empty', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+
+    # Map header label -> column index (case-insensitive, trims spaces).
+    header_index = {}
+    for i, h in enumerate(header_row):
+        if h is None:
+            continue
+        header_index[_twelfthplus_norm_header(h)] = i
+
+    def get(row, label):
+        idx = header_index.get(_twelfthplus_norm_header(label))
+        if idx is None or idx >= len(row):
+            return ''
+        return _twelfthplus_norm(row[idx])
+
+    inserted = 0
+    updated = 0
+    skipped = []
+
+    conn = get_db()
+    try:
+        # Build a name-lookup map of active employees once.
+        emp_rows = _twelfthplus_active_employees(conn)
+        emp_by_name = { (e['name'] or '').strip().lower(): e['id'] for e in emp_rows }
+
+        for line_no, row in enumerate(rows_iter, start=2):
+            if row is None or all(v is None or _twelfthplus_norm(v) == '' for v in row):
+                continue  # blank row
+            name = get(row, 'School Name')
+            if not name:
+                skipped.append({'line': line_no, 'reason': 'missing School Name'})
+                continue
+            website = get(row, 'Website')
+            area = get(row, 'Area in Cochin')
+            principal = get(row, 'Principal Name')
+            contact = get(row, 'Contact Number')
+            email_v = get(row, 'Email ID')
+            address = get(row, 'Address')
+            school_type = get(row, 'School Type')
+            strength_raw = get(row, 'Student Strength')
+            try:
+                strength = int(float(strength_raw)) if strength_raw else None
+            except ValueError:
+                strength = None
+            assigned_name = get(row, 'Assigned To')
+            assigned_to = None
+            if assigned_name:
+                assigned_to = emp_by_name.get(assigned_name.lower())
+                if not assigned_to:
+                    skipped.append({
+                        'line': line_no,
+                        'reason': f"Assigned To '{assigned_name}' not matched to active employee",
+                    })
+                    # we still insert/update the school but leave assigned_to NULL
+            existing = conn.execute(
+                "SELECT id FROM schools WHERE LOWER(name) = ?",
+                (name.lower(),),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE schools SET website=?, area=?, principal_name=?, "
+                    "  contact_number=?, email=?, address=?, school_type=?, "
+                    "  student_strength=?, assigned_to=?, "
+                    "  updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?",
+                    (
+                        website or None, area or None, principal or None,
+                        contact or None, email_v or None, address or None,
+                        school_type or None, strength, assigned_to,
+                        existing['id'],
+                    ),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO schools "
+                    "(name, website, area, principal_name, contact_number, email, "
+                    " address, school_type, student_strength, assigned_to, status, "
+                    " created_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)",
+                    (
+                        name, website or None, area or None, principal or None,
+                        contact or None, email_v or None, address or None,
+                        school_type or None, strength, assigned_to, user['id'],
+                    ),
+                )
+                inserted += 1
+        conn.commit()
+    finally:
+        wb.close()
+        conn.close()
+
+    summary = {
+        'inserted': inserted,
+        'updated': updated,
+        'skipped': skipped,
+    }
+    return render_template(
+        'sales_twelfthplus_schools_import.html',
+        user=user,
+        sample_headers=_TWELFTHPLUS_IMPORT_HEADERS,
+        active_section='sales',
+        summary=summary,
+    )
+
+
+# ───── Meetings ─────
+def _twelfthplus_collect_meeting_form():
+    f = request.form
+    def s(k):
+        return (f.get(k) or '').strip() or None
+    handler = f.get('handler_employee_id', '').strip()
+    try:
+        handler_id = int(handler) if handler else None
+    except ValueError:
+        handler_id = None
+    return {
+        'meeting_date': s('meeting_date'),
+        'meeting_time': s('meeting_time'),
+        'contact_type': s('contact_type'),
+        'status': s('status'),
+        'notes': s('notes'),
+        'next_followup_date': s('next_followup_date'),
+        'next_followup_note': s('next_followup_note'),
+        'handler_employee_id': handler_id,
+    }
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/meetings/add', methods=['GET'])
+@admin_required
+def sales_twelfthplus_meeting_add_page(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_meeting_form.html',
+        user=user, school=school, employees=employees,
+        record=None, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/meetings/add', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_add_save(sid):
+    user = get_user()
+    data = _twelfthplus_collect_meeting_form()
+    if not data['meeting_date']:
+        flash('Meeting date is required', 'error')
+        return redirect(url_for('sales_twelfthplus_meeting_add_page', sid=sid))
+    conn = get_db()
+    try:
+        school = conn.execute("SELECT id FROM schools WHERE id = ?", (sid,)).fetchone()
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        conn.execute(
+            "INSERT INTO school_meetings "
+            "(school_id, meeting_date, meeting_time, contact_type, status, notes, "
+            " next_followup_date, next_followup_note, handler_employee_id, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                sid, data['meeting_date'], data['meeting_time'], data['contact_type'],
+                data['status'], data['notes'], data['next_followup_date'],
+                data['next_followup_note'], data['handler_employee_id'], user['id'],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting added', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+def _twelfthplus_meeting_or_404(conn, mid):
+    return conn.execute(
+        "SELECT sm.*, s.name AS school_name, s.id AS sid, "
+        "       e.name AS handler_name "
+        "FROM school_meetings sm "
+        "JOIN schools s ON sm.school_id = s.id "
+        "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+        "WHERE sm.id = ?",
+        (mid,)
+    ).fetchone()
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>')
+@admin_required
+def sales_twelfthplus_meeting_detail(mid):
+    user = get_user()
+    conn = get_db()
+    try:
+        meeting = _twelfthplus_meeting_or_404(conn, mid)
+    finally:
+        conn.close()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        return redirect(url_for('sales_twelfthplus_dashboard'))
+    return render_template(
+        'sales_twelfthplus_meeting_detail.html',
+        user=user, meeting=meeting, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/edit', methods=['GET'])
+@admin_required
+def sales_twelfthplus_meeting_edit_page(mid):
+    user = get_user()
+    conn = get_db()
+    try:
+        meeting = _twelfthplus_meeting_or_404(conn, mid)
+        if not meeting:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        school = conn.execute(
+            "SELECT * FROM schools WHERE id = ?", (meeting['school_id'],)
+        ).fetchone()
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_meeting_form.html',
+        user=user, school=school, employees=employees,
+        record=meeting, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/edit', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_edit_save(mid):
+    data = _twelfthplus_collect_meeting_form()
+    if not data['meeting_date']:
+        flash('Meeting date is required', 'error')
+        return redirect(url_for('sales_twelfthplus_meeting_edit_page', mid=mid))
+    conn = get_db()
+    try:
+        meeting = conn.execute(
+            "SELECT school_id FROM school_meetings WHERE id = ?", (mid,)
+        ).fetchone()
+        if not meeting:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        sid = meeting['school_id']
+        conn.execute(
+            "UPDATE school_meetings SET "
+            "  meeting_date=?, meeting_time=?, contact_type=?, status=?, notes=?, "
+            "  next_followup_date=?, next_followup_note=?, handler_employee_id=?, "
+            "  updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (
+                data['meeting_date'], data['meeting_time'], data['contact_type'],
+                data['status'], data['notes'], data['next_followup_date'],
+                data['next_followup_note'], data['handler_employee_id'], mid,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting updated', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/delete', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_delete(mid):
+    conn = get_db()
+    try:
+        m = conn.execute(
+            "SELECT school_id FROM school_meetings WHERE id = ?", (mid,)
+        ).fetchone()
+        if not m:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        sid = m['school_id']
+        conn.execute("DELETE FROM school_meetings WHERE id = ?", (mid,))
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting deleted', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/followups')
+@admin_required
+def sales_twelfthplus_followups_list():
+    user = get_user()
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT sm.*, s.name AS school_name, s.id AS sid, "
+            "       e.name AS handler_name "
+            "FROM school_meetings sm "
+            "JOIN schools s ON sm.school_id = s.id "
+            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+            "WHERE sm.next_followup_date IS NOT NULL "
+            "  AND sm.next_followup_date <> '' "
+            "ORDER BY sm.next_followup_date ASC, sm.id ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    # Group by date for the template.
+    grouped = []
+    current_date = None
+    bucket = None
+    for r in rows:
+        d = r['next_followup_date']
+        if d != current_date:
+            bucket = {'date': d, 'items': []}
+            grouped.append(bucket)
+            current_date = d
+        bucket['items'].append(r)
+    from datetime import date
+    return render_template(
+        'sales_twelfthplus_followups_list.html',
+        user=user, grouped=grouped, today=date.today().isoformat(),
+        active_section='sales',
+    )
 
 
 # ─────────────────────────────────────────────────────────
