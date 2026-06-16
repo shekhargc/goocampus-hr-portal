@@ -7220,6 +7220,20 @@ def ensure_crm_tables():
             conn.commit()
         except Exception:
             conn.rollback()
+        # City/off-site meeting upgrade (2026-06-16): off-site city on the
+        # trip; per-meeting time + the source entity id for the cascade
+        # Meeting-With dropdown.
+        for _tbl, _col, _type in [
+            ('b2b_trips',    'city',         'TEXT'),
+            ('b2b_meetings', 'meeting_time', 'TEXT'),
+            ('b2b_meetings', 'entity_id',    'INTEGER'),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         # Add product_cost column to products_services (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN product_cost NUMERIC(14,2) DEFAULT 0")
@@ -8993,26 +9007,50 @@ def add_b2b_trip():
     conn = get_db()
 
     if request.method == 'POST':
-        trip_type = request.form.get('trip_type')
+        trip_type = request.form.get('trip_type')        # 'city' | 'outstation'
         meeting_category = request.form.get('meeting_category', 'face_to_face')
         from_date = request.form.get('from_date')
         to_date = request.form.get('to_date')
         travel_date = request.form.get('travel_date', '')
+        city = (request.form.get('city') or '').strip() or None
         project_id = request.form.get('project_id') or None
         notes = request.form.get('notes', '').strip()
 
+        # City (local) meetings only carry single meeting dates -- there's
+        # no trip window. Derive the trip from/to from the meeting dates
+        # so the b2b_trips row stays valid without forcing the user to
+        # enter a redundant range. Off-site keeps the explicit window.
+        if trip_type == 'city':
+            md = request.form.getlist('meeting_date[]')
+            md = [d for d in md if d]
+            if md:
+                from_date = min(md)
+                to_date = max(md)
+            travel_date = ''   # not relevant for local meetings
+            city = city or 'Bangalore'
+        else:
+            if not from_date or not to_date:
+                flash('For off-site meetings, From date and To date are required', 'error')
+                projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+                meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+                cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
+                conn.close()
+                return render_template('add_meeting.html', user=user, projects=projects,
+                        meeting_clients=meeting_clients, cities=cities, active_section='sales')
+
         if not from_date or not to_date:
-            flash('From date and to date are required', 'error')
+            flash('Please add at least one meeting with a date', 'error')
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
             meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+            cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
             conn.close()
-            return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
-                    active_section='sales')
+            return render_template('add_meeting.html', user=user, projects=projects,
+                    meeting_clients=meeting_clients, cities=cities, active_section='sales')
 
         conn.execute('''
-            INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, project_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user['id'], trip_type, meeting_category, from_date, to_date, travel_date or None, project_id, notes))
+            INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, city, project_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user['id'], trip_type, meeting_category, from_date, to_date, travel_date or None, city, project_id, notes))
         conn.commit()
 
         # Get the new trip ID
@@ -9021,8 +9059,10 @@ def add_b2b_trip():
 
         # Process multiple meetings
         meeting_dates = request.form.getlist('meeting_date[]')
+        meeting_times = request.form.getlist('meeting_time[]')
         meeting_withs = request.form.getlist('meeting_with[]')
         meeting_type_ids = request.form.getlist('meeting_type_id[]')
+        meeting_entity_ids = request.form.getlist('entity_id[]')
         meeting_locations = request.form.getlist('meeting_location[]')
         meeting_contacts = request.form.getlist('contact_person[]')
         meeting_phones = request.form.getlist('contact_phone[]')
@@ -9032,10 +9072,12 @@ def add_b2b_trip():
             if meeting_dates[i] and meeting_withs[i]:
                 m_project_id = meeting_project_ids[i] if i < len(meeting_project_ids) and meeting_project_ids[i] else project_id
                 m_type_id = meeting_type_ids[i] if i < len(meeting_type_ids) and meeting_type_ids[i] else None
+                m_time = meeting_times[i] if i < len(meeting_times) else ''
+                m_entity = meeting_entity_ids[i] if i < len(meeting_entity_ids) and meeting_entity_ids[i] else None
                 conn.execute('''
-                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, project_id, location, contact_person, contact_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i],
+                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, meeting_time, entity_id, project_id, location, contact_person, contact_phone)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i], m_time or None, m_entity,
                       m_project_id, meeting_locations[i] if i < len(meeting_locations) else '',
                       meeting_contacts[i] if i < len(meeting_contacts) else '',
                       meeting_phones[i] if i < len(meeting_phones) else ''))
@@ -9047,9 +9089,62 @@ def add_b2b_trip():
 
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+    cities = conn.execute("SELECT id, name FROM cities WHERE COALESCE(is_active,1)=1 ORDER BY name").fetchall()
     conn.close()
     return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
-                    active_section='sales')
+                    cities=cities, active_section='sales')
+
+
+@app.route('/api/meeting-entities')
+@login_required
+def api_meeting_entities():
+    """Cascade source for the meeting form's 'Meeting With' dropdown.
+
+    Given a meeting-client category (School / College / Partner /
+    Branch Partner / Agent), return the list of entities from the
+    matching table, each with its known contact person + phone so the
+    form can auto-fill the Contact fields when one is picked.
+
+    Decision (locked 2026-06-16): School -> schools, College ->
+    colleges, and Partner / Branch Partner / Agent all -> partners.
+    The three partner-ish categories share the partners table; a
+    partner_type filter can refine them later once those values exist.
+    """
+    category = (request.args.get('type') or '').strip().lower()
+    conn = get_db()
+    out = []
+    try:
+        if category == 'school':
+            rows = conn.execute(
+                "SELECT id, name, principal_name AS contact, contact_number AS phone, email "
+                "FROM schools WHERE COALESCE(status,'active')='active' ORDER BY name"
+            ).fetchall()
+        elif category == 'college':
+            rows = conn.execute(
+                "SELECT id, name, '' AS contact, contact_phone AS phone, contact_email AS email "
+                "FROM colleges ORDER BY name"
+            ).fetchall()
+        elif category in ('partner', 'branch partner', 'agent'):
+            rows = conn.execute(
+                "SELECT id, company_name AS name, contact_person AS contact, phone, email "
+                "FROM partners ORDER BY company_name"
+            ).fetchall()
+        else:
+            rows = []
+        for r in rows:
+            d = dict(r)
+            out.append({
+                'id': d.get('id'),
+                'name': d.get('name') or '',
+                'contact': d.get('contact') or '',
+                'phone': d.get('phone') or '',
+                'email': d.get('email') or '',
+            })
+    except Exception as e:
+        logging.error(f"api_meeting_entities({category}): {e}")
+    finally:
+        conn.close()
+    return jsonify(out)
 
 
 @app.route('/b2b/<int:trip_id>')

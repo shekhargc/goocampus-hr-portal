@@ -137,23 +137,33 @@
             </div>
         </div>
 
-        <!-- Schedule Details (F2F) -->
-        <div class="panel" id="f2f-fields" style="display: block;">
+        <!-- Schedule Details (off-site only — shown when mode = outstation) -->
+        <div class="panel" id="f2f-fields" style="display: none;">
             <div class="panel-header">
                 <div class="panel-title">
                     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-                    Travel Schedule
+                    Off-site Travel Schedule
                 </div>
             </div>
             <div class="panel-body">
+                <div class="form-group" style="margin-bottom: 1rem;">
+                    <label>City / Location <span class="required">*</span></label>
+                    <select name="city" id="cityselect" style="width:100%;">
+                        <option value="">-- Select city --</option>
+                        {% for ct in cities %}
+                        <option value="{{ ct.name }}">{{ ct.name }}</option>
+                        {% endfor %}
+                    </select>
+                    <small style="color:var(--gray-500);">For an extended stay (e.g. Cochin for 15 days) pick the city + the date range below.</small>
+                </div>
                 <div class="form-grid-3">
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>From Date <span class="required">*</span></label>
-                        <input type="date" name="from_date" id="fromDate" required>
+                        <input type="date" name="from_date" id="fromDate">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>To Date <span class="required">*</span></label>
-                        <input type="date" name="to_date" id="toDate" required>
+                        <input type="date" name="to_date" id="toDate">
                     </div>
                     <div class="form-group" style="margin-bottom: 0;">
                         <label>Travel Date</label>
@@ -211,31 +221,42 @@
                                 <input type="date" name="meeting_date[]" required>
                             </div>
                             <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Time</label>
+                                <input type="time" name="meeting_time[]">
+                            </div>
+                            <div class="form-group" style="margin-bottom:0.75rem;">
                                 <label>Meeting Client <span class="required">*</span></label>
-                                <select name="meeting_type_id[]" required>
+                                <select name="meeting_type_id[]" class="mtg-client" required onchange="loadEntities(this)">
                                     <option value="">-- Select client type --</option>
                                     {% for mc in meeting_clients %}
-                                    <option value="{{ mc.id }}">{{ mc.name }}</option>
+                                    <option value="{{ mc.id }}" data-name="{{ mc.name }}">{{ mc.name }}</option>
                                     {% endfor %}
                                 </select>
                             </div>
-                            <div class="form-group" style="margin-bottom:0.75rem;">
-                                <label>Meeting With <span class="required">*</span></label>
-                                <input type="text" name="meeting_with[]" placeholder="Client/institution name" required>
-                            </div>
                         </div>
                         <div class="form-grid-3">
-                            <div class="form-group" style="margin-bottom:0;">
-                                <label>Location</label>
-                                <input type="text" name="meeting_location[]" placeholder="Meeting location">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
+                                <label>Meeting With <span class="required">*</span></label>
+                                <!-- Cascade dropdown (populated from the selected client type).
+                                     Falls back to free text when no entities exist. -->
+                                <select name="meeting_with[]" class="mtg-with" required onchange="fillContact(this)" disabled>
+                                    <option value="">-- Select client type first --</option>
+                                </select>
+                                <input type="hidden" name="entity_id[]" class="mtg-entity">
                             </div>
-                            <div class="form-group" style="margin-bottom:0;">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
                                 <label>Contact Person</label>
-                                <input type="text" name="contact_person[]" placeholder="Contact name">
+                                <input type="text" name="contact_person[]" class="mtg-contact" placeholder="Contact name">
                             </div>
-                            <div class="form-group" style="margin-bottom:0;">
+                            <div class="form-group" style="margin-bottom:0.75rem;">
                                 <label>Contact Phone</label>
-                                <input type="tel" name="contact_phone[]" placeholder="Phone number">
+                                <input type="tel" name="contact_phone[]" class="mtg-phone" placeholder="Phone number">
+                            </div>
+                        </div>
+                        <div class="form-grid">
+                            <div class="form-group" style="margin-bottom:0;">
+                                <label>Location / Notes</label>
+                                <input type="text" name="meeting_location[]" placeholder="Meeting location or note">
                             </div>
                         </div>
                     </div>
@@ -261,33 +282,84 @@ function selectType(type) {
     document.getElementById('meetingCategory').value = type;
 
     const modeSection = document.getElementById('mode-section');
-    const f2fFields = document.getElementById('f2f-fields');
-    const fromDate = document.getElementById('fromDate');
-    const toDate = document.getElementById('toDate');
-
     if (type === 'online') {
         modeSection.classList.remove('show');
-        f2fFields.style.display = 'none';
         document.getElementById('tripType').value = 'online';
-        fromDate.removeAttribute('required');
-        toDate.removeAttribute('required');
-        fromDate.value = '';
-        toDate.value = '';
+        applyMode('city');   // online has no travel window
     } else {
         modeSection.classList.add('show');
-        f2fFields.style.display = 'block';
-        fromDate.setAttribute('required', 'required');
-        toDate.setAttribute('required', 'required');
-        // Restore last selected mode
         const checked = document.querySelector('input[name="mode_radio"]:checked');
-        if (checked) document.getElementById('tripType').value = checked.value;
+        applyMode(checked ? checked.value : 'city');
     }
 }
 
 function selectMode(mode) {
     document.querySelectorAll('.mode-card').forEach(c => c.classList.remove('selected'));
     event.currentTarget.classList.add('selected');
+    applyMode(mode);
+}
+
+// City = local single-date meetings (no trip window). Off-site =
+// extended stay → show city dropdown + from/to/travel + make them
+// required.
+function applyMode(mode) {
     document.getElementById('tripType').value = mode;
+    const offsite = document.getElementById('f2f-fields');
+    const fromDate = document.getElementById('fromDate');
+    const toDate = document.getElementById('toDate');
+    const citysel = document.getElementById('cityselect');
+    if (mode === 'outstation') {
+        offsite.style.display = 'block';
+        fromDate.setAttribute('required', 'required');
+        toDate.setAttribute('required', 'required');
+        if (citysel) citysel.setAttribute('required', 'required');
+    } else {
+        offsite.style.display = 'none';
+        fromDate.removeAttribute('required'); fromDate.value = '';
+        toDate.removeAttribute('required');   toDate.value = '';
+        if (citysel) { citysel.removeAttribute('required'); citysel.value = ''; }
+    }
+}
+
+// ── Cascade: Meeting Client (category) → Meeting With (entity list) ──
+function loadEntities(selectEl) {
+    const card = selectEl.closest('.meeting-card');
+    const opt = selectEl.options[selectEl.selectedIndex];
+    const typeName = opt ? (opt.getAttribute('data-name') || '') : '';
+    const withSel = card.querySelector('.mtg-with');
+    const entityHidden = card.querySelector('.mtg-entity');
+    const contact = card.querySelector('.mtg-contact');
+    const phone = card.querySelector('.mtg-phone');
+    contact.value = ''; phone.value = ''; entityHidden.value = '';
+    withSel.innerHTML = '<option value="">Loading...</option>';
+    withSel.disabled = true;
+    if (!typeName) { withSel.innerHTML = '<option value="">-- Select client type first --</option>'; return; }
+    fetch('/api/meeting-entities?type=' + encodeURIComponent(typeName))
+        .then(r => r.json())
+        .then(list => {
+            if (!list.length) {
+                // No records for this category yet → free-text fallback.
+                withSel.outerHTML = '<input type="text" name="meeting_with[]" class="mtg-with" placeholder="Type name (no records yet)" required>';
+                return;
+            }
+            let html = '<option value="">-- Select --</option>';
+            list.forEach(e => {
+                html += `<option value="${(e.name||'').replace(/"/g,'&quot;')}" data-id="${e.id}" data-contact="${(e.contact||'').replace(/"/g,'&quot;')}" data-phone="${(e.phone||'').replace(/"/g,'&quot;')}">${e.name||''}</option>`;
+            });
+            withSel.innerHTML = html;
+            withSel.disabled = false;
+        })
+        .catch(() => { withSel.innerHTML = '<option value="">Error loading</option>'; withSel.disabled = false; });
+}
+
+// ── When an entity is picked, auto-fill contact + phone + entity_id ──
+function fillContact(selectEl) {
+    const card = selectEl.closest('.meeting-card');
+    const opt = selectEl.options[selectEl.selectedIndex];
+    if (!opt) return;
+    card.querySelector('.mtg-entity').value = opt.getAttribute('data-id') || '';
+    card.querySelector('.mtg-contact').value = opt.getAttribute('data-contact') || '';
+    card.querySelector('.mtg-phone').value = opt.getAttribute('data-phone') || '';
 }
 
 let meetingCount = 1;
@@ -296,6 +368,14 @@ function addMeeting() {
     const first = list.querySelector('.meeting-card');
     const clone = first.cloneNode(true);
     clone.querySelectorAll('input, select, textarea').forEach(el => el.value = '');
+    // Reset the cascade in the clone back to its empty state.
+    const withSel = clone.querySelector('.mtg-with');
+    if (withSel && withSel.tagName === 'SELECT') {
+        withSel.innerHTML = '<option value="">-- Select client type first --</option>';
+        withSel.disabled = true;
+    }
+    const mc = clone.querySelector('.mtg-client');
+    if (mc) mc.selectedIndex = 0;
     meetingCount++;
     clone.querySelector('.meeting-card-num').innerHTML = '<span>' + meetingCount + '</span> Meeting';
     clone.querySelector('.btn-remove').style.display = '';
@@ -319,7 +399,14 @@ function updateRemoveButtons() {
     });
 }
 
-// Initialize type selection
+// Initialize: face-to-face + city mode (off-site panel hidden until
+// the user picks Outstation).
 document.querySelector('.type-card').classList.add('selected');
+(function initMode() {
+    var modeSection = document.getElementById('mode-section');
+    if (modeSection) modeSection.classList.add('show');
+    var checked = document.querySelector('input[name="mode_radio"]:checked');
+    applyMode(checked ? checked.value : 'city');
+})();
 </script>
 {% endblock %}
