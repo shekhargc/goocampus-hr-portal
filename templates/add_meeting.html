@@ -225,9 +225,9 @@
                                 <input type="time" name="meeting_time[]">
                             </div>
                             <div class="form-group" style="margin-bottom:0.75rem;">
-                                <label>Meeting Client <span class="required">*</span></label>
+                                <label>Institution / Partner Type <span class="required">*</span></label>
                                 <select name="meeting_type_id[]" class="mtg-client" required onchange="loadEntities(this)">
-                                    <option value="">-- Select client type --</option>
+                                    <option value="">-- Select type --</option>
                                     {% for mc in meeting_clients %}
                                     <option value="{{ mc.id }}" data-name="{{ mc.name }}">{{ mc.name }}</option>
                                     {% endfor %}

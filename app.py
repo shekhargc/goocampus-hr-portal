@@ -7498,14 +7498,43 @@ def seed_kra_categories():
 
 
 def seed_default_meeting_types():
-    """Seed default meeting client types if table is empty."""
+    """Sync meeting-client types = School + College + the partner_type
+    values from the partner section (Channel Partner / Marketing
+    Partner / Consultant / ...).
+
+    Replaces the old static School/College/Partner/Branch Partner/Agent
+    list. Runs every boot so a partner_type added in Field Manager
+    shows up in the meeting form after the next restart. Existing rows
+    are reused (FK-safe); legacy generic types (Partner / Branch
+    Partner / Agent) are deactivated, not deleted, so old saved
+    meetings keep their reference.
+    """
     try:
         conn = get_db()
-        count = conn.execute('SELECT COUNT(*) as cnt FROM meeting_types').fetchone()
-        if count['cnt'] == 0:
-            for mt in ['School', 'College', 'Partner', 'Branch Partner', 'Agent']:
-                conn.execute('INSERT INTO meeting_types (name) VALUES (?)', (mt,))
-            conn.commit()
+        # Partner types from the partner section's lookup category.
+        try:
+            ptypes = [r['value'] for r in conn.execute(
+                "SELECT value FROM lookup_options WHERE category='partner_type' "
+                "AND is_active IS NOT FALSE ORDER BY sort_order, value"
+            ).fetchall()]
+        except Exception:
+            ptypes = ['Channel Partner', 'Marketing Partner', 'Consultant']
+        desired = ['School', 'College'] + ptypes
+
+        # Deactivate all, then (re)activate / insert the desired set.
+        try:
+            conn.execute("UPDATE meeting_types SET is_active = 0")
+        except Exception:
+            pass
+        for name in desired:
+            row = conn.execute(
+                "SELECT id FROM meeting_types WHERE LOWER(name) = LOWER(?)", (name,)
+            ).fetchone()
+            if row:
+                conn.execute("UPDATE meeting_types SET is_active = 1, name = ? WHERE id = ?", (name, row['id']))
+            else:
+                conn.execute("INSERT INTO meeting_types (name, is_active) VALUES (?, 1)", (name,))
+        conn.commit()
         conn.close()
     except Exception as e:
         logging.error(f"seed_default_meeting_types: {e}")
@@ -9105,32 +9134,43 @@ def api_meeting_entities():
     matching table, each with its known contact person + phone so the
     form can auto-fill the Contact fields when one is picked.
 
-    Decision (locked 2026-06-16): School -> schools, College ->
-    colleges, and Partner / Branch Partner / Agent all -> partners.
-    The three partner-ish categories share the partners table; a
-    partner_type filter can refine them later once those values exist.
+    Decision (locked 2026-06-16): the category list is now School,
+    College + the partner_type values from the partner section
+    (Channel Partner / Marketing Partner / Consultant / ...). Mapping:
+      School               -> schools (12thPlus CRM)
+      College              -> colleges
+      <any partner_type>   -> partners WHERE partner_type = <category>
+    Legacy generic 'Partner'/'Branch Partner'/'Agent' still return all
+    partners for back-compat with older saved meetings.
     """
-    category = (request.args.get('type') or '').strip().lower()
+    category = (request.args.get('type') or '').strip()
+    cat_lc = category.lower()
     conn = get_db()
     out = []
     try:
-        if category == 'school':
+        if cat_lc == 'school':
             rows = conn.execute(
                 "SELECT id, name, principal_name AS contact, contact_number AS phone, email "
                 "FROM schools WHERE COALESCE(status,'active')='active' ORDER BY name"
             ).fetchall()
-        elif category == 'college':
+        elif cat_lc == 'college':
             rows = conn.execute(
                 "SELECT id, name, '' AS contact, contact_phone AS phone, contact_email AS email "
                 "FROM colleges ORDER BY name"
             ).fetchall()
-        elif category in ('partner', 'branch partner', 'agent'):
+        elif cat_lc in ('partner', 'branch partner', 'agent'):
             rows = conn.execute(
                 "SELECT id, company_name AS name, contact_person AS contact, phone, email "
                 "FROM partners ORDER BY company_name"
             ).fetchall()
         else:
-            rows = []
+            # Treat anything else as a partner_type from the partner
+            # section; filter partners by that type.
+            rows = conn.execute(
+                "SELECT id, company_name AS name, contact_person AS contact, phone, email "
+                "FROM partners WHERE LOWER(COALESCE(partner_type,''))=LOWER(?) ORDER BY company_name",
+                (category,)
+            ).fetchall()
         for r in rows:
             d = dict(r)
             out.append({
