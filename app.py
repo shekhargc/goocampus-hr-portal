@@ -18386,7 +18386,7 @@ def ops_plab_add():
 
     conn.close()
     return render_template('ops_plab_form.html', mode='add', item=None,
-                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
@@ -18505,7 +18505,7 @@ def ops_plab_edit(client_id):
         documents = []
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
-                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
