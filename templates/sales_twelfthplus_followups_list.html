@@ -1,0 +1,62 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}12thPlus Follow-ups{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Upcoming Follow-ups</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">School meetings with a scheduled follow-up date. Email reminders will be added in a future release.</p>
+        </div>
+        <a href="{{ url_for('sales_twelfthplus_dashboard') }}" style="padding:10px 20px;background:var(--navy);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">Back to Dashboard</a>
+    </div>
+
+    {% if grouped %}
+        {% for group in grouped %}
+        <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.06);overflow:hidden;margin-bottom:18px;">
+            <div style="padding:14px 20px;border-bottom:1px solid var(--gray-200);display:flex;justify-content:space-between;align-items:center;background:{% if group.date < today %}#FEF2F2{% elif group.date == today %}#FFF7ED{% else %}var(--gray-50){% endif %};">
+                <h3 style="margin:0;font-size:15px;font-weight:700;color:var(--navy);">
+                    {{ group.date|format_date }}
+                    {% if group.date < today %}<span style="margin-left:10px;font-size:12px;color:#B91C1C;font-weight:600;">OVERDUE</span>
+                    {% elif group.date == today %}<span style="margin-left:10px;font-size:12px;color:var(--orange);font-weight:600;">TODAY</span>
+                    {% endif %}
+                </h3>
+                <span style="font-size:13px;color:var(--gray-500);">{{ group['items']|length }} follow-up{{ '' if group['items']|length == 1 else 's' }}</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table style="width:100%;border-collapse:collapse;font-size:14px;">
+                    <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                        <tr>
+                            <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--navy);">School</th>
+                            <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--navy);">Last Meeting</th>
+                            <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--navy);">Handler</th>
+                            <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--navy);">Follow-up Note</th>
+                            <th style="padding:10px 16px;text-align:left;font-weight:600;color:var(--navy);"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for r in group['items'] %}
+                        <tr style="border-bottom:1px solid var(--gray-200);">
+                            <td style="padding:10px 16px;color:var(--navy);font-weight:500;">
+                                <a href="{{ url_for('sales_twelfthplus_school_detail', sid=r.sid) }}" style="color:var(--navy);text-decoration:none;">{{ r.school_name }}</a>
+                            </td>
+                            <td style="padding:10px 16px;">{{ r.meeting_date|format_date }}</td>
+                            <td style="padding:10px 16px;">{{ r.handler_name or '—' }}</td>
+                            <td style="padding:10px 16px;color:var(--gray-600);">{{ r.next_followup_note or '—' }}</td>
+                            <td style="padding:10px 16px;text-align:right;">
+                                <a href="{{ url_for('sales_twelfthplus_meeting_detail', mid=r.id) }}" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:13px;">View meeting &rarr;</a>
+                            </td>
+                        </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        {% endfor %}
+    {% else %}
+        <div style="background:white;border-radius:12px;padding:50px 20px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+            <p style="margin:0;font-size:15px;color:var(--gray-500);">No follow-ups scheduled.</p>
+            <p style="margin:6px 0 0 0;font-size:13px;color:var(--gray-500);">When you set a follow-up date on a meeting, it will show up here.</p>
+        </div>
+    {% endif %}
+</div>
+{% endblock %}

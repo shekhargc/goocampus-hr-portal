@@ -17,18 +17,35 @@
         <form method="POST">
 
             <!-- ===== CLIENT ===== -->
+            {% if record %}
+            <!-- EDIT MODE — read-only registration + candidate (can't be changed) -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
+                    <input type="hidden" name="registration_number" value="{{ record.registration_number or '' }}" />
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
+                    <input type="text" value="{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+            </div>
+            {% else %}
+            <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
                 <div style="position:relative;">
-                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or (record.registration_number if record else '') }}" />
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
-                        value="{% if record %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% endif %}"
+                        value=""
                         required
                         style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                     <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
                 </div>
             </div>
+            {% endif %}
 
             <!-- ===== RESEARCH DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Research Details</h3>

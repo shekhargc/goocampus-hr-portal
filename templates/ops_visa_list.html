@@ -48,9 +48,6 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
             <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Manage uk visa & travel records &middot; Click a row to view details</p>
         </div>
         <div style="display:flex;gap:10px;">
-            <a href="/operations/uk-visa-travel/import" style="padding:10px 20px;background:var(--blue);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
-                Import CSV
-            </a>
             <a href="/operations/uk-visa-travel/add" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">
                 + Add Record
             </a>
@@ -236,8 +233,8 @@ function openVisaDetail(id) {
 
     document.getElementById('visaDrawerBody').innerHTML = html;
     document.getElementById('visaDrawerActions').innerHTML = `
-        <a href="/operations/uk-visa-travel/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+        <a href="/operations/uk-visa-travel/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('visaDrawer').classList.add('open');

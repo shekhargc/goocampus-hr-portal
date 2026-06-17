@@ -1,5 +1,5 @@
 {% extends "sales_sidebar_base.html" %}
-{% block title %}Leads - Sales CRM{% endblock %}
+{% block title %}Closed Clients - Sales CRM{% endblock %}
 {% block section_extra_css %}
 <style>
 .lead-drawer-overlay { position:fixed;inset:0;background:rgba(15,23,42,0.45);z-index:998;opacity:0;pointer-events:none;transition:opacity 0.2s ease; }
@@ -25,10 +25,10 @@
     <div style="margin-bottom:1rem;"><a href="/sales/crm" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to CRM</a></div>
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:1.25rem;flex-wrap:wrap;gap:1rem;">
         <div>
-            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Leads</h1>
-            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ leads|length }} lead{{ '' if leads|length == 1 else 's' }} visible. Click a row to see full details.</p>
+            <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.3rem 0;">Closed Clients</h1>
+            <p style="margin:0;color:var(--gray-500);font-size:0.9rem;">{{ leads|length }} closed client{{ '' if leads|length == 1 else 's' }} visible. Click a row to see full details. Pipeline tracking is handled in the external CRM.</p>
         </div>
-        {% if role != 'viewer' %}<a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Add Lead</a>{% else %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
+        {% if role != 'viewer' %}<a href="/sales/leads/add" style="background:var(--orange);color:white;padding:0.6rem 1.1rem;border-radius:0.5rem;text-decoration:none;font-weight:600;font-size:0.88rem;">+ Add Closed Client</a>{% else %}<span style="background:var(--gray-100);color:var(--gray-500);padding:0.35rem 0.7rem;border-radius:0.4rem;font-size:0.78rem;font-weight:600;">View-only</span>{% endif %}
     </div>
 
     <form method="GET" style="display:flex;gap:0.5rem;margin-bottom:1rem;align-items:center;flex-wrap:wrap;">
@@ -65,7 +65,7 @@
                 <tr class="lead-row" data-lid="{{ l.id }}" onclick="openLeadDrawer({{ l.id }}, event)" style="border-top:1px solid var(--gray-100);">
                     <td style="padding:0.7rem 1rem;">
                         <div style="font-weight:600;color:var(--navy);">
-                            {% if l.is_hot %}<span style="color:#dc2626;margin-right:0.25rem;" title="Hot lead">🔥</span>{% endif %}{{ l.lead_name }}
+                            {{ l.lead_name }}
                         </div>
                         <div style="font-size:0.74rem;color:var(--gray-500);margin-top:0.1rem;">{{ l.company or '—' }}{% if l.email %} &middot; {{ l.email }}{% endif %}</div>
                     </td>
@@ -105,7 +105,6 @@
         <div class="ld-section">
             <h4>Status</h4>
             <div class="ld-row"><span class="ld-label">Stage</span><span class="ld-val" id="ldStage">—</span></div>
-            <div class="ld-row"><span class="ld-label">Hot lead</span><span class="ld-val" id="ldHot">—</span></div>
             <div class="ld-row"><span class="ld-label">Source</span><span class="ld-val" id="ldSource">—</span></div>
         </div>
         <div class="ld-section">
@@ -169,7 +168,6 @@ function openLeadDrawer(id, evt) {
     document.getElementById('ldName').textContent = l.lead_name || '—';
     document.getElementById('ldCompany').textContent = l.company || '';
     document.getElementById('ldStage').textContent = l.stage_name || '—';
-    document.getElementById('ldHot').textContent = l.is_hot ? 'Yes 🔥' : 'No';
     document.getElementById('ldSource').textContent = txt(l.source);
     document.getElementById('ldPhone').textContent = txt(l.phone);
     document.getElementById('ldEmail').textContent = txt(l.email);

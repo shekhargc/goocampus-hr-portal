@@ -135,12 +135,23 @@
 <div class="page-top">
     <div class="page-top-title">
         <h1>Employees</h1>
-        <p>{{ employees | length }} team members across {{ dept_employees | length }} departments</p>
+        <p>{{ employees | length }} {{ 'past' if show == 'past' else ('active' if show == 'active' else 'total') }} {{ 'team members' if show != 'past' else 'former employees' }} across {{ dept_employees | length }} departments</p>
     </div>
     <div class="page-top-actions">
         <input type="text" class="search-bar" placeholder="Search employees..." id="searchInput" onkeyup="filterEmployees()">
-        <button class="button" onclick="document.getElementById('addModal').classList.add('active')">+ Add Employee</button>
+        <button class="button" onclick="openAddModal('active')">+ Add Employee</button>
+        <button class="button" style="background:var(--gray-600);" onclick="openAddModal('resigned')">+ Add Past Employee</button>
     </div>
+</div>
+
+<!-- Phase A: Active / Past / All tab nav -->
+<div style="display:flex;gap:8px;margin-bottom:1.5rem;border-bottom:2px solid var(--gray-200);">
+    {% for tab, label in [('active','Active'),('past','Past'),('all','All')] %}
+    <a href="?show={{ tab }}"
+       style="padding:10px 18px;font-weight:600;font-size:0.95rem;text-decoration:none;border-bottom:3px solid {{ 'var(--orange)' if show == tab else 'transparent' }};color:{{ 'var(--navy)' if show == tab else 'var(--gray-500)' }};margin-bottom:-2px;">
+        {{ label }} <span style="background:{{ 'var(--orange-light)' if show == tab else 'var(--gray-100)' }};color:{{ 'var(--orange-dark)' if show == tab else 'var(--gray-500)' }};padding:2px 8px;border-radius:10px;font-size:0.75rem;margin-left:4px;">{{ counts[tab] }}</span>
+    </a>
+    {% endfor %}
 </div>
 
 <div class="stat-row">
@@ -187,7 +198,14 @@
             <div class="emp-details">
                 {% if emp.email %}<div class="emp-tag">{{ emp.email }}</div>{% endif %}
                 {% if emp.joining_date %}<div class="emp-tag">Joined {{ emp.joining_date|format_date }}</div>{% endif %}
-                {% if not emp.is_active %}<div class="emp-tag" style="background: var(--danger-light); color: #991B1B;">Inactive</div>{% endif %}
+                {% set st = (emp.employment_status or 'active')|lower %}
+                {% if st != 'active' %}
+                <div class="emp-tag" style="background: var(--danger-light); color: #991B1B; text-transform:capitalize;">{{ st }}</div>
+                {% if emp.last_working_day %}<div class="emp-tag" style="background:#fff7ed;color:#9a3412;">Last day: {{ emp.last_working_day|format_date }}</div>{% endif %}
+                {% if emp.exit_reason %}<div class="emp-tag" style="background:var(--gray-100);color:var(--gray-600);">{{ emp.exit_reason }}</div>{% endif %}
+                {% elif not emp.is_active %}
+                <div class="emp-tag" style="background: var(--danger-light); color: #991B1B;">Inactive</div>
+                {% endif %}
             </div>
         </div>
         {% endfor %}
@@ -198,8 +216,11 @@
 <!-- Add Employee Modal -->
 <div class="modal-overlay" id="addModal">
     <div class="modal">
-        <h2>Add New Employee</h2>
+        <h2 id="addModalTitle">Add New Employee</h2>
         <form method="POST">
+            <input type="hidden" name="return_to" id="returnTo" value="{{ show }}">
+            <input type="hidden" name="employment_status" id="employmentStatus" value="active">
+
             <div class="form-group">
                 <label for="name">Full Name *</label>
                 <input type="text" id="name" name="name" required>
@@ -207,7 +228,7 @@
             <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.25rem;">
                 <div class="form-group">
                     <label for="emp_code">Employee Code *</label>
-                    <input type="text" id="emp_code" name="emp_code" required>
+                    <input type="text" id="emp_code" name="emp_code" required placeholder="e.g. GC123">
                 </div>
                 <div class="form-group">
                     <label for="department">Department *</label>
@@ -222,13 +243,61 @@
                 <label for="email">Email</label>
                 <input type="email" id="email" name="email">
             </div>
+            <div class="form-group">
+                <label for="joining_date">Joining Date</label>
+                <input type="date" id="joining_date" name="joining_date">
+            </div>
+
+            <!-- Phase A: Past-employee fields (shown only when status != active). -->
+            <div id="exitFields" style="display:none;padding:1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:.5rem;margin-bottom:1rem;">
+                <h4 style="margin:0 0 .8rem 0;font-size:.85rem;font-weight:700;color:#9a3412;text-transform:uppercase;letter-spacing:.5px;">Exit details</h4>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;">
+                    <div class="form-group" style="margin-bottom:.8rem;">
+                        <label for="employment_status_select">Status</label>
+                        <select id="employment_status_select" onchange="document.getElementById('employmentStatus').value=this.value;">
+                            <option value="resigned">Resigned</option>
+                            <option value="terminated">Terminated</option>
+                            <option value="absconded">Absconded</option>
+                            <option value="retired">Retired</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="margin-bottom:.8rem;">
+                        <label for="last_working_day">Last Working Day</label>
+                        <input type="date" id="last_working_day" name="last_working_day">
+                    </div>
+                </div>
+                <div class="form-group" style="margin-bottom:.5rem;">
+                    <label for="exit_reason">Exit reason (short)</label>
+                    <input type="text" id="exit_reason" name="exit_reason" placeholder="e.g. Personal reasons, Switched roles, Performance">
+                </div>
+                <div class="form-group" style="margin-bottom:0;">
+                    <label for="exit_notes">Exit notes (optional)</label>
+                    <input type="text" id="exit_notes" name="exit_notes" placeholder="Anything else worth recording">
+                </div>
+            </div>
+
             <div class="modal-actions">
                 <button type="button" class="button button-secondary" onclick="document.getElementById('addModal').classList.remove('active')">Cancel</button>
-                <button type="submit" class="button">Add Employee</button>
+                <button type="submit" class="button" id="addSubmitBtn">Add Employee</button>
             </div>
         </form>
     </div>
 </div>
+
+<script>
+// Phase A: open the Add modal in "active" or "past" mode. Past mode
+// reveals the exit-details block and flips the hidden status field.
+function openAddModal(mode) {
+    const isPast = (mode === 'resigned' || mode === 'past');
+    document.getElementById('addModalTitle').textContent = isPast ? 'Add Past Employee' : 'Add New Employee';
+    document.getElementById('employmentStatus').value = isPast ? 'resigned' : 'active';
+    document.getElementById('exitFields').style.display = isPast ? 'block' : 'none';
+    document.getElementById('addSubmitBtn').textContent = isPast ? 'Add Past Employee' : 'Add Employee';
+    // After submit, return to the matching tab so the new row appears.
+    document.getElementById('returnTo').value = isPast ? 'past' : 'active';
+    document.getElementById('addModal').classList.add('active');
+}
+</script>
 
 <!-- Employee Profile Drawer -->
 <div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>

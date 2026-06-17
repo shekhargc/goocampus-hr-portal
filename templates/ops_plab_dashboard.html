@@ -14,6 +14,23 @@
   <!-- Header Section -->
   <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;">
+        {# X-1: client photo if uploaded #}
+        {% if client.photo_path %}
+        <img src="{{ client.photo_path if '://' in client.photo_path else '/' + client.photo_path.lstrip('/') }}"
+             alt="{{ client.first_name }}"
+             style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid var(--orange);box-shadow:0 2px 6px rgba(0,0,0,0.08);"
+             onerror="this.style.display='none';">
+        {% else %}
+        {# Z-1: better avatar -- if last_name empty, fall back to
+           first two letters of first_name (e.g. "Lakshmi" -> "LA"
+           not just "L"). #}
+        <div style="width:96px;height:96px;border-radius:50%;background:#FFF7ED;border:3px solid #FED7AA;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#F97316;">
+          {% set fn = (client.first_name or '?')|string %}
+          {% set ln = (client.last_name or '')|string %}
+          {% if ln %}{{ fn[0]|upper }}{{ ln[0]|upper }}{% else %}{{ fn[:2]|upper }}{% endif %}
+        </div>
+        {% endif %}
       <div>
         <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
           {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
@@ -44,6 +61,7 @@
           {{ client.account_status or 'Unknown' }}
         </div>
       </div>
+      </div>{# /X-1 photo+text wrapper #}
       <div style="display:flex;gap:12px;">
         <a href="/operations/plab/{{ client.id }}/edit" style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
           Edit Client

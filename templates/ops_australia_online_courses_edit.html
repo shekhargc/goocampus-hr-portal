@@ -1,0 +1,106 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}{% if record.id %}Edit{% else %}Add{% endif %} Subscription{% if record.id %} - {{ record.online_subscription or record.registration_number|format_reg }}{% endif %}{% endblock %}
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        {% if record.id %}
+        <a href="{{ url_for('ops_australia_online_courses_detail', rid=record.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Subscription</a>
+        {% else %}
+        <a href="{{ url_for('ops_australia_online_courses_list') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to List</a>
+        {% endif %}
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record.id %}Edit{% else %}Add{% endif %} Online Course Subscription</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record.id %}Update{% else %}Create a new{% endif %} AMC Pathway online course subscription details, login credentials, and notes.
+        </p>
+
+        <form method="POST" action="{% if record.id %}{{ url_for('ops_australia_online_courses_edit_save', rid=record.id) }}{% else %}{{ url_for('ops_australia_online_courses_add_save') }}{% endif %}">
+
+            <!-- ===== CONTEXT (READ-ONLY) ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number{% if not record.id %} <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    {% if record.id %}
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% else %}
+                    <input type="text" name="registration_number" value="" required placeholder="e.g. AUS-2026-0001" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    {% endif %}
+                </div>
+                {% if record.id %}
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
+                    <input type="text" value="{{ ((record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or ''))|trim }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ===== SUBSCRIPTION DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Subscription Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Online Subscription / Course</label>
+                    <select name="online_subscription" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for s in subscription_types %}
+                        <option value="{{ s }}" {% if record.online_subscription == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Activation Type</label>
+                    <select name="activation_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for a in activation_types %}
+                        <option value="{{ a }}" {% if record.activation_type == a %}selected{% endif %}>{{ a }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Issued Date</label>
+                    <input type="date" name="issued_date" value="{{ record.issued_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Booked By</label>
+                    <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for b in booked_by_options %}
+                        <option value="{{ b }}" {% if record.booked_by == b %}selected{% endif %}>{{ b }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== ACCESS CREDENTIALS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Access Credentials</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Login ID</label>
+                    <input type="text" name="login_id" value="{{ record.login_id or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Password</label>
+                    <input type="text" name="password" value="{{ record.password or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== NOTES ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" rows="4" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.notes or '' }}</textarea>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="display:flex;gap:0.8rem;justify-content:flex-end;margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--gray-200);">
+                <a href="{% if record.id %}{{ url_for('ops_australia_online_courses_detail', rid=record.id) }}{% else %}{{ url_for('ops_australia_online_courses_list') }}{% endif %}" style="padding:0.7rem 1.4rem;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:8px;font-weight:600;font-size:0.9rem;text-decoration:none;">Cancel</a>
+                <button type="submit" style="padding:0.7rem 1.4rem;background:var(--orange);color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">{% if record.id %}Save Changes{% else %}Add Subscription{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

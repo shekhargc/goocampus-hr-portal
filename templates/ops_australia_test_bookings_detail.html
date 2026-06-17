@@ -1,0 +1,145 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Australia Test Booking — {{ record.exam or 'Booking' }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_australia_test_bookings_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to Test Bookings
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
+          {{ record.exam or 'Test Booking' }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          {% if record.first_name or record.last_name %}
+            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+          {% else %}
+            <span style="color:var(--gray-400)">(candidate missing)</span>
+          {% endif %}
+          {% if record.registration_number %} &middot; Reg #{{ record.registration_number|format_reg }}{% endif %}
+        </p>
+        {% if record.exam_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Exam date: {{ record.exam_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        {% set s = (record.exam_status or '')|lower %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if 'booked' in s %}background:#DBEAFE;color:#1D4ED8;
+          {% elif 'attended' in s %}background:#D1FAE5;color:#065F46;
+          {% elif 'reschedul' in s %}background:#FEF3C7;color:#92400E;
+          {% elif 'cancel' in s %}background:#FEE2E2;color:#B91C1C;
+          {% else %}background:#F3F4F6;color:#374151;{% endif %}
+        ">
+          {{ record.exam_status or 'Unknown' }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_australia_test_bookings_edit_page', rid=record.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Test Booking
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Exam Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Exam Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Exam:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Method:</span><span style="color:var(--navy);font-weight:600;">{{ record['exam_method'] if 'exam_method' in record.keys() else record.exam_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Exam Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Booking Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.booking_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Exam Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Test Centre:</span><span style="color:var(--navy);font-weight:600;">{{ record.test_center or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">City / State:</span><span style="color:var(--navy);font-weight:600;">{{ record.city_state or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Country:</span><span style="color:var(--navy);font-weight:600;">{{ record.country or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Login Card (optional fields — only show if column exists & has value) -->
+      {% set has_login = 'login_id' in record.keys() and record['login_id'] %}
+      {% set has_pw    = 'password' in record.keys() and record['password'] %}
+      {% if has_login or has_pw %}
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Login</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Login ID:</span><span style="color:var(--navy);font-weight:600;">{{ record['login_id'] if 'login_id' in record.keys() else '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Password:</span><span style="color:var(--navy);font-weight:600;">{{ record['password'] if 'password' in record.keys() else '—' }}</span></div>
+        </div>
+      </div>
+      {% endif %}
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Status & Result Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Status &amp; Result</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Status:</span>
+            {% set s = (record.exam_status or '')|lower %}
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
+              {% if 'booked' in s %}background:#DBEAFE;color:#1D4ED8;
+              {% elif 'attended' in s %}background:#D1FAE5;color:#065F46;
+              {% elif 'reschedul' in s %}background:#FEF3C7;color:#92400E;
+              {% elif 'cancel' in s %}background:#FEE2E2;color:#B91C1C;
+              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ record.exam_status or 'Unknown' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Result:</span>
+            {% set r2 = (record.exam_result or '')|lower %}
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
+              {% if 'pass' in r2 %}background:#DCFCE7;color:#166534;
+              {% elif 'fail' in r2 %}background:#FEE2E2;color:#B91C1C;
+              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ record.exam_result or '—' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Result Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam_result_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Score:</span><span style="color:var(--navy);font-weight:600;">{{ record.score or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Booked By:</span><span style="color:var(--navy);font-weight:600;">{{ record.booked_by or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Revaluation Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Revaluation</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Applied:</span><span style="color:var(--navy);font-weight:600;">{{ record['revaluation_applied'] if 'revaluation_applied' in record.keys() else record.revaluation or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Applied Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.reval_applied_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Result:</span><span style="color:var(--navy);font-weight:600;">{{ record.reval_result or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Score:</span><span style="color:var(--navy);font-weight:600;">{{ record.reval_score or '—' }}</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Notes (full width) ── -->
+  {% if record.notes %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Notes</h3>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ record.notes }}</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

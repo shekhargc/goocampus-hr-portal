@@ -40,7 +40,7 @@
 
 {% block section_content %}
 <h1 class="page-title">Late Leave Application</h1>
-<p class="page-subtitle">Apply for leave on past dates (up to 15 days ago). Late leave applications are flagged and tracked separately.</p>
+<p class="page-subtitle">Apply for leave on past dates (up to 45 days ago). Late leave applications are flagged and tracked separately.</p>
 
 <div class="card">
     <div class="late-warning">
@@ -126,7 +126,7 @@
     </form>
 
     <div style="margin-top: 3rem; padding: 1.75rem; background: #FEF3C7; border-radius: 0.6rem; border-left: 4px solid #D97706;">
-        <p style="font-size: 0.95rem; color: #92400E;"><strong style="font-weight: 600;">Note:</strong> Late leave applications are flagged separately and require approval from your reporting manager. You can apply for leave up to 15 days in the past. Late leave counts are visible to your manager and admin.</p>
+        <p style="font-size: 0.95rem; color: #92400E;"><strong style="font-weight: 600;">Note:</strong> Late leave applications are flagged separately and require approval from your reporting manager. You can apply for leave up to 45 days in the past. Late leave counts are visible to your manager and admin.</p>
     </div>
 </div>
 
@@ -193,13 +193,13 @@ function updateDateUI() {
     }
 }
 
-// Set date range: max = yesterday, min = 15 days ago
+// Set date range: max = yesterday, min = 45 days ago
 document.addEventListener('DOMContentLoaded', function() {
     const today = new Date();
     const yesterday = new Date(today);
     yesterday.setDate(yesterday.getDate() - 1);
     const minDate = new Date(today);
-    minDate.setDate(minDate.getDate() - 15);
+    minDate.setDate(minDate.getDate() - 45);
 
     const yesterdayStr = yesterday.toISOString().split('T')[0];
     const minDateStr = minDate.toISOString().split('T')[0];

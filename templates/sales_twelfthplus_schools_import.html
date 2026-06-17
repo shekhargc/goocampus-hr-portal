@@ -1,0 +1,62 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}Import 12thPlus Schools{% endblock %}
+{% block section_content %}
+<div style="max-width:880px;margin:0 auto;padding:24px;">
+    <div style="margin-bottom:14px;">
+        <a href="{{ url_for('sales_twelfthplus_schools_list') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:13px;">&larr; Back to Schools</a>
+    </div>
+
+    <div style="background:white;border-radius:14px;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:28px;">
+        <h1 style="font-size:22px;font-weight:700;color:var(--navy);margin:0 0 6px 0;">Import Schools</h1>
+        <p style="font-size:13px;color:var(--gray-500);margin:0 0 22px 0;">Upload an .xlsx file. Existing schools (matched by exact name) are updated; new names are inserted.</p>
+
+        {% if summary %}
+        <div style="background:#ECFDF5;border:1px solid #A7F3D0;border-radius:10px;padding:14px 18px;margin-bottom:22px;">
+            <strong style="color:#065F46;">Import complete.</strong>
+            <div style="margin-top:6px;font-size:14px;color:#065F46;">
+                Inserted: <strong>{{ summary.inserted }}</strong> &middot;
+                Updated: <strong>{{ summary.updated }}</strong> &middot;
+                Skipped: <strong>{{ summary.skipped|length }}</strong>
+            </div>
+            {% if summary.skipped %}
+            <details style="margin-top:10px;">
+                <summary style="cursor:pointer;color:#065F46;font-weight:600;">Skipped rows ({{ summary.skipped|length }})</summary>
+                <ul style="margin:8px 0 0 18px;padding:0;color:#065F46;font-size:13px;">
+                    {% for s in summary.skipped %}
+                    <li>Line {{ s.line }}: {{ s.reason }}</li>
+                    {% endfor %}
+                </ul>
+            </details>
+            {% endif %}
+        </div>
+        {% endif %}
+
+        <form method="POST" enctype="multipart/form-data" action="{{ url_for('sales_twelfthplus_schools_import_submit') }}">
+            <div style="border:2px dashed var(--gray-300);border-radius:10px;padding:26px;text-align:center;margin-bottom:18px;background:var(--gray-50);">
+                <input type="file" name="xlsx_file" accept=".xlsx" required style="font-size:14px;" />
+                <p style="margin:10px 0 0 0;font-size:12px;color:var(--gray-500);">.xlsx only &middot; up to 5,000 rows recommended</p>
+            </div>
+
+            <div style="display:flex;gap:10px;justify-content:flex-end;">
+                <a href="{{ url_for('sales_twelfthplus_schools_template') }}" style="padding:10px 18px;background:white;color:var(--navy);border:1px solid var(--gray-300);border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">Download Template</a>
+                <button type="submit" style="padding:10px 22px;background:var(--orange);color:white;border:none;border-radius:6px;font-weight:700;font-size:14px;cursor:pointer;">Upload &amp; Import</button>
+            </div>
+        </form>
+
+        <hr style="border:none;border-top:1px solid var(--gray-200);margin:26px 0;" />
+
+        <h3 style="font-size:14px;font-weight:700;color:var(--navy);margin:0 0 10px 0;">Expected Columns</h3>
+        <p style="font-size:13px;color:var(--gray-500);margin:0 0 10px 0;">Headers are case-insensitive. Extra columns are ignored.</p>
+        <div style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:8px;padding:12px 16px;">
+            <code style="font-size:12.5px;color:var(--navy);">
+                {% for h in sample_headers %}{{ h }}{% if not loop.last %} &middot; {% endif %}{% endfor %}
+            </code>
+        </div>
+        <ul style="margin:14px 0 0 18px;padding:0;font-size:13px;color:var(--gray-600);line-height:1.7;">
+            <li><strong>School Name</strong> is required. Rows without a name are skipped.</li>
+            <li>De-duplication is by exact school name (case-insensitive). Match &rarr; UPDATE, no match &rarr; INSERT.</li>
+            <li><strong>Assigned To</strong> is matched against active employees by case-insensitive name. Unmatched names are noted in the skip log but the school row is still imported with Assigned blank.</li>
+        </ul>
+    </div>
+</div>
+{% endblock %}

@@ -133,10 +133,46 @@
             <input type="text" id="emergency_contact_relation" name="emergency_contact_relation" value="{{ employee.emergency_contact_relation or '' }}">
         </div>
 
+        <!-- Employment Status & Exit (Phase B) -->
+        <h2 style="margin-top: 2.5rem; margin-bottom: 1.5rem; font-size: 1.2rem; color: var(--navy);">Employment Status &amp; Exit</h2>
+        {% set estatus = (employee.employment_status or ('active' if employee.is_active else 'resigned')) %}
+        <div class="form-group">
+            <label for="employment_status">Status</label>
+            <select id="employment_status" name="employment_status" onchange="toggleExitFields()">
+                <option value="active"     {% if estatus == 'active' %}selected{% endif %}>Active</option>
+                <option value="resigned"   {% if estatus == 'resigned' %}selected{% endif %}>Resigned</option>
+                <option value="terminated" {% if estatus == 'terminated' %}selected{% endif %}>Terminated</option>
+                <option value="absconded"  {% if estatus == 'absconded' %}selected{% endif %}>Absconded</option>
+                <option value="retired"    {% if estatus == 'retired' %}selected{% endif %}>Retired</option>
+            </select>
+            <small style="color:var(--gray-500);">Setting anything other than Active runs the exit process — the employee can no longer log in.</small>
+        </div>
+        <div id="exitFields" style="display:{% if estatus != 'active' %}block{% else %}none{% endif %};padding:1rem;background:#fff7ed;border:1px solid #fed7aa;border-radius:.5rem;">
+            <div class="form-group">
+                <label for="last_working_day">Last Working Day / Exit Date</label>
+                <input type="date" id="last_working_day" name="last_working_day" value="{{ employee.last_working_day or '' }}">
+                <small style="color:var(--gray-500);">Leave blank if not known — status still applies.</small>
+            </div>
+            <div class="form-group">
+                <label for="exit_reason">Exit Reason</label>
+                <input type="text" id="exit_reason" name="exit_reason" value="{{ employee.exit_reason or '' }}" placeholder="e.g. Personal reasons, Better opportunity, Performance">
+            </div>
+            <div class="form-group">
+                <label for="exit_notes">Exit Notes</label>
+                <textarea id="exit_notes" name="exit_notes" placeholder="Any additional notes about the exit">{{ employee.exit_notes or '' }}</textarea>
+            </div>
+        </div>
+
         <div style="display: flex; gap: 1rem; margin-top: 2rem;">
             <button type="submit" class="button">Save Changes</button>
             <a href="/admin/employee/{{ employee.id }}" class="button button-secondary">Cancel</a>
         </div>
     </form>
+    <script>
+    function toggleExitFields() {
+        var v = document.getElementById('employment_status').value;
+        document.getElementById('exitFields').style.display = (v === 'active') ? 'none' : 'block';
+    }
+    </script>
 </div>
 {% endblock %}

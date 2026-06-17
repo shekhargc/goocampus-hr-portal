@@ -52,6 +52,19 @@
             </div>
 
             <div style="margin-bottom:1.3rem;">
+                <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Pathway <span style="color:var(--gray-500);font-weight:400;">(routes the client to PLAB / Australia ops)</span></label>
+                <select name="pathway" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;">
+                    <option value="" {% if not product.pathway %}selected{% endif %}>— Unassigned —</option>
+                    <option value="plab" {% if product.pathway == 'plab' %}selected{% endif %}>PLAB Pathway</option>
+                    <option value="australia" {% if product.pathway == 'australia' %}selected{% endif %}>AMC Pathway</option>
+                    <option value="standard_consulting" {% if product.pathway == 'standard_consulting' %}selected{% endif %}>Standard Consulting Pathway</option>
+                    <option value="germany" {% if product.pathway == 'germany' %}selected{% endif %}>Germany Pathway</option>
+                    <option value="amc_training" {% if product.pathway == 'amc_training' %}selected{% endif %}>AMC Training</option>
+                </select>
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">When sales adds a closed client with this product, the invitation routes to the picked pathway's Ops team.</div>
+            </div>
+
+            <div style="margin-bottom:1.3rem;">
                 <label style="display:block;font-weight:600;font-size:0.85rem;color:var(--gray-600);margin-bottom:0.5rem;">Currency *</label>
                 <select name="currency" id="pf-currency" onchange="pfUpdate()" style="width:100%;padding:0.65rem 0.85rem;border:1px solid var(--gray-300);border-radius:0.5rem;font-size:0.9rem;box-sizing:border-box;">
                     {% for c in supported_currencies %}

@@ -204,8 +204,8 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading...</div>
     </div>
     <div class="drawer-actions" id="drawerActions">
-        <a href="#" id="btnViewProfile" style="background:var(--navy);color:white;">View Profile</a>
-        <a href="#" id="btnEditClient" style="background:var(--orange);color:white;">Edit Client</a>
+        <a href="#" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="#" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     </div>
 </div>
 
@@ -297,8 +297,8 @@ function openDrawer(clientId) {
     if (activeRow) activeRow.classList.add('active-row');
 
     // Set links
+    document.getElementById('btnEditRecord').href = `/operations/plab/${clientId}/edit`;
     document.getElementById('btnViewProfile').href = `/operations/plab/${clientId}`;
-    document.getElementById('btnEditClient').href = `/operations/plab/${clientId}/edit`;
 
     body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Loading documents...</div>';
     backdrop.classList.add('open');
@@ -327,6 +327,26 @@ function openDrawer(clientId) {
                 </div>`;
             }
 
+            // ===== Upload Document panel (Y-6 Phase 2) =====
+            // Doc-type dropdown -- merge known PLAB types with any
+            // already-uploaded ones so the user always sees a sensible
+            // set. The first option pre-selected is the first MISSING
+            // type, so a single click usually picks the right one.
+            const knownTypes = ['Photograph','Passport Copy (Front)','Passport Copy (Back)','MBBS Final Certificate','MBBS Course Completion Certificate','Internship Certificate','State Registration Certificate','Aadhar Copy (Optional)','Other'];
+            const allTypes = Array.from(new Set([...(data.missing||[]), ...knownTypes]));
+            const defaultType = (data.missing && data.missing.length > 0) ? data.missing[0] : '';
+            html += `<div id="uploadPanel_${clientId}" style="margin-bottom:18px;padding:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
+                <h4 style="margin:0 0 10px 0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#0c4a6e;">+ Upload Document</h4>
+                <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+                    <select id="upDocType_${clientId}" style="padding:8px 10px;border:1px solid #bae6fd;border-radius:6px;font-size:13px;background:white;">
+                        ${allTypes.map(t => `<option value="${t}"${t === defaultType ? ' selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                    <input type="file" id="upDocFile_${clientId}" accept="image/*,.pdf,.doc,.docx" style="padding:6px;border:1px solid #bae6fd;border-radius:6px;font-size:13px;background:white;">
+                    <button type="button" onclick="uploadDocFromDrawer(${clientId}, this)" style="padding:8px 16px;background:#0284c7;color:white;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;">Upload</button>
+                    <div id="upDocMsg_${clientId}" style="font-size:11px;color:var(--gray-500);"></div>
+                </div>
+            </div>`;
+
             // Uploaded documents
             if (data.docs && data.docs.length > 0) {
                 html += `<h4 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 12px 0;">Uploaded Documents (${data.docs.length})</h4>`;
@@ -337,13 +357,14 @@ function openDrawer(clientId) {
                     const icon = isImage ? '🖼️' : (isPdf ? '📄' : '📎');
                     const statusColor = doc.status === 'verified' ? '#065f46' : (doc.status === 'rejected' ? '#991b1b' : '#92400e');
                     const statusBg = doc.status === 'verified' ? '#d1fae5' : (doc.status === 'rejected' ? '#fee2e2' : '#fef3c7');
-                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--gray-100);border-radius:8px;margin-bottom:8px;cursor:pointer;transition:background .15s;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
-                        <span style="font-size:20px;">${icon}</span>
-                        <div style="flex:1;min-width:0;">
+                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--gray-100);border-radius:8px;margin-bottom:8px;transition:background .15s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
+                        <span style="font-size:20px;cursor:pointer;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')">${icon}</span>
+                        <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')">
                             <div style="font-weight:600;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.doc_type}</div>
                             <div style="font-size:11px;color:var(--gray-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.file_name}</div>
                         </div>
                         <span style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:${statusBg};color:${statusColor};white-space:nowrap;">${doc.status}</span>
+                        <button type="button" onclick="event.stopPropagation();deleteDocFromDrawer(${doc.id}, ${clientId}, this)" title="Delete document" style="background:none;border:none;color:#991b1b;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;">&times;</button>
                     </div>`;
                 });
             } else {
@@ -414,5 +435,39 @@ document.addEventListener('keydown', function(e) {
         else if (document.getElementById('docDrawer').classList.contains('open')) closeDrawer();
     }
 });
+
+// ===== Y-6 Phase 2: Upload + Delete from drawer =====
+function uploadDocFromDrawer(clientId, btn) {
+    const fileInput = document.getElementById('upDocFile_' + clientId);
+    const typeSelect = document.getElementById('upDocType_' + clientId);
+    const msgEl = document.getElementById('upDocMsg_' + clientId);
+    if (!fileInput || !fileInput.files.length) { msgEl.textContent = 'Pick a file first.'; msgEl.style.color = '#991b1b'; return; }
+    const file = fileInput.files[0];
+    if (file.size > 12 * 1024 * 1024) { msgEl.textContent = 'File too large (max 12 MB).'; msgEl.style.color = '#991b1b'; return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('doc_type', typeSelect.value || 'Other');
+    fd.append('doc_category', 'personal');
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    msgEl.textContent = ''; msgEl.style.color = '';
+    fetch('/operations/plab/' + clientId + '/upload-doc', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { openDrawer(clientId); }   // refresh drawer
+            else { msgEl.textContent = data.error || 'Upload failed'; msgEl.style.color = '#991b1b'; btn.disabled = false; btn.textContent = 'Upload'; }
+        })
+        .catch(() => { msgEl.textContent = 'Upload failed'; msgEl.style.color = '#991b1b'; btn.disabled = false; btn.textContent = 'Upload'; });
+}
+function deleteDocFromDrawer(docId, clientId, btn) {
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    btn.disabled = true;
+    fetch('/operations/plab/doc/' + docId + '/delete', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { openDrawer(clientId); }   // refresh drawer
+            else { alert(data.error || 'Delete failed'); btn.disabled = false; }
+        })
+        .catch(() => { alert('Delete failed'); btn.disabled = false; });
+}
 </script>
 {% endblock %}

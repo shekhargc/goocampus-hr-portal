@@ -1,0 +1,185 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Add Call Note &mdash; Standard Consulting{% endblock %}
+
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="{{ url_for('ops_consulting_call_notes_list') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Call Notes</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Add Call Note <span style="color:var(--orange);font-size:0.9rem;font-weight:600;">(Australia)</span></h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            Add a new call note for an Standard Consulting client. Form fields and conditions match the PLAB Pathway call notes.
+        </p>
+
+        <form method="POST">
+
+            <!-- ===== CLIENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <div style="position:relative;">
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
+                    <input type="text" id="client_search" autocomplete="off" placeholder="Type Australia client name..."
+                        value="{% if pre_client %}{{ pre_client.prefix or '' }} {{ pre_client.first_name or '' }} {{ pre_client.last_name or '' }}{% endif %}"
+                        required
+                        style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                </div>
+                <p style="font-size:0.7rem;color:var(--gray-500);margin:0.35rem 0 0;">Only Standard Consulting clients appear in suggestions.</p>
+            </div>
+
+            <!-- ===== CONTACT STATUS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact Status</h3>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contacted? *</label>
+                    <select name="contacted_status" id="contacted_status" required onchange="toggleContactType()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Yes" selected>Yes</option>
+                        <option value="No">No</option>
+                    </select>
+                </div>
+                <div id="contact_type_wrapper">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Contact Type *</label>
+                    <select name="contact_type" id="contact_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="Call" selected>Call</option>
+                        <option value="WhatsApp">WhatsApp</option>
+                        <option value="Email">Email</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== NOTE DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Note Details</h3>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Date *</label>
+                    <input type="date" name="call_date" required value="" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Added By</label>
+                    <input type="text" name="added_by" value="{{ user.name if user else '' }}" placeholder="Staff name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== NOTE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Note</h3>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Note *</label>
+                <textarea name="call_note" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;min-height:150px;font-family:inherit;resize:vertical;"></textarea>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    Add Call Note
+                </button>
+                <a href="{{ url_for('ops_consulting_call_notes_list') }}" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+
+        <script>
+            // Default call_date to today on the empty form.
+            if (!document.querySelector('input[name="call_date"]').value) {
+                const today = new Date().toISOString().split('T')[0];
+                document.querySelector('input[name="call_date"]').value = today;
+            }
+
+            // Hide Contact Type when Contacted=No (matches PLAB UX).
+            function toggleContactType() {
+                const status = document.getElementById('contacted_status').value;
+                const wrapper = document.getElementById('contact_type_wrapper');
+                if (status === 'No') {
+                    wrapper.style.display = 'none';
+                    document.getElementById('contact_type').removeAttribute('required');
+                } else {
+                    wrapper.style.display = '';
+                    document.getElementById('contact_type').setAttribute('required', 'required');
+                }
+            }
+            toggleContactType();
+        </script>
+    </div>
+</div>
+
+<!-- Client autocomplete — uses the shared API with pathway=consulting so only Standard Consulting clients are suggested. -->
+<script>
+(function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    searchInput.closest('form').addEventListener('submit', function(e) {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select an Australia client from the suggestions.');
+        }
+    });
+
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?pathway=consulting&q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        selectItem(items[parseInt(this.dataset.idx)]);
+                    });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) {
+        searchInput.value = item.name;
+        hiddenInput.value = item.reg;
+        searchInput.style.borderColor = '#10B981';
+        hide();
+    }
+
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() {
+        dropdown.querySelectorAll('[data-idx]').forEach((el, i) => {
+            el.style.background = i === highlightIdx ? '#f9fafb' : 'white';
+        });
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+{% endblock %}

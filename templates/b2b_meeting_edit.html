@@ -1,0 +1,141 @@
+{% extends "sales_sidebar_base.html" %}
+{% block title %}Edit Meeting - GooCampus HR Portal{% endblock %}
+{% block section_extra_css %}
+<style>
+    .edit-form { max-width: 820px; margin: 0 auto; }
+    .page-header { margin-bottom: 1.5rem; }
+    .page-header h1 { font-size: 1.8rem; font-weight: 700; color: var(--navy); }
+    .page-header p { color: var(--gray-500); font-size: 0.9rem; }
+    .panel { background: var(--white); border-radius: 1rem; border: 1px solid var(--gray-200); box-shadow: 0 1px 4px rgba(0,0,0,0.06); overflow: hidden; margin-bottom: 1.5rem; }
+    .panel-header { padding: 1.1rem 1.5rem; border-bottom: 1px solid var(--gray-100); background: var(--gray-50); }
+    .panel-title { font-weight: 700; font-size: 1rem; color: var(--navy); }
+    .panel-body { padding: 1.5rem; }
+    .form-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1.1rem; }
+    .form-group { margin-bottom: 1.1rem; }
+    .form-group:last-child { margin-bottom: 0; }
+    .form-group label { display: block; font-weight: 600; color: var(--gray-700); font-size: 0.88rem; margin-bottom: 0.4rem; }
+    .form-group input, .form-group select, .form-group textarea {
+        width: 100%; padding: 0.7rem 0.9rem; border: 2px solid var(--gray-200); border-radius: 0.6rem;
+        font-family: inherit; font-size: 0.93rem; box-sizing: border-box; background: var(--white);
+    }
+    .form-group input:focus, .form-group select:focus, .form-group textarea:focus { outline: none; border-color: var(--orange); }
+    .form-group textarea { resize: vertical; min-height: 70px; }
+    .readonly-box { padding: 0.7rem 0.9rem; background: var(--gray-50); border: 1px dashed var(--gray-300); border-radius: 0.6rem; font-size: 0.93rem; color: var(--navy); font-weight: 600; }
+    .readonly-hint { font-size: 0.75rem; color: var(--gray-500); margin-top: 0.3rem; }
+    .form-actions { display: flex; gap: 1rem; padding-top: 1.25rem; border-top: 1px solid var(--gray-200); margin-top: 0.5rem; }
+    .btn-submit { padding: 0.7rem 2.2rem; background: var(--orange); color: white; border: none; border-radius: 0.6rem; cursor: pointer; font-size: 0.95rem; font-weight: 600; font-family: inherit; }
+    .btn-submit:hover { background: var(--orange-dark); }
+    .btn-cancel { padding: 0.7rem 1.8rem; background: var(--gray-200); color: var(--gray-700); border: none; border-radius: 0.6rem; cursor: pointer; font-size: 0.92rem; font-weight: 600; font-family: inherit; text-decoration: none; display: inline-flex; align-items: center; }
+    .btn-cancel:hover { background: var(--gray-300); }
+    .followup-note { font-size: 0.78rem; color: var(--gray-500); margin-top: 0.5rem; line-height: 1.5; }
+    @media (max-width: 768px) { .form-grid { grid-template-columns: 1fr; } }
+</style>
+{% endblock %}
+
+{% block section_content %}
+<div class="edit-form">
+    <a href="{{ url_for('b2b_trip_detail', trip_id=meeting.trip_id) }}" class="btn-cancel" style="background:none;color:var(--gray-500);padding:0;margin-bottom:1rem;">&larr; Back to Meeting</a>
+    <div class="page-header">
+        <h1>Edit Meeting</h1>
+        <p>Update meeting details. Changes are logged, and a new follow-up date schedules a linked follow-up meeting.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('edit_b2b_meeting_save', meeting_id=meeting.id) }}">
+        <div class="panel">
+            <div class="panel-header"><div class="panel-title">Meeting With</div></div>
+            <div class="panel-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Institution / Partner Type</label>
+                        <div class="readonly-box">{{ meeting.meeting_type_name or '—' }}</div>
+                        <div class="readonly-hint">Cannot be changed for a logged meeting.</div>
+                    </div>
+                    <div class="form-group">
+                        <label>Meeting With</label>
+                        <div class="readonly-box">{{ meeting.meeting_with or '—' }}</div>
+                        <div class="readonly-hint">Cannot be changed for a logged meeting.</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header"><div class="panel-title">Details</div></div>
+            <div class="panel-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Meeting Date</label>
+                        <input type="date" name="meeting_date" value="{{ meeting.meeting_date or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Meeting Time</label>
+                        <input type="time" name="meeting_time" value="{{ meeting.meeting_time or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Type</label>
+                        <select name="contact_type">
+                            <option value="">-- Select --</option>
+                            {% for opt in contact_type_options %}
+                            <option value="{{ opt }}" {% if meeting.contact_type == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Status</label>
+                        <select name="status">
+                            <option value="">-- Select --</option>
+                            {% for opt in status_options %}
+                            <option value="{{ opt }}" {% if meeting.status == opt %}selected{% endif %}>{{ opt }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Person</label>
+                        <input type="text" name="contact_person" value="{{ meeting.contact_person or '' }}" placeholder="Contact name">
+                    </div>
+                    <div class="form-group">
+                        <label>Contact Phone</label>
+                        <input type="tel" name="contact_phone" value="{{ meeting.contact_phone or '' }}" placeholder="Phone number">
+                    </div>
+                    <div class="form-group">
+                        <label>Handled By</label>
+                        <select name="handler_employee_id">
+                            {% for emp in employees %}
+                            <option value="{{ emp.id }}" {% if emp.id == meeting.handler_employee_id %}selected{% endif %}>{{ emp.name }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+                <div class="form-group" style="margin-top:1.1rem;">
+                    <label>Notes</label>
+                    <textarea name="notes" placeholder="Meeting notes...">{{ meeting.notes or '' }}</textarea>
+                </div>
+            </div>
+        </div>
+
+        <div class="panel">
+            <div class="panel-header"><div class="panel-title">Follow-up</div></div>
+            <div class="panel-body">
+                <div class="form-grid">
+                    <div class="form-group">
+                        <label>Follow-up Date</label>
+                        <input type="date" name="next_followup_date" value="{{ meeting.next_followup_date or '' }}">
+                    </div>
+                    <div class="form-group">
+                        <label>Follow-up Note</label>
+                        <input type="text" name="next_followup_note" value="{{ meeting.next_followup_note or '' }}" placeholder="What to follow up on">
+                    </div>
+                </div>
+                <div class="followup-note">
+                    Setting a <strong>new</strong> follow-up date creates a linked follow-up meeting (same school/partner, status "Follow up") on that date, and clears the follow-up here.
+                </div>
+            </div>
+        </div>
+
+        <div class="form-actions">
+            <button type="submit" class="btn-submit">Save Changes</button>
+            <a href="{{ url_for('b2b_trip_detail', trip_id=meeting.trip_id) }}" class="btn-cancel">Cancel</a>
+        </div>
+    </form>
+</div>
+{% endblock %}

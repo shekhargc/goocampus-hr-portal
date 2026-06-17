@@ -166,33 +166,7 @@
             </div>
         </div>
 
-        <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
-            <div style="padding:1rem 1.3rem;border-bottom:1px solid var(--gray-100);background:var(--gray-50);font-weight:700;color:var(--navy);font-size:0.95rem;display:flex;justify-content:space-between;align-items:center;">
-                <span>Hot Leads</span>
-                <a href="/sales/leads?hot=1" style="font-size:0.78rem;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-            </div>
-            <div style="padding:0.5rem 1.3rem 1rem;">
-                {% if hot_leads %}
-                {% for h in hot_leads %}
-                <div style="padding:0.65rem 0;border-top:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center;gap:0.75rem;">
-                    <div style="min-width:0;flex:1;">
-                        <div style="font-weight:600;color:var(--navy);font-size:0.88rem;">{{ h.lead_name }}{% if h.company %} <span style="color:var(--gray-500);font-weight:400;">&middot; {{ h.company }}</span>{% endif %}</div>
-                        <div style="font-size:0.75rem;color:var(--gray-500);margin-top:0.1rem;">
-                            {{ h.owner_name or '—' }}
-                            {% if h.expected_close_date %} &middot; closes {{ h.expected_close_date|format_date }}{% endif %}
-                        </div>
-                    </div>
-                    <div style="text-align:right;">
-                        {% if h.stage_name %}<span style="background:{{ h.stage_color or '#3b82f6' }}22;color:{{ h.stage_color or '#3b82f6' }};padding:0.2rem 0.5rem;border-radius:0.3rem;font-size:0.72rem;font-weight:700;">{{ h.stage_name }}</span>{% endif %}
-                        {% if h.expected_value %}<div style="font-size:0.78rem;color:var(--navy);font-weight:600;margin-top:0.2rem;">₹{{ '{:,.0f}'.format(h.expected_value) }}</div>{% endif %}
-                    </div>
-                </div>
-                {% endfor %}
-                {% else %}
-                <div style="padding:1.5rem 0;text-align:center;color:var(--gray-500);font-size:0.88rem;">No hot leads.{% if role != 'viewer' %} <a href="/sales/leads/add" style="color:var(--orange);font-weight:600;">Add a lead &rarr;</a>{% endif %}</div>
-                {% endif %}
-            </div>
-        </div>
+        {# Hot Leads widget retired 2026-06-02 -- the team now uses an external CRM for pipeline. #}
     </div>
 
     {% if news %}

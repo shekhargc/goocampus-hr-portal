@@ -61,12 +61,33 @@
             <dt style="font-weight: 600; color: var(--navy);">Carry Forward:</dt>
             <dd style="color: var(--gray-700);">{{ employee.carry_forward }}</dd>
 
-            <dt style="font-weight: 600; color: var(--navy);">Active:</dt>
-            <dd style="color: var(--gray-700);">{% if employee.is_active %}<span style="color: var(--success);">Yes</span>{% else %}<span style="color: var(--danger);">No</span>{% endif %}</dd>
+            <dt style="font-weight: 600; color: var(--navy);">Employment Status:</dt>
+            <dd style="color: var(--gray-700);text-transform:capitalize;">
+                {% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
+                {% if est == 'active' %}<span style="color: var(--success);font-weight:600;">Active</span>
+                {% else %}<span style="color: var(--danger);font-weight:600;">{{ est }}</span>{% endif %}
+            </dd>
+
+            {% set est = employee.employment_status or ('active' if employee.is_active else 'resigned') %}
+            {% if est != 'active' %}
+            <dt style="font-weight: 600; color: var(--navy);">Last Working Day:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.last_working_day or 'Not recorded' }}</dd>
+
+            <dt style="font-weight: 600; color: var(--navy);">Exit Reason:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.exit_reason or '-' }}</dd>
+
+            {% if employee.exit_notes %}
+            <dt style="font-weight: 600; color: var(--navy);">Exit Notes:</dt>
+            <dd style="color: var(--gray-700);">{{ employee.exit_notes }}</dd>
+            {% endif %}
+            {% endif %}
         </dl>
 
-        <div style="margin-top: 2rem;">
+        <div style="margin-top: 2rem;display:flex;gap:1rem;">
             <a href="/admin/employee/{{ employee.id }}/edit" class="button">Edit Employee</a>
+            {% if est == 'active' %}
+            <a href="/admin/employee/{{ employee.id }}/edit#exitFields" class="button" style="background:var(--danger);">Run Exit Process</a>
+            {% endif %}
         </div>
     </div>
 

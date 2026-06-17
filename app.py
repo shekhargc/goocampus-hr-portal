@@ -30,6 +30,11 @@ except ImportError:
 from email_utils import send_birthday_reminder, send_anniversary_reminder, send_announcement_email, send_happy_birthday_email, send_leave_status_email
 
 app = Flask(__name__)
+# X-1 (2026-06-03): accept trailing slashes on every route so Google
+# Search Console + Bing Webmaster Tools verification on URL-prefix
+# properties (e.g. /georgia/) doesn't 404. Single switch, applies to
+# every route -- no per-route change needed.
+app.url_map.strict_slashes = False
 app.secret_key = os.environ.get('SECRET_KEY', 'goocampus-leave-2026')
 app.config['DEBUG'] = False
 
@@ -60,9 +65,20 @@ def format_date_filter(value):
 
 @app.template_filter('format_reg')
 def format_reg_filter(value):
-    """Normalize registration number to GCUKIP/YY-YY/NNN format.
-    Converts GCUKIP/2022/042 → GCUKIP/22-23/042
-    Leaves GCUKIP/22-23/042 or GCUKIP/25-26/009 as-is.
+    """Normalize registration numbers to a single canonical display:
+        GCUKIP/YY-YY/NNN    (PLAB)
+        GCAUSIP/YY-YY/NNN   (AMC)
+        GCCSS/YY-YY/NNN     (Standard Consulting -- S-3)
+    Handles both source formats and pads the trailing number to at
+    least 3 digits.
+
+      GCUKIP/2022/42      ->  GCUKIP/22-23/042
+      GCUKIP/24-25/06     ->  GCUKIP/24-25/006
+      GCAUSIP/2023/9      ->  GCAUSIP/23-24/009
+      GCAUSIP/26-27/04    ->  GCAUSIP/26-27/004
+      GCAUSIP/25-26/039   ->  GCAUSIP/25-26/039   (unchanged)
+      GCCSS/24-25/06      ->  GCCSS/24-25/006
+    Unknown shapes are returned as-is. Empty / None becomes '—'.
     """
     if not value or not isinstance(value, str):
         return value or '—'
@@ -70,164 +86,119 @@ def format_reg_filter(value):
     if not value:
         return '—'
     import re as _re
-    # Match GCUKIP/YYYY/NNN (4-digit year)
-    m = _re.match(r'^(GCUKIP)/(\d{4})/(\d+)$', value)
-    if m:
-        prefix, year_str, num = m.group(1), m.group(2), m.group(3)
-        year = int(year_str)
+
+    def _pad(n):
+        try:
+            return f"{int(n):03d}"
+        except (ValueError, TypeError):
+            return n
+
+    # Match either prefix with either middle form.
+    # Group 1 prefix; group 2 either YYYY or YY-YY; group 3 trailing number.
+    m = _re.match(r'^(GCUKIP|GCAUSIP|GCCSS)/(\d{2,4}(?:-\d{2,4})?)/(\d+)$',
+                  value, _re.IGNORECASE)
+    if not m:
+        return value
+    prefix = m.group(1).upper()
+    middle = m.group(2)
+    num    = _pad(m.group(3))
+
+    if _re.match(r'^\d{4}$', middle):
+        # 4-digit year -> convert to YY-(YY+1)
+        year = int(middle)
         yy = year % 100
         next_yy = (yy + 1) % 100
-        return f"{prefix}/{yy:02d}-{next_yy:02d}/{num}"
-    # Already in YY-YY format or other — return as-is
-    return value
+        middle = f"{yy:02d}-{next_yy:02d}"
+    elif _re.match(r'^\d{2}-\d{2}$', middle):
+        pass  # already canonical
+    elif _re.match(r'^\d{2,4}-\d{2,4}$', middle):
+        # Mixed widths -- coerce both halves to 2 digits if 4-digit years.
+        a, b = middle.split('-')
+        try:
+            a2 = int(a) % 100
+            b2 = int(b) % 100
+            middle = f"{a2:02d}-{b2:02d}"
+        except ValueError:
+            pass
+    return f"{prefix}/{middle}/{num}"
 
 
 PHOTO_FOLDER = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static', 'photos')
 os.makedirs(PHOTO_FOLDER, exist_ok=True)
-ALLOWED_EXTENSIONS = {'png', 'jpg', 'jpeg', 'gif', 'webp'}
 
-def allowed_file(filename):
-    return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
+# Shared helpers extracted to core/helpers.py during refactor.
+# Re-exported here so existing code keeps working unchanged.
+from core.helpers import ALLOWED_EXTENSIONS, allowed_file, hash_password
 
-def hash_password(password):
-    return hashlib.sha256(password.encode()).hexdigest()
+# Auth decorators + permission helpers extracted to core/auth.py during refactor.
+# User-related query helpers extracted to core/users.py during refactor.
+# Re-imported here so existing code keeps working unchanged.
+from core.auth import (
+    MANAGEMENT_CODES,
+    login_required,
+    admin_required,
+    client_required,
+    can_post_announcements,
+    can_approve_leave,
+    sales_access_required,
+)
+from core.users import get_user, is_manager, get_pending_team_count
 
-def login_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def admin_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        conn = get_db()
-        user = conn.execute('SELECT is_admin FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
-        conn.close()
-        if not user or user['is_admin'] != 1:
-            flash('Admin access required', 'error')
-            return redirect(url_for('dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def client_required(f):
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if not session.get('is_client'):
-            flash('Please log in to continue', 'error')
-            return redirect(url_for('client_login_page'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-# Management codes that can post announcements (along with admin)
-MANAGEMENT_CODES = ['GC001', 'GC002', 'GC003']
-
-def can_post_announcements(user):
-    """Check if user is admin or management team."""
-    return user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES
-
-def can_approve_leave(approver, leave_employee, conn):
-    """Determine if approver can approve/reject a leave for leave_employee.
-    Returns (allowed: bool, reason: str).
-    Rules:
-      1. Never self-approve
-      2. Management (GC001-GC003) leaves → other management members can approve
-      3. Employee with reporting_to → reporting manager OR any admin can approve
-      4. Employee without reporting_to → only admin can approve
-    """
-    if approver['id'] == leave_employee['id']:
-        return False, 'You cannot approve your own leave request'
-
-    emp_code = leave_employee.get('emp_code', '')
-    approver_code = approver.get('emp_code', '')
-
-    # Management cross-approval: any management member can approve another's leave
-    if emp_code in MANAGEMENT_CODES and approver_code in MANAGEMENT_CODES:
-        return True, 'management_peer'
-
-    # Admin can approve anyone else's leave
-    if approver['is_admin'] == 1:
-        return True, 'admin'
-
-    # Reporting manager can approve their direct report's leave
-    reporting_to = leave_employee.get('reporting_to')
-    if reporting_to and reporting_to == approver['id']:
-        return True, 'manager'
-
-    return False, 'Not authorized to approve this leave'
-
-def has_module_access(user, module):
-    """Check if user has access to a CRM module (sales, projects, b2b_meetings).
-    Admin and management always have access. Others need explicit grant."""
-    if user['is_admin'] == 1 or user['emp_code'] in MANAGEMENT_CODES:
-        return True
-    conn = get_db()
-    access = conn.execute(
-        'SELECT id FROM module_access WHERE employee_id = ? AND module = ? AND is_active = 1',
-        (user['id'], module)
-    ).fetchone()
-    conn.close()
-    return access is not None
-
-def sales_access_required(f):
-    """Decorator requiring sales module access."""
-    @wraps(f)
-    def decorated_function(*args, **kwargs):
-        if 'user_id' not in session:
-            return redirect(url_for('login'))
-        user = get_user()
-        if not has_module_access(user, 'sales'):
-            flash('Sales module access required', 'error')
-            return redirect(url_for('dashboard'))
-        return f(*args, **kwargs)
-    return decorated_function
-
-def get_user():
-    if 'user_id' not in session:
-        return None
-    conn = get_db()
-    user = conn.execute('SELECT * FROM employees WHERE id = ?', (session['user_id'],)).fetchone()
-    conn.close()
-    return user
 
 def get_monthly_alloc(month_num):
     """Get monthly leave allocation for a given month number (1-12).
     April (month 4) gets 3 days, all other months get 2 days. Base total = 25/year."""
     return 3 if month_num == 4 else 2
 
-def is_manager(user_id):
-    """Check if user has any direct reports"""
-    conn = get_db()
-    count = conn.execute('SELECT COUNT(*) as cnt FROM employees WHERE reporting_to = ? AND is_active = 1', (user_id,)).fetchone()
-    conn.close()
-    return count['cnt'] > 0
-
-def get_pending_team_count(user_id):
-    """Get count of pending leave requests from direct reports"""
-    conn = get_db()
-    count = conn.execute('''
-        SELECT COUNT(*) as cnt FROM leave_records lr
-        JOIN employees e ON lr.employee_id = e.id
-        WHERE lr.status = 'pending' AND e.reporting_to = ?
-    ''', (user_id,)).fetchone()
-    conn.close()
-    return count['cnt']
-
 @app.context_processor
 def inject_manager_status():
-    """Make is_manager, pending_team_count, and has_sales_access available in all templates"""
+    """Make is_manager, pending_team_count, has_sales_access, and
+    has_operations_access + operations_landing_url available in all
+    templates.
+
+    Operations access is granted to any user with view permission on
+    at least one pathway dashboard OR any operations_shared sub-area.
+    The landing URL is the first pathway dashboard they have access
+    to (PLAB > Australia > Consulting), so a Consulting-only user
+    lands on /operations/consulting instead of 403'ing on
+    /operations/uk-pathway.
+    """
     if 'user_id' in session:
         user_id = session['user_id']
         user = get_user()
         mgr = is_manager(user_id)
         pending_team = get_pending_team_count(user_id) if mgr else 0
-        sales_access = has_module_access(user, 'sales') if user else False
-        return {'is_manager': mgr, 'pending_team_count': pending_team, 'has_sales_access': sales_access}
-    return {'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False}
+        sales_access = has_section_permission(user, 'sales', 'meetings', 'view') if user else False
+
+        # has_operations_access — any of the 3 pathway dashboards, or
+        # any operations_shared sub-area (reports / field_manager /
+        # vendors_providers). Admins always see Operations.
+        plab_ok = has_section_permission(user, 'plab_pathway', 'dashboard', 'view') if user else False
+        aus_ok  = has_section_permission(user, 'australia_pathway', 'dashboard', 'view') if user else False
+        cons_ok = has_section_permission(user, 'consulting_pathway', 'dashboard', 'view') if user else False
+        shared_ok = any(has_section_permission(user, 'operations_shared', s, 'view')
+                        for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
+        ops_access = plab_ok or aus_ok or cons_ok or shared_ok
+
+        # Smart landing URL — unified Operations dashboard when the user
+        # has any pathway dashboard; otherwise fall back to Reports.
+        if plab_ok or aus_ok or cons_ok:
+            ops_landing = '/operations/dashboard'
+        else:
+            # operations_shared only -> Reports is the safest default
+            ops_landing = '/operations/reports'
+
+        return {
+            'is_manager': mgr,
+            'pending_team_count': pending_team,
+            'has_sales_access': sales_access,
+            'has_operations_access': ops_access,
+            'operations_landing_url': ops_landing,
+        }
+    return {
+        'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
+        'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
+    }
 
 def calculate_monthly_balance(employee_id, year, month):
     """Calculate running balance for a given month"""
@@ -533,24 +504,43 @@ def partner_login():
 
 
 def get_partner_visible_sections(partner_id):
-    """Return list of section_key strings this partner can see."""
+    """Return list of legacy `section_key` strings this partner can see.
+
+    Phase 6 (2026-06-01): now reads from user_section_permissions
+    (subject_type='partner'). The legacy `partner_section_permissions`
+    table is going away. We translate from the new (main, sub) tuples
+    back to the legacy section_key strings so existing template /
+    sidebar consumers don't need to change.
+    """
+    # Inverse of LEGACY_PARTNER_SECTION_MAP defined further down in app.py.
+    # Hand-inlined here so this helper has no forward-reference dependency.
+    INVERSE = {
+        ('partner_portal', 'dashboard'):         'partner_dashboard',
+        ('partner_portal', 'student_leads'):     'partner_student_leads',
+        ('partner_portal', 'b2b_leads'):         'partner_b2b_leads',
+        ('partner_portal', 'team'):              'partner_team',
+        ('partner_portal', 'products'):          'partner_products',
+        ('partner_portal', 'commissions'):       'partner_commissions',
+        ('partner_portal', 'reports'):           'partner_reports',
+        ('partner_portal', 'college_portal'):    'partner_college_portal',
+        ('partner_portal', 'medical_predictor'): 'partner_medical_predictor',
+    }
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT section_key, allowed_partner_ids FROM partner_section_permissions WHERE is_active = 1"
+            "SELECT main_section, sub_section FROM user_section_permissions "
+            "WHERE subject_type='partner' AND subject_id = ? AND can_view = 1",
+            (partner_id,),
         ).fetchall()
         visible = []
-        pid_str = str(partner_id)
         for r in rows:
-            allowed = (r['allowed_partner_ids'] or '').strip()
-            # Empty allowed_partner_ids means visible to ALL partners
-            if not allowed:
-                visible.append(r['section_key'])
-            else:
-                # Check if this partner's ID is in the comma-separated list
-                allowed_list = [x.strip() for x in allowed.split(',') if x.strip()]
-                if pid_str in allowed_list:
-                    visible.append(r['section_key'])
+            key = INVERSE.get((r['main_section'], r['sub_section']))
+            if key:
+                visible.append(key)
+        # Always include the dashboard so a partner with zero grants still
+        # has a landing page (matches legacy except-clause behavior).
+        if 'partner_dashboard' not in visible:
+            visible.append('partner_dashboard')
         return visible
     except Exception as e:
         logging.error(f"get_partner_visible_sections: {e}")
@@ -1030,21 +1020,70 @@ def client_register(token):
             conn.commit()
             acct_id = conn.execute("SELECT id FROM client_accounts WHERE mobile = ?", (clean,)).fetchone()['id']
 
-        # Generate registration number: GC-{PRODUCT_CODE}-{YYYYMM}-{SEQ}
-        prod_code = (product['name'][:3] if product else 'GEN').upper()
-        from datetime import datetime
-        ym = datetime.now().strftime('%Y%m')
-        seq_row = conn.execute(
-            "SELECT COUNT(*) as c FROM client_registrations WHERE registration_number LIKE ?",
-            (f'GC-{prod_code}-{ym}-%',)
-        ).fetchone()
-        seq = (seq_row['c'] if seq_row else 0) + 1
-        reg_num = f"GC-{prod_code}-{ym}-{seq:04d}"
+        # Generate registration number using per-pathway format.
+        # PLAB / UK   -> GCUKIP/<FY>/<NNN>
+        # Australia   -> GCAUSIP/<FY>/<NNN>
+        # UAE         -> GCUAEIP/<FY>/<NNN>
+        # Consulting  -> GCCONS/<FY>/<NNN>
+        from core.registration import next_registration_number
+        reg_num = next_registration_number(conn, product['name'] if product else None)
+
+        # 2026-06-02: counsellor auto-assign -- the sales rep who raised
+        # the invitation IS the counsellor.
+        counsellor_id = inv['invited_by']
+        counsellor_name = ''
+        if counsellor_id:
+            emp_row = conn.execute(
+                "SELECT name FROM employees WHERE id = ?",
+                (counsellor_id,),
+            ).fetchone()
+            if emp_row:
+                counsellor_name = emp_row['name'] or ''
+
+        # Item C: parse the sales closure metadata stashed on the
+        # invitation, so the registration row is born with plan +
+        # package + installments already filled in. Sales can still
+        # tweak any of these later via /admin/clients/<id>.
+        import json as _json
+        try:
+            closure_meta = _json.loads(inv['closure_metadata']) \
+                           if inv['closure_metadata'] else {}
+        except Exception:
+            closure_meta = {}
+        plan_type        = closure_meta.get('plan_type', '') or ''
+        package_amount   = float(closure_meta.get('package_amount',   0) or 0)
+        discount_allowed = float(closure_meta.get('discount_allowed', 0) or 0)
+        final_package    = float(closure_meta.get('final_package',    0) or 0)
+        addl_pack_notes  = closure_meta.get('additional_package_notes', '') or ''
+        lead_source      = closure_meta.get('lead_source', '') or ''
+        addl_notes       = closure_meta.get('additional_notes', '') or ''
+        inst_amts = [float(closure_meta.get(f'inst{i}_amount', 0) or 0) for i in (1,2,3,4)]
+        inst_dts  = [closure_meta.get(f'inst{i}_date', '') or '' for i in (1,2,3,4)]
+        inst_nts  = [closure_meta.get(f'inst{i}_note', '') or '' for i in (1,2,3,4)]
 
         conn.execute('''INSERT INTO client_registrations
-            (account_id, invitation_id, product_id, registration_number, first_name, last_name, mobile, email, form_status, current_step)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'draft', 1)''',
-            (acct_id, inv['id'], inv['product_id'], reg_num, first_name, last_name, clean, inv['client_email'] or ''))
+            (account_id, invitation_id, product_id, registration_number,
+             first_name, last_name, mobile, email,
+             counsellor_id, counsellor_name,
+             plan_type, package_amount, discount_allowed, final_package,
+             inst1_amount, inst1_date, inst1_note,
+             inst2_amount, inst2_date, inst2_note,
+             inst3_amount, inst3_date, inst3_note,
+             inst4_amount, inst4_date, inst4_note,
+             lead_source, additional_notes,
+             form_status, current_step)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, 'draft', 1)''',
+            (acct_id, inv['id'], inv['product_id'], reg_num,
+             first_name, last_name, clean, inv['client_email'] or '',
+             counsellor_id, counsellor_name,
+             plan_type, package_amount, discount_allowed, final_package,
+             inst_amts[0], inst_dts[0], inst_nts[0],
+             inst_amts[1], inst_dts[1], inst_nts[1],
+             inst_amts[2], inst_dts[2], inst_nts[2],
+             inst_amts[3], inst_dts[3], inst_nts[3],
+             lead_source, addl_notes))
         conn.execute("UPDATE client_invitations SET status = 'registered', registered_at = CURRENT_TIMESTAMP WHERE id = ?", (inv['id'],))
         conn.commit()
         conn.close()
@@ -1074,13 +1113,85 @@ def client_dashboard():
     acct_id = session.get('user_id')
     conn = get_db()
     account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
-    registrations = conn.execute('''
-        SELECT cr.*, ps.name as product_name
+    # Item C-2: fetch counsellor contact for "Your counsellor" card.
+    registrations_raw = conn.execute('''
+        SELECT cr.*, ps.name as product_name,
+               e.name as counsellor_full_name,
+               e.email as counsellor_email_addr,
+               e.phone as counsellor_phone_no
         FROM client_registrations cr
         LEFT JOIN products_services ps ON ps.id = cr.product_id
+        LEFT JOIN employees e ON e.id = cr.counsellor_id
         WHERE cr.account_id = ?
         ORDER BY cr.created_at DESC
     ''', (acct_id,)).fetchall()
+    # Item F: load the admin-managed holidays once per dashboard load
+    # so the working-day projection for the 30-day Check-in step
+    # honours weekends + holidays. Cheap query, single fetch.
+    try:
+        from working_days import load_holidays_set
+        holidays_set = load_holidays_set(conn)
+    except Exception:
+        holidays_set = set()
+
+    # Item D: pre-fetch onboarding milestones for every registration
+    # number, joined via plab_clients (which holds the ops-side record
+    # both PLAB and AMC flows write into). Keyed by registration_number
+    # so we can attach per-reg below without a per-row query.
+    reg_nums = [r['registration_number'] for r in registrations_raw if r['registration_number']]
+    onboarding_by_reg = {}
+    if reg_nums:
+        placeholders = ','.join(['?' for _ in reg_nums])
+        try:
+            onb_rows = conn.execute(f"""
+                SELECT pc.registration_number,
+                       co.welcome_email_sent, co.welcome_email_sent_at,
+                       co.welcome_call_confirmed, co.welcome_call_date,
+                       co.kit_delivered_date, co.welcome_kit_sent_date,
+                       co.onboarding_status, co.updated_at as onb_updated_at
+                FROM plab_clients pc
+                LEFT JOIN client_onboarding co ON co.client_id = pc.id
+                WHERE pc.registration_number IN ({placeholders})
+            """, reg_nums).fetchall()
+            for row in onb_rows:
+                reg_num = row['registration_number']
+                if reg_num and reg_num not in onboarding_by_reg:
+                    onboarding_by_reg[reg_num] = dict(row)
+        except Exception:
+            # Defensive: if join fails for any reason just show empty
+            # timelines rather than 500 the dashboard.
+            onboarding_by_reg = {}
+
+    # Convert to dicts so the template can attach a pre-computed
+    # installments list without complicating the SELECT.
+    registrations = []
+    for r in registrations_raw:
+        d = dict(r)
+        d['installments'] = [
+            {
+                'n': i,
+                'amount':  float(d.get(f'inst{i}_amount') or 0),
+                'date':    d.get(f'inst{i}_date') or '',
+                'note':    d.get(f'inst{i}_note') or '',
+                'paid':    bool(d.get(f'inst{i}_amount') and float(d.get(f'inst{i}_amount') or 0) > 0
+                                and (d.get('total_paid') or 0) >= sum(
+                                    float(d.get(f'inst{j}_amount') or 0) for j in range(1, i + 1))),
+            }
+            for i in (1, 2, 3, 4)
+        ]
+        # Only keep installments that have an amount or date set so we
+        # don't render four empty rows for a single-installment plan.
+        d['installments'] = [it for it in d['installments'] if it['amount'] or it['date']]
+
+        # Item D + F: build the 5-step client-facing onboarding
+        # timeline. holidays_set lets the helper project the 30-day
+        # Check-in date forward using working_days. onb is None for
+        # clients without a client_onboarding row yet; helper handles
+        # that by returning all steps as 'upcoming'.
+        d['timeline'] = _build_client_timeline(
+            onboarding_by_reg.get(d.get('registration_number')),
+            holidays_set=holidays_set)
+        registrations.append(d)
 
     # Get doc requests for all registrations
     reg_ids = [r['id'] for r in registrations]
@@ -1455,6 +1566,7 @@ def client_form_config_page():
     conn = get_db()
     products = conn.execute("SELECT id, name FROM products_services WHERE status = 'active' ORDER BY name").fetchall()
     selected_product = request.args.get('product_id', '')
+    selected_role = request.args.get('role', '').strip().lower()  # '' = all
     configs = []
     if selected_product:
         configs = conn.execute('''
@@ -1471,9 +1583,58 @@ def client_form_config_page():
             LEFT JOIN products_services ps ON ps.id = cfc.product_id
             ORDER BY cfc.product_id, cfc.step_number, cfc.display_order
         ''').fetchall()
+
+    # Apply role filter post-query (small datasets; cleaner than dynamic SQL).
+    if selected_role in ('client', 'sales', 'ops'):
+        configs = [c for c in configs if (c['role'] or 'client') == selected_role]
+
+    # Phase D (2026-06-02): group fields by step so the template can render
+    # collapsible step-cards instead of one long flat table. Each group is
+    # {step_number, step_name, fields[], role_counts{}}.
+    # NOTE: the list key is 'fields' (not 'items') because Jinja's dot-access
+    # resolves `sg.items` to the dict.items() method before falling through
+    # to the key lookup -- naming it 'items' silently breaks the template.
+    step_groups = []
+    by_step = {}
+    for c in configs:
+        sn = c['step_number'] or 0
+        if sn not in by_step:
+            by_step[sn] = {
+                'step_number': sn,
+                'step_name': c['step_name'] or f'Step {sn}',
+                'fields': [],
+                'role_counts': {'client': 0, 'sales': 0, 'ops': 0},
+            }
+        by_step[sn]['fields'].append(c)
+        r = (c['role'] or 'client').lower()
+        if r in by_step[sn]['role_counts']:
+            by_step[sn]['role_counts'][r] += 1
+    step_groups = [by_step[k] for k in sorted(by_step.keys())]
+
+    overall_role_counts = {'client': 0, 'sales': 0, 'ops': 0}
+    for c in configs:
+        r = (c['role'] or 'client').lower()
+        if r in overall_role_counts:
+            overall_role_counts[r] += 1
+
+    # Available lookup categories — both pathways merged for the picker.
+    try:
+        lookup_categories = [
+            r['category'] for r in conn.execute(
+                "SELECT DISTINCT category FROM lookup_options ORDER BY category"
+            ).fetchall()
+        ]
+    except Exception:
+        lookup_categories = []
     conn.close()
-    return render_template('client_form_config.html', configs=configs, products=products,
-                         selected_product=selected_product, user=user, active_section='clients')
+    return render_template('client_form_config.html',
+                         configs=configs, products=products,
+                         selected_product=selected_product,
+                         selected_role=selected_role,
+                         step_groups=step_groups,
+                         overall_role_counts=overall_role_counts,
+                         user=user, lookup_categories=lookup_categories,
+                         active_section='clients')
 
 
 @app.route('/admin/client-form-config/add', methods=['POST'])
@@ -1482,12 +1643,14 @@ def client_form_config_add():
     conn = get_db()
     try:
         conn.execute('''INSERT INTO client_form_configs
-            (product_id, step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, is_visible, display_order, placeholder, hint_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (product_id, step_number, step_name, field_name, field_label, field_type, field_options, lookup_category, role, is_required, is_visible, display_order, placeholder, hint_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
             (request.form.get('product_id'), int(request.form.get('step_number', 1)),
              request.form.get('step_name', ''), request.form.get('field_name', ''),
              request.form.get('field_label', ''), request.form.get('field_type', 'text'),
-             request.form.get('field_options', ''), request.form.get('role', 'client'),
+             request.form.get('field_options', ''),
+             (request.form.get('lookup_category') or None),
+             request.form.get('role', 'client'),
              1 if request.form.get('is_required') else 0,
              1 if request.form.get('is_visible', 'on') else 0,
              int(request.form.get('display_order', 0)),
@@ -1509,12 +1672,13 @@ def client_form_config_edit(config_id):
     try:
         conn.execute('''UPDATE client_form_configs SET
             step_number = ?, step_name = ?, field_name = ?, field_label = ?, field_type = ?,
-            field_options = ?, role = ?, is_required = ?, is_visible = ?, display_order = ?,
+            field_options = ?, lookup_category = ?, role = ?, is_required = ?, is_visible = ?, display_order = ?,
             placeholder = ?, hint_text = ?
             WHERE id = ?''',
             (int(request.form.get('step_number', 1)), request.form.get('step_name', ''),
              request.form.get('field_name', ''), request.form.get('field_label', ''),
              request.form.get('field_type', 'text'), request.form.get('field_options', ''),
+             (request.form.get('lookup_category') or None),
              request.form.get('role', 'client'),
              1 if request.form.get('is_required') else 0,
              1 if request.form.get('is_visible') else 0,
@@ -1549,6 +1713,655 @@ def client_form_config_delete(config_id):
     finally:
         conn.close()
     return redirect(url_for('client_form_config_page', product_id=pid))
+
+
+# ── ADMIN: Welcome Kit per-product templates (Phase E, 2026-06-02) ──
+
+@app.route('/admin/welcome-kit', methods=['GET'])
+@login_required
+def welcome_kit_page():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    products = conn.execute(
+        "SELECT id, name FROM products_services WHERE status='active' ORDER BY name"
+    ).fetchall()
+    selected_product = request.args.get('product_id', '')
+    items = []
+    if selected_product:
+        items = conn.execute(
+            "SELECT * FROM welcome_kit_items WHERE product_id = ? "
+            "ORDER BY sort_order, id",
+            (selected_product,),
+        ).fetchall()
+    conn.close()
+    return render_template(
+        'welcome_kit_config.html',
+        user=user, products=products, items=items,
+        selected_product=selected_product,
+        active_section='clients',
+    )
+
+
+@app.route('/admin/welcome-kit/add', methods=['POST'])
+@login_required
+def welcome_kit_add():
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    pid = request.form.get('product_id', '').strip()
+    if not pid.isdigit():
+        flash('Pick a product first', 'error')
+        return redirect(url_for('welcome_kit_page'))
+    conn = get_db()
+    try:
+        conn.execute(
+            "INSERT INTO welcome_kit_items "
+            "(product_id, item_name, item_type, description, sort_order, "
+            " is_required, is_active, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, 1, ?)",
+            (
+                int(pid),
+                request.form.get('item_name', '').strip(),
+                request.form.get('item_type', 'task').strip() or 'task',
+                request.form.get('description', '').strip(),
+                int(request.form.get('sort_order', '0') or 0),
+                1 if request.form.get('is_required') else 0,
+                user['id'],
+            ),
+        )
+        conn.commit()
+        flash('Kit item added', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_add: {e}")
+        flash('Could not add item', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+@app.route('/admin/welcome-kit/edit/<int:item_id>', methods=['POST'])
+@login_required
+def welcome_kit_edit(item_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    pid = ''
+    try:
+        row = conn.execute(
+            "SELECT product_id FROM welcome_kit_items WHERE id = ?", (item_id,),
+        ).fetchone()
+        pid = str(row['product_id']) if row else ''
+        conn.execute(
+            "UPDATE welcome_kit_items SET "
+            " item_name = ?, item_type = ?, description = ?, "
+            " sort_order = ?, is_required = ?, is_active = ? "
+            "WHERE id = ?",
+            (
+                request.form.get('item_name', '').strip(),
+                request.form.get('item_type', 'task').strip() or 'task',
+                request.form.get('description', '').strip(),
+                int(request.form.get('sort_order', '0') or 0),
+                1 if request.form.get('is_required') else 0,
+                1 if request.form.get('is_active') else 0,
+                item_id,
+            ),
+        )
+        conn.commit()
+        flash('Kit item updated', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_edit: {e}")
+        flash('Could not update item', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+@app.route('/admin/welcome-kit/delete/<int:item_id>', methods=['POST'])
+@login_required
+def welcome_kit_delete(item_id):
+    user = get_user()
+    if not (user and user['is_admin']):
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    pid = ''
+    try:
+        row = conn.execute(
+            "SELECT product_id FROM welcome_kit_items WHERE id = ?", (item_id,),
+        ).fetchone()
+        pid = str(row['product_id']) if row else ''
+        conn.execute("DELETE FROM welcome_kit_items WHERE id = ?", (item_id,))
+        conn.commit()
+        flash('Kit item deleted', 'success')
+    except Exception as e:
+        logging.error(f"welcome_kit_delete: {e}")
+        flash('Could not delete item (it may be referenced by a client kit)', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('welcome_kit_page', product_id=pid))
+
+
+# ── Item E-1: Email-template admin UI ─────────────────────────────────
+# A single admin surface for editing every onboarding-stage email
+# template + toggling who receives each one (client / counsellor / ops /
+# parents). Backed by the email_templates table extended in the boot
+# migration above. NEW templates seeded with enabled=0 so nothing
+# auto-fires until an admin explicitly turns it on.
+
+EMAIL_RECIPIENT_KEYS = [
+    ('recipients_client',     'Client',      'Sent to the client themselves.'),
+    ('recipients_counsellor', 'Counsellor',  'Sent to the registered counsellor.'),
+    ('recipients_ops',        'Operations',  'Sent to ops@goocampus.in.'),
+    ('recipients_parents',    'Parents',     "Sent to the parents' email (if captured)."),
+]
+
+
+@app.route('/admin/email-templates', methods=['GET'])
+@login_required
+def admin_email_templates_list():
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    try:
+        rows = conn.execute("""
+            SELECT id, template_key, stage, label, subject, enabled,
+                   recipients_client, recipients_counsellor,
+                   recipients_ops, recipients_parents, updated_at
+              FROM email_templates
+             ORDER BY CASE stage
+                        WHEN 'welcome_email' THEN 1
+                        WHEN 'welcome_call_scheduled' THEN 2
+                        WHEN 'kit_dispatched' THEN 3
+                        WHEN 'onboarded' THEN 4
+                        WHEN 'thirty_day_checkin' THEN 5
+                        ELSE 99 END,
+                      template_key
+        """).fetchall()
+    except Exception:
+        rows = []
+    templates = []
+    for r in rows:
+        d = dict(r)
+        d['recipient_summary'] = ', '.join(
+            label for col, label, _ in EMAIL_RECIPIENT_KEYS if d.get(col))
+        if not d['recipient_summary']:
+            d['recipient_summary'] = '(no recipients selected)'
+        templates.append(d)
+    conn.close()
+    return render_template(
+        'admin_email_templates_list.html',
+        user=user, templates=templates,
+        active_section='company',
+    )
+
+
+@app.route('/admin/email-templates/<template_key>', methods=['GET'])
+@login_required
+def admin_email_template_edit(template_key):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    conn = get_db()
+    tpl = conn.execute(
+        "SELECT * FROM email_templates WHERE template_key = ?", (template_key,)
+    ).fetchone()
+    conn.close()
+    if not tpl:
+        flash('Template not found.', 'error')
+        return redirect(url_for('admin_email_templates_list'))
+    return render_template(
+        'admin_email_templates_edit.html',
+        user=user, tpl=dict(tpl),
+        recipient_keys=EMAIL_RECIPIENT_KEYS,
+        active_section='company',
+    )
+
+
+@app.route('/admin/email-templates/<template_key>/save', methods=['POST'])
+@login_required
+def admin_email_template_save(template_key):
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    f = request.form
+    subject = (f.get('subject') or '').strip()
+    body_html = (f.get('body_html') or '').strip()
+    notes = (f.get('notes') or '').strip()
+    label = (f.get('label') or '').strip()
+    if not subject or not body_html:
+        flash('Subject and body are required.', 'error')
+        return redirect(url_for('admin_email_template_edit', template_key=template_key))
+    enabled = 1 if f.get('enabled') else 0
+    r_client = 1 if f.get('recipients_client') else 0
+    r_couns  = 1 if f.get('recipients_counsellor') else 0
+    r_ops    = 1 if f.get('recipients_ops') else 0
+    r_parent = 1 if f.get('recipients_parents') else 0
+    conn = get_db()
+    try:
+        conn.execute("""
+            UPDATE email_templates SET
+              subject = ?, body_html = ?, label = ?, notes = ?, enabled = ?,
+              recipients_client = ?, recipients_counsellor = ?,
+              recipients_ops = ?, recipients_parents = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE template_key = ?
+        """, (subject, body_html, label, notes, enabled,
+              r_client, r_couns, r_ops, r_parent, template_key))
+        conn.commit()
+        flash('Email template saved.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"admin_email_template_save: {e}")
+        flash(f'Save failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(url_for('admin_email_template_edit', template_key=template_key))
+
+
+# ── Item G-1: Time-slot request flow (calendar slot picker) ──────────
+# Pattern A: ops triggers a slot request -> system generates N open
+# 30-min slots over the next 5 working days -> client opens a public
+# token URL and picks one -> chosen slot writes back into
+# client_onboarding.welcome_call_date which lights up E-3's
+# welcome_call_scheduled fire-point. Zero back-and-forth.
+
+SLOT_CALL_HOURS = (10, 17)          # 10:00 - 17:00 IST (last slot starts 16:30)
+SLOT_LENGTH_MIN = 30
+SLOT_LOOKAHEAD_WORKING_DAYS = 5
+SLOT_EXPIRES_DAYS = 14              # token good for 14 calendar days
+
+
+def _generate_call_slots(holidays_set):
+    """Build a list of ISO datetime strings for the next
+    SLOT_LOOKAHEAD_WORKING_DAYS working days, 30-min slots between
+    10:00 and 17:00 IST. Honours the F-1 5pm cutoff so 'today' is
+    skipped after 17:00 IST.
+    """
+    from working_days import add_working_days, next_working_day, now_ist
+    from datetime import datetime as _dt, timedelta as _td
+    today_ist = now_ist().date()
+    # Use add_working_days with n=0 to apply the cutoff rule to the
+    # starting date in one place.
+    start = add_working_days(today_ist, 0, holidays_set)
+    days = [start]
+    cur = start
+    for _ in range(SLOT_LOOKAHEAD_WORKING_DAYS - 1):
+        cur = add_working_days(cur, 1, holidays_set, cutoff_hour=None)
+        days.append(cur)
+
+    slots = []
+    for d in days:
+        slot_dt = _dt(d.year, d.month, d.day, SLOT_CALL_HOURS[0], 0)
+        end_dt  = _dt(d.year, d.month, d.day, SLOT_CALL_HOURS[1], 0)
+        while slot_dt + _td(minutes=SLOT_LENGTH_MIN) <= end_dt + _td(minutes=1):
+            slots.append(slot_dt.isoformat(timespec='minutes'))
+            slot_dt += _td(minutes=SLOT_LENGTH_MIN)
+    return slots
+
+
+def _gen_slot_token():
+    """Random URL-safe token for the public client URL."""
+    import secrets
+    return secrets.token_urlsafe(16)
+
+
+@app.route('/operations/onboarding/<int:client_id>/request-call-slot', methods=['POST'])
+@admin_required
+def ops_request_call_slot(client_id):
+    """Ops trigger: create a slot request for a client. Returns the
+    ops onboarding detail page with the share URL flashed up."""
+    import json as _json
+    from datetime import datetime as _dt, timedelta as _td
+    user = get_user()
+    conn = get_db()
+    client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close()
+        flash('Client not found.', 'error')
+        return redirect(url_for('ops_onboarding_list'))
+
+    # Don't allow stacking requests -- if there's already a pending
+    # request for this client + slot_type, reuse its token (so ops can
+    # re-send the same link).
+    existing = conn.execute(
+        "SELECT * FROM scheduled_slots "
+        " WHERE client_id = ? AND slot_type = 'welcome_call' "
+        "   AND status = 'pending' "
+        " ORDER BY id DESC LIMIT 1",
+        (client_id,)
+    ).fetchone()
+    if existing:
+        token = existing['token']
+        is_new = False
+    else:
+        try:
+            from working_days import load_holidays_set
+            holidays_set = load_holidays_set(conn)
+        except Exception:
+            holidays_set = set()
+        try:
+            slots = _generate_call_slots(holidays_set)
+        except Exception as e:
+            logging.error(f"slot generation: {e}")
+            slots = []
+        token = _gen_slot_token()
+        expires = _dt.utcnow() + _td(days=SLOT_EXPIRES_DAYS)
+        try:
+            conn.execute(
+                "INSERT INTO scheduled_slots "
+                "(token, client_id, slot_type, available_slots, "
+                " status, requested_by, expires_at) "
+                "VALUES (?, ?, 'welcome_call', ?, 'pending', ?, ?)",
+                (token, client_id, _json.dumps(slots),
+                 user['id'] if user else None,
+                 expires.isoformat(timespec='seconds'))
+            )
+            conn.commit()
+        except Exception as e:
+            try: conn.rollback()
+            except Exception: pass
+            logging.error(f"ops_request_call_slot insert: {e}")
+            conn.close()
+            flash(f'Failed to create slot request: {e}', 'error')
+            return redirect(url_for('ops_onboarding_detail', client_id=client_id))
+        is_new = True
+    pathway = (client['pathway'] if 'pathway' in client.keys() else None) or 'plab'
+    conn.close()
+    share_url = url_for('client_pick_slot', token=token, _external=True)
+    if is_new:
+        flash(
+            f'Slot picker created. Share this link with the client: {share_url}',
+            'success')
+    else:
+        flash(
+            f'A pending slot request already exists. Reuse this link: {share_url}',
+            'info')
+    redirect_endpoint = ('ops_au_onboarding_detail'
+                        if pathway == 'australia'
+                        else 'ops_onboarding_detail')
+    return redirect(url_for(redirect_endpoint, client_id=client_id))
+
+
+@app.route('/slot/<token>', methods=['GET'])
+def client_pick_slot(token):
+    """Public client-facing slot picker. No login required -- the
+    token is the access control."""
+    import json as _json
+    from datetime import datetime as _dt
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM scheduled_slots WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        return render_template('slot_pick.html',
+            error='This link is invalid or has been removed.',
+            row=None, slots_by_day={})
+    row = dict(row)
+    # Expiry check
+    try:
+        if row.get('expires_at'):
+            exp = _dt.fromisoformat(str(row['expires_at'])[:19])
+            if _dt.utcnow() > exp and row.get('status') == 'pending':
+                row['status'] = 'expired'
+    except Exception:
+        pass
+    # Client name for the friendly header
+    client = conn.execute(
+        "SELECT first_name, last_name, prefix FROM plab_clients WHERE id = ?",
+        (row['client_id'],)
+    ).fetchone()
+    client_name = ''
+    if client:
+        client_name = (
+            f"{client['prefix'] or ''} "
+            f"{client['first_name'] or ''} "
+            f"{client['last_name'] or ''}"
+        ).strip()
+
+    # Group slots by date for the UI
+    slots_by_day = {}
+    try:
+        for iso in _json.loads(row.get('available_slots') or '[]'):
+            day = iso[:10]
+            slots_by_day.setdefault(day, []).append(iso)
+    except Exception:
+        pass
+    conn.close()
+    return render_template('slot_pick.html',
+        row=row, slots_by_day=slots_by_day,
+        client_name=client_name, error=None)
+
+
+@app.route('/slot/<token>/pick', methods=['POST'])
+def client_pick_slot_save(token):
+    """Public submission: client picked a slot."""
+    import json as _json
+    from datetime import datetime as _dt
+    chosen = (request.form.get('chosen_slot') or '').strip()
+    if not chosen:
+        flash('Please pick a time slot.', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    conn = get_db()
+    row = conn.execute(
+        "SELECT * FROM scheduled_slots WHERE token = ?", (token,)
+    ).fetchone()
+    if not row:
+        conn.close()
+        flash('This link is invalid or has been removed.', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    row = dict(row)
+    if row.get('status') != 'pending':
+        conn.close()
+        return redirect(url_for('client_pick_slot', token=token))
+    # Validate chosen against available
+    try:
+        avail = _json.loads(row.get('available_slots') or '[]')
+    except Exception:
+        avail = []
+    if chosen not in avail:
+        conn.close()
+        flash('That slot is no longer available. Please pick another.',
+              'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    try:
+        conn.execute(
+            "UPDATE scheduled_slots SET "
+            "  chosen_slot = ?, status = 'confirmed', "
+            "  chosen_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (chosen, row['id']))
+        # Wire back to client_onboarding so the D timeline + E-3
+        # welcome_call_scheduled fire-point both light up. Snapshot
+        # old state first so the transition is detected.
+        onb = conn.execute(
+            "SELECT * FROM client_onboarding WHERE client_id = ?",
+            (row['client_id'],)
+        ).fetchone()
+        if not onb:
+            client = conn.execute(
+                "SELECT registration_number FROM plab_clients WHERE id = ?",
+                (row['client_id'],)
+            ).fetchone()
+            if client:
+                onb = _ensure_client_onboarding(
+                    conn, row['client_id'], client['registration_number'])
+        if onb:
+            old_state = dict(onb)
+            chosen_date = chosen[:10]  # YYYY-MM-DD
+            conn.execute(
+                "UPDATE client_onboarding SET "
+                "  welcome_call_date = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE id = ?",
+                (chosen_date, onb['id']))
+            conn.commit()
+            new_state = dict(conn.execute(
+                "SELECT * FROM client_onboarding WHERE id = ?",
+                (onb['id'],)
+            ).fetchone() or {})
+            _maybe_fire_stage_transitions(
+                conn, row['client_id'], old_state, new_state)
+        else:
+            conn.commit()
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        logging.error(f"client_pick_slot_save: {e}")
+        conn.close()
+        flash(f'Save failed: {e}', 'error')
+        return redirect(url_for('client_pick_slot', token=token))
+    conn.close()
+    return redirect(url_for('client_pick_slot', token=token))
+
+
+# Toggle a client's welcome-kit item between done <-> pending.
+@app.route('/admin/client/<int:reg_id>/welcome-kit/<int:cwk_id>/toggle', methods=['POST'])
+@login_required
+def client_welcome_kit_toggle(reg_id, cwk_id):
+    user = get_user()
+    conn = get_db()
+    try:
+        row = conn.execute(
+            "SELECT status FROM client_welcome_kit "
+            " WHERE id = ? AND registration_id = ?",
+            (cwk_id, reg_id),
+        ).fetchone()
+        if row:
+            if row['status'] == 'done':
+                conn.execute(
+                    "UPDATE client_welcome_kit SET status='pending', "
+                    " completed_by=NULL, completed_at=NULL WHERE id = ?",
+                    (cwk_id,),
+                )
+            else:
+                conn.execute(
+                    "UPDATE client_welcome_kit SET status='done', "
+                    " completed_by = ?, completed_at = CURRENT_TIMESTAMP "
+                    " WHERE id = ?",
+                    (user['id'], cwk_id),
+                )
+            conn.commit()
+    except Exception as e:
+        logging.warning(f"client_welcome_kit_toggle: {e}")
+    finally:
+        conn.close()
+    return redirect(url_for('admin_client_detail', reg_id=reg_id))
+
+
+def _seed_client_welcome_kit_from_template(conn, registration_id):
+    """Copy every active welcome_kit_items row for the registration's
+    product into client_welcome_kit, one row per item. Idempotent via
+    the UNIQUE(registration_id, kit_item_id) constraint -- re-running
+    after the kit has been seeded is a no-op.
+
+    Returns the number of items inserted (0 if the kit is already
+    seeded or the product has no template).
+    """
+    reg = conn.execute(
+        "SELECT product_id FROM client_registrations WHERE id = ?",
+        (registration_id,),
+    ).fetchone()
+    if not reg or not reg['product_id']:
+        return 0
+    items = conn.execute(
+        "SELECT id, item_name, item_type FROM welcome_kit_items "
+        "WHERE product_id = ? AND is_active = 1 "
+        "ORDER BY sort_order, id",
+        (reg['product_id'],),
+    ).fetchall()
+    inserted = 0
+    for it in items:
+        try:
+            conn.execute(
+                "INSERT INTO client_welcome_kit "
+                "(registration_id, kit_item_id, item_name, item_type, status) "
+                "VALUES (?, ?, ?, ?, 'pending')",
+                (registration_id, it['id'], it['item_name'], it['item_type']),
+            )
+            inserted += 1
+        except Exception:
+            # UNIQUE constraint -> kit already seeded for this item; skip.
+            try: conn.rollback()
+            except Exception: pass
+    return inserted
+
+
+def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
+                              client_email, invited_by, closure_data=None):
+    """Create a client_invitations row tied to a fresh closure and send the
+    WhatsApp invite. Used by the sales -> closure auto-flow so the closing
+    rep doesn't have to manually generate the invite.
+
+    closure_data (Item C): optional dict of sales-collected fields
+    (plan_type, package_amount, discount_allowed, final_package,
+    inst1..inst4 amount/date/note, lead_source, additional_notes). When
+    provided, JSON-serialized into client_invitations.closure_metadata
+    so /client/register/<token> can pre-fill the registration row
+    with what the client signed up for.
+
+    Returns the token on success, or None when name/mobile are missing.
+    Idempotent-ish: if a non-cancelled invitation already exists for this
+    (mobile, product) pair we skip creating a duplicate.
+    """
+    import uuid, json
+    if not client_name or not client_mobile:
+        return None
+    mobile = client_mobile.lstrip('+').lstrip('0')
+    if mobile.startswith('91') and len(mobile) == 12:
+        mobile = mobile[2:]
+    if not mobile or len(mobile) < 10:
+        return None
+    try:
+        existing = conn.execute(
+            "SELECT token FROM client_invitations "
+            " WHERE client_mobile = ? AND product_id = ? "
+            "   AND COALESCE(status,'pending') <> 'cancelled' "
+            " ORDER BY id DESC LIMIT 1",
+            (mobile, product_id),
+        ).fetchone()
+    except Exception:
+        existing = None
+    if existing:
+        return existing['token']
+    token = uuid.uuid4().hex
+    closure_json = None
+    if closure_data:
+        try:
+            closure_json = json.dumps(
+                {k: v for k, v in closure_data.items() if v not in (None, '')}
+            )
+        except Exception as e:
+            logging.warning(f"_auto_invite: closure_data serialize: {e}")
+    try:
+        conn.execute(
+            "INSERT INTO client_invitations "
+            "(token, product_id, client_name, client_mobile, client_email, "
+            " invited_by, closure_metadata) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            (token, product_id, client_name, mobile, client_email,
+             invited_by, closure_json),
+        )
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: insert failed: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return None
+    # WhatsApp invite is a side-effect; don't let a delivery failure roll
+    # back the row.
+    try:
+        invite_url = f"https://goocampus.org/client/register/{token}"
+        _send_client_invite_wa(mobile, client_name, invite_url)
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: WA send failed: {e}")
+    return token
 
 
 def _send_client_invite_wa(mobile, name, link):
@@ -1617,10 +2430,25 @@ def admin_client_detail(reg_id):
     doc_requests = conn.execute("SELECT * FROM client_doc_requests WHERE registration_id = ? ORDER BY requested_at DESC", (reg_id,)).fetchall()
     notifications = conn.execute("SELECT * FROM client_notifications WHERE registration_id = ? ORDER BY sent_at DESC LIMIT 20", (reg_id,)).fetchall()
     counsellors = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+    # Phase E: welcome-kit checklist for this client (rows are seeded on
+    # ops-verify; an empty list means either ops hasn't verified yet or
+    # the product has no welcome-kit template configured).
+    try:
+        welcome_kit = conn.execute(
+            "SELECT cwk.*, e.name AS completed_by_name "
+            "FROM client_welcome_kit cwk "
+            "LEFT JOIN employees e ON e.id = cwk.completed_by "
+            "WHERE cwk.registration_id = ? "
+            "ORDER BY cwk.id",
+            (reg_id,),
+        ).fetchall()
+    except Exception:
+        welcome_kit = []
     conn.close()
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
-        counsellors=counsellors, user=user, active_section='clients')
+        counsellors=counsellors, welcome_kit=welcome_kit,
+        user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──
@@ -1712,10 +2540,17 @@ def admin_client_ops_verify(reg_id):
             ops_status = 'verified', ops_verified_by = ?, ops_verified_at = CURRENT_TIMESTAMP,
             ops_notes = ?, onboarding_status = 'confirmed', updated_at = CURRENT_TIMESTAMP
             WHERE id = ?''', (user['id'], request.form.get('ops_notes',''), reg_id))
+        # 2026-06-02 (Phase E): auto-populate the welcome-kit checklist
+        # from the product's template. Skips silently if a checklist
+        # already exists or the product has no template defined.
+        try:
+            _seed_client_welcome_kit_from_template(conn, reg_id)
+        except Exception as wk_err:
+            logging.warning(f"seed client welcome kit at ops-verify: {wk_err}")
         conn.commit()
         conn.close()
         _notify_onboarding_confirmed(reg_id)
-        flash('Client onboarding confirmed! Notifications sent.', 'success')
+        flash('Client onboarding confirmed! Welcome-kit checklist created. Notifications sent.', 'success')
 
     elif action == 'request_docs':
         doc_type = request.form.get('doc_type', '')
@@ -2050,6 +2885,35 @@ def dashboard():
         WHERE lr.leave_date = ? AND lr.status = 'approved'
         ORDER BY e.name
     ''', (today,)).fetchall()
+
+    # Working from home today (approved WFH overlapping today)
+    try:
+        wfh_today = conn.execute('''
+            SELECT e.name, e.photo_url, e.department
+            FROM wfh_requests w JOIN employees e ON w.employee_id = e.id
+            WHERE w.status = 'approved' AND w.from_date <= ? AND w.to_date >= ?
+            ORDER BY e.name
+        ''', (today, today)).fetchall()
+    except Exception:
+        wfh_today = []
+
+    # Travelling / off-site today: approved official travel + B2B trips overlapping today
+    try:
+        travel_today = conn.execute('''
+            SELECT e.name, e.photo_url, e.department, t.city AS place, 'Travel' AS kind
+            FROM official_travel_requests t JOIN employees e ON t.employee_id = e.id
+            WHERE t.status = 'approved' AND t.from_date <= ? AND t.to_date >= ?
+            UNION ALL
+            SELECT e.name, e.photo_url, e.department,
+                   COALESCE(NULLIF(TRIM(b.notes), ''), INITCAP(b.trip_type)) AS place,
+                   'Off-site' AS kind
+            FROM b2b_trips b JOIN employees e ON b.employee_id = e.id
+            WHERE COALESCE(b.status,'approved') <> 'cancelled'
+              AND b.from_date <= ? AND COALESCE(b.to_date, b.from_date) >= ?
+            ORDER BY name
+        ''', (today, today, today, today)).fetchall()
+    except Exception:
+        travel_today = []
 
     # Recent announcements
     announcements = conn.execute('''
@@ -2392,6 +3256,8 @@ def dashboard():
                          my_unread_notifs=my_unread_notifs,
                          my_kra_score=my_kra_score,
                          team_pending_approvals=team_pending_approvals,
+                         wfh_today=wfh_today,
+                         travel_today=travel_today,
                          today=today)
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -2639,7 +3505,7 @@ def apply_leave():
 @app.route('/apply-late-leave', methods=['GET', 'POST'])
 @login_required
 def apply_late_leave():
-    """Late leave application — for past dates up to 15 days ago"""
+    """Late leave application — for past dates up to 45 days ago"""
     user = get_user()
 
     if user['emp_code'] == 'admin':
@@ -2679,16 +3545,16 @@ def apply_late_leave():
         from_dt = datetime.strptime(from_date, '%Y-%m-%d')
         to_dt = datetime.strptime(to_date, '%Y-%m-%d')
         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
-        min_date = today - timedelta(days=15)
+        min_date = today - timedelta(days=45)
 
         # Validate: dates must be in the past
         if from_dt >= today:
             flash('Late leave is for past dates only. Use regular leave application for today or future dates.', 'error')
             return redirect(url_for('apply_late_leave'))
 
-        # Validate: not older than 15 days
+        # Validate: not older than 45 days
         if from_dt < min_date:
-            flash('Cannot apply late leave for dates older than 15 days', 'error')
+            flash('Cannot apply late leave for dates older than 45 days', 'error')
             return redirect(url_for('apply_late_leave'))
 
         if to_dt < from_dt:
@@ -3903,18 +4769,35 @@ def admin_employee_edit(emp_id):
         emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         emergency_contact_relation = request.form.get('emergency_contact_relation', '').strip()
 
+        # Phase B — employment status / exit process. Anything other than
+        # 'active' flips is_active=0 so the employee can no longer log in.
+        employment_status = (request.form.get('employment_status') or 'active').strip().lower()
+        is_active = 1 if employment_status == 'active' else 0
+        if employment_status == 'active':
+            # Re-activated / staying active — clear exit fields.
+            last_working_day = None
+            exit_reason = None
+            exit_notes = None
+        else:
+            last_working_day = (request.form.get('last_working_day') or '').strip() or None
+            exit_reason = (request.form.get('exit_reason') or '').strip() or None
+            exit_notes = (request.form.get('exit_notes') or '').strip() or None
+
         conn.execute('''
             UPDATE employees
             SET name = ?, email = ?, phone = ?, dob = ?, address = ?, department = ?,
                 designation = ?, joining_date = ?, carry_forward = ?, reporting_to = ?,
-                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?
+                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
+                employment_status = ?, is_active = ?, last_working_day = ?, exit_reason = ?, exit_notes = ?
             WHERE id = ?
         ''', (name, email, phone, dob, address, department, designation, joining_date, carry_forward,
-              reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation, emp_id))
+              reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+              employment_status, is_active, last_working_day, exit_reason, exit_notes, emp_id))
         conn.commit()
         conn.close()
 
-        flash('Employee updated successfully', 'success')
+        msg = 'Exit recorded — employee marked ' + employment_status if employment_status != 'active' else 'Employee updated successfully'
+        flash(msg, 'success')
         return redirect(url_for('admin_employee_detail', emp_id=emp_id))
 
     # Get all active employees as potential managers (exclude the employee being edited)
@@ -4162,6 +5045,13 @@ def manage_employees():
         emp_code = request.form.get('emp_code', '').strip()
         email = request.form.get('email', '').strip()
         department = request.form.get('department', '').strip()
+        # Phase A lifecycle fields. Default behaviour preserved -- if
+        # the user submits no employment_status, treat as active.
+        employment_status = (request.form.get('employment_status') or 'active').strip().lower()
+        joining_date = (request.form.get('joining_date') or '').strip() or datetime.now().strftime('%Y-%m-%d')
+        last_working_day = (request.form.get('last_working_day') or '').strip() or None
+        exit_reason = (request.form.get('exit_reason') or '').strip() or None
+        exit_notes = (request.form.get('exit_notes') or '').strip() or None
 
         if not name or not emp_code or not department:
             flash('Required fields missing', 'error')
@@ -4173,16 +5063,57 @@ def manage_employees():
             flash('Employee code already exists', 'error')
             return redirect(url_for('manage_employees'))
 
+        # Non-active employment_status flips is_active=0 so login is
+        # blocked + per-section access checks fail safely.
+        is_active = 1 if employment_status == 'active' else 0
+
         conn.execute('''
-            INSERT INTO employees (name, emp_code, password, department, is_active, joining_date, created_at)
-            VALUES (?, ?, ?, ?, 1, ?, ?)
-        ''', (name, emp_code, hash_password(name.split()[0].lower()), department, datetime.now().strftime('%Y-%m-%d'), datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
+            INSERT INTO employees (
+                name, emp_code, password, department, email,
+                is_active, joining_date, created_at,
+                employment_status, last_working_day, exit_reason, exit_notes
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (
+            name, emp_code,
+            hash_password(name.split()[0].lower()),
+            department, email or None,
+            is_active,
+            joining_date,
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            employment_status, last_working_day, exit_reason, exit_notes,
+        ))
         conn.commit()
 
-        flash('Employee added successfully', 'success')
-        return redirect(url_for('manage_employees'))
+        label = 'Past employee added' if employment_status != 'active' else 'Employee added successfully'
+        flash(label, 'success')
+        return redirect(url_for('manage_employees', show=request.form.get('return_to') or 'active'))
 
-    employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY department, name").fetchall()
+    # Filter view: ?show=active | past | all  (default = active)
+    show = (request.args.get('show') or 'active').strip().lower()
+    if show == 'past':
+        emp_filter = "COALESCE(employment_status,'active') != 'active'"
+    elif show == 'all':
+        emp_filter = "1=1"
+    else:
+        show = 'active'
+        emp_filter = "(COALESCE(employment_status,'active') = 'active' OR is_active = 1)"
+
+    employees = conn.execute(
+        f"SELECT * FROM employees WHERE {emp_filter} AND emp_code != 'admin' "
+        f"ORDER BY department, name"
+    ).fetchall()
+
+    # Counts for the tab badges -- always shows totals regardless of
+    # which tab is active.
+    counts = {
+        'active': conn.execute(
+            "SELECT COUNT(*) AS c FROM employees WHERE COALESCE(employment_status,'active') = 'active' AND emp_code != 'admin'"
+        ).fetchone()['c'],
+        'past': conn.execute(
+            "SELECT COUNT(*) AS c FROM employees WHERE COALESCE(employment_status,'active') != 'active' AND emp_code != 'admin'"
+        ).fetchone()['c'],
+    }
+    counts['all'] = counts['active'] + counts['past']
 
     # Group employees by department
     dept_employees = {}
@@ -4201,6 +5132,8 @@ def manage_employees():
                          employees=employees,
                          dept_employees=dept_employees,
                          departments=departments,
+                         show=show,
+                         counts=counts,
                     active_section='hr')
 
 @app.route('/admin/delete-employee/<int:emp_id>', methods=['POST'])
@@ -6167,6 +7100,64 @@ def ensure_crm_tables():
                 rejection_reason TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )''',
+            # On Official Travel (OOT) — mirrors WFH but tracks a city
+            # the employee is travelling to and a longer description.
+            # The user can backdate up to 45 days, similar to late leave.
+            '''CREATE TABLE IF NOT EXISTS official_travel_requests (
+                id SERIAL PRIMARY KEY,
+                employee_id INTEGER NOT NULL REFERENCES employees(id),
+                from_date TEXT NOT NULL,
+                to_date TEXT NOT NULL,
+                city TEXT,
+                description TEXT,
+                status TEXT NOT NULL DEFAULT 'pending',
+                approved_by INTEGER REFERENCES employees(id),
+                approved_at TIMESTAMP,
+                rejection_reason TEXT,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            # 12thPlus Schools CRM — sales-side school outreach DB.
+            # Each school can have many meetings; meetings carry an optional
+            # next-followup date that the (future) reminder cron will read.
+            '''CREATE TABLE IF NOT EXISTS schools (
+                id SERIAL PRIMARY KEY,
+                name             TEXT NOT NULL,
+                website          TEXT,
+                area             TEXT,
+                principal_name   TEXT,
+                contact_number   TEXT,
+                email            TEXT,
+                address          TEXT,
+                school_type      TEXT,
+                student_strength INTEGER,
+                assigned_to      INTEGER REFERENCES employees(id),
+                status           TEXT DEFAULT 'active',
+                notes            TEXT,
+                created_by       INTEGER REFERENCES employees(id),
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            )''',
+            '''CREATE INDEX IF NOT EXISTS idx_schools_assigned ON schools(assigned_to)''',
+            '''CREATE INDEX IF NOT EXISTS idx_schools_area     ON schools(area)''',
+            '''CREATE TABLE IF NOT EXISTS school_meetings (
+                id SERIAL PRIMARY KEY,
+                school_id INTEGER NOT NULL REFERENCES schools(id) ON DELETE CASCADE,
+                meeting_date TEXT NOT NULL,
+                meeting_time TEXT,
+                contact_type TEXT,
+                status TEXT,
+                notes TEXT,
+                next_followup_date TEXT,
+                next_followup_note TEXT,
+                handler_employee_id INTEGER REFERENCES employees(id),
+                created_by INTEGER REFERENCES employees(id),
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                reminder_sent_at TIMESTAMP
+            )''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_school   ON school_meetings(school_id)''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_handler  ON school_meetings(handler_employee_id)''',
+            '''CREATE INDEX IF NOT EXISTS idx_school_meetings_followup ON school_meetings(next_followup_date)''',
             '''CREATE TABLE IF NOT EXISTS projects (
                 id SERIAL PRIMARY KEY,
                 name TEXT NOT NULL,
@@ -6274,6 +7265,51 @@ def ensure_crm_tables():
             conn.commit()
         except Exception:
             conn.rollback()
+        # City/off-site meeting upgrade (2026-06-16): off-site city on the
+        # trip; per-meeting time + the source entity id for the cascade
+        # Meeting-With dropdown.
+        for _tbl, _col, _type in [
+            ('b2b_trips',    'city',         'TEXT'),
+            ('b2b_meetings', 'meeting_time', 'TEXT'),
+            ('b2b_meetings', 'entity_id',    'INTEGER'),
+            # Unified meeting CRM upgrade (2026-06-16): status pipeline,
+            # contact type, follow-up scheduling, follow-up chaining and
+            # per-meeting handler. Schema already applied on staging; these
+            # ALTERs make fresh deploys match.
+            ('b2b_meetings', 'status',              'TEXT'),
+            ('b2b_meetings', 'contact_type',        'TEXT'),
+            ('b2b_meetings', 'next_followup_date',  'TEXT'),
+            ('b2b_meetings', 'next_followup_note',  'TEXT'),
+            ('b2b_meetings', 'parent_meeting_id',   'INTEGER'),
+            ('b2b_meetings', 'handler_employee_id', 'INTEGER'),
+            # 2026-06-16: hard link client -> employee for closure stats
+            # by counsellor (product/pathway-wise). Backfilled by name
+            # in resync_client_counsellor_ids_once() below.
+            ('plab_clients', 'counsellor_id',       'INTEGER'),
+        ]:
+            try:
+                conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        # Meeting edit audit trail (2026-06-16): records old/new value for
+        # each changed field so the unified CRM has a change history.
+        try:
+            conn.execute('''
+                CREATE TABLE IF NOT EXISTS b2b_meeting_audit (
+                    id SERIAL PRIMARY KEY,
+                    meeting_id INTEGER,
+                    field TEXT,
+                    old_value TEXT,
+                    new_value TEXT,
+                    changed_by INTEGER,
+                    changed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )''')
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         # Add product_cost column to products_services (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN product_cost NUMERIC(14,2) DEFAULT 0")
@@ -6313,6 +7349,15 @@ def ensure_crm_tables():
         # Add revenue_stream_id column to products_services (migration)
         try:
             conn.execute("ALTER TABLE products_services ADD COLUMN revenue_stream_id INTEGER REFERENCES revenue_streams(id)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        # Sales/Closure flow (2026-06-02): link each product to a pathway
+        # so the sales -> closure -> invitation -> ops pipeline knows where
+        # to route the client. Values: 'plab', 'australia', NULL (unassigned).
+        try:
+            conn.execute("ALTER TABLE products_services ADD COLUMN pathway TEXT")
             conn.commit()
         except Exception:
             try:
@@ -6528,15 +7573,89 @@ def seed_kra_categories():
         logging.error(f"seed_kra_categories: {e}")
 
 
-def seed_default_meeting_types():
-    """Seed default meeting client types if table is empty."""
+def resync_client_counsellor_ids_once():
+    """Backfill plab_clients.counsellor_id from the text counsellor name.
+
+    The legacy bulk-imported clients only store the counsellor as a name
+    string. This links each to the real employees.id so closure stats
+    can group by employee (and join product/pathway/plan_type). Runs
+    every boot but only touches rows where counsellor_id IS NULL, so it
+    is cheap + idempotent and auto-links any newly imported/edited rows.
+
+    Matching: exact full-name first, then a unique first-name match
+    (skips a first name shared by >1 employee to avoid mis-attribution).
+    """
     try:
         conn = get_db()
-        count = conn.execute('SELECT COUNT(*) as cnt FROM meeting_types').fetchone()
-        if count['cnt'] == 0:
-            for mt in ['School', 'College', 'Partner', 'Branch Partner', 'Agent']:
-                conn.execute('INSERT INTO meeting_types (name) VALUES (?)', (mt,))
+        def norm(s): return ' '.join((s or '').strip().lower().split())
+        emp_exact = {}; emp_first = {}
+        for row in conn.execute("SELECT id, name FROM employees").fetchall():
+            nn = norm(row['name'])
+            if not nn:
+                continue
+            emp_exact[nn] = row['id']
+            emp_first.setdefault(nn.split()[0], []).append(row['id'])
+        pending = conn.execute(
+            "SELECT id, counsellor FROM plab_clients "
+            "WHERE counsellor_id IS NULL AND TRIM(COALESCE(counsellor,'')) <> ''"
+        ).fetchall()
+        linked = 0
+        for r in pending:
+            nn = norm(r['counsellor']); f = nn.split()[0] if nn else ''
+            eid = None
+            if nn in emp_exact:
+                eid = emp_exact[nn]
+            elif f in emp_first and len(emp_first[f]) == 1:
+                eid = emp_first[f][0]
+            if eid:
+                conn.execute("UPDATE plab_clients SET counsellor_id = ? WHERE id = ?", (eid, r['id']))
+                linked += 1
+        if linked:
             conn.commit()
+            logging.info(f"resync_client_counsellor_ids: linked {linked} clients to employees")
+        conn.close()
+    except Exception as e:
+        logging.error(f"resync_client_counsellor_ids_once: {e}")
+
+
+def seed_default_meeting_types():
+    """Sync meeting-client types = School + College + the partner_type
+    values from the partner section (Channel Partner / Marketing
+    Partner / Consultant / ...).
+
+    Replaces the old static School/College/Partner/Branch Partner/Agent
+    list. Runs every boot so a partner_type added in Field Manager
+    shows up in the meeting form after the next restart. Existing rows
+    are reused (FK-safe); legacy generic types (Partner / Branch
+    Partner / Agent) are deactivated, not deleted, so old saved
+    meetings keep their reference.
+    """
+    try:
+        conn = get_db()
+        # Partner types from the partner section's lookup category.
+        try:
+            ptypes = [r['value'] for r in conn.execute(
+                "SELECT value FROM lookup_options WHERE category='partner_type' "
+                "AND is_active IS NOT FALSE ORDER BY sort_order, value"
+            ).fetchall()]
+        except Exception:
+            ptypes = ['Channel Partner', 'Marketing Partner', 'Consultant']
+        desired = ['School', 'College'] + ptypes
+
+        # Deactivate all, then (re)activate / insert the desired set.
+        try:
+            conn.execute("UPDATE meeting_types SET is_active = 0")
+        except Exception:
+            pass
+        for name in desired:
+            row = conn.execute(
+                "SELECT id FROM meeting_types WHERE LOWER(name) = LOWER(?)", (name,)
+            ).fetchone()
+            if row:
+                conn.execute("UPDATE meeting_types SET is_active = 1, name = ? WHERE id = ?", (name, row['id']))
+            else:
+                conn.execute("INSERT INTO meeting_types (name, is_active) VALUES (?, 1)", (name,))
+        conn.commit()
         conn.close()
     except Exception as e:
         logging.error(f"seed_default_meeting_types: {e}")
@@ -6799,13 +7918,395 @@ def approve_wfh(wfh_id):
     return redirect(url_for('wfh_approvals'))
 
 
+# ─── On Official Travel (OOT) Routes ───
+# OOT mirrors the WFH flow: an employee applies for one or more days they will
+# be out of the office on official business, the manager/admin approves, and
+# approved dates are then credited as Present in the Time Log (the employee
+# won't be at the office to hit the biometric).
+#
+# Differences from WFH:
+#   • The form has an extra `city` dropdown sourced from the `cities` table.
+#   • The reason field is a longer `description`.
+#   • A 45-day backdate cap is enforced server-side.
+
+@app.route('/official-travel/apply', methods=['GET', 'POST'])
+@app.route('/apply-official-travel', methods=['GET', 'POST'])
+@login_required
+def apply_official_travel():
+    user = get_user()
+
+    # Admin control account cannot apply for OOT
+    if user['emp_code'] == 'admin':
+        flash('Admin account cannot apply for Official Travel.', 'error')
+        return redirect(url_for('official_travel_approvals'))
+
+    conn = get_db()
+
+    if request.method == 'POST':
+        from_date = request.form.get('from_date')
+        to_date = request.form.get('to_date')
+        city = (request.form.get('city') or '').strip()
+        description = (request.form.get('description') or '').strip()
+
+        if not from_date or not to_date:
+            flash('From and To dates are required', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if not city:
+            flash('Please select a city', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if not description:
+            flash('Description is required', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        if to_date < from_date:
+            flash('To date cannot be before from date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # 45-day backdate cap
+        try:
+            from_dt = datetime.strptime(from_date, '%Y-%m-%d')
+        except Exception:
+            flash('Invalid from date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        today_dt = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
+        if (today_dt - from_dt).days > 45:
+            flash('Cannot apply for dates older than 45 days. Please contact HR for older entries.', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # Auto-cancel overlapping leave records (mirror WFH apply)
+        try:
+            to_dt = datetime.strptime(to_date, '%Y-%m-%d')
+        except Exception:
+            flash('Invalid to date', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        leave_cancelled = 0
+        current = from_dt
+        while current <= to_dt:
+            date_str = current.strftime('%Y-%m-%d')
+            overlapping_leaves = conn.execute(
+                "SELECT id, leave_group_id FROM leave_records WHERE employee_id = ? AND leave_date = ? AND status IN ('approved','pending')",
+                (user['id'], date_str)).fetchall()
+            for lv in overlapping_leaves:
+                conn.execute("UPDATE leave_records SET status = 'cancelled' WHERE id = ?", (lv['id'],))
+                leave_cancelled += 1
+            current += timedelta(days=1)
+
+        # Check for overlapping OOT (approved/pending) — block
+        existing_oot = conn.execute(
+            "SELECT id FROM official_travel_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+            (user['id'], to_date, from_date)).fetchall()
+        if existing_oot:
+            flash('You already have an Official Travel request overlapping this date range', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        # Check for overlapping WFH (approved/pending) — block
+        existing_wfh = conn.execute(
+            "SELECT id FROM wfh_requests WHERE employee_id = ? AND status IN ('approved','pending') AND from_date <= ? AND to_date >= ?",
+            (user['id'], to_date, from_date)).fetchall()
+        if existing_wfh:
+            flash('You already have a WFH request overlapping this date range', 'error')
+            conn.close()
+            return redirect(url_for('apply_official_travel'))
+
+        conn.execute('''
+            INSERT INTO official_travel_requests (employee_id, from_date, to_date, city, description)
+            VALUES (?, ?, ?, ?, ?)
+        ''', (user['id'], from_date, to_date, city, description))
+        conn.commit()
+
+        # Notify admins
+        admins = conn.execute('SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1').fetchall()
+        for admin in admins:
+            if admin['id'] != user['id']:
+                create_notification(conn, admin['id'],
+                    f"Official Travel Request from {user['name']}",
+                    f"{user['name']} has requested Official Travel to {city} from {from_date} to {to_date}.",
+                    'leave_request', '/official-travel/approvals')
+        conn.commit()
+        conn.close()
+
+        msg = 'Official Travel request submitted successfully'
+        if leave_cancelled:
+            msg += f'. {leave_cancelled} overlapping leave record(s) auto-cancelled.'
+        flash(msg, 'success')
+        return redirect(url_for('my_official_travel_requests'))
+
+    # GET — load cities list for the dropdown
+    cities_rows = conn.execute('SELECT id, name FROM cities ORDER BY name').fetchall()
+    cities_list = [dict(c) for c in cities_rows]
+    conn.close()
+    return render_template('apply_official_travel.html', user=user, cities=cities_list,
+                    active_section='hr')
+
+
+@app.route('/official-travel/my-requests')
+@login_required
+def my_official_travel_requests():
+    user = get_user()
+
+    if user['emp_code'] == 'admin':
+        return redirect(url_for('official_travel_approvals'))
+
+    conn = get_db()
+    requests_list = conn.execute('''
+        SELECT o.*, a.name as approver_name
+        FROM official_travel_requests o
+        LEFT JOIN employees a ON o.approved_by = a.id
+        WHERE o.employee_id = ?
+        ORDER BY o.created_at DESC
+    ''', (user['id'],)).fetchall()
+    conn.close()
+    return render_template('my_official_travel_requests.html', user=user, requests=requests_list,
+                    active_section='hr')
+
+
+@app.route('/official-travel/approvals')
+@login_required
+def official_travel_approvals():
+    user = get_user()
+    conn = get_db()
+
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+    is_admin_user = user['is_admin'] == 1
+
+    # Filters
+    f_employee = (request.args.get('employee') or '').strip()
+    f_department = (request.args.get('department') or '').strip()
+    f_status = (request.args.get('status') or '').strip()
+
+    base_select = '''
+        SELECT o.id, o.employee_id, o.from_date, o.to_date, o.city, o.description, o.status,
+               o.approved_by, o.approved_at, o.rejection_reason, o.created_at,
+               e.name          AS employee_name,
+               e.emp_code      AS emp_code,
+               e.department    AS department,
+               e.designation   AS designation,
+               e.email         AS email,
+               e.phone         AS mobile,
+               e.photo_url     AS photo_url,
+               a.name          AS approver_name
+        FROM official_travel_requests o
+        JOIN employees e ON o.employee_id = e.id
+        LEFT JOIN employees a ON o.approved_by = a.id
+    '''
+
+    where_clauses = []
+    params = []
+
+    if not is_admin_user and not is_mgmt:
+        direct_report_ids = [r['id'] for r in conn.execute(
+            'SELECT id FROM employees WHERE reporting_to = ? AND is_active = 1', (user['id'],)
+        ).fetchall()]
+        if not direct_report_ids:
+            flash('No team members to manage', 'error')
+            conn.close()
+            return redirect(url_for('dashboard'))
+        placeholders = ','.join('?' * len(direct_report_ids))
+        where_clauses.append(f'o.employee_id IN ({placeholders})')
+        params.extend(direct_report_ids)
+
+    if f_employee:
+        where_clauses.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        params.extend([like, like])
+    if f_department:
+        where_clauses.append('LOWER(e.department) LIKE ?')
+        params.append(f'%{f_department.lower()}%')
+    if f_status:
+        where_clauses.append('o.status = ?')
+        params.append(f_status)
+
+    sql = base_select
+    if where_clauses:
+        sql += ' WHERE ' + ' AND '.join(where_clauses)
+    sql += ' ORDER BY o.created_at DESC'
+
+    requests_list = conn.execute(sql, tuple(params)).fetchall()
+
+    enriched = []
+    for r in requests_list:
+        d = dict(r)
+        p = d.get('photo_url') or ''
+        if p:
+            d['photo_src'] = p if p.startswith('http') else f'/static/photos/{p}'
+        else:
+            d['photo_src'] = ''
+        enriched.append(d)
+
+    # Stat counts
+    count_sql_base = '''
+        SELECT o.status AS st, COUNT(*) AS c
+        FROM official_travel_requests o
+        JOIN employees e ON o.employee_id = e.id
+    '''
+    count_where = []
+    count_params = []
+    if not is_admin_user and not is_mgmt:
+        placeholders = ','.join('?' * len(direct_report_ids))
+        count_where.append(f'o.employee_id IN ({placeholders})')
+        count_params.extend(direct_report_ids)
+    if f_employee:
+        count_where.append('(LOWER(e.name) LIKE ? OR LOWER(e.emp_code) LIKE ?)')
+        like = f'%{f_employee.lower()}%'
+        count_params.extend([like, like])
+    if f_department:
+        count_where.append('LOWER(e.department) LIKE ?')
+        count_params.append(f'%{f_department.lower()}%')
+    count_sql = count_sql_base
+    if count_where:
+        count_sql += ' WHERE ' + ' AND '.join(count_where)
+    count_sql += ' GROUP BY o.status'
+    rows = conn.execute(count_sql, tuple(count_params)).fetchall()
+    counts_by_status = {r['st']: r['c'] for r in rows}
+    pending_count = counts_by_status.get('pending', 0)
+    approved_count = counts_by_status.get('approved', 0)
+    rejected_count = counts_by_status.get('rejected', 0)
+    cancelled_count = counts_by_status.get('cancelled', 0)
+    total_count = pending_count + approved_count + rejected_count + cancelled_count
+
+    conn.close()
+    return render_template('official_travel_approvals.html', user=user, requests=enriched,
+                           f_employee=f_employee, f_department=f_department, f_status=f_status,
+                           total_count=total_count, pending_count=pending_count,
+                           approved_count=approved_count, rejected_count=rejected_count,
+                    active_section='hr')
+
+
+@app.route('/official-travel/approve/<int:oot_id>', methods=['POST'])
+@login_required
+def approve_official_travel(oot_id):
+    user = get_user()
+    action = request.form.get('action')  # 'approve' or 'reject'
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    if oot['status'] != 'pending':
+        flash('This request has already been processed', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    new_status = 'approved' if action == 'approve' else 'rejected'
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    conn.execute('''
+        UPDATE official_travel_requests SET status = ?, approved_by = ?, approved_at = ?, rejection_reason = ?
+        WHERE id = ?
+    ''', (new_status, user['id'], now, rejection_reason if action == 'reject' else None, oot_id))
+
+    status_text = 'approved' if action == 'approve' else 'rejected'
+    msg = f"Your Official Travel request ({oot['from_date']} to {oot['to_date']}) has been {status_text} by {user['name']}."
+    if action == 'reject' and rejection_reason:
+        msg += f" Reason: {rejection_reason}"
+    create_notification(conn, oot['employee_id'],
+        f"Official Travel Request {status_text.title()}", msg,
+        'success' if action == 'approve' else 'danger', '/official-travel/my-requests')
+
+    conn.commit()
+    conn.close()
+
+    flash(f'Official Travel request {status_text}', 'success')
+    return redirect(url_for('official_travel_approvals'))
+
+
+@app.route('/official-travel/reject/<int:oot_id>', methods=['POST'])
+@login_required
+def reject_official_travel(oot_id):
+    """Convenience alias — same logic as approve_official_travel with action=reject."""
+    user = get_user()
+    rejection_reason = request.form.get('rejection_reason', '').strip()
+
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    if oot['status'] != 'pending':
+        flash('This request has already been processed', 'error')
+        conn.close()
+        return redirect(url_for('official_travel_approvals'))
+
+    now = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    conn.execute('''
+        UPDATE official_travel_requests SET status = 'rejected', approved_by = ?, approved_at = ?, rejection_reason = ?
+        WHERE id = ?
+    ''', (user['id'], now, rejection_reason or None, oot_id))
+
+    msg = f"Your Official Travel request ({oot['from_date']} to {oot['to_date']}) has been rejected by {user['name']}."
+    if rejection_reason:
+        msg += f" Reason: {rejection_reason}"
+    create_notification(conn, oot['employee_id'],
+        "Official Travel Request Rejected", msg, 'danger', '/official-travel/my-requests')
+
+    conn.commit()
+    conn.close()
+
+    flash('Official Travel request rejected', 'success')
+    return redirect(url_for('official_travel_approvals'))
+
+
+@app.route('/official-travel/cancel/<int:oot_id>', methods=['POST'])
+@login_required
+def cancel_official_travel(oot_id):
+    """An employee can cancel their own pending OOT request.
+    Admins / management can cancel any request."""
+    user = get_user()
+    conn = get_db()
+    oot = conn.execute('SELECT * FROM official_travel_requests WHERE id = ?', (oot_id,)).fetchone()
+    if not oot:
+        flash('Official Travel request not found', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    is_owner = oot['employee_id'] == user['id']
+    is_mgmt = user['emp_code'] in MANAGEMENT_CODES
+    is_admin_user = user.get('is_admin') == 1
+    if not (is_owner or is_mgmt or is_admin_user):
+        flash('You are not allowed to cancel this request', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    if oot['status'] not in ('pending', 'approved'):
+        flash('Only pending or approved requests can be cancelled', 'error')
+        conn.close()
+        return redirect(url_for('my_official_travel_requests'))
+
+    conn.execute("UPDATE official_travel_requests SET status='cancelled' WHERE id = ?", (oot_id,))
+    conn.commit()
+    conn.close()
+
+    flash('Official Travel request cancelled', 'success')
+    if is_owner and not (is_mgmt or is_admin_user):
+        return redirect(url_for('my_official_travel_requests'))
+    return redirect(url_for('official_travel_approvals'))
+
+
 # ─── Projects Routes ───
 
 @app.route('/projects')
 @login_required
 def projects_list():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         # All employees can view projects, but only certain can manage
         pass
     conn = get_db()
@@ -6849,7 +8350,7 @@ def projects_list():
 @admin_required
 def add_project():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -6935,7 +8436,7 @@ def project_detail(project_id):
 @admin_required
 def edit_project(project_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -7034,7 +8535,7 @@ def streams_list():
 @admin_required
 def add_revenue_stream():
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('streams_list'))
     if request.method == 'POST':
@@ -7068,7 +8569,7 @@ def add_revenue_stream():
 @admin_required
 def edit_revenue_stream(stream_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('streams_list'))
     conn = get_db()
@@ -7192,7 +8693,7 @@ def products_list():
 @admin_required
 def add_product(project_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -7240,13 +8741,15 @@ def add_product(project_id):
             conn.close()
             return redirect(url_for('add_product', project_id=project_id))
 
+        pathway_raw = (request.form.get('pathway') or '').strip().lower()
+        pathway = pathway_raw if pathway_raw in ('plab', 'australia', 'standard_consulting', 'germany', 'amc_training') else None
         conn.execute('''
             INSERT INTO products_services
                 (name, description, type, project_id, revenue_stream_id, product_cost, sale_price,
-                 cost_currency, sale_currency, created_by)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                 cost_currency, sale_currency, pathway, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ''', (name, description, ps_type, effective_project_id, revenue_stream_id, product_cost, sale_price,
-              cost_currency, sale_currency, user['id']))
+              cost_currency, sale_currency, pathway, user['id']))
         conn.commit()
         conn.close()
         flash('Product/Service added', 'success')
@@ -7270,7 +8773,7 @@ def add_product(project_id):
 @admin_required
 def edit_product(ps_id):
     user = get_user()
-    if not has_module_access(user, 'projects') and not user['is_admin']:
+    if not has_section_permission(user, 'sales', 'projects', 'view'):
         flash('Access denied', 'error')
         return redirect(url_for('dashboard'))
 
@@ -7333,14 +8836,18 @@ def edit_product(ps_id):
         if not chk:
             revenue_stream_id = None
 
+    pathway_raw = (request.form.get('pathway') or '').strip().lower()
+    pathway = pathway_raw if pathway_raw in ('plab', 'australia', 'standard_consulting', 'germany', 'amc_training') else None
     conn.execute('''UPDATE products_services
                     SET name = ?, description = ?, type = ?, status = ?,
                         product_cost = ?, sale_price = ?,
                         cost_currency = ?, sale_currency = ?,
-                        project_id = ?, revenue_stream_id = ?
+                        project_id = ?, revenue_stream_id = ?,
+                        pathway = ?
                     WHERE id = ?''',
                 (name, description, ps_type, status, product_cost, sale_price,
-                 cost_currency, sale_currency, project_id_val, revenue_stream_id, ps_id))
+                 cost_currency, sale_currency, project_id_val, revenue_stream_id,
+                 pathway, ps_id))
     conn.commit()
     conn.close()
     flash('Updated successfully', 'success')
@@ -7650,52 +9157,124 @@ def add_b2b_trip():
     conn = get_db()
 
     if request.method == 'POST':
-        trip_type = request.form.get('trip_type')
+        trip_type = request.form.get('trip_type')        # 'city' | 'outstation'
         meeting_category = request.form.get('meeting_category', 'face_to_face')
         from_date = request.form.get('from_date')
         to_date = request.form.get('to_date')
         travel_date = request.form.get('travel_date', '')
+        city = (request.form.get('city') or '').strip() or None
         project_id = request.form.get('project_id') or None
         notes = request.form.get('notes', '').strip()
 
+        # City (local) meetings only carry single meeting dates -- there's
+        # no trip window. Derive the trip from/to from the meeting dates
+        # so the b2b_trips row stays valid without forcing the user to
+        # enter a redundant range. Off-site keeps the explicit window.
+        if trip_type == 'city':
+            md = request.form.getlist('meeting_date[]')
+            md = [d for d in md if d]
+            if md:
+                from_date = min(md)
+                to_date = max(md)
+            travel_date = ''   # not relevant for local meetings
+            city = city or 'Bangalore'
+        else:
+            if not from_date or not to_date:
+                flash('For off-site meetings, From date and To date are required', 'error')
+                projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
+                meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+                cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+                employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
+                conn.close()
+                return render_template('add_meeting.html', user=user, projects=projects,
+                        meeting_clients=meeting_clients, cities=cities, employees=employees, active_section='sales')
+
         if not from_date or not to_date:
-            flash('From date and to date are required', 'error')
+            flash('Please add at least one meeting with a date', 'error')
             projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
             meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+            cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+            employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
             conn.close()
-            return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
-                    active_section='sales')
+            return render_template('add_meeting.html', user=user, projects=projects,
+                    meeting_clients=meeting_clients, cities=cities, employees=employees, active_section='sales')
 
         conn.execute('''
-            INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, project_id, notes)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (user['id'], trip_type, meeting_category, from_date, to_date, travel_date or None, project_id, notes))
+            INSERT INTO b2b_trips (employee_id, trip_type, meeting_category, from_date, to_date, travel_date, city, project_id, notes)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ''', (user['id'], trip_type, meeting_category, from_date, to_date, travel_date or None, city, project_id, notes))
         conn.commit()
 
         # Get the new trip ID
         trip = conn.execute('SELECT id FROM b2b_trips WHERE employee_id = ? ORDER BY id DESC LIMIT 1', (user['id'],)).fetchone()
         trip_id = trip['id']
 
+        # Auto-link: an OUTSTATION B2B trip takes the person away from the
+        # office (biometric not possible), so raise a matching Official
+        # Travel request (pending manager approval) so those days count as
+        # Present. Local 'city' trips don't affect attendance, so skip.
+        if trip_type == 'outstation':
+            try:
+                dup = conn.execute(
+                    "SELECT id FROM official_travel_requests WHERE employee_id = ? "
+                    "AND from_date = ? AND to_date = ? AND status != 'rejected'",
+                    (user['id'], from_date, to_date)).fetchone()
+                if not dup:
+                    desc = f"Auto-created from B2B off-site trip #{trip_id}"
+                    if notes:
+                        desc += f": {notes[:200]}"
+                    conn.execute(
+                        "INSERT INTO official_travel_requests "
+                        "(employee_id, from_date, to_date, city, description, status) "
+                        "VALUES (?, ?, ?, ?, ?, 'pending')",
+                        (user['id'], from_date, to_date, city, desc))
+                    conn.commit()
+            except Exception as e:
+                logging.error(f"b2b->official_travel auto-link failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
         # Process multiple meetings
         meeting_dates = request.form.getlist('meeting_date[]')
+        meeting_times = request.form.getlist('meeting_time[]')
         meeting_withs = request.form.getlist('meeting_with[]')
         meeting_type_ids = request.form.getlist('meeting_type_id[]')
+        meeting_entity_ids = request.form.getlist('entity_id[]')
         meeting_locations = request.form.getlist('meeting_location[]')
         meeting_contacts = request.form.getlist('contact_person[]')
         meeting_phones = request.form.getlist('contact_phone[]')
         meeting_project_ids = request.form.getlist('meeting_project_id[]')
+        meeting_contact_types = request.form.getlist('contact_type[]')
+        meeting_statuses = request.form.getlist('status[]')
+        meeting_followup_dates = request.form.getlist('next_followup_date[]')
+        meeting_followup_notes = request.form.getlist('next_followup_note[]')
+        meeting_handlers = request.form.getlist('handler_employee_id[]')
+
+        def _at(lst, i):
+            """Safe index access for parallel meeting field lists."""
+            return lst[i] if i < len(lst) else ''
 
         for i in range(len(meeting_dates)):
             if meeting_dates[i] and meeting_withs[i]:
                 m_project_id = meeting_project_ids[i] if i < len(meeting_project_ids) and meeting_project_ids[i] else project_id
                 m_type_id = meeting_type_ids[i] if i < len(meeting_type_ids) and meeting_type_ids[i] else None
+                m_time = meeting_times[i] if i < len(meeting_times) else ''
+                m_entity = meeting_entity_ids[i] if i < len(meeting_entity_ids) and meeting_entity_ids[i] else None
+                m_handler = _at(meeting_handlers, i)
+                m_handler = int(m_handler) if str(m_handler).isdigit() else user['id']
                 conn.execute('''
-                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, project_id, location, contact_person, contact_phone)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-                ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i],
-                      m_project_id, meeting_locations[i] if i < len(meeting_locations) else '',
-                      meeting_contacts[i] if i < len(meeting_contacts) else '',
-                      meeting_phones[i] if i < len(meeting_phones) else ''))
+                    INSERT INTO b2b_meetings (trip_id, meeting_type_id, meeting_with, meeting_date, meeting_time, entity_id, project_id, location, contact_person, contact_phone,
+                                              status, contact_type, next_followup_date, next_followup_note, handler_employee_id)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ''', (trip_id, m_type_id, meeting_withs[i], meeting_dates[i], m_time or None, m_entity,
+                      m_project_id, _at(meeting_locations, i),
+                      _at(meeting_contacts, i),
+                      _at(meeting_phones, i),
+                      _at(meeting_statuses, i) or None,
+                      _at(meeting_contact_types, i) or None,
+                      _at(meeting_followup_dates, i) or None,
+                      _at(meeting_followup_notes, i) or None,
+                      m_handler))
 
         conn.commit()
         conn.close()
@@ -7704,9 +9283,74 @@ def add_b2b_trip():
 
     projects = conn.execute("SELECT id, name FROM projects WHERE status = 'active' ORDER BY name").fetchall()
     meeting_clients = conn.execute("SELECT * FROM meeting_types WHERE is_active = 1 ORDER BY name").fetchall()
+    cities = conn.execute("SELECT id, name FROM cities WHERE is_active IS NOT FALSE AND name ~ '[A-Za-z]' ORDER BY name").fetchall()
+    employees = conn.execute("SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
     conn.close()
     return render_template('add_meeting.html', user=user, projects=projects, meeting_clients=meeting_clients,
-                    active_section='sales')
+                    cities=cities, employees=employees, active_section='sales')
+
+
+@app.route('/api/meeting-entities')
+@login_required
+def api_meeting_entities():
+    """Cascade source for the meeting form's 'Meeting With' dropdown.
+
+    Given a meeting-client category (School / College / Partner /
+    Branch Partner / Agent), return the list of entities from the
+    matching table, each with its known contact person + phone so the
+    form can auto-fill the Contact fields when one is picked.
+
+    Decision (locked 2026-06-16): the category list is now School,
+    College + the partner_type values from the partner section
+    (Channel Partner / Marketing Partner / Consultant / ...). Mapping:
+      School               -> schools (12thPlus CRM)
+      College              -> colleges
+      <any partner_type>   -> partners WHERE partner_type = <category>
+    Legacy generic 'Partner'/'Branch Partner'/'Agent' still return all
+    partners for back-compat with older saved meetings.
+    """
+    category = (request.args.get('type') or '').strip()
+    cat_lc = category.lower()
+    conn = get_db()
+    out = []
+    try:
+        if cat_lc == 'school':
+            rows = conn.execute(
+                "SELECT id, name, principal_name AS contact, contact_number AS phone, email "
+                "FROM schools WHERE COALESCE(status,'active')='active' ORDER BY name"
+            ).fetchall()
+        elif cat_lc == 'college':
+            rows = conn.execute(
+                "SELECT id, name, '' AS contact, contact_phone AS phone, contact_email AS email "
+                "FROM colleges ORDER BY name"
+            ).fetchall()
+        elif cat_lc in ('partner', 'branch partner', 'agent'):
+            rows = conn.execute(
+                "SELECT id, company_name AS name, contact_person AS contact, phone, email "
+                "FROM partners ORDER BY company_name"
+            ).fetchall()
+        else:
+            # Treat anything else as a partner_type from the partner
+            # section; filter partners by that type.
+            rows = conn.execute(
+                "SELECT id, company_name AS name, contact_person AS contact, phone, email "
+                "FROM partners WHERE LOWER(COALESCE(partner_type,''))=LOWER(?) ORDER BY company_name",
+                (category,)
+            ).fetchall()
+        for r in rows:
+            d = dict(r)
+            out.append({
+                'id': d.get('id'),
+                'name': d.get('name') or '',
+                'contact': d.get('contact') or '',
+                'phone': d.get('phone') or '',
+                'email': d.get('email') or '',
+            })
+    except Exception as e:
+        logging.error(f"api_meeting_entities({category}): {e}")
+    finally:
+        conn.close()
+    return jsonify(out)
 
 
 @app.route('/b2b/<int:trip_id>')
@@ -7729,10 +9373,12 @@ def b2b_trip_detail(trip_id):
         return redirect(url_for('b2b_trips_list'))
 
     meetings = conn.execute('''
-        SELECT m.*, mt.name as meeting_type_name, p.name as project_name
+        SELECT m.*, mt.name as meeting_type_name, p.name as project_name,
+               e.name as handler_name
         FROM b2b_meetings m
         LEFT JOIN meeting_types mt ON m.meeting_type_id = mt.id
         LEFT JOIN projects p ON m.project_id = p.id
+        LEFT JOIN employees e ON m.handler_employee_id = e.id
         WHERE m.trip_id = ?
         ORDER BY m.meeting_date, m.id
     ''', (trip_id,)).fetchall()
@@ -7785,6 +9431,12 @@ def add_meeting_to_trip(trip_id):
 @login_required
 @sales_access_required
 def update_meeting_outcome(meeting_id):
+    """Legacy outcome endpoint — kept so old buttons still work.
+
+    The minimal outcome form only posted outcome + notes. The unified CRM
+    now uses the full edit flow (with audit + follow-up chaining), so this
+    persists the two legacy fields with an audit trail and redirects back.
+    """
     user = get_user()
     conn = get_db()
 
@@ -7797,12 +9449,149 @@ def update_meeting_outcome(meeting_id):
     outcome = request.form.get('outcome', '').strip()
     notes = request.form.get('notes', '').strip()
 
+    old = dict(meeting)
+    for field, new_val in (('outcome', outcome), ('notes', notes)):
+        old_val = old.get(field)
+        if (old_val or '') != (new_val or ''):
+            conn.execute(
+                "INSERT INTO b2b_meeting_audit (meeting_id, field, old_value, new_value, changed_by) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meeting_id, field, old_val, new_val, user['id'])
+            )
     conn.execute('UPDATE b2b_meetings SET outcome = ?, notes = ? WHERE id = ?',
                 (outcome, notes, meeting_id))
     conn.commit()
     conn.close()
     flash('Meeting outcome updated', 'success')
     return redirect(url_for('b2b_trip_detail', trip_id=meeting['trip_id']))
+
+
+@app.route('/b2b/meeting/<int:meeting_id>/edit', methods=['GET'])
+@login_required
+@sales_access_required
+def edit_b2b_meeting(meeting_id):
+    """Full edit form for a single b2b meeting (unified CRM)."""
+    user = get_user()
+    conn = get_db()
+    meeting = conn.execute(
+        "SELECT m.*, mt.name AS meeting_type_name "
+        "FROM b2b_meetings m "
+        "LEFT JOIN meeting_types mt ON m.meeting_type_id = mt.id "
+        "WHERE m.id = ?",
+        (meeting_id,)
+    ).fetchone()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+    employees = conn.execute(
+        "SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name"
+    ).fetchall()
+    conn.close()
+    return render_template(
+        'b2b_meeting_edit.html', user=user, meeting=meeting,
+        employees=employees,
+        contact_type_options=['Online meeting', 'Face to face meeting', 'Walk in', 'Meeting fixed'],
+        status_options=['Discussion stage', 'Interested', 'Follow up', 'Demo done', 'Not interested'],
+        active_section='sales'
+    )
+
+
+@app.route('/b2b/meeting/<int:meeting_id>/edit', methods=['POST'])
+@login_required
+@sales_access_required
+def edit_b2b_meeting_save(meeting_id):
+    """Save edits with an audit trail + spawn a linked follow-up meeting.
+
+    When a NEW follow-up date is scheduled (different from what was there
+    before), we create a child b2b_meetings row carrying forward the same
+    school/partner context, so the follow-up keeps its lineage.
+    """
+    user = get_user()
+    conn = get_db()
+    meeting = conn.execute('SELECT * FROM b2b_meetings WHERE id = ?', (meeting_id,)).fetchone()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        conn.close()
+        return redirect(url_for('b2b_trips_list'))
+
+    old = dict(meeting)
+
+    def g(k):
+        return (request.form.get(k) or '').strip()
+
+    new_vals = {
+        'meeting_date':       g('meeting_date') or None,
+        'meeting_time':       g('meeting_time') or None,
+        'contact_type':       g('contact_type') or None,
+        'status':             g('status') or None,
+        'notes':              g('notes') or None,
+        'contact_person':     g('contact_person') or None,
+        'contact_phone':      g('contact_phone') or None,
+        'next_followup_date': g('next_followup_date') or None,
+        'next_followup_note': g('next_followup_note') or None,
+    }
+    handler_raw = g('handler_employee_id')
+    new_vals['handler_employee_id'] = int(handler_raw) if handler_raw.isdigit() else old.get('handler_employee_id')
+
+    old_followup = old.get('next_followup_date') or None
+    new_followup = new_vals['next_followup_date']
+    # A genuinely new follow-up was scheduled (set + changed from before).
+    spawn_followup = bool(new_followup) and (str(new_followup) != str(old_followup or ''))
+
+    # Audit each changed field.
+    for field, new_val in new_vals.items():
+        old_val = old.get(field)
+        if str(old_val if old_val is not None else '') != str(new_val if new_val is not None else ''):
+            conn.execute(
+                "INSERT INTO b2b_meeting_audit (meeting_id, field, old_value, new_value, changed_by) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (meeting_id,
+                 field,
+                 str(old_val) if old_val is not None else None,
+                 str(new_val) if new_val is not None else None,
+                 user['id'])
+            )
+
+    if spawn_followup:
+        # The parent's follow-up has been actioned into a child row, so
+        # clear it on the parent (cleaner — avoids double-counting in the
+        # follow-ups-due card).
+        parent_followup_to_store = None
+    else:
+        parent_followup_to_store = new_followup
+
+    conn.execute(
+        "UPDATE b2b_meetings SET "
+        "  meeting_date = ?, meeting_time = ?, contact_type = ?, status = ?, "
+        "  notes = ?, contact_person = ?, contact_phone = ?, "
+        "  next_followup_date = ?, next_followup_note = ?, handler_employee_id = ? "
+        "WHERE id = ?",
+        (new_vals['meeting_date'], new_vals['meeting_time'], new_vals['contact_type'],
+         new_vals['status'], new_vals['notes'], new_vals['contact_person'],
+         new_vals['contact_phone'], parent_followup_to_store,
+         new_vals['next_followup_note'], new_vals['handler_employee_id'], meeting_id)
+    )
+
+    if spawn_followup:
+        # Create the carried-forward follow-up meeting as a child row.
+        conn.execute(
+            "INSERT INTO b2b_meetings "
+            "(trip_id, meeting_type_id, meeting_with, entity_id, project_id, location, "
+            " contact_person, contact_phone, handler_employee_id, "
+            " meeting_date, status, notes, next_followup_date, parent_meeting_id) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Follow up', ?, NULL, ?)",
+            (old.get('trip_id'), old.get('meeting_type_id'), old.get('meeting_with'),
+             old.get('entity_id'), old.get('project_id'), old.get('location'),
+             new_vals['contact_person'], new_vals['contact_phone'],
+             new_vals['handler_employee_id'],
+             new_followup, new_vals['next_followup_note'], meeting_id)
+        )
+
+    conn.commit()
+    conn.close()
+    flash('Meeting updated' + (' — follow-up scheduled' if spawn_followup else ''), 'success')
+    return redirect(url_for('b2b_trip_detail', trip_id=old.get('trip_id')))
 
 
 # ─── Meeting Types Management (Admin) ───
@@ -11681,6 +13470,35 @@ def ensure_ops_tables():
             updated_at TIMESTAMP
         )''')
 
+        # ── AMC Registration (S-2b) ──
+        # Same schema as ops_gmc_registration -- AMC is the Australian
+        # Medical Council equivalent of GMC. Currently used by the
+        # consulting pathway; will be retrofitted to PLAB / AMC pathways
+        # in a follow-up if needed. pathway column added on boot by
+        # ensure_pathway_columns_on_ops_tables (ops_amc_registration is
+        # in OPS_PATHWAY_TABLES).
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_amc_registration (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            amc_reference_number TEXT,
+            login_pwd TEXT,
+            secret_question TEXT,
+            secret_answer TEXT,
+            amc_setup TEXT,
+            registration_date TEXT,
+            english_exam TEXT,
+            exam_date TEXT,
+            english_result_expiry_date TEXT,
+            license TEXT,
+            license_received_date TEXT,
+            candidate_email TEXT,
+            mobile_number TEXT,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP
+        )''')
+
         # ── Research & Publication ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_research_publication (
             id SERIAL PRIMARY KEY,
@@ -11700,6 +13518,24 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # ── Job Stage (PLAB job placement tracking) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_job_stage (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            hospital_name TEXT,
+            designation TEXT,
+            joined_date TEXT,
+            job_location TEXT,
+            job_confirmed_by TEXT,
+            offered_salary TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            additional_notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT NOW(),
+            pathway TEXT DEFAULT 'plab'
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_job_stage_reg ON ops_job_stage(registration_number)")
         # ── Online Subscriptions ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_subscriptions (
             id SERIAL PRIMARY KEY,
@@ -12173,6 +14009,33 @@ def ensure_ops_tables():
             delivered INTEGER DEFAULT 0,
             notes TEXT
         )''')
+        # AMC-specific onboarding columns (2026-06-02). Added via ALTER for
+        # back-compat with existing rows; each wrapped in try/except so
+        # re-runs are idempotent on PG.
+        for ddl in (
+            "ALTER TABLE client_onboarding ADD COLUMN welcome_kit_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN welcome_kit_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_handbook_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_handbook_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_clinical_handbook_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN amc_clinical_handbook_sent_date TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN brochure_policy_items TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN sla_copy_method TEXT",
+            "ALTER TABLE client_onboarding ADD COLUMN additional_goodies TEXT",
+            # Item F-2: 30-day check-in scheduler tracking. sent_at
+            # is set when the daily job actually fires the email;
+            # skipped=1 means the row was past the freshness window
+            # (too late to send) and should be ignored on subsequent
+            # job runs.
+            "ALTER TABLE client_onboarding ADD COLUMN thirty_day_checkin_sent_at TIMESTAMP",
+            "ALTER TABLE client_onboarding ADD COLUMN thirty_day_checkin_skipped INTEGER DEFAULT 0",
+        ):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
 
         # ── Welcome Email Template ──
         conn.execute('''CREATE TABLE IF NOT EXISTS email_templates (
@@ -12182,6 +14045,47 @@ def ensure_ops_tables():
             body_html TEXT NOT NULL,
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+
+        # ── Item G-1: Time-slot request flow (calendar slot picker) ──
+        # One row per request from ops. The token is the public URL key
+        # the client uses to view + pick a slot (no login required).
+        # available_slots is a JSON array of ISO datetime strings;
+        # chosen_slot is set once client picks.
+        conn.execute('''CREATE TABLE IF NOT EXISTS scheduled_slots (
+            id SERIAL PRIMARY KEY,
+            token TEXT NOT NULL UNIQUE,
+            client_id INTEGER NOT NULL REFERENCES plab_clients(id) ON DELETE CASCADE,
+            slot_type TEXT DEFAULT 'welcome_call',
+            available_slots TEXT,
+            chosen_slot TIMESTAMP,
+            status TEXT DEFAULT 'pending',
+            requested_by INTEGER,
+            requested_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            chosen_at TIMESTAMP,
+            expires_at TIMESTAMP
+        )''')
+        try:
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_scheduled_slots_client ON scheduled_slots(client_id, slot_type, status)")
+        except Exception: pass
+        # Item E-1: extend email_templates with stage, enable flag,
+        # per-stakeholder recipient toggles and admin notes. All
+        # idempotent ALTERs so re-boots are safe on Postgres.
+        for ddl in (
+            "ALTER TABLE email_templates ADD COLUMN stage TEXT",
+            "ALTER TABLE email_templates ADD COLUMN label TEXT",
+            "ALTER TABLE email_templates ADD COLUMN enabled INTEGER DEFAULT 1",
+            "ALTER TABLE email_templates ADD COLUMN recipients_client INTEGER DEFAULT 1",
+            "ALTER TABLE email_templates ADD COLUMN recipients_counsellor INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN recipients_ops INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN recipients_parents INTEGER DEFAULT 0",
+            "ALTER TABLE email_templates ADD COLUMN notes TEXT",
+        ):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
 
         # ── WhatsApp Messaging System ──
         conn.execute('''CREATE TABLE IF NOT EXISTS wa_contacts (
@@ -12317,6 +14221,17 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             registered_at TIMESTAMP
         )''')
+        # 2026-06-02 (Item C): stash the sales-collected closure details
+        # on the invitation so the client_registrations row created when
+        # the client accepts can be pre-filled with what they signed up
+        # for. JSON-encoded; populated by sales_leads_add (Add Closed
+        # Client), consumed by /client/register/<token>.
+        try:
+            conn.execute("ALTER TABLE client_invitations ADD COLUMN closure_metadata TEXT")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
 
         # ── Client Registrations (main client data per product) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_registrations (
@@ -13389,18 +15304,61 @@ MENTORSHIP_CONFIRMATION = ['Confirmed', 'Pending', 'Cancelled', 'Rescheduled']
 CAB_VENDORS = ['Imran', 'Other']
 
 
-def get_lookup_options(category):
-    """Fetch active lookup options for a category from the database."""
+def get_lookup_options(category, pathway=None):
+    """Fetch active lookup options for a category from the database.
+
+    Args:
+        category: lookup_options.category (e.g. 'plan_type', 'epic_status').
+        pathway:  Optional pathway slug ('plab', 'australia', 'consulting').
+                  When provided, results are scoped to that pathway so the
+                  PLAB and AMC dropdowns stay isolated. When omitted the
+                  legacy union-of-pathways behaviour is preserved so existing
+                  PLAB callers don't change. New AMC/Consulting handlers
+                  should always pass the pathway slug so admins editing
+                  Field Manager for that pathway see their values render
+                  in the section forms.
+
+    If the pathway-scoped query returns zero rows we fall back to the PLAB
+    set so brand-new pathways inherit sensible defaults instead of empty
+    dropdowns. Field Manager admins can still override per-pathway.
+    """
     try:
         conn = get_db()
-        rows = conn.execute(
-            "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
-            (category,)
-        ).fetchall()
+        if pathway:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options "
+                "WHERE category = ? AND is_active = TRUE "
+                "  AND COALESCE(pathway, 'plab') = ? "
+                "ORDER BY sort_order, id",
+                (category, pathway)
+            ).fetchall()
+            # Fallback: if nothing seeded for this pathway yet, return the
+            # PLAB set so the admin still sees a non-empty dropdown. Field
+            # Manager can override later.
+            if not rows and pathway != 'plab':
+                rows = conn.execute(
+                    "SELECT value FROM lookup_options "
+                    "WHERE category = ? AND is_active = TRUE "
+                    "  AND COALESCE(pathway, 'plab') = 'plab' "
+                    "ORDER BY sort_order, id",
+                    (category,)
+                ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category = ? AND is_active = TRUE ORDER BY sort_order, id",
+                (category,)
+            ).fetchall()
         conn.close()
-        return [r['value'] for r in rows]
+        # De-dupe while preserving order in case fallback duplicated values.
+        seen, out = set(), []
+        for r in rows:
+            v = r['value']
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+        return out
     except Exception as e:
-        logging.error(f"get_lookup_options({category}): {e}")
+        logging.error(f"get_lookup_options({category}, pathway={pathway}): {e}")
         return []
 
 
@@ -13428,6 +15386,89 @@ def _next_registration_number(conn):
 
 # ─── PATHWAY LANDING PAGES ───
 
+# (display label, exact account_status value) — full client lifecycle breakdown
+STATUS_DEFS = [
+    ('In Process',           'In Process'),
+    ('On Hold',              'On Hold'),
+    ('Completed',            'Completed'),
+    ('Dropped Out',          'Dropped Out'),
+    ('Dropped & Refunded',   'Dropped and Refunded'),
+    ('Switched Program',     'Switched Program'),
+]
+
+@app.route('/operations/dashboard')
+@admin_required
+def ops_main_dashboard():
+    """Unified Operations dashboard — aggregate stats across PLAB, AMC
+    (australia) and Standard Consulting. Each pathway card is shown only
+    if the user has dashboard access to it (admins see all)."""
+    user = get_user()
+    is_admin = bool(user and user.get('is_admin'))
+
+    def can(section):
+        return is_admin or (user and has_section_permission(user, section, 'dashboard', 'view'))
+
+    visible = []
+    if can('plab_pathway'):
+        visible.append(('plab', 'PLAB Pathway', url_for('ops_plab_pathway_dashboard'), '#1F3A5F'))
+    if can('australia_pathway'):
+        visible.append(('australia', 'AMC Pathway', '/operations/australia-pathway', '#0369A1'))
+    if can('consulting_pathway'):
+        visible.append(('consulting', 'Standard Consulting', '/operations/consulting', '#B45309'))
+
+    conn = get_db()
+
+    def one(sql, args):
+        try:
+            r = conn.execute(sql, args).fetchone()
+            return r['c'] if r else 0
+        except Exception:
+            return 0
+
+    def stats(pw):
+        d = {}
+        d['total'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=?", (pw,))
+        # Full account-status breakdown (label, exact DB value)
+        d['status'] = {}
+        for label, val in STATUS_DEFS:
+            d['status'][label] = one(
+                "SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status=?",
+                (pw, val))
+        d['tests'] = one("SELECT COUNT(*) c FROM ops_test_bookings WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['coaching'] = one("SELECT COUNT(*) c FROM ops_coaching WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['epic'] = one("SELECT COUNT(*) c FROM ops_epic_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['call_notes'] = one("SELECT COUNT(*) c FROM ops_call_notes WHERE COALESCE(pathway,'plab')=?", (pw,))
+        if pw == 'plab':
+            d['reg_label'] = 'GMC Reg'
+            d['reg'] = one("SELECT COUNT(*) c FROM ops_gmc_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        else:
+            d['reg_label'] = 'AMC Reg'
+            d['reg'] = one("SELECT COUNT(*) c FROM ops_amc_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        try:
+            d['recent'] = [dict(r) for r in conn.execute(
+                "SELECT registration_number, prefix, first_name, last_name, account_status, current_stage, registration_date "
+                "FROM plab_clients WHERE COALESCE(pathway,'plab')=? "
+                "ORDER BY registration_date DESC NULLS LAST, id DESC LIMIT 5", (pw,)).fetchall()]
+        except Exception:
+            d['recent'] = []
+        return d
+
+    cards = []
+    for pw, label, url, color in visible:
+        d = stats(pw)
+        d.update({'key': pw, 'label': label, 'url': url, 'color': color})
+        cards.append(d)
+    conn.close()
+
+    totals = {
+        'clients': sum(c['total'] for c in cards),
+        'status': {label: sum(c['status'][label] for c in cards) for label, _ in STATUS_DEFS},
+    }
+    return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
+                           status_labels=[label for label, _ in STATUS_DEFS],
+                           active_ops_page='ops-dashboard', user=user)
+
+
 @app.route('/operations/uk-pathway')
 @admin_required
 def ops_uk_pathway():
@@ -13435,13 +15476,10 @@ def ops_uk_pathway():
     return redirect(url_for('ops_plab_pathway_dashboard'))
 
 
-@app.route('/operations/australia-pathway')
-@admin_required
-def ops_australia_pathway():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='Australia Pathway',
-                         pathway_desc='Australia medical pathway operations will be configured here.')
+
+
+# /operations/australia-pathway is now served by routes/operations/australia.py
+# (registered via register_operations_modules(app) at app boot).
 
 
 @app.route('/operations/uae-pathway')
@@ -13453,13 +15491,9 @@ def ops_uae_pathway():
                          pathway_desc='UAE medical pathway operations will be configured here.')
 
 
-@app.route('/operations/consulting')
-@admin_required
-def ops_consulting():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='Consulting',
-                         pathway_desc='Consulting operations and client management will be configured here.')
+# S-0: /operations/consulting is now served by
+# routes/operations/consulting.py (real dashboard + clients list).
+# Placeholder removed. Endpoint name reused: ops_consulting_pathway.
 
 
 @app.route('/operations/plab-pathway-dashboard')
@@ -13471,65 +15505,68 @@ def ops_plab_pathway_dashboard():
         from datetime import date, timedelta
         today = date.today().isoformat()
 
+        # Every count below is now scoped to pathway='plab' so Australia rows
+        # never leak into the PLAB dashboard. COALESCE handles the rare row
+        # whose backfill missed.
+        PLAB = "COALESCE(pathway, 'plab') = 'plab'"
+
         # ── Total clients ──
-        total_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients").fetchone()['c']
-        active_clients = conn.execute("SELECT COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process'").fetchone()['c']
+        total_clients = conn.execute(f"SELECT COUNT(*) as c FROM plab_clients WHERE {PLAB}").fetchone()['c']
+        active_clients = conn.execute(f"SELECT COUNT(*) as c FROM plab_clients WHERE {PLAB} AND account_status = 'In Process'").fetchone()['c']
 
         # ── Account status breakdown (matches client profile on PLAB Pathway page) ──
-        status_rows = conn.execute("SELECT account_status, COUNT(*) as c FROM plab_clients GROUP BY account_status").fetchall()
+        status_rows = conn.execute(f"SELECT account_status, COUNT(*) as c FROM plab_clients WHERE {PLAB} GROUP BY account_status").fetchall()
         status_counts = {r['account_status']: r['c'] for r in status_rows}
 
         # ── Current stage breakdown (active / In Process clients only) ──
-        stage_rows = conn.execute("SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE account_status = 'In Process' GROUP BY current_stage").fetchall()
+        stage_rows = conn.execute(f"SELECT current_stage, COUNT(*) as c FROM plab_clients WHERE {PLAB} AND account_status = 'In Process' GROUP BY current_stage").fetchall()
         stage_counts = {r['current_stage']: r['c'] for r in stage_rows}
 
         # ── Coaching ──
-        coaching_total = conn.execute("SELECT COUNT(*) as c FROM ops_coaching").fetchone()['c']
-        coaching_ongoing = conn.execute("SELECT COUNT(*) as c FROM ops_coaching WHERE coaching_status = 'On Going'").fetchone()['c']
+        coaching_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_coaching WHERE {PLAB}").fetchone()['c']
+        coaching_ongoing = conn.execute(f"SELECT COUNT(*) as c FROM ops_coaching WHERE {PLAB} AND coaching_status = 'On Going'").fetchone()['c']
 
         # ── Test Bookings ──
-        test_total = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings").fetchone()['c']
-        upcoming_tests = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked'", (today,)).fetchone()['c']
-        # PLAB 1 upcoming
-        plab1_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 1'", (today,)).fetchone()['c']
-        # PLAB 2 upcoming
-        plab2_upcoming = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 2'", (today,)).fetchone()['c']
-        # Awaiting results (attended but no result)
-        awaiting_results = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')").fetchone()['c']
-        # Recent passes (last 30 days)
+        test_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB}").fetchone()['c']
+        upcoming_tests = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked'", (today,)).fetchone()['c']
+        plab1_upcoming = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 1'", (today,)).fetchone()['c']
+        plab2_upcoming = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_date >= ? AND exam_status = 'Booked' AND exam = 'PLAB 2'", (today,)).fetchone()['c']
+        awaiting_results = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')").fetchone()['c']
         thirty_ago = (date.today() - timedelta(days=30)).isoformat()
-        recent_passes = conn.execute("SELECT COUNT(*) as c FROM ops_test_bookings WHERE exam_result = 'Passed' AND exam_result_date >= ?", (thirty_ago,)).fetchone()['c']
+        recent_passes = conn.execute(f"SELECT COUNT(*) as c FROM ops_test_bookings WHERE {PLAB} AND exam_result = 'Passed' AND exam_result_date >= ?", (thirty_ago,)).fetchone()['c']
 
         # ── EPIC Registration ──
-        epic_total = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration").fetchone()['c']
-        epic_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'In Process'").fetchone()['c']
-        epic_sent_gmc = conn.execute("SELECT COUNT(*) as c FROM ops_epic_registration WHERE epic_status = 'Sent to GMC'").fetchone()['c']
+        epic_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB}").fetchone()['c']
+        epic_in_process = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB} AND epic_status = 'In Process'").fetchone()['c']
+        epic_sent_gmc = conn.execute(f"SELECT COUNT(*) as c FROM ops_epic_registration WHERE {PLAB} AND epic_status = 'Sent to GMC'").fetchone()['c']
 
         # ── GMC Registration ──
-        gmc_total = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration").fetchone()['c']
-        gmc_completed = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE gmc_setup = 'Completed'").fetchone()['c']
-        gmc_license_received = conn.execute("SELECT COUNT(*) as c FROM ops_gmc_registration WHERE license = 'Received'").fetchone()['c']
+        gmc_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB}").fetchone()['c']
+        gmc_completed = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB} AND gmc_setup = 'Completed'").fetchone()['c']
+        gmc_license_received = conn.execute(f"SELECT COUNT(*) as c FROM ops_gmc_registration WHERE {PLAB} AND license = 'Received'").fetchone()['c']
 
         # ── Research & Publication ──
-        research_total = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication").fetchone()['c']
-        research_published = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Published'").fetchone()['c']
-        research_completed = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Research Completed'").fetchone()['c']
-        research_started = conn.execute("SELECT COUNT(*) as c FROM ops_research_publication WHERE research_status = 'Started'").fetchone()['c']
+        research_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB}").fetchone()['c']
+        research_published = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Research Published'").fetchone()['c']
+        research_completed = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Research Completed'").fetchone()['c']
+        research_started = conn.execute(f"SELECT COUNT(*) as c FROM ops_research_publication WHERE {PLAB} AND research_status = 'Started'").fetchone()['c']
 
         # ── UK Visa & Travel ──
-        visa_total = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel").fetchone()['c']
-        visa_accepted = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'Accepted'").fetchone()['c']
-        visa_in_process = conn.execute("SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE visa_status = 'In Process'").fetchone()['c']
+        visa_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB}").fetchone()['c']
+        visa_accepted = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB} AND visa_status = 'Accepted'").fetchone()['c']
+        visa_in_process = conn.execute(f"SELECT COUNT(*) as c FROM ops_uk_visa_travel WHERE {PLAB} AND visa_status = 'In Process'").fetchone()['c']
 
         # ── Academic Details ──
-        academic_total = conn.execute("SELECT COUNT(*) as c FROM ops_academic_details").fetchone()['c']
+        academic_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_academic_details WHERE {PLAB}").fetchone()['c']
 
         # ── Upcoming exams list (next 5) ──
         upcoming_exams = conn.execute("""
             SELECT t.*, p.prefix, p.first_name, p.last_name
             FROM ops_test_bookings t
             JOIN plab_clients p ON p.registration_number = t.registration_number
-            WHERE t.exam_date >= ? AND t.exam_status = 'Booked'
+            WHERE COALESCE(t.pathway, 'plab') = 'plab'
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+              AND t.exam_date >= ? AND t.exam_status = 'Booked'
             ORDER BY t.exam_date ASC LIMIT 5
         """, (today,)).fetchall()
 
@@ -13674,7 +15711,23 @@ def ops_plab_settings():
 @app.route('/operations/field-manager')
 @login_required
 def ops_field_manager():
-    """Unified Field Manager — manage all lookup fields and options."""
+    """Unified Field Manager — manage all lookup fields and options.
+
+    Pathway-aware: the ?pathway= query param scopes the lookup options
+    shown so PLAB and Australia (and future pathways) never mix. Default
+    is 'plab' for back-compat with existing bookmarks / shortcuts.
+    """
+    # Pathway selector. Only show known pathways in the picker.
+    PATHWAY_TABS = [
+        {'slug': 'plab',       'label': 'UK / PLAB Pathway', 'flag': '\U0001f1ec\U0001f1e7'},
+        {'slug': 'australia',  'label': 'AMC Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
+        {'slug': 'uae',        'label': 'UAE Pathway',       'flag': '\U0001f1e6\U0001f1ea'},
+        {'slug': 'consulting', 'label': 'Standard Consulting','flag': '\U0001f9ed'},
+    ]
+    selected_pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if selected_pathway not in {t['slug'] for t in PATHWAY_TABS}:
+        selected_pathway = 'plab'
+
     conn = get_db()
     try:
         # Fetch all field_registry rows
@@ -13682,9 +15735,13 @@ def ops_field_manager():
             "SELECT * FROM field_registry ORDER BY section, display_order, id"
         ).fetchall()
 
-        # Fetch ALL lookup_options in one query
+        # Fetch lookup_options scoped to the selected pathway.
+        # Existing rows backfilled to pathway='plab' in Phase 1 migration, so
+        # the default selection keeps showing the same data PLAB admins always saw.
         all_options = conn.execute(
-            "SELECT * FROM lookup_options ORDER BY category, sort_order, id"
+            "SELECT * FROM lookup_options WHERE COALESCE(pathway, 'plab') = ? "
+            "ORDER BY category, sort_order, id",
+            (selected_pathway,),
         ).fetchall()
 
         # Group options by category
@@ -13730,7 +15787,10 @@ def ops_field_manager():
                              vendor_linked_categories=list(VENDOR_LOOKUP_MAP.keys()),
                              kit_items=kit_items,
                              email_template=email_tpl,
-                             active_ops_page='settings')
+                             pathway_tabs=PATHWAY_TABS,
+                             selected_pathway=selected_pathway,
+                             active_ops_page='settings',
+                             active_pathway=selected_pathway)
     except Exception as e:
         logging.error(f"ops_field_manager error: {e}")
         logging.exception("Full traceback for ops_field_manager:")
@@ -13742,29 +15802,42 @@ def ops_field_manager():
 @app.route('/operations/plab-settings/add', methods=['POST'])
 @login_required
 def ops_plab_settings_add():
-    """Add a new lookup option."""
+    """Add a new lookup option. Scoped to the requested pathway."""
     try:
         category = request.json.get('category', '').strip()
         value = request.json.get('value', '').strip()
+        # Pathway scope — default 'plab' for back-compat with callers that
+        # don't pass the new field. Frontend will pass the currently-selected
+        # pathway tab so PLAB and Australia dropdowns stay isolated.
+        pathway = (request.json.get('pathway') or 'plab').strip().lower()
+        if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+            pathway = 'plab'
 
         if not category or not value:
             return jsonify({'error': 'Category and value required'}), 400
 
         conn = get_db()
-        # Get max sort_order for this category
+        # Max sort_order WITHIN THIS PATHWAY ONLY — so adding to Australia
+        # doesn't depend on PLAB's counter.
         max_order = conn.execute(
-            "SELECT MAX(sort_order) as m FROM lookup_options WHERE category = ?",
-            (category,)
+            "SELECT MAX(sort_order) as m FROM lookup_options "
+            "WHERE category = ? AND COALESCE(pathway, 'plab') = ?",
+            (category, pathway),
         ).fetchone()['m']
         max_order = (max_order or 0) + 1
 
         conn.execute(
-            "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
-            (category, value, value, max_order)
+            "INSERT INTO lookup_options (category, label, value, sort_order, is_active, pathway) "
+            "VALUES (?, ?, ?, ?, TRUE, ?)",
+            (category, value, value, max_order, pathway),
         )
         conn.commit()
         # Get the new ID
-        result = conn.execute("SELECT id FROM lookup_options WHERE category = ? AND value = ? ORDER BY id DESC LIMIT 1", (category, value))
+        result = conn.execute(
+            "SELECT id FROM lookup_options WHERE category = ? AND value = ? AND COALESCE(pathway, 'plab') = ? "
+            "ORDER BY id DESC LIMIT 1",
+            (category, value, pathway),
+        )
         row = result.fetchone()
         new_id = row['id'] if row else None
         conn.close()
@@ -13772,7 +15845,8 @@ def ops_plab_settings_add():
         return jsonify({
             'success': True,
             'id': new_id,
-            'message': f'Added {value} to {category}'
+            'pathway': pathway,
+            'message': f'Added {value} to {category} ({pathway})'
         })
     except Exception as e:
         logging.error(f"ops_plab_settings_add error: {e}")
@@ -13905,7 +15979,9 @@ def ops_field_manager_reorder():
 #  VENDORS & PROVIDERS — Centralised Vendor Database
 # ─────────────────────────────────────────────────────────
 
-VENDOR_COUNTRIES = ['UK Pathway', 'Australia Pathway', 'USMLE Pathway', 'Germany Pathway']
+# X-4d: 'Standard Consulting' added so consulting vendors get their own
+# pathway scope on /operations/vendors-providers?pathway=consulting.
+VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
@@ -14143,15 +16219,44 @@ def api_vendors_by_category():
 @app.route('/operations/vendors-providers')
 @login_required
 def ops_vendors_providers():
-    """Vendors & Providers management page."""
+    """Vendors & Providers management page.
+
+    Pathway-aware via ?pathway= query param. Vendors are already scoped by
+    the legacy `country` column (values like 'UK Pathway', 'Australia
+    Pathway') — we just translate the pathway slug to the matching country
+    label and filter. Default (no param) shows ALL vendors.
+    """
+    pathway = (request.args.get('pathway') or '').strip().lower()
+    PATHWAY_TO_COUNTRY = {
+        'plab':       'UK Pathway',
+        'australia':  'AMC Pathway',
+        'usmle':      'USMLE Pathway',
+        'germany':    'Germany Pathway',
+        # X-4d: consulting added so its sidebar Vendors & Providers
+        # link filters to consulting-tagged vendors instead of showing
+        # everything.
+        'consulting': 'Standard Consulting',
+    }
+    country_filter = PATHWAY_TO_COUNTRY.get(pathway)
+
     conn = get_db()
-    vendors = conn.execute("""
-        SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
-        FROM vendors_providers vp
-        LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
-        GROUP BY vp.id
-        ORDER BY vp.country, vp.category, vp.sort_order, vp.name
-    """).fetchall()
+    if country_filter:
+        vendors = conn.execute("""
+            SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
+            FROM vendors_providers vp
+            LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            WHERE vp.country = ?
+            GROUP BY vp.id
+            ORDER BY vp.category, vp.sort_order, vp.name
+        """, (country_filter,)).fetchall()
+    else:
+        vendors = conn.execute("""
+            SELECT vp.*, GROUP_CONCAT(vsm.service_name, ', ') as services
+            FROM vendors_providers vp
+            LEFT JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+            GROUP BY vp.id
+            ORDER BY vp.country, vp.category, vp.sort_order, vp.name
+        """).fetchall()
     conn.close()
 
     # Section grouping
@@ -14184,7 +16289,8 @@ def ops_vendors_providers():
                          countries=VENDOR_COUNTRIES,
                          categories=VENDOR_CATEGORIES,
                          deliverables=deliverables,
-                         active_ops_page='vendors-providers')
+                         active_ops_page='vendors-providers',
+                         active_pathway=(pathway if pathway else 'plab'))
 
 
 @app.route('/operations/vendors-providers/add', methods=['POST'])
@@ -14320,6 +16426,113 @@ def _compute_onboarding_status(onb, kit_items):
     return 'Call Done'
 
 
+def _build_client_timeline(onb, holidays_set=None):
+    """Item D + F: build the 5-step client-facing onboarding timeline.
+
+    Returns a list of dicts, one per milestone:
+        {key, label, done, current, date, projected}
+    `done` is True once Ops has marked the milestone complete.
+    `current` is True for the first not-yet-done step (so the UI can
+    light it up as the next thing to expect).
+    `date` is an ISO-style date string (YYYY-MM-DD) or '' when unset.
+    `projected` is True when the date shown is a forward projection
+    rather than an actual recorded milestone date (Item F applies
+    this to the 30-day Check-in step once Onboarded).
+
+    `onb` may be None — when the client has no client_onboarding row
+    yet (e.g. they just signed up and Ops hasn't created the record),
+    all 5 steps come back as upcoming.
+
+    `holidays_set` (Item F): optional set of 'YYYY-MM-DD' strings
+    used to project the 30-day Check-in date forward using the
+    working_days helper (weekends + holidays skipped). Pass None to
+    skip projection -- the 30-day step then stays blank.
+    """
+    o = onb or {}
+
+    def _d(v):
+        if not v:
+            return ''
+        s = str(v)
+        # Keep just the date portion of TIMESTAMPs (welcome_email_sent_at)
+        # while preserving plain TEXT dates that already look right.
+        return s[:10] if len(s) >= 10 else s
+
+    kit_date = o.get('kit_delivered_date') or o.get('welcome_kit_sent_date')
+    onboarded = (o.get('onboarding_status') or '').strip().lower() == 'completed'
+    onboarded_date_str = _d(o.get('onb_updated_at')) if onboarded else ''
+
+    # Item F: project the 30-day Check-in date if the client is
+    # already Onboarded. Uses 30 working days from the Onboarded
+    # date, skipping weekends + holidays + the 5pm cutoff. Silently
+    # falls back to blank on any error so the timeline never breaks.
+    checkin_date = ''
+    checkin_projected = False
+    if onboarded and onboarded_date_str and holidays_set is not None:
+        try:
+            from working_days import add_working_days
+            from datetime import datetime as _dt
+            base = _dt.strptime(onboarded_date_str, '%Y-%m-%d').date()
+            projected = add_working_days(base, 30, holidays_set)
+            checkin_date = projected.strftime('%Y-%m-%d')
+            checkin_projected = True
+        except Exception:
+            pass
+
+    steps = [
+        {
+            'key':   'email',
+            'label': 'Welcome Email',
+            'done':  bool(o.get('welcome_email_sent')),
+            'date':  _d(o.get('welcome_email_sent_at')),
+            'projected': False,
+        },
+        {
+            'key':   'call',
+            'label': 'Welcome Call',
+            'done':  bool(o.get('welcome_call_confirmed')),
+            'date':  _d(o.get('welcome_call_date')),
+            'projected': False,
+        },
+        {
+            'key':   'kit',
+            'label': 'Welcome Kit',
+            'done':  bool(kit_date),
+            'date':  _d(kit_date),
+            'projected': False,
+        },
+        {
+            'key':   'onboarded',
+            'label': 'Onboarded',
+            'done':  onboarded,
+            # Show the last-updated timestamp when Completed so the
+            # client can see when it actually happened.
+            'date':  onboarded_date_str,
+            'projected': False,
+        },
+        {
+            # Date is projected forward (Item F) once Onboarded. Stays
+            # blank until then. Actual email firing (Item F-2) reads
+            # the same projected date.
+            'key':   'checkin',
+            'label': '30-day Check-in',
+            'done':  False,
+            'date':  checkin_date,
+            'projected': checkin_projected,
+        },
+    ]
+
+    # First step that isn't done becomes 'current' (visually distinct).
+    for s in steps:
+        s['current'] = False
+    for s in steps:
+        if not s['done']:
+            s['current'] = True
+            break
+
+    return steps
+
+
 def _ensure_client_onboarding(conn, client_id, reg_num):
     """Create onboarding record + default kit items if not exists. Returns onboarding row."""
     onb = conn.execute("SELECT * FROM client_onboarding WHERE client_id = ?", (client_id,)).fetchone()
@@ -14341,6 +16554,74 @@ def _ensure_client_onboarding(conn, client_id, reg_num):
     return onb
 
 
+# ── Unified Welcome-Kit-driven Onboarding (Phase E continuation) ────
+# A single list view per pathway. Backed entirely by client_welcome_kit
+# so any tick/untick auto-syncs with the Welcome Kit tab on the client
+# detail page (admin/clients/<reg_id>). PLAB sidebar's existing
+# "Onboarding" link continues to point at the legacy plab_clients page
+# below; the new "Welcome Kit" link in the sidebar points here.
+
+@app.route('/operations/welcome-kit-onboarding')
+@admin_required
+def ops_welcome_kit_onboarding():
+    pathway = request.args.get('pathway', 'plab')
+    if pathway not in ('plab', 'australia'):
+        pathway = 'plab'
+    pathway_label = {'plab': 'PLAB Pathway', 'australia': 'AMC Pathway'}[pathway]
+    conn = get_db()
+    # Only verified v2 clients on this pathway. Verified = ops has
+    # confirmed onboarding, which is exactly when the welcome kit gets
+    # seeded.
+    rows = conn.execute(
+        '''SELECT cr.id, cr.registration_number, cr.first_name, cr.last_name,
+                  cr.mobile, cr.email, cr.ops_verified_at,
+                  ps.name AS product_name,
+                  (SELECT COUNT(*) FROM client_welcome_kit cwk
+                    WHERE cwk.registration_id = cr.id) AS kit_total,
+                  (SELECT COUNT(*) FROM client_welcome_kit cwk
+                    WHERE cwk.registration_id = cr.id
+                      AND cwk.status = 'done') AS kit_done
+             FROM client_registrations cr
+        LEFT JOIN products_services ps ON ps.id = cr.product_id
+            WHERE COALESCE(ps.pathway, '') = ?
+              AND cr.ops_status = 'verified'
+         ORDER BY cr.ops_verified_at DESC NULLS LAST, cr.id DESC''',
+        (pathway,),
+    ).fetchall()
+    # Bucket clients by progress for a kanban-style summary at the top.
+    summary = {'not_started': 0, 'in_progress': 0, 'complete': 0, 'no_template': 0}
+    enriched = []
+    for r in rows:
+        d = dict(r)
+        d['kit_total'] = d.get('kit_total') or 0
+        d['kit_done'] = d.get('kit_done') or 0
+        if d['kit_total'] == 0:
+            d['bucket'] = 'no_template'
+        elif d['kit_done'] == 0:
+            d['bucket'] = 'not_started'
+        elif d['kit_done'] >= d['kit_total']:
+            d['bucket'] = 'complete'
+        else:
+            d['bucket'] = 'in_progress'
+        summary[d['bucket']] += 1
+        d['progress_pct'] = (d['kit_done'] * 100 // d['kit_total']) if d['kit_total'] else 0
+        d['display_name'] = (
+            f"{d['first_name'] or ''} {d['last_name'] or ''}".strip()
+            or d['registration_number'] or '—'
+        )
+        enriched.append(d)
+    conn.close()
+    return render_template(
+        'ops_welcome_kit_onboarding.html',
+        clients=enriched, summary=summary,
+        pathway=pathway, pathway_label=pathway_label,
+        active_pathway=pathway,
+        active_ops_page=('australia-welcome-kit' if pathway == 'australia'
+                         else 'welcome-kit'),
+        active_section='operations',
+    )
+
+
 @app.route('/operations/onboarding')
 @admin_required
 def ops_onboarding_list():
@@ -14360,7 +16641,7 @@ def ops_onboarding_list():
                     o.id as onboarding_id
              FROM plab_clients p
              LEFT JOIN client_onboarding o ON o.client_id = p.id
-             WHERE 1=1"""
+             WHERE COALESCE(p.pathway, 'plab') = 'plab' """
     params = []
     if status_filter:
         if status_filter == 'Pending':
@@ -14373,7 +16654,7 @@ def ops_onboarding_list():
         params.extend([f'%{search}%'] * 4)
 
     # Count
-    count_sql = "SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE 1=1"
+    count_sql = "SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE COALESCE(p.pathway, 'plab') = 'plab'"
     count_params = []
     if status_filter:
         if status_filter == 'Pending':
@@ -14400,7 +16681,7 @@ def ops_onboarding_list():
     kanban_counts = {}
     for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
         if st == 'Pending':
-            c = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE o.onboarding_status IS NULL OR o.onboarding_status = 'Pending'").fetchone()['cnt']
+            c = conn.execute("SELECT COUNT(*) as cnt FROM plab_clients p LEFT JOIN client_onboarding o ON o.client_id = p.id WHERE COALESCE(p.pathway, 'plab') = 'plab' AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')").fetchone()['cnt']
         else:
             c = conn.execute("SELECT COUNT(*) as cnt FROM client_onboarding WHERE onboarding_status = ?", (st,)).fetchone()['cnt']
         kanban_counts[st] = c
@@ -14417,7 +16698,10 @@ def ops_onboarding_list():
 @app.route('/operations/onboarding/<int:client_id>')
 @admin_required
 def ops_onboarding_detail(client_id):
-    """Client onboarding detail/edit page."""
+    """PLAB onboarding detail/edit -- now driven by welcome_kit_items
+    (per-product master template configured in /admin/welcome-kit)
+    + client_welcome_kit (per-client status). Same data model as the
+    AMC pathway page."""
     conn = get_db()
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
     if not client:
@@ -14425,9 +16709,37 @@ def ops_onboarding_detail(client_id):
         flash('Client not found.', 'error')
         return redirect(url_for('ops_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
-    kit_items = conn.execute(
-        "SELECT * FROM client_kit_items WHERE onboarding_id = ? ORDER BY id", (onb['id'],)
-    ).fetchall()
+
+    plab_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'plab' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    kit_items = []
+    if plab_prod:
+        templ = conn.execute(
+            "SELECT id, item_name, item_type, sort_order "
+            " FROM welcome_kit_items WHERE product_id = ? AND is_active = 1 "
+            " ORDER BY sort_order, id",
+            (plab_prod['id'],),
+        ).fetchall()
+        progress = {
+            r['kit_item_id']: r for r in conn.execute(
+                "SELECT kit_item_id, status, sent_date, completed_at, notes "
+                " FROM client_welcome_kit WHERE client_id = ?",
+                (client_id,),
+            ).fetchall()
+        }
+        for t in templ:
+            p = progress.get(t['id'])
+            kit_items.append({
+                'id': t['id'],
+                'item_name': t['item_name'],
+                'item_type': t['item_type'] or 'task',
+                'sort_order': t['sort_order'] or 0,
+                'included': bool(p and p['status'] == 'done'),
+                'sent_date': (p['sent_date'] if p else '') or '',
+                'notes': (p['notes'] if p else '') or '',
+            })
     email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
     conn.close()
     return render_template('ops_onboarding_detail.html',
@@ -14446,6 +16758,9 @@ def ops_onboarding_update(client_id):
         flash('Client not found.', 'error')
         return redirect(url_for('ops_onboarding_list'))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    # Item E-3: snapshot the pre-update state so we can detect
+    # milestone transitions after the save and fire stage emails.
+    _e3_old_state = dict(onb) if onb else {}
     f = request.form
     conn.execute("""UPDATE client_onboarding SET
         welcome_call_date=?, welcome_call_by=?, welcome_call_confirmed=?,
@@ -14461,28 +16776,776 @@ def ops_onboarding_update(client_id):
          f.get('kit_tracking_number', ''),
          1 if f.get('kit_tracking_communicated') else 0,
          onb['id']))
-    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
-    for ki in kit_items:
-        included = 1 if f.get(f'kit_included_{ki["id"]}') else 0
-        delivered = 1 if f.get(f'kit_delivered_{ki["id"]}') else 0
-        notes = f.get(f'kit_notes_{ki["id"]}', '')
-        conn.execute("UPDATE client_kit_items SET included=?, delivered=?, notes=? WHERE id=?",
-                     (included, delivered, notes, ki['id']))
-    # Recompute status
-    kit_items = conn.execute("SELECT * FROM client_kit_items WHERE onboarding_id = ?", (onb['id'],)).fetchall()
+    user = get_user()
+    plab_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'plab' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    if plab_prod:
+        items = conn.execute(
+            "SELECT id, item_name, item_type FROM welcome_kit_items "
+            " WHERE product_id = ? AND is_active = 1",
+            (plab_prod['id'],),
+        ).fetchall()
+        for it in items:
+            included = bool(f.get(f"kit_included_{it['id']}"))
+            sent_date = (f.get(f"kit_sent_date_{it['id']}") or '').strip()
+            notes = (f.get(f"kit_notes_{it['id']}") or '').strip()
+            row = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, it['id']),
+            ).fetchone()
+            if included or sent_date:
+                if row:
+                    conn.execute(
+                        "UPDATE client_welcome_kit SET "
+                        " status = 'done', sent_date = ?, notes = ?, "
+                        " completed_by = ?, "
+                        " completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP) "
+                        " WHERE id = ?",
+                        (sent_date, notes, user['id'] if user else None, row['id']),
+                    )
+                else:
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_welcome_kit "
+                            "(client_id, kit_item_id, item_name, item_type, "
+                            " status, sent_date, notes, completed_by, completed_at) "
+                            "VALUES (?, ?, ?, ?, 'done', ?, ?, ?, CURRENT_TIMESTAMP)",
+                            (client_id, it['id'], it['item_name'], it['item_type'],
+                             sent_date, notes, user['id'] if user else None),
+                        )
+                    except Exception as e:
+                        logging.warning(f"plab onb update insert cwk: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            elif row:
+                conn.execute(
+                    "UPDATE client_welcome_kit SET "
+                    " status = 'pending', sent_date = NULL, "
+                    " completed_by = NULL, completed_at = NULL, notes = ? "
+                    " WHERE id = ?",
+                    (notes, row['id']),
+                )
+    # Recompute status using the new per-item store.
+    cwk = conn.execute(
+        "SELECT status FROM client_welcome_kit WHERE client_id = ?",
+        (client_id,),
+    ).fetchall()
     onb = conn.execute("SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)).fetchone()
-    new_status = _compute_onboarding_status(dict(onb), [dict(ki) for ki in kit_items])
+    # Legacy compute helper expected client_kit_items rows; emulate with
+    # delivered/included flags derived from the new table.
+    pseudo_items = [
+        {'included': 1, 'delivered': 1 if (r['status'] or '') == 'done' else 0}
+        for r in cwk
+    ]
+    new_status = _compute_onboarding_status(dict(onb), pseudo_items)
     conn.execute("UPDATE client_onboarding SET onboarding_status=? WHERE id=?", (new_status, onb['id']))
+    # Item E-3: re-read fresh state and fire any stage emails whose
+    # milestone just transitioned. Helper is dormant (template
+    # enabled=0 by seed) until admin opts in.
+    _e3_new_state = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone() or {})
     conn.commit()
+    _maybe_fire_stage_transitions(conn, client_id, _e3_old_state, _e3_new_state)
     conn.close()
     flash('Onboarding updated.', 'success')
     return redirect(url_for('ops_onboarding_detail', client_id=client_id))
 
 
+# ── AMC Pathway Onboarding (2026-06-02): same UI/structure as PLAB,
+#    backed by plab_clients WHERE pathway='australia' + client_onboarding
+#    extended with AMC-specific columns. Seeded once from the Zoho Excel
+#    export -- see seed_amc_onboarding_from_xlsx_once below. ────────
+
+@app.route('/operations/australia/onboarding')
+@admin_required
+def ops_au_onboarding_list():
+    """AMC pathway onboarding list (kanban + table). Mirror of
+    ops_onboarding_list but filtered to australia pathway."""
+    conn = get_db()
+    status_filter = request.args.get('status', '')
+    search = request.args.get('search', '').strip()
+    page = int(request.args.get('page', 1))
+    per_page = 50
+
+    base_select = """SELECT p.id, p.registration_number, p.first_name, p.last_name,
+                            p.email, p.mobile, p.plan_type, p.current_stage,
+                            p.account_status, p.registration_date,
+                            COALESCE(o.onboarding_status, 'Pending') as onboarding_status,
+                            o.welcome_email_sent, o.welcome_email_sent_at,
+                            o.welcome_call_date, o.welcome_call_by, o.welcome_call_confirmed,
+                            o.welcome_kit_method, o.welcome_kit_sent_date,
+                            o.amc_handbook_method, o.amc_handbook_sent_date,
+                            o.amc_clinical_handbook_method, o.amc_clinical_handbook_sent_date,
+                            o.brochure_policy_items, o.sla_copy_method,
+                            o.additional_goodies,
+                            o.id as onboarding_id"""
+    base_from = (" FROM plab_clients p "
+                 " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+                 " WHERE COALESCE(p.pathway, 'plab') = 'australia' ")
+    where, params = [], []
+    if status_filter:
+        if status_filter == 'Pending':
+            where.append("(o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')")
+        else:
+            where.append("o.onboarding_status = ?")
+            params.append(status_filter)
+    if search:
+        where.append("(p.first_name ILIKE ? OR p.last_name ILIKE ? "
+                     " OR p.registration_number ILIKE ? OR p.email ILIKE ?)")
+        params.extend([f'%{search}%'] * 4)
+    where_sql = (' AND ' + ' AND '.join(where)) if where else ''
+
+    total = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM plab_clients p "
+        " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+        " WHERE COALESCE(p.pathway, 'plab') = 'australia'" + where_sql,
+        params,
+    ).fetchone()['cnt']
+    total_pages = max(1, (total + per_page - 1) // per_page)
+
+    kanban_sql = base_select + base_from + where_sql + " ORDER BY p.registration_date DESC NULLS LAST"
+    kanban_clients = conn.execute(kanban_sql, params).fetchall()
+    table_sql = kanban_sql + " LIMIT ? OFFSET ?"
+    table_clients = conn.execute(table_sql, params + [per_page, (page - 1) * per_page]).fetchall()
+
+    kanban_counts = {}
+    for st in ['Pending', 'Email Sent', 'Call Done', 'Kit Dispatched', 'Completed']:
+        if st == 'Pending':
+            c = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM plab_clients p "
+                " LEFT JOIN client_onboarding o ON o.client_id = p.id "
+                " WHERE COALESCE(p.pathway, 'plab') = 'australia' "
+                "   AND (o.onboarding_status IS NULL OR o.onboarding_status = 'Pending')"
+            ).fetchone()['cnt']
+        else:
+            c = conn.execute(
+                "SELECT COUNT(*) AS cnt FROM client_onboarding co "
+                " JOIN plab_clients p ON p.id = co.client_id "
+                " WHERE COALESCE(p.pathway, 'plab') = 'australia' AND co.onboarding_status = ?",
+                (st,),
+            ).fetchone()['cnt']
+        kanban_counts[st] = c
+    conn.close()
+
+    return render_template(
+        'ops_australia_onboarding.html',
+        clients=table_clients, kanban_clients=kanban_clients,
+        page=page, total_pages=total_pages, total=total,
+        status_filter=status_filter, search=search,
+        kanban_counts=kanban_counts,
+        active_ops_page='australia-onboarding', active_pathway='australia',
+        active_section='operations',
+    )
+
+
+@app.route('/operations/australia/onboarding/<int:client_id>')
+@admin_required
+def ops_au_onboarding_detail(client_id):
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+
+    # Kit items: pull the AMC (australia) product's master template from
+    # /admin/welcome-kit, plus this client's per-item progress.
+    amc_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'australia' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    kit_items = []
+    if amc_prod:
+        templ = conn.execute(
+            "SELECT id, item_name, item_type, sort_order "
+            " FROM welcome_kit_items WHERE product_id = ? AND is_active = 1 "
+            " ORDER BY sort_order, id",
+            (amc_prod['id'],),
+        ).fetchall()
+        # Existing per-client status for these items (legacy AMC clients
+        # link via client_id; v2 client_registrations use registration_id).
+        progress = {
+            r['kit_item_id']: r for r in conn.execute(
+                "SELECT kit_item_id, status, sent_date, completed_at, notes "
+                " FROM client_welcome_kit WHERE client_id = ?",
+                (client_id,),
+            ).fetchall()
+        }
+        for t in templ:
+            p = progress.get(t['id'])
+            kit_items.append({
+                'id': t['id'],
+                'item_name': t['item_name'],
+                'item_type': t['item_type'] or 'task',
+                'sort_order': t['sort_order'] or 0,
+                'included': bool(p and p['status'] == 'done'),
+                'sent_date': (p['sent_date'] if p else '') or '',
+                'notes': (p['notes'] if p else '') or '',
+            })
+    conn.close()
+    return render_template(
+        'ops_australia_onboarding_detail.html',
+        client=client, onboarding=onb, kit_items=kit_items,
+        active_ops_page='australia-onboarding', active_pathway='australia',
+        active_section='operations',
+    )
+
+
+@app.route('/operations/australia/onboarding/<int:client_id>/update', methods=['POST'])
+@admin_required
+def ops_au_onboarding_update(client_id):
+    user = get_user()
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+    # Item E-3: snapshot pre-update state for transition detection.
+    _e3_old_state = dict(onb) if onb else {}
+    f = request.form
+    conn.execute(
+        """UPDATE client_onboarding SET
+              welcome_call_date = ?, welcome_call_by = ?,
+              welcome_call_confirmed = ?, welcome_call_notes = ?,
+              welcome_kit_method = ?, welcome_kit_sent_date = ?,
+              updated_at = CURRENT_TIMESTAMP
+            WHERE id = ?""",
+        (
+            f.get('welcome_call_date', ''),  f.get('welcome_call_by', ''),
+            1 if f.get('welcome_call_confirmed') else 0,
+            f.get('welcome_call_notes', ''),
+            f.get('welcome_kit_method', ''),  f.get('welcome_kit_sent_date', ''),
+            onb['id'],
+        ),
+    )
+
+    # Per-item kit checklist -- now stored in client_welcome_kit, driven
+    # by the admin-configured items in /admin/welcome-kit.
+    amc_prod = conn.execute(
+        "SELECT id FROM products_services WHERE pathway = 'australia' "
+        " ORDER BY id LIMIT 1"
+    ).fetchone()
+    if amc_prod:
+        items = conn.execute(
+            "SELECT id, item_name, item_type FROM welcome_kit_items "
+            " WHERE product_id = ? AND is_active = 1",
+            (amc_prod['id'],),
+        ).fetchall()
+        for it in items:
+            included = bool(f.get(f"kit_included_{it['id']}"))
+            sent_date = (f.get(f"kit_sent_date_{it['id']}") or '').strip()
+            notes = (f.get(f"kit_notes_{it['id']}") or '').strip()
+            row = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, it['id']),
+            ).fetchone()
+            if included or sent_date:
+                if row:
+                    conn.execute(
+                        "UPDATE client_welcome_kit SET "
+                        " status = 'done', sent_date = ?, notes = ?, "
+                        " completed_by = ?, "
+                        " completed_at = COALESCE(completed_at, CURRENT_TIMESTAMP) "
+                        " WHERE id = ?",
+                        (sent_date, notes, user['id'] if user else None, row['id']),
+                    )
+                else:
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_welcome_kit "
+                            "(client_id, kit_item_id, item_name, item_type, "
+                            " status, sent_date, notes, completed_by, completed_at) "
+                            "VALUES (?, ?, ?, ?, 'done', ?, ?, ?, CURRENT_TIMESTAMP)",
+                            (client_id, it['id'], it['item_name'], it['item_type'],
+                             sent_date, notes, user['id'] if user else None),
+                        )
+                    except Exception as e:
+                        logging.warning(f"au onb update insert cwk: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            elif row:
+                # Unticked: revert to pending and clear the completion.
+                conn.execute(
+                    "UPDATE client_welcome_kit SET "
+                    " status = 'pending', sent_date = NULL, "
+                    " completed_by = NULL, completed_at = NULL, notes = ? "
+                    " WHERE id = ?",
+                    (notes, row['id']),
+                )
+    # Re-compute simple onboarding status from filled-ness of key items.
+    fresh = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone())
+    status = 'Pending'
+    if fresh.get('welcome_email_sent'):
+        status = 'Email Sent'
+    if fresh.get('welcome_call_confirmed'):
+        status = 'Call Done'
+    if fresh.get('welcome_kit_sent_date') or fresh.get('welcome_kit_method'):
+        status = 'Kit Dispatched'
+    # Completed = all four AMC kit pieces have a sent date
+    if all(fresh.get(k) for k in (
+        'welcome_kit_sent_date', 'amc_handbook_sent_date',
+        'amc_clinical_handbook_sent_date',
+    )) and fresh.get('welcome_call_confirmed'):
+        status = 'Completed'
+    conn.execute(
+        "UPDATE client_onboarding SET onboarding_status = ? WHERE id = ?",
+        (status, onb['id']),
+    )
+    # Item E-3: re-read fresh state and fire any stage emails whose
+    # milestone just transitioned. Dormant until admin enables the
+    # relevant template in /admin/email-templates.
+    _e3_new_state = dict(conn.execute(
+        "SELECT * FROM client_onboarding WHERE id = ?", (onb['id'],)
+    ).fetchone() or {})
+    conn.commit()
+    _maybe_fire_stage_transitions(conn, client_id, _e3_old_state, _e3_new_state)
+    conn.close()
+    flash('AMC onboarding updated.', 'success')
+    return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+
+
+@app.route('/operations/australia/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
+@admin_required
+def ops_au_onboarding_send_welcome_email(client_id):
+    """Mirror of ops_onboarding_send_welcome_email for AMC pathway.
+    Routes through the Item E-2 stage-email helper so recipient
+    toggles + enabled flag are honoured."""
+    conn = get_db()
+    client = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway,'plab')='australia'",
+        (client_id,),
+    ).fetchone()
+    if not client:
+        conn.close()
+        flash('AMC client not found.', 'error')
+        return redirect(url_for('ops_au_onboarding_list'))
+    if not client['email']:
+        conn.close()
+        flash('Client has no email address.', 'error')
+        return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+    onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
+
+    context = _stage_email_context_from_client(dict(client))
+    context['product_name'] = 'GooCampus AMC Pathway'
+    result = _send_stage_email(conn, 'welcome_email', client_id, context)
+
+    if result['status'] == 'sent':
+        conn.execute(
+            """UPDATE client_onboarding SET
+                 welcome_email_sent = 1,
+                 welcome_email_sent_at = CURRENT_TIMESTAMP,
+                 welcome_email_sent_by = ?,
+                 onboarding_status = CASE
+                   WHEN onboarding_status = 'Pending' THEN 'Email Sent'
+                   ELSE onboarding_status END,
+                 updated_at = CURRENT_TIMESTAMP
+               WHERE id = ?""",
+            (session.get('user_id'), onb['id']),
+        )
+        conn.commit()
+        flash(f'Welcome email sent to {", ".join(result["recipients"])}', 'success')
+    elif result['status'] == 'disabled':
+        flash('Welcome email template is disabled. Enable it in Email Templates to send.', 'error')
+    elif result['status'] == 'no_template':
+        flash('Welcome email template not found.', 'error')
+    elif result['status'] == 'no_recipients':
+        flash('No recipients selected on the welcome email template (and at least one stakeholder must have a valid email).', 'error')
+    elif result['status'] == 'send_failed':
+        flash('Failed to send email. Check Resend API key.', 'error')
+    else:
+        flash(f'Error sending email: {result.get("error","unknown")}', 'error')
+    conn.close()
+    return redirect(url_for('ops_au_onboarding_detail', client_id=client_id))
+
+
+def seed_amc_onboarding_from_xlsx_once():
+    """One-shot seed: upsert AMC onboarding statuses from
+    imports/amc_onboarding_seed.json (parsed earlier from the Zoho
+    export). Idempotent via marker amc_onboarding_seeded = v1.
+    Matches Excel rows to plab_clients by registration_number; rows
+    that don't match a client are skipped (logged).
+    """
+    MARKER_KEY = 'amc_onboarding_seeded'
+    MARKER_VAL = 'v1'
+    import json, os
+    seed_path = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                             'imports', 'amc_onboarding_seed.json')
+    if not os.path.isfile(seed_path):
+        return  # no seed file shipped with this deploy
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        with open(seed_path, 'r', encoding='utf-8') as fp:
+            seeds = json.load(fp)
+
+        upserted, no_match = 0, 0
+        for s in seeds:
+            reg = s.get('reg_no') or ''
+            if not reg:
+                continue
+            client = conn.execute(
+                "SELECT id, registration_number FROM plab_clients "
+                " WHERE registration_number = ? "
+                "   AND COALESCE(pathway, 'plab') = 'australia' LIMIT 1",
+                (reg,),
+            ).fetchone()
+            if not client:
+                no_match += 1
+                continue
+            # Ensure a client_onboarding row exists.
+            row = conn.execute(
+                "SELECT id FROM client_onboarding WHERE client_id = ?",
+                (client['id'],),
+            ).fetchone()
+            if not row:
+                try:
+                    conn.execute(
+                        "INSERT INTO client_onboarding "
+                        "(client_id, registration_number) VALUES (?, ?)",
+                        (client['id'], client['registration_number']),
+                    )
+                    conn.commit()
+                    row = conn.execute(
+                        "SELECT id FROM client_onboarding WHERE client_id = ?",
+                        (client['id'],),
+                    ).fetchone()
+                except Exception as e:
+                    logging.warning(
+                        f"amc_seed: create onboarding row failed "
+                        f"({reg}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+                    continue
+            # Upsert AMC fields. Only overwrites NULL/empty so a manual
+            # edit later isn't clobbered if the seed re-runs (it won't,
+            # because of the marker, but defensive).
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_call_by   = COALESCE(NULLIF(welcome_call_by,''),   ?),
+                          welcome_call_date = COALESCE(NULLIF(welcome_call_date,''), ?),
+                          welcome_kit_method     = COALESCE(NULLIF(welcome_kit_method,''),     ?),
+                          welcome_kit_sent_date  = COALESCE(NULLIF(welcome_kit_sent_date,''),  ?),
+                          amc_handbook_method    = COALESCE(NULLIF(amc_handbook_method,''),    ?),
+                          amc_handbook_sent_date = COALESCE(NULLIF(amc_handbook_sent_date,''), ?),
+                          amc_clinical_handbook_method    = COALESCE(NULLIF(amc_clinical_handbook_method,''),    ?),
+                          amc_clinical_handbook_sent_date = COALESCE(NULLIF(amc_clinical_handbook_sent_date,''), ?),
+                          brochure_policy_items = COALESCE(NULLIF(brochure_policy_items,''), ?),
+                          sla_copy_method       = COALESCE(NULLIF(sla_copy_method,''),       ?),
+                          additional_goodies    = COALESCE(NULLIF(additional_goodies,''),    ?),
+                          updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?""",
+                    (
+                        s.get('welcome_call_by',''),
+                        s.get('welcome_call_date',''),
+                        s.get('welcome_kit_method',''),
+                        s.get('welcome_kit_sent_date',''),
+                        s.get('amc_handbook_method',''),
+                        s.get('amc_handbook_sent_date',''),
+                        s.get('amc_clinical_handbook_method',''),
+                        s.get('amc_clinical_handbook_sent_date',''),
+                        s.get('brochure_policy_items',''),
+                        s.get('sla_copy_method',''),
+                        s.get('additional_goodies',''),
+                        row['id'],
+                    ),
+                )
+                # Recompute status now that fields are set.
+                conn.execute(
+                    """UPDATE client_onboarding SET onboarding_status =
+                       CASE
+                         WHEN (welcome_kit_sent_date IS NOT NULL AND welcome_kit_sent_date <> ''
+                               AND amc_handbook_sent_date IS NOT NULL AND amc_handbook_sent_date <> ''
+                               AND amc_clinical_handbook_sent_date IS NOT NULL AND amc_clinical_handbook_sent_date <> '')
+                           THEN 'Completed'
+                         WHEN (welcome_kit_sent_date IS NOT NULL AND welcome_kit_sent_date <> '')
+                           THEN 'Kit Dispatched'
+                         WHEN (welcome_call_date IS NOT NULL AND welcome_call_date <> '')
+                           THEN 'Call Done'
+                         WHEN welcome_email_sent = 1
+                           THEN 'Email Sent'
+                         ELSE 'Pending'
+                       END
+                     WHERE id = ?""",
+                    (row['id'],),
+                )
+                upserted += 1
+            except Exception as e:
+                logging.warning(f"amc_seed: upsert failed ({reg}): {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"amc_seed marker write: {e}")
+
+        logging.info(
+            f"AMC onboarding seed: upserted {upserted} client(s); "
+            f"{no_match} reg# without matching plab_clients row"
+        )
+    except Exception as e:
+        logging.warning(f"seed_amc_onboarding_from_xlsx_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+# ── Item E-2: stage-email send helper ─────────────────────────────────
+# Single entry-point for sending any onboarding-stage email. Honours
+# the enabled flag and the per-stakeholder recipient toggles set in
+# /admin/email-templates. Returns a dict describing the outcome --
+# never raises -- so callers can light-touch fire it from milestone
+# handlers without try/except wrapping.
+#
+# A template's `recipients_*` toggles are layered on top of "does the
+# email address actually exist?" so missing addresses are silently
+# skipped (e.g. no parents_email -> parents row not added).
+
+OPS_EMAIL_RECIPIENT = 'ops@goocampus.in'
+
+
+def _resolve_stage_email_recipients(conn, template_key, plab_client_id):
+    """Resolve recipient address list for a stage email.
+
+    Returns (recipients_list, template_dict). Either can be empty/None:
+      - template_dict is None when the template_key doesn't exist
+      - recipients_list is [] when the template is disabled or every
+        toggled-on stakeholder is missing an email address
+    """
+    tpl_row = conn.execute(
+        "SELECT * FROM email_templates WHERE template_key = ?",
+        (template_key,)
+    ).fetchone()
+    if not tpl_row:
+        return [], None
+    tpl = dict(tpl_row)
+    if not tpl.get('enabled'):
+        return [], tpl
+
+    client_row = conn.execute(
+        "SELECT * FROM plab_clients WHERE id = ?", (plab_client_id,)
+    ).fetchone()
+    if not client_row:
+        return [], tpl
+    client = dict(client_row)
+
+    recipients = []
+    if tpl.get('recipients_client') and client.get('email'):
+        recipients.append(client['email'])
+    if tpl.get('recipients_parents') and client.get('parents_email'):
+        recipients.append(client['parents_email'])
+    if tpl.get('recipients_counsellor'):
+        # Counsellor lives on client_registrations; resolve via
+        # registration_number (same join used in Item D's timeline).
+        try:
+            r = conn.execute(
+                """SELECT e.email AS email
+                     FROM client_registrations cr
+                     LEFT JOIN employees e ON e.id = cr.counsellor_id
+                    WHERE cr.registration_number = ?
+                    LIMIT 1""",
+                (client.get('registration_number'),)
+            ).fetchone()
+            if r and r['email']:
+                recipients.append(r['email'])
+        except Exception:
+            pass
+    if tpl.get('recipients_ops'):
+        recipients.append(OPS_EMAIL_RECIPIENT)
+
+    # De-dup while preserving order.
+    seen, dedup = set(), []
+    for r in recipients:
+        if r and r not in seen:
+            seen.add(r); dedup.append(r)
+    return dedup, tpl
+
+
+def _render_stage_email(tpl, context):
+    """Substitute {{var}} placeholders. Unknown vars come through as
+    empty string rather than failing the send."""
+    subject = tpl.get('subject') or ''
+    body = tpl.get('body_html') or ''
+    for k, v in (context or {}).items():
+        token = '{{' + k + '}}'
+        rendered = '' if v is None else str(v)
+        subject = subject.replace(token, rendered)
+        body = body.replace(token, rendered)
+    return subject, body
+
+
+def _send_stage_email(conn, template_key, plab_client_id, context=None):
+    """Fire a stage email. Returns a status dict; never raises.
+
+    Result keys:
+      status:       'sent' / 'send_failed' / 'disabled'
+                    / 'no_template' / 'no_recipients' / 'error'
+      recipients:   list of email addresses actually sent to
+      error:        only present when status='error'
+    """
+    try:
+        recipients, tpl = _resolve_stage_email_recipients(
+            conn, template_key, plab_client_id)
+        if tpl is None:
+            return {'status': 'no_template', 'recipients': []}
+        if not tpl.get('enabled'):
+            return {'status': 'disabled', 'recipients': []}
+        if not recipients:
+            return {'status': 'no_recipients', 'recipients': []}
+        subject, body = _render_stage_email(tpl, context or {})
+        from email_utils import send_email
+        ok = send_email(recipients, subject, body)
+        return {
+            'status': 'sent' if ok else 'send_failed',
+            'recipients': recipients,
+        }
+    except Exception as e:
+        logging.error(
+            f"_send_stage_email(template={template_key}, "
+            f"client={plab_client_id}): {e}")
+        return {'status': 'error', 'error': str(e), 'recipients': []}
+
+
+def _maybe_fire_stage_transitions(conn, plab_client_id, old_state, new_state):
+    """Item E-3: detect milestone transitions on a client_onboarding row
+    and fire the corresponding stage email -- silently no-ops if the
+    template is disabled (which is the seeded default for all 4 new
+    stages, so this whole helper is dormant until admin enables them
+    in /admin/email-templates).
+
+    Transitions detected per a save:
+      welcome_call_scheduled  -- welcome_call_date  went from empty -> set
+      kit_dispatched          -- kit_delivered_date OR welcome_kit_sent_date
+                                  went from empty -> set
+      onboarded               -- onboarding_status transitioned to 'Completed'
+
+    Per the standing "do not send emails during the current
+    backfill" constraint, the templates above stay enabled=0 by
+    seed. Admin can flip on per template + recipient toggle from
+    the Email Templates UI when they're ready.
+    """
+    if not old_state or not new_state:
+        return
+    try:
+        client_row = conn.execute(
+            "SELECT * FROM plab_clients WHERE id = ?", (plab_client_id,)
+        ).fetchone()
+        if not client_row:
+            return
+        ctx = _stage_email_context_from_client(dict(client_row))
+
+        def _was_empty_now_set(col):
+            return (not (old_state.get(col) or '').strip()
+                    and (new_state.get(col) or '').strip())
+
+        # Welcome Call Scheduled
+        if _was_empty_now_set('welcome_call_date'):
+            ctx['welcome_call_date'] = new_state.get('welcome_call_date') or ''
+            _send_stage_email(conn, 'welcome_call_scheduled',
+                              plab_client_id, ctx)
+
+        # Kit Dispatched -- either column counts (PLAB uses
+        # kit_delivered_date, AMC uses welcome_kit_sent_date).
+        old_kit = ((old_state.get('kit_delivered_date') or '')
+                   or (old_state.get('welcome_kit_sent_date') or '')).strip()
+        new_kit = ((new_state.get('kit_delivered_date') or '')
+                   or (new_state.get('welcome_kit_sent_date') or '')).strip()
+        if not old_kit and new_kit:
+            ctx['kit_dispatched_date'] = new_kit
+            ctx['kit_tracking_number'] = new_state.get('kit_tracking_number') or ''
+            ctx['kit_delivery_method']  = (new_state.get('kit_delivery_method')
+                                           or new_state.get('welcome_kit_method')
+                                           or '')
+            _send_stage_email(conn, 'kit_dispatched',
+                              plab_client_id, ctx)
+
+        # Onboarded -- status transitioned to 'Completed'
+        old_status = (old_state.get('onboarding_status') or '').strip().lower()
+        new_status = (new_state.get('onboarding_status') or '').strip().lower()
+        if old_status != 'completed' and new_status == 'completed':
+            _send_stage_email(conn, 'onboarded', plab_client_id, ctx)
+    except Exception as e:
+        # Never let a fire-point break the save handler.
+        logging.error(f"_maybe_fire_stage_transitions: {e}")
+
+
+def _stage_email_context_from_client(client):
+    """Build the standard variable bag for a stage email from a
+    plab_clients row dict. Stage-specific handlers can extend by
+    merging additional keys on top."""
+    name = (
+        f"{client.get('prefix') or ''} "
+        f"{client.get('first_name') or ''} "
+        f"{client.get('last_name') or ''}"
+    ).strip()
+    return {
+        'client_name':         name or (client.get('email') or 'there'),
+        'registration_number': format_reg_filter(client.get('registration_number') or ''),
+        'plan_type':           client.get('plan_type') or 'N/A',
+        'registration_date':   client.get('registration_date') or '',
+        'product_name':        'GooCampus',
+        'counsellor_name':     '',
+        'counsellor_email':    '',
+        'welcome_call_date':   client.get('welcome_call_date') or '',
+        'kit_dispatched_date': '',
+        'kit_tracking_number': '',
+        'kit_delivery_method': '',
+    }
+
+
 @app.route('/operations/onboarding/<int:client_id>/send-welcome-email', methods=['POST'])
 @admin_required
 def ops_onboarding_send_welcome_email(client_id):
-    """Send welcome email to a client."""
+    """Send welcome email to a client. Now routes through the stage-
+    email helper so recipient toggles + enabled flag are honoured."""
     conn = get_db()
     client = conn.execute("SELECT * FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
     if not client:
@@ -14494,35 +17557,29 @@ def ops_onboarding_send_welcome_email(client_id):
         flash('Client has no email address.', 'error')
         return redirect(url_for('ops_onboarding_detail', client_id=client_id))
     onb = _ensure_client_onboarding(conn, client_id, client['registration_number'])
-    email_tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
-    if not email_tpl:
-        conn.close()
+
+    context = _stage_email_context_from_client(dict(client))
+    result = _send_stage_email(conn, 'welcome_email', client_id, context)
+
+    if result['status'] == 'sent':
+        conn.execute("""UPDATE client_onboarding SET
+            welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
+            welcome_email_sent_by=?,
+            onboarding_status = CASE WHEN onboarding_status = 'Pending' THEN 'Email Sent' ELSE onboarding_status END,
+            updated_at=CURRENT_TIMESTAMP
+            WHERE id=?""", (session.get('user_id'), onb['id']))
+        conn.commit()
+        flash(f'Welcome email sent to {", ".join(result["recipients"])}', 'success')
+    elif result['status'] == 'disabled':
+        flash('Welcome email template is disabled. Enable it in Email Templates to send.', 'error')
+    elif result['status'] == 'no_template':
         flash('Welcome email template not found.', 'error')
-        return redirect(url_for('ops_onboarding_detail', client_id=client_id))
-    client_name = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
-    reg_display = format_reg_filter(client['registration_number'])
-    subject = email_tpl['subject'].replace('{{client_name}}', client_name)
-    body = email_tpl['body_html'].replace('{{client_name}}', client_name)
-    body = body.replace('{{registration_number}}', reg_display)
-    body = body.replace('{{plan_type}}', client['plan_type'] or 'N/A')
-    body = body.replace('{{registration_date}}', client['registration_date'] or '')
-    try:
-        from email_utils import send_email
-        success = send_email([client['email']], subject, body)
-        if success:
-            conn.execute("""UPDATE client_onboarding SET
-                welcome_email_sent=1, welcome_email_sent_at=CURRENT_TIMESTAMP,
-                welcome_email_sent_by=?,
-                onboarding_status = CASE WHEN onboarding_status = 'Pending' THEN 'Email Sent' ELSE onboarding_status END,
-                updated_at=CURRENT_TIMESTAMP
-                WHERE id=?""", (session.get('user_id'), onb['id']))
-            conn.commit()
-            flash(f'Welcome email sent to {client["email"]}', 'success')
-        else:
-            flash('Failed to send email. Check Resend API key.', 'error')
-    except Exception as e:
-        logging.error(f"ops_onboarding_send_welcome_email: {e}")
-        flash(f'Error sending email: {e}', 'error')
+    elif result['status'] == 'no_recipients':
+        flash('No recipients selected on the welcome email template (and at least one stakeholder must have a valid email).', 'error')
+    elif result['status'] == 'send_failed':
+        flash('Failed to send email. Check Resend API key.', 'error')
+    else:
+        flash(f'Error sending email: {result.get("error","unknown")}', 'error')
     conn.close()
     return redirect(url_for('ops_onboarding_detail', client_id=client_id))
 
@@ -14746,7 +17803,19 @@ REPORT_FIELD_DEFS = {
 @app.route('/operations/reports')
 @admin_required
 def ops_reports():
-    """Reports page with template management and quick download."""
+    """Reports page with template management and quick download.
+
+    Pathway-aware: ?pathway=australia keeps the Australia sidebar active.
+    Report templates are pathway-agnostic for now (admin can scope each
+    template manually) — adding a `pathway` column to report_templates
+    would let us filter the list, but the user said "look into Reports
+    for Australia" without specifying separate report sets, so we keep
+    the list shared and just route the sidebar correctly.
+    """
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+        pathway = 'plab'
+
     conn = get_db()
     try:
         templates = conn.execute(
@@ -14760,7 +17829,8 @@ def ops_reports():
         templates=templates,
         field_defs=REPORT_FIELD_DEFS,
         active_ops_page='reports',
-        active_section='operations')
+        active_section='operations',
+        active_pathway=pathway)
 
 
 @app.route('/operations/reports/template', methods=['POST'])
@@ -15047,7 +18117,9 @@ def ops_plab_list():
         status_filter = request.args.get('status_filter', '') or request.args.get('status', '')
         stage_filter = request.args.get('stage_filter', '') or request.args.get('stage', '')
 
-        sql = "SELECT * FROM plab_clients WHERE 1=1"
+        # PLAB Registration list — strictly scoped to pathway='plab' so
+        # Australia rows never appear here.
+        sql = "SELECT * FROM plab_clients WHERE COALESCE(pathway, 'plab') = 'plab'"
         params = []
         if search:
             sql += """ AND (
@@ -15065,15 +18137,20 @@ def ops_plab_list():
         if stage_filter:
             sql += " AND current_stage = ?"
             params.append(stage_filter)
-        sql += " ORDER BY id DESC"
+        # Recent registrations on top (user request 2026-06-01). Fall back to
+        # id DESC for rows missing a registration_date — keeps order stable.
+        sql += " ORDER BY registration_date DESC NULLS LAST, id DESC"
         clients_raw = conn.execute(sql, tuple(params)).fetchall()
 
-        # Get actual payment totals per client from ops_payments
+        # Payment totals scoped to PLAB too so the Total Paid card on this
+        # page doesn't include Australia payments.
         payment_totals = {}
         pay_rows = conn.execute("""SELECT registration_number,
             COALESCE(SUM(amount_paid), 0) as paid,
             COALESCE(SUM(gst_paid), 0) as gst
-            FROM ops_payments GROUP BY registration_number""").fetchall()
+            FROM ops_payments
+            WHERE COALESCE(pathway, 'plab') = 'plab'
+            GROUP BY registration_number""").fetchall()
         for pr in pay_rows:
             payment_totals[pr['registration_number']] = {
                 'paid': float(pr['paid'] or 0),
@@ -15174,6 +18251,28 @@ def ops_plab_dashboard(client_id):
                            epic_records=epic_records, gmc_records=gmc_records,
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
+
+
+@app.route('/operations/plab/by-reg/<path:reg>')
+@admin_required
+def ops_plab_by_reg(reg):
+    """Resolve a PLAB client by registration_number and redirect to detail.
+
+    Used by section drawers (Coaching, Payments, Call Notes, etc.) whose
+    "View Client Profile" button only knows the registration_number, not
+    the numeric client_id required by /operations/plab/<int:client_id>.
+    """
+    conn = get_db()
+    row = conn.execute(
+        "SELECT id FROM plab_clients WHERE registration_number = ? "
+        "AND COALESCE(pathway, 'plab') = 'plab' LIMIT 1",
+        (reg,)
+    ).fetchone()
+    conn.close()
+    if not row:
+        flash(f'PLAB client {reg} not found.', 'error')
+        return redirect(url_for('ops_plab_list'))
+    return redirect(url_for('ops_plab_dashboard', client_id=row['id']))
 
 
 @app.route('/operations/plab/add', methods=['GET', 'POST'])
@@ -15461,21 +18560,29 @@ def ops_documents_list():
     page = max(1, int(request.args.get('page', 1)))
     per_page = 50
     try:
+        # X-1: pathway='plab' filter so /operations/documents stops
+        # showing AMC + Standard Consulting clients in the PLAB
+        # documents page. Each pathway will get its own documents
+        # surface (PLAB stays here; AMC + consulting in follow-up
+        # X-3 commits).
         q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
                       c.account_status, c.current_stage, c.created_at,
                       COUNT(d.id) as doc_count,
                       SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
                FROM plab_clients c
-               LEFT JOIN plab_client_documents d ON d.client_id = c.id"""
+               LEFT JOIN plab_client_documents d ON d.client_id = c.id
+                    AND COALESCE(d.doc_category, '') <> 'certificate'
+               WHERE COALESCE(c.pathway, 'plab') = 'plab'"""
         params = []
         wheres = []
         if search:
             wheres.append("(c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)")
             params += [f'%{search}%', f'%{search}%', f'%{search}%']
         if wheres:
-            q += " WHERE " + " AND ".join(wheres)
+            q += " AND " + " AND ".join(wheres)
         q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
-        q += " ORDER BY c.id DESC"
+        # Latest first (user request 2026-06-01) — newer client docs on top.
+        q += " ORDER BY c.created_at DESC NULLS LAST, c.id DESC"
         rows = conn.execute(q, params).fetchall()
         total_required = len(PLAB_ALL_REQUIRED_DOCS)
         all_clients = []
@@ -15519,9 +18626,20 @@ def ops_documents_list():
 @app.route('/operations/plab/<int:client_id>/upload-doc', methods=['POST'])
 @admin_required
 def ops_plab_upload_doc(client_id):
-    """Upload document for a PLAB client."""
+    """Upload a document for ANY client (PLAB / AMC / Consulting).
+
+    Route is named ops_plab_* historically — the table
+    plab_client_documents is shared across pathways, so this endpoint
+    serves every pathway by client_id. After Y-4 file bytes go to
+    Cloudflare R2 (file_path stores the R2 key); BYTEA is only used
+    as a fallback if R2 isn't configured.
+    """
     conn = get_db()
-    client = conn.execute("SELECT id FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    client = conn.execute(
+        "SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway"
+        "   FROM plab_clients WHERE id = ?",
+        (client_id,),
+    ).fetchone()
     if not client:
         conn.close()
         return jsonify({'error': 'Client not found'}), 404
@@ -15531,14 +18649,44 @@ def ops_plab_upload_doc(client_id):
     if not file or not file.filename:
         conn.close()
         return jsonify({'error': 'No file selected'}), 400
-    import os, uuid
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
-    # Detect content type from extension
     ct_map = {'pdf': 'application/pdf', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'png': 'image/png', 'gif': 'image/gif', 'webp': 'image/webp', 'doc': 'application/msword', 'docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
     content_type = ct_map.get(ext, 'application/octet-stream')
-    # Read file binary for DB storage
     file_bytes = file.read()
     file_size = len(file_bytes)
+    # Cap size at 12 MB to match bulk_import_documents.py and keep
+    # the Postgres row payload small even on the BYTEA fallback.
+    if file_size > 12 * 1024 * 1024:
+        conn.close()
+        return jsonify({'error': 'File too large (max 12 MB)'}), 400
+
+    # R2 path (default) -- bytes go to R2, file_path stores the key.
+    from core import storage
+    if storage.is_configured():
+        r2_key = storage.make_doc_key(
+            client['pathway'], client['registration_number'] or f'client_{client_id}',
+            doc_type, file.filename,
+        )
+        if not storage.upload_bytes(r2_key, file_bytes, content_type):
+            conn.close()
+            return jsonify({'error': 'Upload to R2 failed'}), 500
+        cur = conn.execute(
+            "INSERT INTO plab_client_documents "
+            "  (client_id, doc_type, doc_category, file_name, file_path, "
+            "   file_size, uploaded_by, content_type, status) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'uploaded') RETURNING id",
+            (client_id, doc_type, doc_category, file.filename, r2_key,
+             file_size, 'ops_team', content_type),
+        )
+        doc_id = cur.fetchone()['id']
+        conn.commit()
+        conn.close()
+        return jsonify({'success': True, 'doc_id': doc_id, 'file_name': file.filename, 'doc_type': doc_type})
+
+    # Legacy BYTEA fallback (R2 not configured -- shouldn't happen on
+    # staging or prod after Y-4 deploy, but keep so local dev works
+    # without R2 env vars).
+    import uuid
     fname = f"plab_{client_id}_{uuid.uuid4().hex[:8]}.{ext}"
     conn.execute(
         "INSERT INTO plab_client_documents (client_id, doc_type, doc_category, file_name, file_path, file_size, uploaded_by, file_data, content_type) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
@@ -15583,7 +18731,7 @@ def api_plab_client_docs(client_id):
         if not client:
             conn.close()
             return jsonify({'error': 'Client not found'}), 404
-        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? AND COALESCE(doc_category, '') <> 'certificate' ORDER BY doc_category, doc_type", (client_id,)).fetchall()
         docs = [dict(r) for r in rows]
         client_dict = dict(client)
         client_dict['name'] = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
@@ -15597,14 +18745,132 @@ def api_plab_client_docs(client_id):
     return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs, 'missing': missing, 'total_required': len(all_required)})
 
 
+# ─────────────────────────────────────────────────────────────────────
+#  Clients Certificates — a separate surface over plab_client_documents
+#  filtered to doc_category='certificate'. Reuses the same upload /
+#  serve / download / delete routes (all category-agnostic). Built as a
+#  clone of the Documents section, minus the required-doc checklist
+#  (certificates have no fixed list).
+# ─────────────────────────────────────────────────────────────────────
+@app.route('/operations/certificates')
+@admin_required
+def ops_certificates_list():
+    """Certificates overview — PLAB clients with their certificate counts.
+
+    Same shape as ops_documents_list but counts only rows where
+    doc_category='certificate', and drops the required-docs checklist."""
+    conn = get_db()
+    search = request.args.get('search', '').strip()
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 50
+    try:
+        q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                      c.account_status, c.current_stage, c.created_at,
+                      COUNT(d.id) FILTER (WHERE d.doc_category = 'certificate') as cert_count
+               FROM plab_clients c
+               LEFT JOIN plab_client_documents d ON d.client_id = c.id
+               WHERE COALESCE(c.pathway, 'plab') = 'plab'"""
+        params = []
+        if search:
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)"
+            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
+        q += " ORDER BY c.created_at DESC NULLS LAST, c.id DESC"
+        rows = conn.execute(q, params).fetchall()
+        all_clients = []
+        for r in rows:
+            rd = dict(r)
+            rd['name'] = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            all_clients.append(rd)
+        total_filtered = len(all_clients)
+        total_documents = sum(c.get('cert_count', 0) for c in all_clients)
+        clients_with_certs = sum(1 for c in all_clients if c.get('cert_count', 0) > 0)
+        total_pages = max(1, (total_filtered + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        start = (page - 1) * per_page
+        clients = all_clients[start:start + per_page]
+    except Exception as e:
+        logging.error(f"ops_certificates_list error: {e}")
+        clients = []
+        total_filtered = total_documents = clients_with_certs = 0
+        total_pages = 1
+        start = 0
+    conn.close()
+    return render_template('ops_certificates_list.html',
+                           clients=clients, search=search,
+                           total_clients=total_filtered,
+                           total_documents=total_documents,
+                           clients_with_certs=clients_with_certs,
+                           page=page, total_pages=total_pages, per_page=per_page,
+                           start_index=start if clients else 0,
+                           active_ops_page='certificates')
+
+
+@app.route('/api/plab-client-certificates/<int:client_id>')
+@admin_required
+def api_plab_client_certificates(client_id):
+    """Return ONLY certificate docs for a client as JSON (drawer UI).
+
+    Mirrors api_plab_client_docs but filters doc_category='certificate'
+    and drops the missing-required-docs logic."""
+    conn = get_db()
+    try:
+        client = conn.execute("SELECT id, registration_number, prefix, first_name, last_name, account_status, current_stage FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        if not client:
+            conn.close()
+            return jsonify({'error': 'Client not found'}), 404
+        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? AND doc_category = 'certificate' ORDER BY doc_type, uploaded_at DESC", (client_id,)).fetchall()
+        docs = [dict(r) for r in rows]
+        client_dict = dict(client)
+        client_dict['name'] = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+    conn.close()
+    return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs})
+
+
+def _r2_object_key_or_none(file_path):
+    """Y-4: detect whether a doc row's file_path is an R2 object key vs a
+    legacy file_data BYTEA row. R2 keys look like 'plab/REG/DocType/file.jpg'
+    (no leading slash, no URL scheme). Legacy paths may start with /
+    or already be URLs."""
+    if not file_path:
+        return None
+    s = str(file_path).strip()
+    if not s or s.startswith('/') or '://' in s:
+        return None
+    return s
+
+
 @app.route('/operations/plab/doc/<int:doc_id>/file')
 @admin_required
 def ops_plab_serve_doc(doc_id):
-    """Serve a PLAB client document file from DB (BYTEA)."""
+    """Serve a PLAB client document. Y-4: redirects to a 15-min
+    presigned R2 URL when file_path is an R2 key; falls back to
+    streaming from BYTEA for legacy rows."""
     conn = get_db()
-    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    doc = conn.execute(
+        "SELECT file_name, file_data, content_type, file_path "
+        "  FROM plab_client_documents WHERE id = ?",
+        (doc_id,),
+    ).fetchone()
     conn.close()
-    if not doc or not doc['file_data']:
+    if not doc:
+        return "Document not found", 404
+    # R2 path
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(r2_key)
+            if url:
+                return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"ops_plab_serve_doc R2 presign: {e}")
+        return "Document temporarily unavailable", 503
+    # Legacy BYTEA fallback
+    if not doc['file_data']:
         return "Document not found", 404
     file_data = doc['file_data']
     if isinstance(file_data, memoryview):
@@ -15616,11 +18882,30 @@ def ops_plab_serve_doc(doc_id):
 @app.route('/operations/plab/doc/<int:doc_id>/download')
 @admin_required
 def ops_plab_download_doc(doc_id):
-    """Download a PLAB client document file from DB."""
+    """Download a PLAB client document. Y-4: R2 presigned URL with
+    Content-Disposition: attachment when on R2; legacy BYTEA stream
+    fallback."""
     conn = get_db()
-    doc = conn.execute("SELECT file_name, file_data, content_type FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
+    doc = conn.execute(
+        "SELECT file_name, file_data, content_type, file_path "
+        "  FROM plab_client_documents WHERE id = ?",
+        (doc_id,),
+    ).fetchone()
     conn.close()
-    if not doc or not doc['file_data']:
+    if not doc:
+        return "Document not found", 404
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(
+                r2_key, filename_for_download=doc['file_name'])
+            if url:
+                return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"ops_plab_download_doc R2 presign: {e}")
+        return "Document temporarily unavailable", 503
+    if not doc['file_data']:
         return "Document not found", 404
     file_data = doc['file_data']
     if isinstance(file_data, memoryview):
@@ -15632,16 +18917,26 @@ def ops_plab_download_doc(doc_id):
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
 @admin_required
 def ops_plab_delete_doc(doc_id):
-    """Delete a PLAB client document."""
+    """Delete a PLAB client document. Y-4: removes the R2 object too
+    when file_path is an R2 key; legacy file_path on disk handled as
+    before for back-compat."""
     conn = get_db()
     doc = conn.execute("SELECT * FROM plab_client_documents WHERE id = ?", (doc_id,)).fetchone()
     if not doc:
         conn.close()
         return jsonify({'error': 'Document not found'}), 404
-    import os
-    fpath = os.path.join(app.root_path, doc['file_path'].lstrip('/'))
-    if os.path.exists(fpath):
-        os.remove(fpath)
+    r2_key = _r2_object_key_or_none(doc['file_path'])
+    if r2_key:
+        try:
+            from core import storage
+            storage.delete_object(r2_key)
+        except Exception as e:
+            logging.warning(f"ops_plab_delete_doc R2 delete: {e}")
+    else:
+        import os
+        fpath = os.path.join(app.root_path, (doc['file_path'] or '').lstrip('/'))
+        if fpath and os.path.exists(fpath):
+            os.remove(fpath)
     conn.execute("DELETE FROM plab_client_documents WHERE id = ?", (doc_id,))
     conn.commit()
     conn.close()
@@ -16131,7 +19426,7 @@ def ops_coaching_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_coaching c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql += ' AND c.registration_number = ?'
@@ -16144,7 +19439,7 @@ def ops_coaching_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.start_date DESC NULLS LAST, c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_coaching_list: {e}")
@@ -16205,7 +19500,16 @@ def ops_coaching_add():
 def ops_coaching_edit(record_id):
     """Edit coaching/training record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_coaching WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_coaching t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -16364,13 +19668,13 @@ def ops_english_logins_list():
         sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
                  FROM ops_english_logins e
                  LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(e.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY e.created_at DESC'
+        sql += ' ORDER BY e.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_english_logins_list: {e}")
@@ -16412,7 +19716,16 @@ def ops_english_logins_add():
 @admin_required
 def ops_english_logins_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_english_logins WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT e.*, p.first_name, p.last_name, p.prefix
+             FROM ops_english_logins e
+        LEFT JOIN plab_clients p
+               ON e.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE e.id = ?
+              AND COALESCE(e.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -16464,10 +19777,12 @@ def ops_test_bookings_list():
     exam_filter = request.args.get('exam', '')
     status_filter = request.args.get('status', '')
     try:
+        # Scope to PLAB only. Australia (and any future pathway) lives in the
+        # same table but is read via /operations/australia/test-bookings etc.
         sql = '''SELECT t.*, p.first_name, p.last_name, p.prefix
                  FROM ops_test_bookings t
                  LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(t.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql += ' AND t.registration_number = ?'
@@ -16483,7 +19798,7 @@ def ops_test_bookings_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.created_at DESC'
+        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_test_bookings_list: {e}")
@@ -16534,7 +19849,16 @@ def ops_test_bookings_add():
 @admin_required
 def ops_test_bookings_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_test_bookings WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_test_bookings t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -16714,7 +20038,7 @@ def ops_call_notes_list():
         sql_base = '''SELECT n.*, p.first_name, p.last_name, p.prefix
                       FROM ops_call_notes n
                       LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
-                      WHERE 1=1'''
+                      WHERE COALESCE(n.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql_base += ' AND n.registration_number ILIKE ?'
@@ -16743,7 +20067,7 @@ def ops_call_notes_list():
             offset = (page - 1) * per_page
 
         # Get paginated records
-        sql = sql_base + ' ORDER BY n.call_date DESC NULLS LAST, n.created_at DESC LIMIT ? OFFSET ?'
+        sql = sql_base + ' ORDER BY n.call_date DESC NULLS LAST, n.id DESC LIMIT ? OFFSET ?'
         sql_params = params + [per_page, offset]
         records = conn.execute(sql, sql_params).fetchall()
     except Exception as e:
@@ -16770,8 +20094,16 @@ def ops_call_notes_list():
 @app.route('/operations/api/client-search')
 @admin_required
 def ops_client_search_api():
-    """Return matching client names for autocomplete (JSON)."""
+    """Return matching client names for autocomplete (JSON).
+
+    Pathway-scoped via the ?pathway= query string. Defaults to PLAB so
+    existing call sites keep working. The Australia Call Notes "add" form
+    passes ?pathway=australia so only Australia clients are suggested.
+    """
     q = request.args.get('q', '').strip()
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+        pathway = 'plab'
     if len(q) < 2:
         return jsonify([])
     conn = get_db()
@@ -16779,12 +20111,13 @@ def ops_client_search_api():
         rows = conn.execute('''
             SELECT id, registration_number, prefix, first_name, last_name
             FROM plab_clients
-            WHERE first_name ILIKE ? OR last_name ILIKE ?
-               OR (first_name || ' ' || last_name) ILIKE ?
-               OR registration_number ILIKE ?
+            WHERE COALESCE(pathway, 'plab') = ?
+              AND (first_name ILIKE ? OR last_name ILIKE ?
+                OR (first_name || ' ' || last_name) ILIKE ?
+                OR registration_number ILIKE ?)
             ORDER BY first_name, last_name
             LIMIT 15
-        ''', (f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
+        ''', (pathway, f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
         results = []
         for r in rows:
             name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"
@@ -16818,7 +20151,8 @@ def ops_call_notes_tracker():
                    MAX(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN n.contact_type END) as last_contact_type
             FROM plab_clients p
             LEFT JOIN ops_call_notes n ON p.registration_number = n.registration_number
-            WHERE p.account_status = 'In Process'
+            WHERE COALESCE(p.pathway, 'plab') = 'plab'
+              AND p.account_status = 'In Process'
         '''
         params = []
 
@@ -16949,7 +20283,8 @@ def ops_call_notes_not_contacted():
                    COUNT(CASE WHEN COALESCE(n.contacted_status, 'Yes') = 'Yes' THEN 1 END) as contacted_count
             FROM plab_clients p
             INNER JOIN ops_call_notes n ON p.registration_number = n.registration_number
-            WHERE p.account_status = 'In Process'
+            WHERE COALESCE(p.pathway, 'plab') = 'plab'
+              AND p.account_status = 'In Process'
               AND EXISTS (SELECT 1 FROM ops_call_notes n2 WHERE n2.registration_number = p.registration_number AND n2.contacted_status = 'No')
         '''
         params = []
@@ -17148,7 +20483,16 @@ def ops_call_notes_add():
 @admin_required
 def ops_call_notes_edit(record_id):
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_call_notes WHERE id = ?", (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT n.*, p.first_name, p.last_name, p.prefix
+             FROM ops_call_notes n
+        LEFT JOIN plab_clients p
+               ON n.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE n.id = ?
+              AND COALESCE(n.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -17211,7 +20555,7 @@ def ops_payments_list():
         sql_base = '''SELECT p.*, c.first_name, c.last_name, c.prefix
                       FROM ops_payments p
                       LEFT JOIN plab_clients c ON p.registration_number = c.registration_number
-                      WHERE 1=1'''
+                      WHERE COALESCE(p.pathway, 'plab') = 'plab' '''
         params = []
         if reg:
             sql_base += ' AND p.registration_number ILIKE ?'
@@ -17240,7 +20584,7 @@ def ops_payments_list():
             offset = (page - 1) * per_page
 
         # Get paginated records
-        sql = sql_base + ' ORDER BY p.payment_date DESC NULLS LAST, p.created_at DESC LIMIT ? OFFSET ?'
+        sql = sql_base + ' ORDER BY p.payment_date DESC NULLS LAST, p.id DESC LIMIT ? OFFSET ?'
         sql_params = params + [per_page, offset]
         records = conn.execute(sql, sql_params).fetchall()
 
@@ -17320,7 +20664,16 @@ def ops_payments_add():
 @admin_required
 def ops_payments_edit(record_id):
     conn = get_db()
-    record = conn.execute('SELECT * FROM ops_payments WHERE id = ?', (record_id,)).fetchone()
+    record = conn.execute(
+        """SELECT t.*, p.first_name, p.last_name, p.prefix
+             FROM ops_payments t
+        LEFT JOIN plab_clients p
+               ON t.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE t.id = ?
+              AND COALESCE(t.pathway, 'plab') = 'plab' """,
+        (record_id,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Payment record not found', 'error')
@@ -17392,7 +20745,7 @@ def ops_epic_list():
         sql = '''SELECT e.*, p.first_name, p.last_name, p.prefix
                  FROM ops_epic_registration e
                  LEFT JOIN plab_clients p ON e.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(e.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND e.epic_registration = ?'
@@ -17401,7 +20754,7 @@ def ops_epic_list():
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY e.created_at DESC'
+        sql += ' ORDER BY e.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_epic_list: {e}")
@@ -17460,7 +20813,16 @@ def ops_epic_add():
 def ops_epic_edit(eid):
     """Edit EPIC registration record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_epic_registration WHERE id = ?", (eid,)).fetchone()
+    record = conn.execute(
+        """SELECT e.*, p.first_name, p.last_name, p.prefix
+             FROM ops_epic_registration e
+        LEFT JOIN plab_clients p
+               ON e.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE e.id = ?
+              AND COALESCE(e.pathway, 'plab') = 'plab' """,
+        (eid,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -17526,7 +20888,7 @@ def ops_gmc_list():
         sql = '''SELECT g.*, p.first_name, p.last_name, p.prefix
                  FROM ops_gmc_registration g
                  LEFT JOIN plab_clients p ON g.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(g.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND g.gmc_setup = ?'
@@ -17535,7 +20897,7 @@ def ops_gmc_list():
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR g.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY g.created_at DESC'
+        sql += ' ORDER BY g.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_gmc_list: {e}")
@@ -17590,7 +20952,16 @@ def ops_gmc_add():
 def ops_gmc_edit(gid):
     """Edit GMC registration record."""
     conn = get_db()
-    record = conn.execute("SELECT * FROM ops_gmc_registration WHERE id = ?", (gid,)).fetchone()
+    record = conn.execute(
+        """SELECT g.*, p.first_name, p.last_name, p.prefix
+             FROM ops_gmc_registration g
+        LEFT JOIN plab_clients p
+               ON g.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE g.id = ?
+              AND COALESCE(g.pathway, 'plab') = 'plab' """,
+        (gid,),
+    ).fetchone()
     if not record:
         conn.close()
         flash('Record not found', 'error')
@@ -17637,6 +21008,159 @@ def ops_gmc_delete(gid):
 
 
 # ─────────────────────────────────────────────────────────
+#  OPERATIONS – Job Stage (PLAB job placement tracking)
+# ─────────────────────────────────────────────────────────
+
+JOB_CONFIRMED_BY_OPTIONS = ['Job by GooCampus', 'Interview by GooCampus', 'By Candidate']
+
+
+@app.route('/operations/job-stage')
+@admin_required
+def ops_job_stage_list():
+    """List all PLAB Job Stage records with search + Job Confirmed By filter."""
+    conn = get_db()
+    search = request.args.get('q', '')
+    confirmed_filter = request.args.get('confirmed_by', '')
+    try:
+        sql = '''SELECT j.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_job_stage j
+                 LEFT JOIN plab_clients p
+                        ON j.registration_number = p.registration_number
+                       AND COALESCE(p.pathway, 'plab') = 'plab'
+                 WHERE COALESCE(j.pathway, 'plab') = 'plab' '''
+        params = []
+        if confirmed_filter:
+            sql += ' AND j.job_confirmed_by = ?'
+            params.append(confirmed_filter)
+        if search:
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR j.registration_number ILIKE ?
+                OR j.hospital_name ILIKE ? OR j.designation ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 6)
+        sql += ' ORDER BY j.joined_date DESC NULLS LAST, j.id DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_job_stage_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_job_stage_list.html', records=records,
+                           search=search, confirmed_filter=confirmed_filter,
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+@app.route('/operations/job-stage/add', methods=['GET', 'POST'])
+@admin_required
+def ops_job_stage_add_page():
+    """Add a Job Stage record (GET form / POST save share this endpoint)."""
+    if request.method == 'POST':
+        return ops_job_stage_add_save()
+    pre_reg = request.args.get('reg', '') or request.args.get('client', '')
+    return render_template('ops_job_stage_form.html', record=None, pre_reg=pre_reg,
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+def ops_job_stage_add_save():
+    """Persist a new Job Stage record."""
+    conn = get_db()
+    f = request.form
+    conn.execute('''INSERT INTO ops_job_stage (
+        registration_number, hospital_name, designation, joined_date,
+        job_location, job_confirmed_by, offered_salary, mobile_number,
+        candidate_email, additional_notes, created_by, pathway
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        f.get('registration_number'), f.get('hospital_name'), f.get('designation'),
+        f.get('joined_date'), f.get('job_location'), f.get('job_confirmed_by'),
+        f.get('offered_salary'), f.get('mobile_number'), f.get('candidate_email'),
+        f.get('additional_notes'), session.get('user_id', 0), 'plab'
+    ))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record added', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
+
+
+@app.route('/operations/job-stage/<int:rid>')
+@admin_required
+def ops_job_stage_detail(rid):
+    """Read-only detail view of a Job Stage record."""
+    conn = get_db()
+    record = conn.execute(
+        '''SELECT j.*, p.first_name, p.last_name, p.prefix
+             FROM ops_job_stage j
+        LEFT JOIN plab_clients p
+               ON j.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE j.id = ?
+              AND COALESCE(j.pathway, 'plab') = 'plab' ''',
+        (rid,)
+    ).fetchone()
+    conn.close()
+    if not record:
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_job_stage_list'))
+    return render_template('ops_job_stage_detail.html', record=record,
+                           active_ops_page='job-stage')
+
+
+@app.route('/operations/job-stage/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_job_stage_edit_page(rid):
+    """Edit a Job Stage record (GET form / POST save share this endpoint)."""
+    if request.method == 'POST':
+        return ops_job_stage_edit_save(rid)
+    conn = get_db()
+    record = conn.execute(
+        '''SELECT j.*, p.first_name, p.last_name, p.prefix
+             FROM ops_job_stage j
+        LEFT JOIN plab_clients p
+               ON j.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE j.id = ?
+              AND COALESCE(j.pathway, 'plab') = 'plab' ''',
+        (rid,)
+    ).fetchone()
+    conn.close()
+    if not record:
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_job_stage_list'))
+    return render_template('ops_job_stage_form.html', record=record, pre_reg='',
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+def ops_job_stage_edit_save(rid):
+    """Persist edits to a Job Stage record."""
+    conn = get_db()
+    f = request.form
+    conn.execute('''UPDATE ops_job_stage SET
+        registration_number=?, hospital_name=?, designation=?, joined_date=?,
+        job_location=?, job_confirmed_by=?, offered_salary=?, mobile_number=?,
+        candidate_email=?, additional_notes=? WHERE id=?''', (
+        f.get('registration_number'), f.get('hospital_name'), f.get('designation'),
+        f.get('joined_date'), f.get('job_location'), f.get('job_confirmed_by'),
+        f.get('offered_salary'), f.get('mobile_number'), f.get('candidate_email'),
+        f.get('additional_notes'), rid
+    ))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record updated', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
+
+
+@app.route('/operations/job-stage/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_job_stage_delete(rid):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_job_stage WHERE id = ?", (rid,))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
+
+
+# ─────────────────────────────────────────────────────────
 #  OPERATIONS – Research & Publication
 # ─────────────────────────────────────────────────────────
 
@@ -17650,7 +21174,7 @@ def ops_research_list():
         sql = '''SELECT r.*, p.first_name, p.last_name, p.prefix
                  FROM ops_research_publication r
                  LEFT JOIN plab_clients p ON r.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(r.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND r.research_status = ?'
@@ -17660,7 +21184,7 @@ def ops_research_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY r.created_at DESC'
+        sql += ' ORDER BY r.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_research_list: {e}")
@@ -17840,14 +21364,14 @@ def ops_subscriptions_list():
         sql = '''SELECT s.*, p.first_name, p.last_name, p.prefix
                  FROM ops_online_subscriptions s
                  LEFT JOIN plab_clients p ON s.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(s.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR s.online_subscription ILIKE ?
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY s.created_at DESC'
+        sql += ' ORDER BY s.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_subscriptions_list: {e}")
@@ -18015,7 +21539,7 @@ def ops_webinars_list():
         sql = '''SELECT w.*, p.first_name, p.last_name, p.prefix
                  FROM ops_webinars_conferences w
                  LEFT JOIN plab_clients p ON w.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(w.pathway, 'plab') = 'plab' '''
         params = []
         if type_filter:
             sql += ' AND w.event_type = ?'
@@ -18025,7 +21549,7 @@ def ops_webinars_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY w.created_at DESC'
+        sql += ' ORDER BY w.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_webinars_list: {e}")
@@ -18207,7 +21731,7 @@ def ops_visa_list():
         sql = '''SELECT v.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_visa_travel v
                  LEFT JOIN plab_clients p ON v.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(v.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND v.visa_application_status = ?'
@@ -18217,7 +21741,7 @@ def ops_visa_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY v.created_at DESC'
+        sql += ' ORDER BY v.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_visa_list: {e}")
@@ -18450,14 +21974,14 @@ def ops_academic_list():
         sql = '''SELECT a.*, p.first_name, p.last_name, p.prefix
                  FROM ops_academic_details a
                  LEFT JOIN plab_clients p ON a.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(a.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR a.img_medical_college ILIKE ?
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY a.created_at DESC'
+        sql += ' ORDER BY a.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_academic_list: {e}")
@@ -18566,7 +22090,7 @@ def ops_courses_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_online_courses c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if status_filter:
             sql += ' AND c.course_status = ?'
@@ -18576,7 +22100,7 @@ def ops_courses_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_courses_list: {e}")
@@ -18678,14 +22202,14 @@ def ops_observerships_list():
         sql = '''SELECT o.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_observerships o
                  LEFT JOIN plab_clients p ON o.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(o.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR o.hospital_name ILIKE ?
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY o.created_at DESC'
+        sql += ' ORDER BY o.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_observerships_list: {e}")
@@ -18756,87 +22280,8 @@ def ops_observerships_delete(rid):
 
 # ─────────────────────────────────────────────────────────
 #  OPERATIONS – NGO Activities
+#  Migrated to routes/operations/ngo.py (see register_operations_modules at end of file).
 # ─────────────────────────────────────────────────────────
-
-@app.route('/operations/ngo-activities')
-@admin_required
-def ops_ngo_list():
-    conn = get_db()
-    search = request.args.get('q', '')
-    try:
-        sql = '''SELECT n.*, p.first_name, p.last_name, p.prefix
-                 FROM ops_ngo_activities n
-                 LEFT JOIN plab_clients p ON n.registration_number = p.registration_number
-                 WHERE 1=1'''
-        params = []
-        if search:
-            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR n.ngo_vendor_name ILIKE ?
-                OR p.registration_number ILIKE ?
-                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
-            params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY n.created_at DESC'
-        records = conn.execute(sql, params).fetchall()
-    except Exception as e:
-        logging.error(f"ops_ngo_list: {e}")
-        records = []
-    conn.close()
-    return render_template('ops_ngo_list.html', records=records, search=search,
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/add', methods=['GET', 'POST'])
-@admin_required
-def ops_ngo_add():
-    conn = get_db()
-    if request.method == 'POST':
-        f = request.form
-        conn.execute('''INSERT INTO ops_ngo_activities (
-            registration_number, ngo_vendor_name, activity_type,
-            batch_name_no, activity_start_date, created_by
-        ) VALUES (?,?,?,?,?,?)''', (
-            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
-            f.get('batch_name_no'), f.get('activity_start_date'), session.get('user_id', 0)
-        ))
-        conn.commit(); conn.close()
-        flash('NGO Activity record added', 'success')
-        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
-    conn.close()
-    pre_reg = request.args.get('client', '')
-    return render_template('ops_ngo_form.html', record=None,
-                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg=pre_reg,
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/<int:rid>/edit', methods=['GET', 'POST'])
-@admin_required
-def ops_ngo_edit(rid):
-    conn = get_db()
-    record = conn.execute("SELECT n.*, p.first_name, p.last_name, p.prefix FROM ops_ngo_activities n LEFT JOIN plab_clients p ON n.registration_number=p.registration_number WHERE n.id=?", (rid,)).fetchone()
-    if not record:
-        conn.close(); flash('Record not found', 'error'); return redirect(url_for('ops_ngo_list'))
-    if request.method == 'POST':
-        f = request.form
-        conn.execute('''UPDATE ops_ngo_activities SET
-            registration_number=?, ngo_vendor_name=?, activity_type=?,
-            batch_name_no=?, activity_start_date=? WHERE id=?''', (
-            f.get('registration_number'), f.get('ngo_vendor_name'), f.get('activity_type'),
-            f.get('batch_name_no'), f.get('activity_start_date'), rid
-        ))
-        conn.commit(); conn.close()
-        flash('NGO Activity record updated', 'success')
-        return redirect(request.args.get('next') or url_for('ops_ngo_list'))
-    conn.close()
-    return render_template('ops_ngo_form.html', record=record,
-                           ngo_vendors=get_lookup_options('ngo_vendor'), activity_types=get_lookup_options('ngo_activity_type'), pre_reg='',
-                           active_ops_page='ngo')
-
-
-@app.route('/operations/ngo-activities/<int:rid>/delete', methods=['POST'])
-@admin_required
-def ops_ngo_delete(rid):
-    conn = get_db(); conn.execute("DELETE FROM ops_ngo_activities WHERE id=?", (rid,)); conn.commit(); conn.close()
-    flash('NGO Activity record deleted', 'success')
-    return redirect(request.args.get('next') or url_for('ops_ngo_list'))
 
 
 # ─────────────────────────────────────────────────────────
@@ -18852,14 +22297,14 @@ def ops_mentorship_list():
         sql = '''SELECT m.*, p.first_name, p.last_name, p.prefix
                  FROM ops_mentorship m
                  LEFT JOIN plab_clients p ON m.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(m.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR m.program_provider ILIKE ?
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY m.created_at DESC'
+        sql += ' ORDER BY m.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_mentorship_list: {e}")
@@ -18955,14 +22400,14 @@ def ops_cab_list():
         sql = '''SELECT c.*, p.first_name, p.last_name, p.prefix
                  FROM ops_uk_cab_bookings c
                  LEFT JOIN plab_clients p ON c.registration_number = p.registration_number
-                 WHERE 1=1'''
+                 WHERE COALESCE(c.pathway, 'plab') = 'plab' '''
         params = []
         if search:
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR c.vendor ILIKE ?
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_cab_list: {e}")
@@ -19498,7 +22943,7 @@ def sales_crm_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = get_user()
-        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+        if not has_section_permission(user, 'sales', 'meetings', 'view'):
             flash('Sales module access required', 'error')
             return redirect(url_for('dashboard'))
         if not get_sales_role(user):
@@ -19517,7 +22962,7 @@ def sales_write_required(f):
         if 'user_id' not in session:
             return redirect(url_for('login'))
         user = get_user()
-        if not has_module_access(user, 'sales') and user['is_admin'] != 1:
+        if not has_section_permission(user, 'sales', 'meetings', 'view'):
             flash('Sales module access required', 'error')
             return redirect(url_for('dashboard'))
         role = get_sales_role(user)
@@ -20039,8 +23484,15 @@ def sales_leads_add():
         product_id = int(product_id) if product_id and product_id.isdigit() else None
         stream_id = request.form.get('stream_id')
         stream_id = int(stream_id) if stream_id and stream_id.isdigit() else None
-        stage_id = request.form.get('stage_id')
-        stage_id = int(stage_id) if stage_id and stage_id.isdigit() else None
+        # 2026-06-02: sales no longer tracks open pipeline -- every new lead
+        # is a finalised (closed) client. Force the stage to Closed Won
+        # regardless of what the form submits, so the auto-closure +
+        # auto-invitation flow fires every time.
+        won_row = conn.execute(
+            "SELECT id FROM sales_lead_stages WHERE is_won = 1 AND is_active = 1 "
+            "ORDER BY sort_order LIMIT 1"
+        ).fetchone()
+        stage_id = won_row['id'] if won_row else None
         try:
             ev = float(request.form.get('expected_value') or 0)
         except ValueError:
@@ -20059,7 +23511,7 @@ def sales_leads_add():
                 (request.form.get('email') or '').strip(),
                 (request.form.get('source') or '').strip(),
                 product_id, stream_id, stage_id, owner_id, ev, ecd,
-                1 if request.form.get('is_hot') else 0,
+                0,  # is_hot retired with the "hot lead" UI cleanup
                 (request.form.get('notes') or '').strip(),
                 user['id']
             )
@@ -20113,10 +23565,63 @@ def sales_leads_add():
                             user['id']
                         )
                     )
-                    flash('Closure auto-recorded from won lead', 'success')
+                    # 2026-06-02: auto-generate the client invitation +
+                    # send the WhatsApp link. Failure here doesn't block
+                    # the lead/closure save.
+                    try:
+                        # Item C: capture full sales closure details from the
+                        # form so the client_registrations row created when
+                        # the client accepts the invitation is pre-filled.
+                        def _f(name, default=''):
+                            return (request.form.get(name) or default).strip() \
+                                if isinstance(request.form.get(name), str) \
+                                else (request.form.get(name) or default)
+                        def _n(name):
+                            try: return float(request.form.get(name) or 0)
+                            except ValueError: return 0
+                        closure_data = {
+                            'plan_type':                _f('plan_type'),
+                            'package_amount':           _n('package_amount'),
+                            'discount_allowed':         _n('discount_allowed'),
+                            'final_package':            _n('final_package'),
+                            'additional_package_notes': _f('additional_package_notes'),
+                            'inst1_amount':             _n('inst1_amount'),
+                            'inst1_date':               _f('inst1_date'),
+                            'inst1_note':               _f('inst1_note'),
+                            'inst2_amount':             _n('inst2_amount'),
+                            'inst2_date':               _f('inst2_date'),
+                            'inst2_note':               _f('inst2_note'),
+                            'inst3_amount':             _n('inst3_amount'),
+                            'inst3_date':               _f('inst3_date'),
+                            'inst3_note':               _f('inst3_note'),
+                            'inst4_amount':             _n('inst4_amount'),
+                            'inst4_date':               _f('inst4_date'),
+                            'inst4_note':               _f('inst4_note'),
+                            'lead_source':              _f('source') or _f('lead_source'),
+                            'additional_notes':         _f('notes') or _f('additional_notes'),
+                        }
+                        token = _auto_invite_from_closure(
+                            conn,
+                            product_id=product_id,
+                            client_name=lead_name_new,
+                            client_mobile=(request.form.get('phone') or '').strip(),
+                            client_email=(request.form.get('email') or '').strip(),
+                            invited_by=user['id'],
+                            closure_data=closure_data,
+                        )
+                        if token:
+                            flash('Closed client recorded and invitation sent on WhatsApp', 'success')
+                        else:
+                            flash('Closed client recorded (invitation skipped: phone missing or duplicate)', 'success')
+                    except Exception as inv_err:
+                        logging.warning(f"auto_invite from leads_add failed: {inv_err}")
+                        flash('Closed client recorded (invitation send failed -- check logs)', 'warning')
         conn.commit()
         conn.close()
-        flash('Lead added', 'success')
+        # Fallback flash only if no won-stage flash fired (e.g. no Closed Won
+        # row exists in sales_lead_stages -- unusual but possible).
+        if not stage_id:
+            flash('Lead recorded (no Closed Won stage configured -- closure + invitation skipped)', 'warning')
         return redirect(url_for('sales_leads_list'))
 
     stages = conn.execute('SELECT * FROM sales_lead_stages WHERE is_active = 1 ORDER BY sort_order').fetchall()
@@ -22212,6 +25717,163 @@ def ensure_leave_group_column():
         logging.error(f"ensure_leave_group_column: {e}")
 
 
+# Multi-pathway migration (added 2026-05-31)
+# Adds `pathway` column to every ops_* table AND to lookup_options so the
+# same tables can serve PLAB, Australia, UAE, Consulting, etc. without
+# mixing data. Existing rows backfilled to pathway='plab' (current default).
+def ensure_pathway_column_on_lookup_options():
+    """Migration: add `pathway` TEXT column to lookup_options + backfill.
+
+    Strict per-pathway isolation: dropdowns shown on the PLAB Test Bookings
+    page must only contain PLAB exam values; dropdowns on Australia Test
+    Bookings must only contain AMC values. Filtering happens via this column.
+
+    Callers should use core.lookups.get_options_for_pathway(...) for the
+    pathway-aware read. Direct queries on lookup_options without a pathway
+    filter will return PLAB data only as long as no other pathway rows exist
+    — but should be migrated to the helper for safety once Australia
+    lookups are seeded.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE lookup_options ADD COLUMN pathway TEXT")
+            conn.commit()
+            logging.info("Migration: added pathway column to lookup_options")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        try:
+            conn.execute("UPDATE lookup_options SET pathway = 'plab' WHERE pathway IS NULL")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"Migration backfill skipped for lookup_options: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+OPS_PATHWAY_TABLES = [
+    'ops_academic_details',
+    'ops_call_notes',
+    'ops_coaching',
+    'ops_english_logins',
+    'ops_epic_registration',
+    'ops_gmc_registration',
+    'ops_amc_registration',
+    'ops_mentorship',
+    'ops_ngo_activities',
+    'ops_online_courses',
+    'ops_online_subscriptions',
+    'ops_payments',
+    'ops_research_publication',
+    'ops_test_bookings',
+    'ops_uk_cab_bookings',
+    'ops_uk_observerships',
+    'ops_uk_visa_travel',
+    'ops_webinars_conferences',
+]
+
+
+def ensure_pathway_column_on_plab_clients():
+    """Migration: add `pathway` TEXT column to plab_clients + backfill.
+
+    User locked decision 2026-05-31: Australia clients live in plab_clients
+    with pathway='australia' (legacy PLAB model extended with a pathway
+    column). The Excel schema matches plab_clients almost 1:1 (50 columns).
+
+    Existing PLAB rows backfilled to pathway='plab'. Idempotent on reboot.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN pathway TEXT")
+            conn.commit()
+            logging.info("Migration: added pathway column to plab_clients")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+        # S-0: product_id column lets us link consulting clients to
+        # which specific consulting product they signed up for
+        # (AMC / UAE / USA / UK Consulting). The dashboard's "By Product"
+        # split + clients list Product column both depend on it.
+        try:
+            conn.execute("ALTER TABLE plab_clients ADD COLUMN product_id INTEGER")
+            conn.commit()
+            logging.info("Migration: added product_id column to plab_clients")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        try:
+            conn.execute("UPDATE plab_clients SET pathway = 'plab' WHERE pathway IS NULL")
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"Migration backfill skipped for plab_clients: {e}")
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+def ensure_pathway_columns_on_ops_tables():
+    """Migration: add `pathway` TEXT column to every ops_* table.
+
+    Idempotent — safe to run on every boot:
+      1. Try ALTER TABLE x ADD COLUMN pathway TEXT (no-op if column exists).
+      2. Backfill existing rows: UPDATE x SET pathway='plab' WHERE pathway IS NULL.
+
+    Why on every boot: matches the existing pattern (ensure_leave_group_column,
+    ensure_section_permissions_table, etc.). Survives DB resets and zero-downtime
+    deploys without needing a separate migration runner.
+    """
+    for table in OPS_PATHWAY_TABLES:
+        conn = get_db()
+        try:
+            try:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN pathway TEXT")
+                conn.commit()
+                logging.info(f"Migration: added pathway column to {table}")
+            except Exception:
+                # Column already exists, or table missing — both are fine on a fresh boot.
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+
+            # Backfill existing rows (no-op once everything has a value).
+            try:
+                conn.execute(
+                    f"UPDATE {table} SET pathway = 'plab' WHERE pathway IS NULL"
+                )
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"Migration backfill skipped for {table}: {e}")
+                try:
+                    conn.rollback()
+                except Exception:
+                    pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
+
 # Run on startup
 ensure_crm_tables()
 ensure_sales_crm_tables()
@@ -22219,6 +25881,97 @@ ensure_kra_tables()
 ensure_notification_tables()
 ensure_budget_tables()
 ensure_ops_tables()
+ensure_pathway_columns_on_ops_tables()
+ensure_pathway_column_on_lookup_options()
+ensure_pathway_column_on_plab_clients()
+
+
+def ensure_ops_amc_registration_table():
+    """S-2b/S-3 fix: standalone CREATE TABLE for ops_amc_registration.
+
+    The same CREATE TABLE statement lives inside the big ensure_ops_tables()
+    block, but that block runs as a single transaction -- if any earlier
+    statement aborted the transaction (column "rowid" does not exist, etc.),
+    every subsequent CREATE TABLE silently no-ops. This helper retries
+    ops_amc_registration in its own clean transaction so the consulting AMC
+    importer can rely on the table existing.
+    """
+    try:
+        conn = get_db()
+    except Exception:
+        return
+    try:
+        try: conn.rollback()
+        except Exception: pass
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS ops_amc_registration (
+                id SERIAL PRIMARY KEY,
+                registration_number TEXT REFERENCES plab_clients(registration_number),
+                amc_reference_number TEXT,
+                login_pwd TEXT,
+                secret_question TEXT,
+                secret_answer TEXT,
+                amc_setup TEXT,
+                registration_date TEXT,
+                english_exam TEXT,
+                exam_date TEXT,
+                english_result_expiry_date TEXT,
+                license TEXT,
+                license_received_date TEXT,
+                candidate_email TEXT,
+                mobile_number TEXT,
+                notes TEXT,
+                pathway TEXT,
+                created_by INTEGER,
+                created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                updated_at TIMESTAMP
+            )
+        """)
+        conn.commit()
+        logging.info("ensure_ops_amc_registration_table: ready")
+    except Exception as e:
+        logging.error(f"ensure_ops_amc_registration_table: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+ensure_ops_amc_registration_table()
+
+
+def ensure_lookup_category_on_form_configs():
+    """Migration: client_form_configs gets a `lookup_category` column.
+
+    Lets admin pick (in the form-config UI) which lookup_options category
+    drives a select field instead of typing comma-separated options into
+    field_options. The dropdown values then come from lookup_options
+    scoped to the product's pathway, so the same form-config entry
+    surfaces PLAB values for PLAB clients and Australia values for
+    Australia clients.
+
+    Idempotent on every boot.
+    """
+    try:
+        conn = get_db()
+        try:
+            conn.execute("ALTER TABLE client_form_configs ADD COLUMN lookup_category TEXT")
+            conn.commit()
+            logging.info("Migration: added lookup_category column to client_form_configs")
+        except Exception:
+            try:
+                conn.rollback()
+            except Exception:
+                pass
+    finally:
+        try:
+            conn.close()
+        except Exception:
+            pass
+
+
+ensure_lookup_category_on_form_configs()
 
 # One-time Excel import: load latest PLAB client data from Excel if available
 def _import_excel_clients_once():
@@ -22412,6 +26165,87 @@ if os.path.exists(_excel_src) and not os.path.exists(_excel_dst):
     shutil.copy2(_excel_src, _excel_dst)
 
 _import_excel_clients_once()
+
+# ── One-time import: Australia clients from GC_AUS_Registration_Report.xlsx ──
+# Same upsert-by-reg-number pattern as PLAB. Sets pathway='australia' on every
+# row. Skips silently if Excel file or marker says we're already up to date.
+try:
+    from import_australia_clients import run_import_australia_clients_once
+    run_import_australia_clients_once(get_db)
+except Exception as _au_err:
+    logging.error(f"Australia client import failed: {_au_err}")
+
+# ── One-time import: Australia test bookings (links to plab_clients by reg num) ──
+try:
+    from import_australia_test_bookings import run_import_australia_test_bookings_once
+    run_import_australia_test_bookings_once(get_db)
+except Exception as _au_tb_err:
+    logging.error(f"Australia test-bookings import failed: {_au_tb_err}")
+
+# ── One-time import: 8 additional Australia operations sections (Phase 3 batch) ──
+# Each importer is idempotent (marker key). Boot order doesn't matter — they
+# write to disjoint ops_* rows scoped to pathway='australia'.
+_AU_PHASE3_IMPORTERS = [
+    ('academic',      'import_australia_academic',      'run_import_australia_academic_once'),
+    ('epic',          'import_australia_epic',          'run_import_australia_epic_once'),
+    ('training',      'import_australia_training',      'run_import_australia_training_once'),
+    ('online_courses','import_australia_online_courses','run_import_australia_online_courses_once'),
+    ('payments',      'import_australia_payments',      'run_import_australia_payments_once'),
+    ('call_notes',    'import_australia_call_notes',    'run_import_australia_call_notes_once'),
+    ('research',      'import_australia_research',      'run_import_australia_research_once'),
+    ('webinars',      'import_australia_webinars',      'run_import_australia_webinars_once'),
+]
+for _slug, _mod_name, _fn_name in _AU_PHASE3_IMPORTERS:
+    try:
+        _mod = __import__(_mod_name)
+        getattr(_mod, _fn_name)(get_db)
+    except Exception as _au_err:
+        logging.error(f"Australia {_slug} import failed: {_au_err}")
+
+# ── Auto-seed Australia dropdowns (lookup_options) from the imported data ──
+# Runs AFTER all Phase 2/3 ops_* imports so the source rows exist.
+try:
+    from seed_australia_lookups import run_seed_australia_lookups_once
+    run_seed_australia_lookups_once(get_db)
+except Exception as _au_lk_err:
+    logging.error(f"Australia lookups seed failed: {_au_lk_err}")
+
+# ── S-3: One-time import for Standard Consulting (7 files) ────────────
+# Files in imports/. Clients first, then dependent sections. Each
+# importer is idempotent and marker-versioned -- safe on every boot.
+try:
+    from import_consulting import run_all_consulting_imports_once
+    run_all_consulting_imports_once(get_db)
+except Exception as _cs_imp_err:
+    logging.error(f"Consulting imports failed: {_cs_imp_err}")
+
+# ── X-4c: auto-seed consulting dropdowns (lookup_options) from imports ──
+# Runs AFTER the consulting imports so the distinct-value extraction has
+# fresh data to scan. Idempotent via marker cs_lookups_seed.
+try:
+    from seed_consulting_lookups import run_seed_consulting_lookups_once
+    run_seed_consulting_lookups_once(get_db)
+except Exception as _cs_lk_err:
+    logging.error(f"Consulting lookups seed failed: {_cs_lk_err}")
+
+# ── X-2: One-time import for AMC Pathway AMC Registrations (152 rows) ──
+# Excel candidate names don't have embedded reg#; importer name-matches
+# against plab_clients WHERE pathway='australia'. Idempotent.
+try:
+    from import_au_amc_registrations import run_import_au_amc_registrations_once
+    run_import_au_amc_registrations_once(get_db)
+except Exception as _au_amc_err:
+    logging.error(f"AU AMC registrations import failed: {_au_amc_err}")
+
+# ── Auto-seed Australia vendors + vendor_service_map from imported ops_* data ──
+# User insight: the historical Excel imports already contain every training
+# vendor, online subscription, and research provider for Australia. Extract
+# those distinct names and populate the centralised vendors_providers table.
+try:
+    from seed_australia_vendors import run_seed_australia_vendors_once
+    run_seed_australia_vendors_once(get_db)
+except Exception as _au_vp_err:
+    logging.error(f"Australia vendors seed failed: {_au_vp_err}")
 
 # ── One-time import: Call Notes from Zoho export ───
 def _import_call_notes_once():
@@ -22680,6 +26514,7 @@ _backfill_switched_program()
 
 seed_kra_categories()
 seed_default_meeting_types()
+resync_client_counsellor_ids_once()
 seed_budget_categories()
 # Backfill finance revenue categories from sales streams at boot
 try:
@@ -22906,6 +26741,63 @@ def upload_attendance():
                     active_section='hr')
 
 
+@app.route('/api/attendance/toggle-manual-present', methods=['POST'])
+@admin_required
+def api_toggle_manual_present():
+    """HR-admin override: mark a specific (employee, date) as Present
+    even when biometric shows no punch -- eg. device offline, employee
+    was in office. Toggles the flag on existing attendance_logs rows,
+    or inserts a placeholder row if the day was missing entirely.
+    """
+    user = get_user()
+    employee_id = request.form.get('employee_id', type=int)
+    date_str    = (request.form.get('date') or '').strip()
+    target_val  = (request.form.get('value') or 'true').lower() == 'true'
+    note        = (request.form.get('note') or '').strip() or 'HR-confirmed present (biometric missed)'
+
+    if not employee_id or not date_str:
+        return jsonify({'error': 'employee_id and date required'}), 400
+
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM attendance_logs WHERE employee_id=? AND attendance_date=?",
+            (employee_id, date_str),
+        ).fetchone()
+        if existing:
+            conn.execute(
+                "UPDATE attendance_logs SET manual_present=?, manual_present_note=?, "
+                "  manual_present_by=?, manual_present_at=NOW() "
+                "WHERE id=?",
+                (target_val, note if target_val else None,
+                 user['id'] if target_val else None,
+                 existing['id']),
+            )
+        else:
+            # Insert a placeholder row so the day shows in the calendar
+            conn.execute(
+                "INSERT INTO attendance_logs "
+                " (employee_id, attendance_date, shift, scheduled_in, scheduled_out, "
+                "  actual_in, actual_out, work_duration, overtime, total_duration, "
+                "  late_by, early_going_by, status, punch_records, "
+                "  manual_present, manual_present_note, manual_present_by, manual_present_at) "
+                "VALUES (?,?,'GS','','','','','','','','','',"
+                "  'Absent','',?, ?, ?, NOW())",
+                (employee_id, date_str, target_val,
+                 note if target_val else None,
+                 user['id'] if target_val else None),
+            )
+        conn.commit()
+        return jsonify({'success': True, 'manual_present': target_val})
+    except Exception as e:
+        logging.error(f"api_toggle_manual_present: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
 @app.route('/time-log')
 @login_required
 def time_log():
@@ -23008,6 +26900,31 @@ def time_log():
         except Exception:
             pass
 
+    # ── Fetch approved On Official Travel (OOT) for this month ──
+    # Same pattern as WFH — approved-only, expanded into a per-date set so the
+    # day-by-day loop below can check membership in O(1).
+    try:
+        oot_rows = conn.execute("""
+            SELECT employee_id, from_date, to_date
+            FROM official_travel_requests
+            WHERE status='approved' AND from_date <= ? AND to_date >= ?
+        """, (date_to, date_from)).fetchall()
+    except Exception:
+        # Table may not yet exist on a freshly migrated DB — fail safe.
+        oot_rows = []
+    oot_set = set()
+    for r in oot_rows:
+        try:
+            cur_d = datetime.strptime(r['from_date'], '%Y-%m-%d')
+            end_d = datetime.strptime(r['to_date'], '%Y-%m-%d')
+            while cur_d <= end_d:
+                ds = cur_d.strftime('%Y-%m-%d')
+                if date_from <= ds <= date_to:
+                    oot_set.add((r['employee_id'], ds))
+                cur_d += timedelta(days=1)
+        except Exception:
+            pass
+
     # ── Build attendance lookup by (employee_id, date) ──
     logs_list = [dict(r) for r in logs]
     att_lookup = {}
@@ -23039,7 +26956,7 @@ def time_log():
             'total_work_mins': 0,
             'present_days': 0, 'absent_days': 0, 'late_days': 0,
             'weekly_off_days': 0, 'half_days': 0, 'no_punch_days': 0,
-            'leave_days': 0, 'wfh_days': 0, 'holiday_days': 0,
+            'leave_days': 0, 'wfh_days': 0, 'travel_days': 0, 'holiday_days': 0,
             'in_out_days': 0, 'no_in_days': 0, 'no_out_days': 0,
             'full_days_work_mins': 0,  # work mins only for days with both in & out
             'full_days_total_mins': 0,  # total duration mins only for days with both in & out
@@ -23056,9 +26973,13 @@ def time_log():
             att = att_lookup.get((eid, date_str))
             leave_info = leaves_map.get((eid, date_str))
             is_wfh = (eid, date_str) in wfh_set
+            is_oot = (eid, date_str) in oot_set
             holiday_info = holidays_map.get(date_str)
 
-            # Determine the day_type for coloring
+            # Determine the day_type for coloring.
+            # Priority: holiday > weekend > leave > wfh > travel > weekday.
+            # WFH wins over OOT on the rare case both are approved for the
+            # same date — the user has flagged this as acceptable.
             if holiday_info:
                 day_type = 'holiday'
                 s['holiday_days'] += 1
@@ -23072,8 +26993,53 @@ def time_log():
             elif is_wfh:
                 day_type = 'wfh'
                 s['wfh_days'] += 1
+            elif is_oot:
+                day_type = 'travel'
+                s['travel_days'] += 1
             else:
                 day_type = 'weekday'
+
+            # ── Policy: WFH counts toward Present in the summary cards.
+            # Employees on approved WFH aren't expected at the office, so
+            # the absence of a fingerprint punch should not flag them as
+            # Absent. Only credit if they didn't also happen to punch in
+            # — the normal punch-driven present_days logic below would
+            # otherwise double-count them.
+            if day_type == 'wfh':
+                _ai = ((att.get('actual_in') if att else '') or '').strip()
+                _ao = ((att.get('actual_out') if att else '') or '').strip()
+                if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
+                    s['present_days'] += 1
+
+            # ── Policy: same as WFH — approved Official Travel days
+            # credit toward Present unless the employee also punched
+            # the biometric (in which case the punch path counts them).
+            if day_type == 'travel':
+                _ai = ((att.get('actual_in') if att else '') or '').strip()
+                _ao = ((att.get('actual_out') if att else '') or '').strip()
+                if not (_ai and _ai != '—') and not (_ao and _ao != '—'):
+                    s['present_days'] += 1
+
+            # ── Policy: half-day leave credits the *worked* half toward
+            # Present even when there's no fingerprint punch for that
+            # half. The inner punch-driven block below also credits 0.5
+            # when att exists, so we only fire here when att is missing
+            # to avoid double-counting.
+            if day_type == 'half_leave' and not att:
+                s['half_days'] += 1
+                s['present_days'] += 0.5
+
+            # ── Manual present override (HR-admin marks a day as
+            # present even though the biometric missed the punch — eg.
+            # device offline, employee in office). Stored on
+            # attendance_logs.manual_present. Skip the credit if the
+            # employee also has any punch on that day (the normal
+            # present_days path will count them).
+            if att and att.get('manual_present') and day_type not in ('weekend','holiday','leave','half_leave','wfh','travel'):
+                _ai2 = ((att.get('actual_in')  or '')).strip()
+                _ao2 = ((att.get('actual_out') or '')).strip()
+                if not (_ai2 and _ai2 != '—') and not (_ao2 and _ao2 != '—'):
+                    s['present_days'] += 1
 
             # Build day record
             if att:
@@ -23096,6 +27062,7 @@ def time_log():
             day_rec['leave_type'] = leave_info['leave_type'].capitalize() if leave_info else ''
             day_rec['leave_portion'] = leave_info['day_portion'] if leave_info else ''
             day_rec['is_wfh'] = is_wfh
+            day_rec['is_oot'] = is_oot
 
             s['days'].append(day_rec)
 
@@ -23132,11 +27099,11 @@ def time_log():
                     elif has_in or has_out:
                         # They showed up (even if missing one punch)
                         s['present_days'] += 1
-                    elif leave_info or is_wfh:
-                        pass  # On leave/WFH, already counted
+                    elif leave_info or is_wfh or is_oot:
+                        pass  # On leave/WFH/Travel, already counted
                     elif 'Absent' in status:
                         s['absent_days'] += 1
-                    # No attendance record and no leave/WFH → will be blank row
+                    # No attendance record and no leave/WFH/travel → will be blank row
 
                 # ── Calculate Total Hours from actual in/out times ──
                 FULL_DAY_MINS = 540   # 9 hours = standard working day
@@ -25412,7 +29379,17 @@ def college_import_all():
 # ─── SECTION VISIBILITY CONTROL ───
 
 def ensure_section_permissions_table():
-    """Create section_permissions table for admin visibility control."""
+    """No-op since Phase 6 (2026-06-01). Kept for any callers still
+    referencing the function name; the legacy section_permissions and
+    partner_section_permissions tables are dropped by
+    drop_legacy_section_tables_once() on boot. Access Master replaced this.
+    """
+    return
+
+
+def _legacy_ensure_section_permissions_table_REMOVED():
+    """Original implementation, kept here only as historical comment.
+    Do NOT call. See ensure_section_permissions_table() above."""
     try:
         conn = get_db()
         conn.execute('''CREATE TABLE IF NOT EXISTS section_permissions (
@@ -25507,6 +29484,3359 @@ def ensure_section_permissions_table():
 ensure_section_permissions_table()
 
 
+# ─────────────────────────────────────────────────────────────────────────
+#  ACCESS MASTER (2026-06-01) — granular per-user, per-section permissions
+#
+#  Three independent flags per (employee, main_section, sub_section):
+#    can_view  — sees the page / data
+#    can_edit  — can save changes to existing rows
+#    can_add   — can create new rows
+#
+#  Coexists with the older `module_access` + `section_permissions` tables.
+#  The new helper has_section_permission(user, main, sub, action) checks
+#  this table first. Admins always bypass. The legacy helpers
+#  (has_module_access, etc.) keep working unchanged so nothing breaks.
+# ─────────────────────────────────────────────────────────────────────────
+
+
+# Catalog: which main sections + sub-sections show in the Access Master UI.
+# Restructured 2026-06-01 per user feedback: Operations is split per pathway
+# (PLAB, Australia) plus a Shared bucket for cross-pathway admin tools.
+# This way an admin granting "Payments" access knows exactly which pathway
+# it covers — and can grant the two independently if needed.
+ACCESS_SECTION_CATALOG = [
+    # ── Operations: PLAB Pathway ──────────────────────────────────────────
+    {
+        'key': 'plab_pathway',
+        'label': 'Operations · PLAB Pathway',
+        'description': 'PLAB / UK Pathway operational sub-areas. Grant these to staff supporting PLAB clients.',
+        'sub_sections': [
+            ('dashboard',         'Pathway Dashboard',       'Overview stats for PLAB clients'),
+            ('registration',      'Registration',            'PLAB client registration list + full profile'),
+            ('onboarding',        'Onboarding',              'Welcome kit + onboarding workflow'),
+            ('call_notes',        'Call Notes',              'PLAB call notes + follow-up tracker'),
+            ('payments',          'Payments',                'PLAB payment records (installments, receipts)'),
+            ('documents',         'Documents',               'PLAB document upload + verification'),
+            ('certificates',      'Clients Certificates',    'PLAB client certificates + achievements'),
+            ('coaching',          'Coaching & Training',     'PLAB training enrolment + status'),
+            ('test_bookings',     'Test Bookings',           'PLAB 1 / PLAB 2 / OET / IELTS bookings'),
+            ('english_logins',    'English Logins',          'IELTS / OET portal credentials'),
+            ('online_courses',    'Online Courses',          'PLAB online courses'),
+            ('epic',              'EPIC Registration',       'EPIC + Notary Cam workflow'),
+            ('gmc',               'GMC Registration',        'UK GMC registration tracking'),
+            ('job_stage',         'Job Stage',               'PLAB job placement tracking (hospital, designation, offer)'),
+            ('uk_visa',           'UK Visa & Travel',        'UK visa + travel logistics'),
+            ('uk_cab',            'UK Cab Bookings',         'UK cab bookings'),
+            ('uk_observerships',  'UK Observerships',        'UK observership tracking'),
+            ('academic',          'Academic Details',        'PLAB academic / medical college records'),
+            ('research',          'Research & Publication',  'PLAB research project tracking'),
+            ('subscriptions',     'Online Subscriptions',    'PLAB resource subscriptions (Plabable, Pastest, etc.)'),
+            ('webinars',          'Webinars & Conferences',  'PLAB event attendance log'),
+            ('ngo',               'NGO Activities',          'NGO volunteer activities for PLAB clients'),
+            ('mentorship',        'Mentorship',              'Mentorship sessions for PLAB clients'),
+        ],
+    },
+    # ── Operations: AMC Pathway ─────────────────────────────────────
+    {
+        'key': 'australia_pathway',
+        'label': 'Operations · AMC Pathway',
+        'description': 'Australia (AMC) Pathway operational sub-areas. Grant these to staff supporting Australia clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',       'Overview stats for Australia clients'),
+            ('registration',  'Registration',            'Australia client registration list + full profile'),
+            ('documents',     'Documents',               'Australia client document upload + verification'),
+            ('call_notes',    'Call Notes',              'Australia call notes + tracker + not-contacted view'),
+            ('payments',      'Payments',                'Australia payment records'),
+            ('training',      'Training',                'Australia training (AMC MCQ Mock, English, etc.)'),
+            ('test_bookings', 'Test Bookings',           'AMC MCQ / AMC Clinical / OET bookings'),
+            ('online_courses','Online Courses',          'Australia online courses (MplusX, eMedici, etc.)'),
+            ('epic',          'EPIC Registration',       'Australia EPIC tracking'),
+            ('amc_registration','AMC Registration',      'AHPRA / AMC registration tracking (X-2)'),
+            ('academic',      'Academic Details',        'Australia academic records'),
+            ('research',      'Research & Publication',  'Australia research project tracking'),
+            ('webinars',      'Webinars & Conferences',  'Australia event attendance log'),
+        ],
+    },
+    # ── Operations: Standard Consulting (S-0) ─────────────────────────
+    {
+        'key': 'consulting_pathway',
+        'label': 'Operations · Standard Consulting',
+        'description': 'Standard Consulting operational sub-areas. Houses AMC / UAE / USA / UK Consulting clients in one pathway. Grant these to staff supporting consulting clients.',
+        'sub_sections': [
+            ('dashboard',         'Pathway Dashboard',  'Overview stats for consulting clients'),
+            ('registration',      'Registration',       'Consulting client registration list + full profile'),
+            ('academic',          'Academic Details',   'Consulting client academic records'),
+            ('documents',         'Documents',          'Consulting client document tracker'),
+            ('call_notes',        'Call Notes',         'Consulting call log + tracker'),
+            ('payments',          'Payments',           'Consulting payment records'),
+            ('onboarding',        'Onboarding',         'Welcome flow for consulting clients (shared with other pathways)'),
+            ('epic_verification', 'EPIC Verification',  'ECFMG EPIC credentialing tracker'),
+            ('gmc_registration',  'GMC Registration',   'UK General Medical Council registration tracker'),
+            ('amc_registration',  'AMC Registration',   'Australian Medical Council registration tracker'),
+            ('mentorship',        'Mentorship Sessions','Mentorship session scheduling + tracker'),
+        ],
+    },
+    # ── Operations: Shared / cross-pathway ────────────────────────────────
+    {
+        'key': 'operations_shared',
+        'label': 'Operations · Shared',
+        'description': 'Cross-pathway operations admin tools. Grant separately from individual pathway access.',
+        'sub_sections': [
+            ('reports',           'Reports',                  'Operations reports'),
+            ('field_manager',     'Settings (Field Manager)', 'Lookup options + form config (pathway-aware)'),
+            ('vendors_providers', 'Vendors & Providers',      'Vendor / partner directory (pathway-aware)'),
+        ],
+    },
+    # ── Sales (kept as one section per user feedback) ─────────────────────
+    {
+        'key': 'sales',
+        'label': 'Sales',
+        'description': 'Lead, deal, and sales-team-side workflows.',
+        'sub_sections': [
+            ('meetings',             'Meetings',             'Sales meeting log'),
+            ('projects',             'Projects',             'Sales projects'),
+            ('products',             'Products & Services',  'Product / service catalog'),
+            ('partners',             'Partners',             'Channel / referral partners'),
+            ('news',                 'Sales News',           'Internal sales news feed'),
+            ('clients_pipeline',     'Clients Pipeline',     'Client deal pipeline'),
+            ('reports',              'Sales Reports',        'Sales analytics + reports'),
+            ('settings',             'Sales Settings',       'Sales-team-specific settings'),
+            ('twelfthplus_schools',  '12thPlus Schools',     'School database CRM for 12thPlus outreach'),
+            ('twelfthplus_meetings', '12thPlus Meetings',    'Track school meetings + follow-ups'),
+        ],
+    },
+    # ── HR (employee-facing + admin tools) ────────────────────────────────
+    {
+        'key': 'hr',
+        'label': 'HR',
+        'description': 'Leave, attendance, employee management, time logs.',
+        'sub_sections': [
+            ('leave_management', 'Leave Management',    'Apply / approve leave, balances'),
+            ('late_leave',       'Late Leave',          'Backdated leave applications (45 days)'),
+            ('bulk_leave',       'Bulk Leave Entry',    'Admin bulk leave entry'),
+            ('attendance',       'Attendance / Time Log','Check-in / check-out records'),
+            ('wfh',              'Work From Home',      'WFH applications + approvals'),
+            ('official_travel',  'On Official Travel',  'Apply for + approve official-travel days'),
+            ('employees',        'Employee Directory',  'Active employee list + profiles'),
+            ('id_cards',         'ID Cards',            'ID card requests + generation'),
+            ('letters',          'Letters',             'HR letter templates + generation'),
+        ],
+    },
+    # ── KRA ────────────────────────────────────────────────────────────────
+    {
+        'key': 'kra',
+        'label': 'KRA',
+        'description': 'Goals, performance reviews, KRA tracking.',
+        'sub_sections': [
+            ('dashboard', 'KRA Dashboard', 'Overview + my goals'),
+            ('goals',     'Goals',         'Goal setting + tracking'),
+            ('reviews',   'Reviews',       'Performance reviews'),
+            ('approvals', 'Approvals',     'Manager approval queue'),
+        ],
+    },
+    # ── Finance (admin-heavy) ──────────────────────────────────────────────
+    {
+        'key': 'finance',
+        'label': 'Finance',
+        'description': 'Budget, revenue, expenses, finance admin.',
+        'sub_sections': [
+            ('budget',       'Budget',         'Budget allocation + tracking'),
+            ('revenue',      'Revenue',        'Revenue streams + reports'),
+            ('expenses',     'Expenses',       'Expense claims + approvals'),
+            ('salary',       'Salary',         'Salary structure + deductions'),
+            ('reports',      'Finance Reports','Finance analytics'),
+            ('settings',     'Finance Settings','Finance-team-specific settings'),
+        ],
+    },
+    # ── Company (admin tools, holidays, calendar, etc.) ────────────────────
+    {
+        'key': 'company',
+        'label': 'Company',
+        'description': 'Company-wide admin: holidays, calendar, org chart, system settings.',
+        'sub_sections': [
+            ('org_chart',         'Org Chart',           'Company hierarchy view'),
+            ('holidays',          'Holidays',            'Holiday calendar + management'),
+            ('calendar',          'Calendar',            'Company-wide events calendar'),
+            ('announcements',     'Announcements',       'Internal announcements feed'),
+            ('state_city',        'State & City Settings','Location lookup management'),
+            ('reset_passwords',   'Reset Passwords',     'Admin password reset tool'),
+            ('email_templates',   'Email Templates',     'Edit onboarding-stage emails + stakeholder recipient toggles'),
+            ('access_master',     'Access Master',       'Manage section permissions (this page)'),
+        ],
+    },
+    # ── Colleges ───────────────────────────────────────────────────────────
+    {
+        'key': 'colleges',
+        'label': 'Colleges',
+        'description': 'College portal + predictor tools.',
+        'sub_sections': [
+            ('college_portal',  'College Portal',   'College directory + details'),
+            ('mbbs_predictor',  'MBBS Predictor',   'Indian MBBS rank/college predictor'),
+            ('russian',         'Russian Colleges', 'Russian college seed + admin'),
+            ('country_list',    'Country List',     'Country / pathway list'),
+            ('fees',            'Fee Structures',   'Fee structure admin'),
+        ],
+    },
+    # ── WhatsApp ───────────────────────────────────────────────────────────
+    {
+        'key': 'whatsapp',
+        'label': 'WhatsApp',
+        'description': 'WhatsApp messaging + templates + auto-trigger setup.',
+        'sub_sections': [
+            ('messages',  'Messages',  'WhatsApp message log'),
+            ('templates', 'Templates', 'WhatsApp template management'),
+            ('triggers',  'Auto Triggers', 'Automated WhatsApp triggers + rules'),
+            ('settings',  'WhatsApp Settings', 'Infobip / provider configuration'),
+        ],
+    },
+    # ── Clients (v2 unified client management) ─────────────────────────────
+    {
+        'key': 'clients',
+        'label': 'Clients (v2)',
+        'description': 'v2 unified client management — invitations, registrations, form config.',
+        'sub_sections': [
+            ('invitations',     'Client Invitations',  'Generate + send client portal invites'),
+            ('registrations',   'Client Registrations','v2 client registration list'),
+            ('form_config',     'Form Configuration',  'Centralised client form field config'),
+            ('welcome_kit',     'Welcome Kit',         'Per-product onboarding checklist template'),
+            ('doc_requests',    'Document Requests',   'Ops doc request queue'),
+            ('notifications',   'Notification Log',    'Client notification log'),
+        ],
+    },
+    # ── Dashboard (landing pages) ──────────────────────────────────────────
+    {
+        'key': 'dashboard',
+        'label': 'Dashboard',
+        'description': 'Landing pages each user sees on login.',
+        'sub_sections': [
+            ('personal', 'Personal Dashboard', 'Employee landing page'),
+            ('admin',    'Admin Dashboard',    'Admin landing page'),
+        ],
+    },
+    # ── Partner Portal (for partners — subject_type='partner') ─────────────
+    # Aligned with the real partner portal sections (was a placeholder).
+    {
+        'key': 'partner_portal',
+        'label': 'Partner Portal',
+        'description': 'Sections visible inside the partner-facing portal. Grant these only to partner subjects.',
+        'sub_sections': [
+            ('dashboard',         'Dashboard',          'Partner landing page'),
+            ('student_leads',     'Student Leads',      'Student leads referred by this partner'),
+            ('b2b_leads',         'School / College Leads', 'B2B / institutional leads'),
+            ('team',              'Team Members',       'Partner-side team members'),
+            ('products',          'Products & Services','Products + services the partner can sell'),
+            ('commissions',       'Commissions',        'Commission tracking + payouts'),
+            ('reports',           'Reports',            'Partner-side analytics + reports'),
+            ('college_portal',    'College Portal',     'College directory access'),
+            ('medical_predictor', 'Medical Predictor',  'MBBS predictor tool'),
+            ('profile',           'Profile Settings',   'Partner profile + bank details'),
+        ],
+    },
+]
+
+
+# ── Map from legacy partner_section_permissions.section_key to the
+#    new (main_section, sub_section) tuple in the Access Master catalog.
+LEGACY_PARTNER_SECTION_MAP = {
+    'partner_dashboard':         ('partner_portal', 'dashboard'),
+    'partner_student_leads':     ('partner_portal', 'student_leads'),
+    'partner_b2b_leads':         ('partner_portal', 'b2b_leads'),
+    'partner_team':              ('partner_portal', 'team'),
+    'partner_products':          ('partner_portal', 'products'),
+    'partner_commissions':       ('partner_portal', 'commissions'),
+    'partner_reports':           ('partner_portal', 'reports'),
+    'partner_college_portal':    ('partner_portal', 'college_portal'),
+    'partner_medical_predictor': ('partner_portal', 'medical_predictor'),
+}
+
+
+def migrate_partner_section_permissions_once():
+    """One-time migration: copy rows from the legacy
+    partner_section_permissions table into the unified
+    user_section_permissions table (subject_type='partner').
+
+    Idempotent via the marker key 'access_master_partner_migrated' in
+    _import_markers. Bumping the marker value forces a re-run.
+    """
+    MARKER_KEY = 'access_master_partner_migrated'
+    MARKER_VAL = 'phase2_v1'
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already migrated
+
+        try:
+            legacy_rows = conn.execute(
+                "SELECT section_key, allowed_partner_ids, is_active "
+                "FROM partner_section_permissions"
+            ).fetchall()
+        except Exception:
+            legacy_rows = []
+
+        migrated = 0
+        for row in legacy_rows:
+            if not row['is_active']:
+                continue
+            mapped = LEGACY_PARTNER_SECTION_MAP.get(row['section_key'])
+            if not mapped:
+                continue
+            main_section, sub_section = mapped
+            ids_str = (row['allowed_partner_ids'] or '').strip()
+            if not ids_str:
+                continue
+            for raw in ids_str.split(','):
+                raw = raw.strip()
+                if not raw:
+                    continue
+                try:
+                    partner_id = int(raw)
+                except ValueError:
+                    continue
+                # Already migrated? skip.
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='partner' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (partner_id, main_section, sub_section),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(subject_type, subject_id, main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES ('partner', ?, ?, ?, 1, 0, 0)",
+                        (partner_id, main_section, sub_section),
+                    )
+                    migrated += 1
+                except Exception as e:
+                    logging.warning(
+                        f"migrate_partner_section_permissions: skipped "
+                        f"(partner={partner_id}, key={row['section_key']}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"migrate_partner_section_permissions: marker write failed: {e}")
+
+        if migrated:
+            logging.info(f"Access Master: migrated {migrated} legacy partner permissions")
+    except Exception as e:
+        logging.warning(f"migrate_partner_section_permissions: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+# Runs after partner_section_permissions has been ensured/seeded.
+# Note: depends on ensure_section_permissions_table(), which runs earlier
+# in the boot sequence.
+migrate_partner_section_permissions_once()
+
+
+def cleanup_orphan_access_permissions():
+    """One-shot helper: delete user_section_permissions rows whose
+    (main_section, sub_section) is no longer in ACCESS_SECTION_CATALOG.
+
+    Runs on every boot. After the 2026-06-01 restructure (Operations split
+    per pathway) any rows from the old flat 'operations' catalog become
+    orphans — clean them up so the UI doesn't render stale info.
+    """
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+    try:
+        conn = get_db()
+        # Distinct (main, sub) pairs in the table — find orphans by content,
+        # not by id (SQLite SERIAL doesn't auto-populate, so id can be NULL
+        # on dev DBs; matching by content also lets us clean multi-employee
+        # orphans in a single pass).
+        pairs = conn.execute(
+            "SELECT DISTINCT main_section, sub_section FROM user_section_permissions"
+        ).fetchall()
+        orphans = [(p['main_section'], p['sub_section'])
+                   for p in pairs
+                   if (p['main_section'], p['sub_section']) not in valid_keys]
+        deleted = 0
+        for main, sub in orphans:
+            result = conn.execute(
+                "DELETE FROM user_section_permissions "
+                "WHERE main_section = ? AND sub_section = ?",
+                (main, sub),
+            )
+            # rowcount may be -1 on some drivers; treat any non-zero as success
+            deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+        if orphans:
+            conn.commit()
+            logging.info(
+                f"Access Master: cleaned {len(orphans)} orphan key(s) "
+                f"({deleted} row(s) deleted)"
+            )
+    except Exception as e:
+        logging.warning(f"cleanup_orphan_access_permissions: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+cleanup_orphan_access_permissions()
+
+
+def seed_access_master_baseline_once():
+    """Phase 5 baseline (2026-06-01).
+
+    Before flipping ACCESS_MASTER_ENFORCE to True we MUST guarantee that
+    every active user has at least the access they had yesterday — else
+    enforce day = lockout day.
+
+    Strategy: for every active non-admin employee × every user-applicable
+    catalog entry (everything except partner_portal), insert a
+    (view + edit + add) grant. Mirrors prior behavior where the sidebar
+    showed every section to every employee and per-route gates handled
+    the few admin-only routes. Admins always bypass via can_access() so
+    they don't need rows here.
+
+    For partners: every active partner × every partner_portal sub_section
+    gets (view + edit + add). Combined with the Phase 2 legacy-partner
+    migration, this guarantees no partner loses portal access either.
+
+    Idempotent via the marker key 'access_master_baseline_seeded'. To
+    re-seed (e.g. after onboarding new users), bump MARKER_VAL.
+    """
+    MARKER_KEY = 'access_master_baseline_seeded'
+    MARKER_VAL = 'phase5_v1'
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already seeded
+
+        # Split catalog entries by who they belong to.
+        user_keys = []     # (main, sub) for team members
+        partner_keys = []  # (main, sub) for partners
+        for sec in ACCESS_SECTION_CATALOG:
+            if sec['key'] == 'partner_portal':
+                for sub_key, _l, _d in sec['sub_sections']:
+                    partner_keys.append((sec['key'], sub_key))
+            else:
+                for sub_key, _l, _d in sec['sub_sections']:
+                    user_keys.append((sec['key'], sub_key))
+
+        emp_granted = 0
+        partner_granted = 0
+
+        # ── Active non-admin employees ──
+        try:
+            employees = conn.execute(
+                "SELECT id FROM employees WHERE is_active = 1 "
+                "  AND (is_admin IS NULL OR is_admin = 0)"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+
+        for emp in employees:
+            emp_id = emp['id']
+            for main, sub in user_keys:
+                # Skip rows that already exist (someone may have set grants
+                # manually via the Access Master UI in log-only mode).
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='employee' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (emp_id, main, sub),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES (?, 'employee', ?, ?, ?, 1, 1, 1)",
+                        (emp_id, emp_id, main, sub),
+                    )
+                    emp_granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"baseline grant skipped (emp={emp_id}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # ── Active partners ──
+        try:
+            partners = conn.execute(
+                "SELECT id FROM partners WHERE status = 'Active'"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            partners = []
+
+        for prt in partners:
+            pid = prt['id']
+            for main, sub in partner_keys:
+                exists = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type='partner' AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (pid, main, sub),
+                ).fetchone()
+                if exists:
+                    continue
+                try:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES ('partner', ?, ?, ?, 1, 1, 1)",
+                        (pid, main, sub),
+                    )
+                    partner_granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"baseline partner grant skipped (partner={pid}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"baseline seed marker write failed: {e}")
+
+        logging.info(
+            f"Access Master Phase 5 baseline: granted "
+            f"{emp_granted} employee row(s) + {partner_granted} partner row(s)"
+        )
+    except Exception as e:
+        logging.warning(f"seed_access_master_baseline_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+def ensure_user_section_permissions_table():
+    """Create user_section_permissions table on boot. Idempotent.
+
+    Unified for team members AND partners (Phase 1 of full Access Master
+    rollout, 2026-06-01). The `subject_type` + `subject_id` columns let one
+    row describe permissions for either an employee (subject_type='employee',
+    subject_id=employees.id) or a partner (subject_type='partner',
+    subject_id=partners.id).
+
+    Legacy back-compat: `employee_id` is kept and synchronised with
+    subject_id (when subject_type='employee') so older code reading the
+    column keeps working until Phase 6 cleanup retires it.
+    """
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS user_section_permissions (
+            id SERIAL PRIMARY KEY,
+            employee_id    INTEGER REFERENCES employees(id),
+            subject_type   TEXT    NOT NULL DEFAULT 'employee',
+            subject_id     INTEGER NOT NULL,
+            main_section   TEXT    NOT NULL,
+            sub_section    TEXT    NOT NULL,
+            can_view       INTEGER NOT NULL DEFAULT 0,
+            can_edit       INTEGER NOT NULL DEFAULT 0,
+            can_add        INTEGER NOT NULL DEFAULT 0,
+            granted_by     INTEGER REFERENCES employees(id),
+            created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(employee_id, main_section, sub_section)
+        )''')
+        conn.commit()
+        # Migration: add subject_type / subject_id on existing dev DBs.
+        for ddl in [
+            "ALTER TABLE user_section_permissions ADD COLUMN subject_type TEXT DEFAULT 'employee'",
+            "ALTER TABLE user_section_permissions ADD COLUMN subject_id INTEGER",
+            # Drop the old NOT NULL on employee_id (Postgres syntax). Partner
+            # rows have employee_id = NULL since they don't exist in employees.
+            # SQLite ignores this — its column already allows NULL after
+            # CREATE TABLE IF NOT EXISTS picked up the new schema.
+            "ALTER TABLE user_section_permissions ALTER COLUMN employee_id DROP NOT NULL",
+        ]:
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        # Backfill: any rows missing subject_id get it from employee_id.
+        try:
+            conn.execute(
+                "UPDATE user_section_permissions "
+                "SET subject_type = COALESCE(subject_type, 'employee'), "
+                "    subject_id = COALESCE(subject_id, employee_id) "
+                "WHERE subject_id IS NULL"
+            )
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    except Exception as e:
+        logging.error(f"ensure_user_section_permissions_table: {e}")
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+ensure_user_section_permissions_table()
+
+
+def grant_twelfthplus_to_active_employees_once():
+    """One-shot bulk grant: give every active employee view+edit+add on the
+    new 12thPlus Schools and 12thPlus Meetings sub-sections.
+
+    Needed because the baseline seeder (seed_access_master_baseline_once)
+    is marker-gated and has already run on staging/prod; without this,
+    existing employees would have no Access Master row for the new keys
+    and the per-request audit would deny them.
+
+    Idempotent via marker 'access_master_twelfthplus_granted'.
+    """
+    MARKER_KEY = 'access_master_twelfthplus_granted'
+    MARKER_VAL = 'v1'
+    SUBS = [('sales', 'twelfthplus_schools'), ('sales', 'twelfthplus_meetings')]
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+        try:
+            employees = conn.execute(
+                "SELECT id FROM employees WHERE is_active = 1"
+            ).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+        granted = 0
+        for emp in employees:
+            emp_id = emp['id']
+            for main, sub in SUBS:
+                try:
+                    exists = conn.execute(
+                        "SELECT id FROM user_section_permissions "
+                        "WHERE subject_type='employee' AND subject_id = ? "
+                        "  AND main_section = ? AND sub_section = ?",
+                        (emp_id, main, sub),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, subject_type, subject_id, "
+                        " main_section, sub_section, "
+                        " can_view, can_edit, can_add) "
+                        "VALUES (?, 'employee', ?, ?, ?, 1, 1, 1)",
+                        (emp_id, emp_id, main, sub),
+                    )
+                    granted += 1
+                except Exception as e:
+                    logging.warning(
+                        f"twelfthplus grant skipped (emp={emp_id}, {main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        if granted:
+            logging.info(
+                f"Access Master: bulk-granted 12thPlus sub-sections "
+                f"({granted} row(s) across {len(employees)} active employees)"
+            )
+    except Exception as e:
+        logging.warning(f"grant_twelfthplus_to_active_employees_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+grant_twelfthplus_to_active_employees_once()
+
+
+def seed_twelfthplus_lookup_options_once():
+    """Seed cochin_area + school_type lookup_options for the 12thPlus CRM.
+    Idempotent: skips any value that already exists in lookup_options.
+
+    Categories are global (pathway = NULL).
+    """
+    COCHIN_AREAS = [
+        'Edappally', 'Kakkanad', 'Kaloor', 'Vyttila', 'Aluva',
+        'Tripunithura', 'Palarivattom', 'Panampilly Nagar', 'Marine Drive',
+        'Fort Kochi', 'Kalamassery', 'Thrikkakara', 'Maradu', 'Vennala', 'Other',
+    ]
+    SCHOOL_TYPES = ['CBSE', 'ICSE', 'State', 'IB', 'IGCSE', 'Other']
+    conn = None
+    try:
+        conn = get_db()
+        # Check if lookup_options has the pathway column (it does on prod;
+        # ensure_pathway_column_on_lookup_options adds it on older DBs).
+        has_pathway = False
+        try:
+            conn.execute("SELECT pathway FROM lookup_options LIMIT 1")
+            has_pathway = True
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            has_pathway = False
+        inserted = 0
+        for category, values in (('cochin_area', COCHIN_AREAS), ('school_type', SCHOOL_TYPES)):
+            for sort_idx, val in enumerate(values, 1):
+                try:
+                    exists = conn.execute(
+                        "SELECT id FROM lookup_options WHERE category = ? AND value = ?",
+                        (category, val),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    if has_pathway:
+                        conn.execute(
+                            "INSERT INTO lookup_options "
+                            "(category, label, value, sort_order, is_active, pathway) "
+                            "VALUES (?, ?, ?, ?, TRUE, NULL)",
+                            (category, val, val, sort_idx),
+                        )
+                    else:
+                        conn.execute(
+                            "INSERT INTO lookup_options "
+                            "(category, label, value, sort_order, is_active) "
+                            "VALUES (?, ?, ?, ?, TRUE)",
+                            (category, val, val, sort_idx),
+                        )
+                    inserted += 1
+                except Exception as e:
+                    logging.warning(f"twelfthplus lookup seed ({category}/{val}): {e}")
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+        if inserted:
+            logging.info(f"Seeded {inserted} 12thPlus lookup row(s)")
+    except Exception as e:
+        logging.warning(f"seed_twelfthplus_lookup_options_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_twelfthplus_lookup_options_once()
+
+
+def ensure_welcome_kit_tables():
+    """Phase E (2026-06-02): per-product welcome-kit checklist.
+
+    Two tables:
+      welcome_kit_items     -- the template: admin defines items per product
+      client_welcome_kit    -- the instance: per registration, one row per
+                               template item, tracking completion state
+
+    Idempotent CREATE TABLE IF NOT EXISTS. No seeding -- admin populates
+    the templates from the new /admin/welcome-kit page.
+    """
+    try:
+        conn = get_db()
+        conn.execute('''CREATE TABLE IF NOT EXISTS welcome_kit_items (
+            id           SERIAL PRIMARY KEY,
+            product_id   INTEGER REFERENCES products_services(id) ON DELETE CASCADE,
+            item_name    TEXT    NOT NULL,
+            item_type    TEXT    DEFAULT 'task',
+            description  TEXT,
+            sort_order   INTEGER DEFAULT 0,
+            is_required  INTEGER DEFAULT 1,
+            is_active    INTEGER DEFAULT 1,
+            created_by   INTEGER REFERENCES employees(id),
+            created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_welcome_kit (
+            id              SERIAL PRIMARY KEY,
+            registration_id INTEGER REFERENCES client_registrations(id) ON DELETE CASCADE,
+            kit_item_id     INTEGER REFERENCES welcome_kit_items(id),
+            item_name       TEXT NOT NULL,
+            item_type       TEXT,
+            status          TEXT DEFAULT 'pending',
+            notes           TEXT,
+            completed_by    INTEGER REFERENCES employees(id),
+            completed_at    TIMESTAMP,
+            created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE (registration_id, kit_item_id)
+        )''')
+        conn.commit()
+        # 2026-06-02: extra columns so the legacy plab_clients-based
+        # onboarding pages (PLAB + AMC) can share the same per-item
+        # checklist table. Both ALTERs are idempotent on PG.
+        for ddl in (
+            "ALTER TABLE client_welcome_kit ADD COLUMN sent_date TEXT",
+            "ALTER TABLE client_welcome_kit ADD COLUMN client_id INTEGER",
+        ):
+            try:
+                conn.execute(ddl); conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
+        conn.close()
+    except Exception as e:
+        logging.error(f"ensure_welcome_kit_tables: {e}")
+
+
+ensure_welcome_kit_tables()
+
+
+def seed_default_welcome_kit_items_once():
+    """Seed PHYSICAL ITEMS that go into each pathway's welcome kit.
+
+    Each pathway's canonical product gets the list of things actually
+    shipped to a new client. Operations ticks them off in the onboarding
+    section -- the same list shown in /admin/welcome-kit is the same
+    list a client's onboarding row checks against.
+
+    v1 (deprecated) used process-step labels ("Send welcome email",
+    "Schedule onboarding call", "30-day check-in call") which confused
+    the kit with the onboarding workflow. v2 replaces those with
+    physical items.
+
+    Bump from v1: delete the v1 auto-generated items (by exact label
+    match against KNOWN_V1_LABELS), then INSERT-IF-ABSENT the v2
+    items. Anything an admin added between v1 and v2 is preserved.
+    """
+    MARKER_KEY = 'welcome_kit_seeded'
+    MARKER_VAL = 'v2'
+
+    # Items inserted by v1 -- to be cleaned up when transitioning to v2.
+    KNOWN_V1_LABELS = {
+        'Send welcome email with portal credentials',
+        'Send welcome WhatsApp message',
+        'Add client to cohort WhatsApp group',
+        'Schedule onboarding call',
+        'Onboarding call completed',
+        'Send goodie kit (pen, diary, stickers, bag)',
+        'Confirm goodie kit delivery',
+        '30-day check-in call',
+    }
+
+    # Pathway -> (canonical product name, [(item_name, type, sort_order), ...])
+    PATHWAY_TO_KIT = {
+        'plab': ('UK PGCP', [
+            ('PLAB Brochure',               'document', 10),
+            ('CEO Letter',                  'document', 20),
+            ('Refund Policy',               'document', 30),
+            ('Service Agreement',           'document', 40),
+            ('English Book',                'book',     50),
+            ('Oxford Book',                 'book',     60),
+            ('Pen',                         'goodie',   70),
+            ('Diary',                       'goodie',   80),
+            ('Laptop Bag',                  'goodie',   90),
+            ('Stickers',                    'goodie',  100),
+        ]),
+        'australia': ('AUS PGCP', [
+            ('AMC Hand Book',               'book',     10),
+            ('AMC Clinical Hand Book',      'book',     20),
+            ('Australia Brochure',          'document', 30),
+            ('CEO Letter',                  'document', 40),
+            ('Refund Policy',               'document', 50),
+            ('Service Level Agreement',     'document', 60),
+            ('Pen',                         'goodie',   70),
+            ('Diary',                       'goodie',   80),
+            ('Laptop Bag',                  'goodie',   90),
+            ('Stickers',                    'goodie',  100),
+        ]),
+    }
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        cleaned = 0
+        seeded = 0
+        # v1 -> v2: per pathway, delete the auto-generated v1 process-step
+        # items, then INSERT-IF-ABSENT each v2 physical item. Anything
+        # admin-created stays untouched.
+        for pathway, (product_name, items) in PATHWAY_TO_KIT.items():
+            try:
+                prow = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (product_name,),
+                ).fetchone()
+                if not prow:
+                    continue
+                pid = prow['id']
+                # 1) Drop the known v1 process-step items (only by exact name
+                # match, so admin-added items survive).
+                for label in KNOWN_V1_LABELS:
+                    try:
+                        result = conn.execute(
+                            "DELETE FROM welcome_kit_items "
+                            " WHERE product_id = ? AND item_name = ?",
+                            (pid, label),
+                        )
+                        cleaned += max(0, getattr(result, 'rowcount', 0) or 0)
+                    except Exception:
+                        try: conn.rollback()
+                        except Exception: pass
+                conn.commit()
+                # 2) INSERT-IF-ABSENT the v2 physical items.
+                for name, kind, order in items:
+                    existing = conn.execute(
+                        "SELECT id FROM welcome_kit_items "
+                        " WHERE product_id = ? AND item_name = ?",
+                        (pid, name),
+                    ).fetchone()
+                    if existing:
+                        continue
+                    try:
+                        conn.execute(
+                            "INSERT INTO welcome_kit_items "
+                            "(product_id, item_name, item_type, sort_order, "
+                            " is_required, is_active) "
+                            "VALUES (?, ?, ?, ?, 1, 1)",
+                            (pid, name, kind, order),
+                        )
+                        seeded += 1
+                    except Exception as e:
+                        logging.warning(
+                            f"seed_default_welcome_kit: insert {name}: {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+            except Exception as e:
+                logging.warning(
+                    f"seed_default_welcome_kit: pathway {pathway}: {e}"
+                )
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_default_welcome_kit marker write: {e}")
+
+        if cleaned or seeded:
+            logging.info(
+                f"Welcome-kit items v2: cleaned {cleaned} v1 row(s), "
+                f"seeded {seeded} new physical-item row(s)"
+            )
+    except Exception as e:
+        logging.warning(f"seed_default_welcome_kit_items_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_default_welcome_kit_items_once()
+seed_amc_onboarding_from_xlsx_once()
+
+
+def migrate_amc_onboarding_to_kit_items_once():
+    """One-shot: copy AMC clients' hardcoded onboarding columns into
+    per-item client_welcome_kit rows so the new admin-driven checklist
+    UI reflects already-recorded data.
+
+    For each AMC client_onboarding row, map:
+        amc_handbook_sent_date           -> 'AMC Hand Book'
+        amc_clinical_handbook_sent_date  -> 'AMC Clinical Hand Book'
+        brochure_policy_items (CSV)      -> each item ('Australia Brochure',
+                                            'CEO Letter', 'Refund Policy',
+                                            'Service Level Agreement', ...)
+        additional_goodies   (CSV)       -> each item ('Pen', 'Diary',
+                                            'Laptop Bag', 'Stickers', ...)
+    Idempotent via marker amc_kit_items_migrated=v1 and via the
+    INSERT-IF-ABSENT logic.
+    """
+    MARKER_KEY = 'amc_kit_items_migrated'
+    MARKER_VAL = 'v1'
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        amc_prod = conn.execute(
+            "SELECT id FROM products_services WHERE pathway = 'australia' "
+            " ORDER BY id LIMIT 1"
+        ).fetchone()
+        if not amc_prod:
+            return
+        items = conn.execute(
+            "SELECT id, item_name FROM welcome_kit_items WHERE product_id = ?",
+            (amc_prod['id'],),
+        ).fetchall()
+        by_name = {(r['item_name'] or '').strip().lower(): r['id'] for r in items}
+
+        def _seed_row(client_id, kit_item_id, item_name, sent_date):
+            if not kit_item_id:
+                return
+            exists = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (client_id, kit_item_id),
+            ).fetchone()
+            if exists:
+                return
+            try:
+                conn.execute(
+                    "INSERT INTO client_welcome_kit "
+                    "(client_id, kit_item_id, item_name, item_type, status, "
+                    " sent_date, completed_at) "
+                    "VALUES (?, ?, ?, 'kit_item', 'done', ?, "
+                    "        CASE WHEN ?<>'' THEN ?::timestamp ELSE NULL END)",
+                    (client_id, kit_item_id, item_name,
+                     sent_date or None, sent_date or '', sent_date or None),
+                )
+            except Exception as e:
+                logging.warning(f"amc kit migrate row insert: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
+        amc_rows = conn.execute(
+            "SELECT co.client_id, co.amc_handbook_sent_date, "
+            "       co.amc_clinical_handbook_sent_date, "
+            "       co.brochure_policy_items, co.additional_goodies, "
+            "       co.welcome_kit_sent_date "
+            "  FROM client_onboarding co "
+            "  JOIN plab_clients p ON p.id = co.client_id "
+            " WHERE COALESCE(p.pathway,'plab') = 'australia'"
+        ).fetchall()
+
+        migrated = 0
+        for r in amc_rows:
+            cid = r['client_id']
+            default_dt = (r['welcome_kit_sent_date'] or '').strip()
+
+            if (r['amc_handbook_sent_date'] or '').strip() or 'amc hand book' in by_name:
+                _seed_row(cid, by_name.get('amc hand book'), 'AMC Hand Book',
+                          (r['amc_handbook_sent_date'] or default_dt))
+                migrated += 1
+            if (r['amc_clinical_handbook_sent_date'] or '').strip() or 'amc clinical hand book' in by_name:
+                if (r['amc_clinical_handbook_sent_date'] or '').strip():
+                    _seed_row(cid, by_name.get('amc clinical hand book'),
+                              'AMC Clinical Hand Book',
+                              r['amc_clinical_handbook_sent_date'])
+                    migrated += 1
+            for piece in (r['brochure_policy_items'] or '').split(','):
+                key = piece.strip().lower()
+                if not key:
+                    continue
+                kit_id = by_name.get(key)
+                if kit_id:
+                    _seed_row(cid, kit_id, piece.strip(), default_dt)
+                    migrated += 1
+            for piece in (r['additional_goodies'] or '').split(','):
+                key = piece.strip().lower()
+                if not key:
+                    continue
+                kit_id = by_name.get(key)
+                if kit_id:
+                    _seed_row(cid, kit_id, piece.strip(), default_dt)
+                    migrated += 1
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"amc kit migrate marker: {e}")
+
+        if migrated:
+            logging.info(f"AMC kit-item migration: {migrated} row(s) seeded")
+    except Exception as e:
+        logging.warning(f"migrate_amc_onboarding_to_kit_items_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+migrate_amc_onboarding_to_kit_items_once()
+
+
+def migrate_plab_kit_items_to_welcome_kit_once():
+    """One-shot: copy the legacy client_kit_items rows (PLAB onboarding)
+    into the unified client_welcome_kit table so the PLAB Onboarding
+    page can switch over to the welcome_kit_items / client_welcome_kit
+    model that AMC already uses.
+
+    Mapping: each client_kit_items row (linked via client_onboarding ->
+    plab_clients) is matched by item_name to a welcome_kit_items row in
+    the UK PGCP product. delivered=1 -> status='done', sent_date set
+    to client_onboarding.kit_delivered_date if present. notes preserved.
+
+    Idempotent via marker plab_kit_items_migrated=v1.
+    """
+    MARKER_KEY = 'plab_kit_items_migrated'
+    MARKER_VAL = 'v1'
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        plab_prod = conn.execute(
+            "SELECT id FROM products_services WHERE pathway = 'plab' "
+            " ORDER BY id LIMIT 1"
+        ).fetchone()
+        if not plab_prod:
+            return
+        items = conn.execute(
+            "SELECT id, item_name FROM welcome_kit_items WHERE product_id = ?",
+            (plab_prod['id'],),
+        ).fetchall()
+        by_name = {(r['item_name'] or '').strip().lower(): r['id'] for r in items}
+
+        rows = conn.execute(
+            "SELECT cki.item_name, cki.included, cki.delivered, cki.notes, "
+            "       co.client_id, co.kit_delivered_date "
+            "  FROM client_kit_items cki "
+            "  JOIN client_onboarding co ON co.id = cki.onboarding_id "
+            "  JOIN plab_clients p       ON p.id  = co.client_id "
+            " WHERE COALESCE(p.pathway,'plab') = 'plab'"
+        ).fetchall()
+
+        migrated = 0
+        for r in rows:
+            key = (r['item_name'] or '').strip().lower()
+            kit_id = by_name.get(key)
+            if not kit_id:
+                continue
+            exists = conn.execute(
+                "SELECT id FROM client_welcome_kit "
+                " WHERE client_id = ? AND kit_item_id = ?",
+                (r['client_id'], kit_id),
+            ).fetchone()
+            if exists:
+                continue
+            status = 'done' if (r['delivered'] or 0) else 'pending'
+            sent = (r['kit_delivered_date'] or '') if status == 'done' else ''
+            try:
+                conn.execute(
+                    "INSERT INTO client_welcome_kit "
+                    "(client_id, kit_item_id, item_name, item_type, status, "
+                    " sent_date, notes, completed_at) "
+                    "VALUES (?, ?, ?, 'kit_item', ?, ?, ?, "
+                    "        CASE WHEN ?<>'' THEN ?::timestamp ELSE NULL END)",
+                    (r['client_id'], kit_id, r['item_name'], status,
+                     sent or None, r['notes'] or None,
+                     sent or '', sent or None),
+                )
+                migrated += 1
+            except Exception as e:
+                logging.warning(f"plab kit-items migrate insert: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"plab kit-items migrate marker: {e}")
+
+        if migrated:
+            logging.info(f"PLAB kit-items migration: {migrated} row(s) seeded")
+    except Exception as e:
+        logging.warning(f"migrate_plab_kit_items_to_welcome_kit_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+migrate_plab_kit_items_to_welcome_kit_once()
+
+
+def backfill_completed_kit_dispatch_dates_once():
+    """For every Completed PLAB/AMC client whose kit-dispatch date is
+    missing, set it to (registration_date + 7 days). Falls back to
+    today - 30 days when the registration_date can't be parsed.
+
+    Touches client_onboarding (kit_delivered_date for PLAB,
+    welcome_kit_sent_date for AMC) and also propagates the date to
+    client_welcome_kit rows that are marked 'done' but have no
+    sent_date set.
+
+    Idempotent via marker completed_kit_dates_backfilled = v1.
+    """
+    MARKER_KEY = 'completed_kit_dates_backfilled'
+    MARKER_VAL = 'v1'
+
+    from datetime import datetime, date, timedelta
+
+    def _parse_date(s):
+        if not s: return None
+        s = str(s).split('T')[0].split(' ')[0]
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y'):
+            try: return datetime.strptime(s, fmt).date()
+            except ValueError: continue
+        return None
+
+    def _seven_days_after(reg_s):
+        d = _parse_date(reg_s) or (date.today() - timedelta(days=30))
+        return (d + timedelta(days=7)).isoformat()
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        rows = conn.execute(
+            "SELECT co.id, co.client_id, p.registration_date, "
+            "       COALESCE(p.pathway,'plab') AS pathway, "
+            "       co.kit_delivered_date, co.welcome_kit_sent_date "
+            "  FROM client_onboarding co "
+            "  JOIN plab_clients p ON p.id = co.client_id "
+            " WHERE co.onboarding_status = 'Completed'"
+        ).fetchall()
+
+        plab_fixed = amc_fixed = cwk_fixed = 0
+        for r in rows:
+            new_date = _seven_days_after(r['registration_date'])
+            if r['pathway'] == 'plab':
+                if not (r['kit_delivered_date'] or '').strip():
+                    conn.execute(
+                        "UPDATE client_onboarding SET kit_delivered_date = ? "
+                        " WHERE id = ?",
+                        (new_date, r['id']),
+                    )
+                    plab_fixed += 1
+                    target_date = new_date
+                else:
+                    target_date = r['kit_delivered_date']
+            else:
+                if not (r['welcome_kit_sent_date'] or '').strip():
+                    conn.execute(
+                        "UPDATE client_onboarding SET welcome_kit_sent_date = ? "
+                        " WHERE id = ?",
+                        (new_date, r['id']),
+                    )
+                    amc_fixed += 1
+                    target_date = new_date
+                else:
+                    target_date = r['welcome_kit_sent_date']
+            try:
+                result = conn.execute(
+                    "UPDATE client_welcome_kit "
+                    "   SET sent_date = ?, "
+                    "       completed_at = COALESCE(completed_at, ?::timestamp) "
+                    " WHERE client_id = ? AND status = 'done' "
+                    "   AND (sent_date IS NULL OR sent_date = '')",
+                    (target_date, target_date, r['client_id']),
+                )
+                cwk_fixed += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"backfill cwk dates: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"backfill kit dates marker: {e}")
+
+        logging.info(
+            f"Completed kit-dispatch date backfill: PLAB={plab_fixed} "
+            f"AMC={amc_fixed} cwk_rows={cwk_fixed}"
+        )
+    except Exception as e:
+        logging.warning(f"backfill_completed_kit_dispatch_dates_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+backfill_completed_kit_dispatch_dates_once()
+
+
+def cleanup_obsolete_form_config_fields_once():
+    """Remove system-managed + redundant fields from client_form_configs.
+
+    Per user feedback: the Form Config page should hold form fields the
+    user (or the team) actually fills in. The following are managed
+    elsewhere or are redundant:
+
+      * Welcome Kit items + dates -> welcome_kit_items + client_welcome_kit
+      * Welcome Email / Welcome Call -> Onboarding section UI
+      * Counsellor fields -> known via client_invitations.invited_by
+        (the salesperson who raised the invite is the counsellor)
+      * English Training -> not used; legacy field
+
+    Idempotent via marker form_config_obsoletes_cleared. Bumping the
+    value re-runs the cleanup with an expanded list.
+    """
+    MARKER_KEY = 'form_config_obsoletes_cleared'
+    MARKER_VAL = 'v2'
+
+    # Fields that have moved out of the form into the Onboarding/
+    # Welcome-Kit subsystem, plus other redundant/legacy entries.
+    # Apply across ALL products.
+    OBSOLETE = (
+        # Welcome Email + Welcome Call
+        'welcome_mail', 'welcome_email',
+        'welcome_call_by', 'welcome_call_date', 'welcome_call_notes',
+        # Kit dispatch logistics
+        'kit_delivery_method', 'kit_delivered_date', 'kit_tracking_number',
+        # Kit items (PLAB)
+        'plab_brochure', 'ceo_letter', 'refund_policy', 'service_agreement',
+        'english_book', 'oxford_book',
+        'english_book_date', 'oxford_book_date',
+        # Kit items (AMC)
+        'amc_handbook', 'amc_clinical_handbook', 'australia_brochure',
+        'service_level_agreement', 'brochure_policy_items',
+        'sla_copy_method', 'additional_goodies',
+        # Goodies
+        'goodie_pen', 'goodie_diary', 'goodie_laptop_bag', 'goodie_stickers',
+        # Counsellor (the sales user who raised the invitation is the
+        # counsellor -- no need for free-text entry).
+        'counsellor', 'counsellor_email', 'counsellor_number',
+        # Legacy / unused
+        'english_training',
+    )
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        removed = 0
+        try:
+            result = conn.execute(
+                "DELETE FROM client_form_configs "
+                " WHERE field_name = ANY(?)",
+                (list(OBSOLETE),),
+            )
+            removed = max(0, getattr(result, 'rowcount', 0) or 0)
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"form_config cleanup delete: {e}")
+            try: conn.rollback()
+            except Exception: pass
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"form_config cleanup marker: {e}")
+
+        if removed:
+            logging.info(f"Form Config cleanup: removed {removed} obsolete row(s)")
+    except Exception as e:
+        logging.warning(f"cleanup_obsolete_form_config_fields_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+cleanup_obsolete_form_config_fields_once()
+
+
+def seed_documents_step_once():
+    """Add a 'Documents' step (Step 3, role=client) to client_form_configs
+    for the canonical PLAB + AMC products. Files the client uploads as
+    part of registration -- photo, ID proofs, academic certificates,
+    score-cards.
+
+    Idempotent via marker documents_step_seeded. INSERT-IF-ABSENT per
+    field_name within each product, so admin edits are preserved.
+    """
+    MARKER_KEY = 'documents_step_seeded'
+    MARKER_VAL = 'v1'
+
+    # Step 3 sits between Academic Details (step 2) and Sales/Operations
+    # (currently step 3 / step 4). The display_order keeps documents
+    # rendering in the order admins typically want to collect them.
+    # (step, step_name, field, label, type, options, role, required, order, placeholder, hint)
+    DOCUMENT_FIELDS_COMMON = [
+        ('photo',                 'Profile Photo',           'file', 1,  10),
+        ('aadhaar_card',          'Aadhaar Card',            'file', 1,  20),
+        ('passport',              'Passport',                'file', 1,  30),
+        ('passport_back',         'Passport (Back)',         'file', 0,  35),
+        ('class10_marksheet',     'Class 10 Marksheet',      'file', 1,  40),
+        ('class12_marksheet',     'Class 12 Marksheet',      'file', 1,  50),
+        ('mbbs_marksheet',        'MBBS Final Marksheet',    'file', 1,  60),
+        ('mbbs_degree',           'MBBS Degree Certificate', 'file', 1,  70),
+        ('internship_certificate','Internship Certificate',  'file', 0,  80),
+        ('mci_registration',      'MCI / NMC Registration',  'file', 0,  90),
+        ('bank_statement',        'Bank Statement (last 3 months)', 'file', 0, 100),
+        ('address_proof',         'Address Proof',           'file', 0, 110),
+    ]
+    # Product-specific extras (slipped into the same step)
+    DOCUMENT_FIELDS_BY_PRODUCT = {
+        'UK PGCP': [
+            ('ielts_oet_scorecard', 'IELTS / OET Scorecard',  'file', 0, 120),
+            ('plab1_scorecard',     'PLAB 1 Scorecard',       'file', 0, 130),
+        ],
+        'AUS PGCP': [
+            ('ielts_oet_scorecard', 'IELTS / OET Scorecard',  'file', 0, 120),
+            ('amc_mcq_scorecard',   'AMC MCQ Scorecard',      'file', 0, 130),
+            ('mdb_certificate',     'Medical Board Certificate', 'file', 0, 140),
+        ],
+    }
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        seeded = 0
+        for product_name in ('UK PGCP', 'AUS PGCP'):
+            try:
+                prow = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (product_name,),
+                ).fetchone()
+                if not prow:
+                    continue
+                pid = prow['id']
+                fields = list(DOCUMENT_FIELDS_COMMON)
+                fields.extend(DOCUMENT_FIELDS_BY_PRODUCT.get(product_name, []))
+                for field_name, label, ftype, required, order in fields:
+                    exists = conn.execute(
+                        "SELECT id FROM client_form_configs "
+                        " WHERE product_id = ? AND field_name = ?",
+                        (pid, field_name),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_form_configs "
+                            "(product_id, step_number, step_name, "
+                            " field_name, field_label, field_type, "
+                            " field_options, role, is_required, is_visible, "
+                            " display_order, placeholder, hint_text) "
+                            "VALUES (?, 3, 'Documents', ?, ?, ?, '', 'client', "
+                            "         ?, 1, ?, 'Upload file', '')",
+                            (pid, field_name, label, ftype, required, order),
+                        )
+                        seeded += 1
+                    except Exception as e:
+                        logging.warning(
+                            f"documents seed insert {field_name}: {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+            except Exception as e:
+                logging.warning(f"documents seed product {product_name}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"documents seed marker: {e}")
+
+        if seeded:
+            logging.info(f"Documents step seeded: {seeded} row(s)")
+    except Exception as e:
+        logging.warning(f"seed_documents_step_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_documents_step_once()
+
+
+def normalize_form_config_steps_once():
+    """Fix the UK PGCP step-number collision (Documents + Sales both at
+    step 3) and seed AUS PGCP -- which the original
+    seed_client_form_configs never populated -- with a parallel set of
+    Personal / Academic / Sales / Operations fields.
+
+    Target final layout (same for both products):
+        step 1  Personal Details
+        step 2  Academic Details
+        step 3  Documents
+        step 4  Sales Details
+        step 5  Operations
+
+    Idempotent via marker form_config_steps_normalised=v1. The
+    INSERT-IF-ABSENT logic + step-number-guarded renumber make
+    re-runs safe.
+    """
+    MARKER_KEY = 'form_config_steps_normalised'
+    MARKER_VAL = 'v1'
+
+    PERSONAL = [
+        ('prefix',         'Prefix',         'select', 'Dr.,Mr.,Mrs.,Ms.', 1, 10),
+        ('first_name',     'First Name',     'text',   '', 1, 20),
+        ('last_name',      'Last Name',      'text',   '', 0, 30),
+        ('mobile',         'Mobile',         'tel',    '', 1, 40),
+        ('whatsapp',       'WhatsApp 1',     'tel',    '', 0, 50),
+        ('whatsapp2',      'WhatsApp 2',     'tel',    '', 0, 60),
+        ('email',          'Email',          'email',  '', 1, 70),
+        ('dob',            'Date of Birth',  'date',   '', 0, 80),
+        ('state',          'State',          'select', 'db:states',  0, 90),
+        ('city',           'City',           'select', 'db:cities',  0, 100),
+        ('instagram',      'Instagram',      'text',   '', 0, 110),
+        ('facebook',       'Facebook',       'text',   '', 0, 120),
+        ('linkedin',       'LinkedIn',       'text',   '', 0, 130),
+        ('father_name',    'Father Name',    'text',   '', 0, 140),
+        ('father_phone',   'Father Phone',   'tel',    '', 0, 150),
+        ('mother_name',    'Mother Name',    'text',   '', 0, 160),
+        ('mother_phone',   'Mother Phone',   'tel',    '', 0, 170),
+        ('parents_email',  'Parents Email',  'email',  '', 0, 180),
+    ]
+    ACADEMIC = [
+        ('img_fmg',               'IMG / FMG',                 'select', 'db:img_fmg',           1, 10),
+        ('img_medical_college',   'IMG Medical College',       'text',   '',                    0, 20),
+        ('fmg_medical_college',   'FMG Medical College',       'text',   '',                    0, 30),
+        ('country',               'Country',                   'text',   '',                    0, 40),
+        ('mbbs_status',           'MBBS Status',               'select', 'db:mbbs_status',      1, 50),
+        ('mbbs_start_date',       'MBBS Start Date',           'date',   '',                    0, 60),
+        ('mbbs_end_date',         'MBBS End Date',             'date',   '',                    0, 70),
+        ('speciality_interest_1', 'Speciality Interest 1',     'text',   '',                    0, 80),
+        ('speciality_interest_2', 'Speciality Interest 2',     'text',   '',                    0, 90),
+        ('internship_status',     'Internship Status',         'select', 'db:internship_status',0, 100),
+        ('internship_hospital',   'Internship Hospital',       'text',   '',                    0, 110),
+        ('internship_location',   'Internship Location',       'text',   '',                    0, 120),
+        ('internship_hospital_2', 'Internship Hospital 2',     'text',   '',                    0, 130),
+        ('internship_location_2', 'Internship Location 2',     'text',   '',                    0, 140),
+        ('internship_start_date', 'Internship Start Date',     'date',   '',                    0, 150),
+        ('internship_end_date',   'Internship End Date',       'date',   '',                    0, 160),
+        ('internship_gap',        'Internship Gap',            'select', 'db:internship_gap',   0, 170),
+        ('gap_in_months',         'Gap in Months',             'text',   '',                    0, 180),
+        ('gap_reason',            'Gap Reason',                'textarea','',                   0, 190),
+        ('working_status',        'Working Status',            'select', 'db:working_status',   0, 200),
+        ('working_hospital_name', 'Working Hospital Name',     'text',   '',                    0, 210),
+        ('additional_info',       'Additional Info',           'textarea','',                   0, 220),
+    ]
+    SALES = [
+        ('joined_stage',             'Joined Stage',              'text',     '',  0, 10),
+        ('plan_type',                'Plan Type',                 'text',     '',  0, 20),
+        ('lead_source',              'Lead Source',               'text',     '',  0, 30),
+        ('referral_type',            'Referral Type',             'text',     '',  0, 40),
+        ('portfolio_referral',       'Portfolio Referral',        'text',     '',  0, 50),
+        ('australia_referral',       'Australia Referral',        'text',     '',  0, 60),
+        ('operations_referral',      'Operations Referral',       'text',     '',  0, 70),
+        ('package_amount',           'Package Amount',            'number',   '',  0, 80),
+        ('discount_allowed',         'Discount Allowed',          'number',   '',  0, 90),
+        ('additional_package_notes', 'Additional Package Notes',  'textarea', '',  0, 100),
+        ('final_package',            'Final Package',             'number',   '',  0, 110),
+        ('inst1_amount',             'Installment 1 Amount',      'number',   '',  0, 120),
+        ('inst1_date',               'Installment 1 Date',        'date',     '',  0, 130),
+        ('inst1_note',               'Installment 1 Note',        'text',     '',  0, 140),
+        ('inst2_amount',             'Installment 2 Amount',      'number',   '',  0, 150),
+        ('inst2_date',               'Installment 2 Date',        'date',     '',  0, 160),
+        ('inst2_note',               'Installment 2 Note',        'text',     '',  0, 170),
+        ('inst3_amount',             'Installment 3 Amount',      'number',   '',  0, 180),
+        ('inst3_date',               'Installment 3 Date',        'date',     '',  0, 190),
+        ('inst3_note',               'Installment 3 Note',        'text',     '',  0, 200),
+        ('inst4_amount',             'Installment 4 Amount',      'number',   '',  0, 210),
+        ('inst4_date',               'Installment 4 Date',        'date',     '',  0, 220),
+        ('inst4_note',               'Installment 4 Note',        'text',     '',  0, 230),
+    ]
+    OPERATIONS = [
+        ('account_status',           'Account Status',            'text',     '', 0, 10),
+        ('current_stage',            'Current Stage',             'text',     '', 0, 20),
+        ('dropped_date',             'Dropped Date',              'date',     '', 0, 30),
+        ('switched_program',         'Switched Program',          'text',     '', 0, 40),
+        ('upgraded_to',              'Upgraded To',               'text',     '', 0, 50),
+        ('additional_notes',         'Additional Notes',          'textarea', '', 0, 60),
+    ]
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        renumbered = inserted = 0
+
+        # 1) UK PGCP renumber: Sales 3 -> 4, Operations 4 -> 5.
+        uk_prod = conn.execute(
+            "SELECT id FROM products_services WHERE name = 'UK PGCP'"
+        ).fetchone()
+        if uk_prod:
+            try:
+                result = conn.execute(
+                    "UPDATE client_form_configs SET step_number = 5 "
+                    " WHERE product_id = ? AND step_name = 'Operations' "
+                    "   AND step_number = 4",
+                    (uk_prod['id'],),
+                )
+                renumbered += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"renumber UK Operations: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            try:
+                result = conn.execute(
+                    "UPDATE client_form_configs SET step_number = 4 "
+                    " WHERE product_id = ? AND step_name = 'Sales Details' "
+                    "   AND step_number = 3",
+                    (uk_prod['id'],),
+                )
+                renumbered += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"renumber UK Sales: {e}")
+                try: conn.rollback()
+                except Exception: pass
+            conn.commit()
+
+        # 2) AUS PGCP seed: insert Personal/Academic/Sales/Ops if absent.
+        au_prod = conn.execute(
+            "SELECT id FROM products_services WHERE name = 'AUS PGCP'"
+        ).fetchone()
+        if au_prod:
+            for step_num, step_name, role, items in (
+                (1, 'Personal Details', 'client', PERSONAL),
+                (2, 'Academic Details', 'client', ACADEMIC),
+                (4, 'Sales Details',    'sales',  SALES),
+                (5, 'Operations',       'ops',    OPERATIONS),
+            ):
+                for fname, label, ftype, fopts, req, order in items:
+                    exists = conn.execute(
+                        "SELECT id FROM client_form_configs "
+                        " WHERE product_id = ? AND field_name = ?",
+                        (au_prod['id'], fname),
+                    ).fetchone()
+                    if exists:
+                        continue
+                    try:
+                        conn.execute(
+                            "INSERT INTO client_form_configs "
+                            "(product_id, step_number, step_name, field_name, "
+                            " field_label, field_type, field_options, role, "
+                            " is_required, is_visible, display_order, "
+                            " placeholder, hint_text) "
+                            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 1, ?, '', '')",
+                            (au_prod['id'], step_num, step_name, fname, label,
+                             ftype, fopts, role, req, order),
+                        )
+                        inserted += 1
+                    except Exception as e:
+                        logging.warning(f"seed AUS {fname}: {e}")
+                        try: conn.rollback()
+                        except Exception: pass
+            conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"form_config normalise marker: {e}")
+
+        logging.info(
+            f"Form config normalise: renumbered {renumbered} UK row(s), "
+            f"inserted {inserted} AUS row(s)"
+        )
+    except Exception as e:
+        logging.warning(f"normalize_form_config_steps_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+normalize_form_config_steps_once()
+
+
+# ── Item E-1: Email-template stage seed ────────────────────────────────
+# Seeds the five onboarding-stage email templates that map 1:1 to the
+# client-facing timeline shipped in Item D:
+#   welcome_email, welcome_call_scheduled, kit_dispatched,
+#   onboarded, thirty_day_checkin
+# All NEW templates are seeded with enabled=0 so they cannot fire until
+# an admin opens /admin/email-templates and explicitly enables them
+# (respects the standing "do not send any emails to clients while we
+# complete the onboarding process" constraint). The existing
+# welcome_email row is back-filled with stage='welcome_email' and
+# enabled=1 since it was already live before this commit.
+EMAIL_TEMPLATE_STAGES = [
+    {
+        'key': 'welcome_email',
+        'label': 'Welcome Email',
+        'stage': 'welcome_email',
+        'subject': 'Welcome to GooCampus - {{client_name}}!',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 1,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to GooCampus</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Welcome to the GooCampus family. We're delighted to have you with us.</p>
+    <p>Your registration details:</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Registration Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_number}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Plan Type</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{plan_type}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Registration Date</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_date}}</td></tr>
+    </table>
+    <p>Your counsellor will be in touch shortly to schedule your welcome call.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'welcome_call_scheduled',
+        'label': 'Welcome Call Scheduled',
+        'stage': 'welcome_call_scheduled',
+        'subject': 'Your welcome call is scheduled - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome Call Scheduled</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Your welcome call has been scheduled for <strong>{{welcome_call_date}}</strong>.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> will walk you through your plan, what to expect over the coming weeks, and answer any questions you have.</p>
+    <p>If this time doesn't work, reply to this email or message your counsellor directly.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'kit_dispatched',
+        'label': 'Welcome Kit Dispatched',
+        'stage': 'kit_dispatched',
+        'subject': 'Your GooCampus welcome kit is on its way - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">Your Welcome Kit Is On Its Way</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Good news -- your GooCampus welcome kit has been dispatched.</p>
+    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Dispatched On</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_dispatched_date}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Tracking Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_tracking_number}}</td></tr>
+      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Courier</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{kit_delivery_method}}</td></tr>
+    </table>
+    <p>It should reach you within a few working days.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'onboarded',
+        'label': 'Onboarding Completed',
+        'stage': 'onboarded',
+        'subject': 'You are officially onboarded with GooCampus - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">You're Officially Onboarded</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>Congratulations -- you are now fully onboarded with the GooCampus {{product_name}} programme.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> remains your single point of contact for everything that comes next.</p>
+    <p>You can always log in to your client dashboard to see your plan, payment schedule and onboarding progress at <a href="https://goocampus.in/client/login">goocampus.in/client/login</a>.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+    {
+        'key': 'thirty_day_checkin',
+        'label': '30-Day Check-in',
+        'stage': 'thirty_day_checkin',
+        'subject': 'How are things going? - {{client_name}}',
+        'recipients_client': 1,
+        'recipients_counsellor': 0,
+        'recipients_ops': 0,
+        'recipients_parents': 0,
+        'enabled': 0,
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">30-Day Check-in</h1>
+  </div>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;">
+    <p>Dear <strong>{{client_name}}</strong>,</p>
+    <p>It's been about a month since you joined GooCampus -- we'd love to hear how things are going.</p>
+    <p>Your counsellor <strong>{{counsellor_name}}</strong> will reach out shortly for a quick check-in. If anything has come up in the meantime, reply to this email and we'll get you the right help.</p>
+    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+  </div>
+</div>''',
+    },
+]
+
+
+def seed_email_templates_once():
+    """Idempotently ensure all five Item-E stage templates exist.
+
+    - For brand-new template keys, INSERT with the defaults above.
+    - For existing keys (only welcome_email today), back-fill stage/
+      label/recipient toggles WITHOUT touching subject/body_html (so
+      any admin edits already saved are preserved).
+    Marker: email_templates_stages_seeded=v1
+    """
+    MARKER_KEY = 'email_templates_stages_seeded'
+    MARKER_VAL = 'v1'
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+        cur = conn.execute("SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,)).fetchone()
+        if cur and cur['value'] == MARKER_VAL:
+            return
+        inserted = 0
+        updated = 0
+        for tpl in EMAIL_TEMPLATE_STAGES:
+            existing = conn.execute(
+                "SELECT id FROM email_templates WHERE template_key = ?",
+                (tpl['key'],)
+            ).fetchone()
+            if existing:
+                # Back-fill new metadata columns only; leave subject + body
+                # untouched in case admin already edited them.
+                conn.execute("""
+                    UPDATE email_templates SET
+                        stage = COALESCE(stage, ?),
+                        label = COALESCE(label, ?),
+                        enabled = COALESCE(enabled, ?),
+                        recipients_client = COALESCE(recipients_client, ?),
+                        recipients_counsellor = COALESCE(recipients_counsellor, ?),
+                        recipients_ops = COALESCE(recipients_ops, ?),
+                        recipients_parents = COALESCE(recipients_parents, ?)
+                    WHERE template_key = ?
+                """, (tpl['stage'], tpl['label'], tpl['enabled'],
+                      tpl['recipients_client'], tpl['recipients_counsellor'],
+                      tpl['recipients_ops'], tpl['recipients_parents'],
+                      tpl['key']))
+                updated += 1
+            else:
+                conn.execute("""
+                    INSERT INTO email_templates
+                      (template_key, stage, label, subject, body_html, enabled,
+                       recipients_client, recipients_counsellor,
+                       recipients_ops, recipients_parents)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (tpl['key'], tpl['stage'], tpl['label'],
+                      tpl['subject'], tpl['body_html'], tpl['enabled'],
+                      tpl['recipients_client'], tpl['recipients_counsellor'],
+                      tpl['recipients_ops'], tpl['recipients_parents']))
+                inserted += 1
+        # Mark done
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+                (MARKER_KEY, MARKER_VAL))
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+            conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)",
+                         (MARKER_KEY, MARKER_VAL))
+        conn.commit()
+        logging.info(
+            f"Email templates seed v1: inserted {inserted} new, "
+            f"back-filled {updated} existing")
+    except Exception as e:
+        logging.warning(f"seed_email_templates_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_email_templates_once()
+
+
+# Also stop the form-config seed (seed_client_form_configs) from
+# re-inserting any of these obsolete fields on subsequent boots. The
+# seed iterates a long `configs` list -- prune entries in it whose
+# field_name appears in the obsolete set. Done at module-import time
+# so it runs BEFORE the seed function executes its INSERTs.
+def _filter_obsolete_form_config_seed_items():
+    """Strip obsolete fields from seed_client_form_configs's master
+    `configs` list (declared inside that function as a local). Since
+    `configs` is a local of seed_client_form_configs we can't patch
+    it here at import time without inspecting bytecode. The simpler
+    safeguard: the per-product `existing > 0 skip` guard inside that
+    seed already prevents re-seeding once a product's configs exist.
+    The cleanup above handles the one-off removal; subsequent boots
+    won't reinsert obsoletes because the seed skips populated products.
+    """
+    pass
+
+
+def seed_onboarding_completion_once():
+    """One-shot data backfill (2026-06-02):
+       - Every PLAB pathway client gets marked Completed with computed
+         working-day-aware timeline dates (welcome email + welcome call
+         + welcome kit) derived from their registration_date.
+       - 8 named AMC clients get marked Completed (Ashwin Rahul,
+         Aiswarya, Swikriti, Chinmay, Sona, Adarsh, Midhun, Liz).
+       - Every AMC client currently in 'Kit Dispatched' state also
+         transitions to Completed.
+
+    Idempotent via marker onboarding_completion_seeded=v1.
+    No emails sent -- this just writes DB rows. The actual onboarding
+    automation (email send, time-slot request, working-day scheduler)
+    is a separate phase.
+    """
+    MARKER_KEY = 'onboarding_completion_seeded'
+    MARKER_VAL = 'v1'
+
+    from datetime import datetime, date, timedelta
+    import re as _re
+
+    AMC_TARGETED_REGS = [
+        'GCAUSIP/25-26/039',  # Ashwin Rahul Ravi Nadar
+        'GCAUSIP/25-26/038',  # Aiswarya Menon
+        'GCAUSIP/25-26/037',  # Swikriti Baksi
+        'GCAUSIP/25-26/036',  # Chinmay Sakharekar
+        'GCAUSIP/25-26/027',  # SONA SUSAN BINOY
+        'GCAUSIP/24-25/106',  # Adarsh Sheena sajan
+        'GCAUSIP/23-24/016',  # Midhun Krishna
+        'GCAUSIP/23-24/007',  # Liz Catherine (stored as GCAUSIP/2023/07)
+    ]
+
+    def _variants(reg):
+        """Generate likely stored forms for a canonical reg number.
+        Covers YYYY vs YY-YY middle, and 1/2/3-digit trailing number.
+        """
+        m = _re.match(r'^(GC\w+)/(\d{2})-(\d{2})/(\d+)$', reg)
+        if not m:
+            return [reg]
+        pfx, yy_a, yy_b, num = m.groups()
+        try:
+            num_int = int(num)
+        except ValueError:
+            return [reg]
+        full_year = 2000 + int(yy_a) if int(yy_a) < 50 else 1900 + int(yy_a)
+        nums = {str(num_int), f"{num_int:02d}", f"{num_int:03d}"}
+        middles = {f"{yy_a}-{yy_b}", str(full_year)}
+        out = set()
+        for mid in middles:
+            for n in nums:
+                out.add(f"{pfx}/{mid}/{n}")
+        return list(out)
+
+    def _parse_date(s):
+        if not s:
+            return None
+        s = str(s).split('T')[0].split(' ')[0]
+        for fmt in ('%Y-%m-%d', '%d-%m-%Y', '%d/%m/%Y', '%m/%d/%Y'):
+            try:
+                return datetime.strptime(s, fmt).date()
+            except ValueError:
+                continue
+        return None
+
+    def _to_working_day(d):
+        # If d falls on Sat/Sun, advance to Monday.
+        while d.weekday() >= 5:
+            d += timedelta(days=1)
+        return d
+
+    def _add_working_days(d, n):
+        added = 0
+        while added < n:
+            d += timedelta(days=1)
+            if d.weekday() < 5:
+                added += 1
+        return d
+
+    def _timeline(reg_date):
+        """Compute (email_date, call_date, kit_date) from a registration
+        date. Falls back to 30 days ago if reg_date is unparseable.
+        Capped at today so we don't end up with future dates."""
+        if reg_date is None:
+            reg_date = date.today() - timedelta(days=30)
+        email_d = _to_working_day(reg_date)
+        call_d  = _add_working_days(email_d, 1)
+        kit_d   = _add_working_days(call_d, 5)  # within the 7-working-day SLA
+        today = date.today()
+        if email_d > today: email_d = today
+        if call_d  > today: call_d  = today
+        if kit_d   > today: kit_d   = today
+        return email_d, call_d, kit_d
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        def _ensure_onb_row(client_id, reg_no):
+            row = conn.execute(
+                "SELECT id, onboarding_status FROM client_onboarding "
+                " WHERE client_id = ?", (client_id,),
+            ).fetchone()
+            if row:
+                return row['id'], row['onboarding_status']
+            try:
+                conn.execute(
+                    "INSERT INTO client_onboarding "
+                    "(client_id, registration_number) VALUES (?, ?)",
+                    (client_id, reg_no),
+                )
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"onb seed: insert failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+                return None, None
+            row = conn.execute(
+                "SELECT id, onboarding_status FROM client_onboarding "
+                " WHERE client_id = ?", (client_id,),
+            ).fetchone()
+            return (row['id'], row['onboarding_status']) if row else (None, None)
+
+        plab_completed = 0
+        amc_completed = 0
+
+        # ── PLAB: every active client -> Completed ──
+        plab = conn.execute(
+            "SELECT id, registration_number, registration_date "
+            " FROM plab_clients WHERE COALESCE(pathway,'plab')='plab'"
+        ).fetchall()
+        for c in plab:
+            onb_id, status = _ensure_onb_row(c['id'], c['registration_number'])
+            if not onb_id:
+                continue
+            if status == 'Completed':
+                continue
+            email_d, call_d, kit_d = _timeline(_parse_date(c['registration_date']))
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_email_sent = 1,
+                          welcome_email_sent_at = COALESCE(welcome_email_sent_at,
+                                                           ?::timestamp),
+                          welcome_call_date    = COALESCE(NULLIF(welcome_call_date,''),    ?),
+                          welcome_call_by      = COALESCE(NULLIF(welcome_call_by,''),      'Operations'),
+                          welcome_call_confirmed = 1,
+                          welcome_call_notes   = COALESCE(NULLIF(welcome_call_notes,''),
+                                                          'Backfilled -- pre-existing onboarding.'),
+                          kit_delivery_method  = COALESCE(NULLIF(kit_delivery_method,''),  'Couriered'),
+                          kit_delivered_date   = COALESCE(NULLIF(kit_delivered_date,''),   ?),
+                          kit_tracking_communicated = 1,
+                          onboarding_status    = 'Completed',
+                          updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (email_d.strftime('%Y-%m-%d %H:%M:%S'),
+                     call_d.isoformat(), kit_d.isoformat(), onb_id),
+                )
+                plab_completed += 1
+            except Exception as e:
+                logging.warning(f"onb seed PLAB {c['registration_number']}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        # ── AMC: targeted regs + currently Kit Dispatched -> Completed ──
+        # Resolve targeted regs to plab_clients.id via variant matching.
+        targeted_ids = set()
+        for reg in AMC_TARGETED_REGS:
+            try:
+                rows = conn.execute(
+                    "SELECT id FROM plab_clients "
+                    " WHERE registration_number = ANY(?) "
+                    "   AND COALESCE(pathway,'plab')='australia'",
+                    (_variants(reg),),
+                ).fetchall()
+            except Exception as e:
+                logging.warning(f"onb seed AMC variant lookup {reg}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+                continue
+            for r in rows:
+                targeted_ids.add(r['id'])
+
+        # Plus all AMC clients currently Kit Dispatched.
+        kit_dispatched = conn.execute(
+            "SELECT p.id FROM plab_clients p "
+            " JOIN client_onboarding o ON o.client_id = p.id "
+            " WHERE COALESCE(p.pathway,'plab')='australia' "
+            "   AND o.onboarding_status = 'Kit Dispatched'"
+        ).fetchall()
+        for r in kit_dispatched:
+            targeted_ids.add(r['id'])
+
+        for cid in targeted_ids:
+            c = conn.execute(
+                "SELECT registration_number, registration_date "
+                " FROM plab_clients WHERE id = ?", (cid,),
+            ).fetchone()
+            if not c:
+                continue
+            onb_id, status = _ensure_onb_row(cid, c['registration_number'])
+            if not onb_id:
+                continue
+            if status == 'Completed':
+                continue
+            email_d, call_d, kit_d = _timeline(_parse_date(c['registration_date']))
+            try:
+                conn.execute(
+                    """UPDATE client_onboarding SET
+                          welcome_email_sent = 1,
+                          welcome_email_sent_at = COALESCE(welcome_email_sent_at,
+                                                           ?::timestamp),
+                          welcome_call_date     = COALESCE(NULLIF(welcome_call_date,''),     ?),
+                          welcome_call_by       = COALESCE(NULLIF(welcome_call_by,''),       'Vipin'),
+                          welcome_call_confirmed = 1,
+                          welcome_kit_method    = COALESCE(NULLIF(welcome_kit_method,''),    'Postal from Office'),
+                          welcome_kit_sent_date = COALESCE(NULLIF(welcome_kit_sent_date,''), ?),
+                          amc_handbook_method   = COALESCE(NULLIF(amc_handbook_method,''),   'Postal from Office'),
+                          amc_handbook_sent_date= COALESCE(NULLIF(amc_handbook_sent_date,''),?),
+                          amc_clinical_handbook_method     = COALESCE(NULLIF(amc_clinical_handbook_method,''),     'Postal from Office'),
+                          amc_clinical_handbook_sent_date  = COALESCE(NULLIF(amc_clinical_handbook_sent_date,''),  ?),
+                          brochure_policy_items = COALESCE(NULLIF(brochure_policy_items,''),
+                                                           'Australia Brochure,CEO Letter,Refund Policy,Service Level Agreement'),
+                          additional_goodies    = COALESCE(NULLIF(additional_goodies,''),
+                                                           'Pen,Diary,Laptop Bag,Stickers'),
+                          onboarding_status     = 'Completed',
+                          updated_at = CURRENT_TIMESTAMP
+                       WHERE id = ?""",
+                    (email_d.strftime('%Y-%m-%d %H:%M:%S'),
+                     call_d.isoformat(),
+                     kit_d.isoformat(), kit_d.isoformat(), kit_d.isoformat(),
+                     onb_id),
+                )
+                amc_completed += 1
+            except Exception as e:
+                logging.warning(f"onb seed AMC id={cid}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"onb seed marker write: {e}")
+
+        logging.info(
+            f"Onboarding completion seed: PLAB={plab_completed}  AMC={amc_completed}"
+        )
+    except Exception as e:
+        logging.warning(f"seed_onboarding_completion_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_onboarding_completion_once()
+
+
+# Phase 5 baseline must run AFTER the table is guaranteed to exist.
+seed_access_master_baseline_once()
+
+
+def realign_access_master_baseline_once():
+    """Phase 5 follow-up (2026-06-01).
+
+    The blanket seed in seed_access_master_baseline_once() granted every
+    active non-admin employee VIEW + EDIT + ADD on every catalog entry --
+    safest possible baseline, but more permissive than what the legacy
+    system actually allowed.
+
+    This realignment narrows the baseline to match what each employee
+    could actually see yesterday, so an admin doesn't have to manually
+    untick 29-37 boxes per employee in the Access Master UI:
+
+    1. Always revoke (29 sub-sections) -- items wrapped in
+       `{% if session.get('is_admin') %}` in templates, so non-admins
+       never saw them. Covers HR admin tools, Finance, sensitive
+       Company admin tools, advanced Colleges admin, WhatsApp,
+       Clients (v2), Dashboard admin, KRA goals editor.
+
+    2. Conditionally revoke `sales/*` (8 sub-sections) if the employee
+       has no active row in legacy module_access for 'sales'. Mirrors
+       the existing has_module_access('sales') gate.
+
+    Idempotent via marker 'access_master_baseline_realigned' = 'phase5_align_v1'.
+    Bumping the value re-runs. Reversible by deleting the marker AND the
+    seed marker so the original blanket seed re-inserts everything.
+
+    Admins are skipped -- can_access() bypasses them anyway.
+    Partners are skipped -- partner_portal grants stay as Phase 5a set them.
+    """
+    MARKER_KEY = 'access_master_baseline_realigned'
+    MARKER_VAL = 'phase5_align_v1'
+
+    # Items wrapped in template-level admin checks -- non-admins never
+    # saw them in the sidebar even before Access Master existed.
+    ALWAYS_REVOKE = [
+        ('hr', 'bulk_leave'), ('hr', 'employees'),
+        ('hr', 'id_cards'), ('hr', 'letters'),
+        ('finance', 'budget'), ('finance', 'revenue'),
+        ('finance', 'expenses'), ('finance', 'salary'),
+        ('finance', 'reports'), ('finance', 'settings'),
+        ('company', 'state_city'), ('company', 'reset_passwords'),
+        ('company', 'section_visibility'), ('company', 'access_master'),
+        ('company', 'announcements'),
+        ('colleges', 'russian'), ('colleges', 'country_list'),
+        ('colleges', 'fees'),
+        ('whatsapp', 'messages'), ('whatsapp', 'templates'),
+        ('whatsapp', 'triggers'), ('whatsapp', 'settings'),
+        ('clients', 'invitations'), ('clients', 'registrations'),
+        ('clients', 'form_config'), ('clients', 'doc_requests'),
+        ('clients', 'notifications'),
+        ('dashboard', 'admin'),
+        ('kra', 'goals'),
+    ]
+    # Sales sub-sections gated by legacy has_module_access('sales').
+    SALES_SUBS = [
+        ('sales', 'meetings'), ('sales', 'projects'),
+        ('sales', 'products'), ('sales', 'partners'),
+        ('sales', 'news'), ('sales', 'clients_pipeline'),
+        ('sales', 'reports'), ('sales', 'settings'),
+    ]
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already realigned
+
+        # Active non-admins + their sales-gate flag in one shot.
+        try:
+            employees = conn.execute("""
+                SELECT e.id,
+                       CASE WHEN EXISTS (
+                         SELECT 1 FROM module_access m
+                         WHERE m.employee_id = e.id
+                           AND m.module = 'sales'
+                           AND m.is_active = 1
+                       ) THEN 1 ELSE 0 END AS has_sales
+                FROM employees e
+                WHERE e.is_active = 1
+                  AND (e.is_admin IS NULL OR e.is_admin = 0)
+            """).fetchall()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+            employees = []
+
+        revoked = 0
+        for emp in employees:
+            emp_id = emp['id']
+            has_sales = emp['has_sales']
+            revoke_list = list(ALWAYS_REVOKE)
+            if not has_sales:
+                revoke_list.extend(SALES_SUBS)
+            for main, sub in revoke_list:
+                try:
+                    result = conn.execute(
+                        "DELETE FROM user_section_permissions "
+                        "WHERE subject_type='employee' AND subject_id = ? "
+                        "  AND main_section = ? AND sub_section = ?",
+                        (emp_id, main, sub),
+                    )
+                    revoked += max(0, getattr(result, 'rowcount', 0) or 0)
+                except Exception as e:
+                    logging.warning(
+                        f"realign revoke skipped (emp={emp_id}, "
+                        f"{main}/{sub}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+        conn.commit()
+
+        # Write the marker so we don't rerun on every boot.
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"realign marker write failed: {e}")
+
+        logging.info(
+            f"Access Master Phase 5 realignment: revoked "
+            f"{revoked} over-permissive grant row(s) from non-admin baseline"
+        )
+    except Exception as e:
+        logging.warning(f"realign_access_master_baseline_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+realign_access_master_baseline_once()
+
+
+def drop_legacy_section_tables_once():
+    """Phase 6 (2026-06-01): drop the legacy section_permissions and
+    partner_section_permissions tables. Their job has moved to Access
+    Master (user_section_permissions).
+
+    Idempotent via marker 'access_master_legacy_dropped' = 'phase6_v1'.
+    `DROP TABLE IF EXISTS` is itself idempotent at the SQL level but we
+    still guard with a marker so the boot log stays quiet after the
+    first deploy.
+
+    The legacy `module_access` table is NOT dropped here -- it's still
+    used by the admin_view tier check in sales views. That's a separate
+    cleanup.
+    """
+    MARKER_KEY = 'access_master_legacy_dropped'
+    MARKER_VAL = 'phase6_v1'
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return  # already dropped
+
+        for ddl in ("DROP TABLE IF EXISTS section_permissions",
+                    "DROP TABLE IF EXISTS partner_section_permissions"):
+            try:
+                conn.execute(ddl)
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"drop_legacy_section_tables: {ddl} failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"drop_legacy_section_tables marker write failed: {e}")
+
+        logging.info("Access Master Phase 6: dropped legacy section_permissions + partner_section_permissions tables")
+    except Exception as e:
+        logging.warning(f"drop_legacy_section_tables_once: {e}")
+        try:
+            if conn is not None:
+                conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None:
+                conn.close()
+        except Exception: pass
+
+
+drop_legacy_section_tables_once()
+
+
+def seed_product_pathways_once():
+    """Apply the canonical product -> pathway taxonomy plus the one-off
+    cleanup of the duplicate "UK / PLAB Pathway" product.
+
+    v2 (2026-06-02) supersedes the v1 keyword-match logic. Uses an
+    explicit name -> pathway map signed off by admin -- safer than
+    fuzzy ILIKE. Anything not on the map stays NULL.
+
+    Idempotent via marker product_pathway_seeded = v2. Bumping to v3
+    in the future re-runs.
+    """
+    MARKER_KEY = 'product_pathway_seeded'
+    MARKER_VAL = 'v5'
+
+    # Exact-name -> pathway slug map. Slug -> display label:
+    #   plab        = PLAB Pathway              (UK PGCP)
+    #   australia   = AMC Pathway               (AUS PGCP)
+    #   consulting  = Standard Consulting       (S-0)
+    #   germany     = Germany Pathway
+    #   amc_training= AMC Training
+    # S-0 (2026-06-02): slug for Standard Consulting unified to
+    # 'consulting' (matching the operations sidebar / URL slug /
+    # lookup_options scope). Previous value 'standard_consulting'
+    # migrated below. UK Consulting added -- was missing in v4.
+    NAME_TO_PATHWAY = {
+        'UK PGCP':         'plab',
+        'AUS PGCP':        'australia',
+        'AMC Consulting':  'consulting',
+        'UAE Consulting':  'consulting',
+        'USA Consulting':  'consulting',
+        'UK Consulting':   'consulting',
+        'Germany PGCP':    'germany',
+        'AMC MCQ':         'amc_training',
+    }
+    # Duplicate -> canonical merges. For each pair we move any
+    # foreign-key references on the duplicate over to the canonical
+    # product before hard-deleting the duplicate, so no history is lost.
+    # Form-config rows on the duplicate are dropped outright since the
+    # canonical product has its own copy.
+    MERGE_DUPLICATE_INTO_CANONICAL = [
+        ('UK / PLAB Pathway', 'UK PGCP'),
+    ]
+
+    conn = None
+    try:
+        conn = get_db()
+        try:
+            conn.execute("CREATE TABLE IF NOT EXISTS _import_markers (key TEXT PRIMARY KEY, value TEXT)")
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        marker = conn.execute(
+            "SELECT value FROM _import_markers WHERE key = ?", (MARKER_KEY,),
+        ).fetchone()
+        if marker and marker['value'] == MARKER_VAL:
+            return
+
+        # ── 1) Merge duplicate products into their canonical -- repoint FK
+        # references first, then hard-delete the duplicate. ──
+        deleted = 0
+        for dup_name, canon_name in MERGE_DUPLICATE_INTO_CANONICAL:
+            try:
+                dup_row = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (dup_name,),
+                ).fetchone()
+                canon_row = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (canon_name,),
+                ).fetchone()
+                if not dup_row:
+                    continue  # already gone
+                if not canon_row:
+                    logging.warning(
+                        f"seed_product_pathways v3: canonical '{canon_name}' "
+                        f"missing, skipping merge of '{dup_name}'"
+                    )
+                    continue
+                dup_id = dup_row['id']
+                canon_id = canon_row['id']
+                # Repoint history-bearing FK references duplicate -> canonical.
+                for repoint_sql in (
+                    "UPDATE sales_leads          SET product_id = ? WHERE product_id = ?",
+                    "UPDATE sales_closures       SET product_id = ? WHERE product_id = ?",
+                    "UPDATE client_invitations   SET product_id = ? WHERE product_id = ?",
+                    "UPDATE client_registrations SET product_id = ? WHERE product_id = ?",
+                ):
+                    try:
+                        conn.execute(repoint_sql, (canon_id, dup_id))
+                    except Exception as e:
+                        logging.warning(
+                            f"seed_product_pathways v3: repoint failed "
+                            f"({repoint_sql.split()[1]}): {e}"
+                        )
+                        try: conn.rollback()
+                        except Exception: pass
+                # Drop the duplicate's form configs (the canonical has its own).
+                try:
+                    conn.execute(
+                        "DELETE FROM client_form_configs WHERE product_id = ?",
+                        (dup_id,),
+                    )
+                except Exception as e:
+                    logging.warning(
+                        f"seed_product_pathways v3: form-config drop for "
+                        f"{dup_id}: {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+                # Finally remove the duplicate product itself.
+                try:
+                    result = conn.execute(
+                        "DELETE FROM products_services WHERE id = ?",
+                        (dup_id,),
+                    )
+                    deleted += max(0, getattr(result, 'rowcount', 0) or 0)
+                except Exception as e:
+                    logging.warning(
+                        f"seed_product_pathways v3: final delete for "
+                        f"{dup_name} (id={dup_id}): {e}"
+                    )
+                    try: conn.rollback()
+                    except Exception: pass
+            except Exception as e:
+                logging.warning(
+                    f"seed_product_pathways v3: merge {dup_name} -> "
+                    f"{canon_name}: {e}"
+                )
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        # ── 1.5) S-0: Standard Consulting pathway slug unification.
+        # Any rows previously tagged 'standard_consulting' (v4 seed)
+        # move to the canonical 'consulting' slug used by sidebar /
+        # routes / lookup_options. Also ensures all 4 consulting
+        # products exist in products_services -- UK Consulting was
+        # missing from the v4 product seed. INSERTs are idempotent
+        # (existence check first). ──
+        try:
+            conn.execute(
+                "UPDATE products_services "
+                "   SET pathway = 'consulting' "
+                " WHERE pathway = 'standard_consulting'"
+            )
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"S-0 consulting slug migration: {e}")
+            try: conn.rollback()
+            except Exception: pass
+
+        consulting_products = [
+            'AMC Consulting', 'UAE Consulting',
+            'USA Consulting', 'UK Consulting',
+        ]
+        inserted_consulting = 0
+        for cname in consulting_products:
+            try:
+                existing = conn.execute(
+                    "SELECT id FROM products_services WHERE name = ?",
+                    (cname,),
+                ).fetchone()
+                if existing:
+                    continue
+                conn.execute(
+                    "INSERT INTO products_services "
+                    "  (name, type, status, pathway) "
+                    "VALUES (?, 'service', 'active', 'consulting')",
+                    (cname,),
+                )
+                inserted_consulting += 1
+            except Exception as e:
+                logging.warning(f"S-0 insert {cname}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        if inserted_consulting:
+            conn.commit()
+            logging.info(
+                f"S-0: inserted {inserted_consulting} consulting product(s)")
+
+        # ── 2) Set pathway by exact-name match ──
+        tagged = 0
+        for name, pathway in NAME_TO_PATHWAY.items():
+            try:
+                result = conn.execute(
+                    "UPDATE products_services SET pathway = ? WHERE name = ?",
+                    (pathway, name),
+                )
+                tagged += max(0, getattr(result, 'rowcount', 0) or 0)
+            except Exception as e:
+                logging.warning(f"seed_product_pathways v2: tag {name}: {e}")
+                try: conn.rollback()
+                except Exception: pass
+        conn.commit()
+
+        try:
+            conn.execute(
+                "INSERT INTO _import_markers (key, value) VALUES (?, ?) "
+                "ON CONFLICT (key) DO UPDATE SET value = excluded.value",
+                (MARKER_KEY, MARKER_VAL),
+            )
+            conn.commit()
+        except Exception:
+            try:
+                conn.rollback()
+                conn.execute("DELETE FROM _import_markers WHERE key = ?", (MARKER_KEY,))
+                conn.execute("INSERT INTO _import_markers (key, value) VALUES (?, ?)", (MARKER_KEY, MARKER_VAL))
+                conn.commit()
+            except Exception as e:
+                logging.warning(f"seed_product_pathways marker write failed: {e}")
+
+        if deleted or tagged:
+            logging.info(
+                f"Product pathway v2: deleted {deleted} duplicate(s), "
+                f"tagged {tagged} product(s)"
+            )
+    except Exception as e:
+        logging.warning(f"seed_product_pathways_once: {e}")
+        try:
+            if conn is not None: conn.rollback()
+        except Exception: pass
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+
+
+seed_product_pathways_once()
+
+
+# ─────────────────────────────────────────────────────────────────────────
+#  Access Master Phase 3: log-only enforcement
+#
+#  Centralised request-level audit. Instead of decorating 300 route
+#  handlers individually, one @app.before_request hook consults a static
+#  endpoint -> (main, sub, action) map and:
+#    - logs every "would-be-denied" request (info-level)
+#    - actually denies (302 to dashboard / 403 JSON) ONLY when
+#      ACCESS_MASTER_ENFORCE is True (Phase 5 will flip this).
+#  Admins and unauthenticated requests bypass — admins because the user
+#  decided so, anon because login_required / @admin_required handle that
+#  already.
+#
+#  Adding a new route to the map = single line.
+#  Going from log-only to enforce = flip ACCESS_MASTER_ENFORCE.
+# ─────────────────────────────────────────────────────────────────────────
+
+ACCESS_MASTER_ENFORCE = True  # Phase 5b (2026-06-01): enforce live. Audit log -> denial.
+
+
+def _ap(main, sub, action='view'):
+    """Tiny helper to keep the route map readable."""
+    return (main, sub, action)
+
+
+ACCESS_ROUTE_MAP = {
+    # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
+    'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
+    'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
+    'ops_consulting_client_detail':                 _ap('consulting_pathway', 'registration'),
+    'ops_consulting_client_edit_page':              _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_client_edit_save':              _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_client_delete':                 _ap('consulting_pathway', 'registration', 'edit'),
+    'ops_consulting_documents_list':                _ap('consulting_pathway', 'documents'),
+    'ops_consulting_onboarding_list':               _ap('consulting_pathway', 'onboarding'),
+    'ops_consulting_onboarding_detail':             _ap('consulting_pathway', 'onboarding'),
+    'ops_consulting_onboarding_update':             _ap('consulting_pathway', 'onboarding', 'edit'),
+    'ops_consulting_onboarding_send_welcome_email': _ap('consulting_pathway', 'onboarding', 'edit'),
+    'ops_consulting_academic_list':                 _ap('consulting_pathway', 'academic'),
+    'ops_consulting_academic_detail':               _ap('consulting_pathway', 'academic'),
+    'ops_consulting_academic_edit_page':            _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_academic_edit_save':            _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_academic_add_page':             _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_academic_add_save':             _ap('consulting_pathway', 'academic', 'edit'),
+    'ops_consulting_call_notes_list':               _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_tracker':            _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_not_contacted':      _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_detail':             _ap('consulting_pathway', 'call_notes'),
+    'ops_consulting_call_notes_edit_page':          _ap('consulting_pathway', 'call_notes', 'edit'),
+    'ops_consulting_call_notes_edit_save':          _ap('consulting_pathway', 'call_notes', 'edit'),
+    'ops_consulting_call_notes_add':                _ap('consulting_pathway', 'call_notes', 'edit'),
+    'ops_consulting_payments_list':                 _ap('consulting_pathway', 'payments'),
+    'ops_consulting_payments_detail':               _ap('consulting_pathway', 'payments'),
+    'ops_consulting_payments_edit_page':            _ap('consulting_pathway', 'payments', 'edit'),
+    'ops_consulting_payments_edit_save':            _ap('consulting_pathway', 'payments', 'edit'),
+    'ops_consulting_epic_list':                     _ap('consulting_pathway', 'epic_verification'),
+    'ops_consulting_epic_detail':                   _ap('consulting_pathway', 'epic_verification'),
+    'ops_consulting_epic_edit_page':                _ap('consulting_pathway', 'epic_verification', 'edit'),
+    'ops_consulting_epic_edit_save':                _ap('consulting_pathway', 'epic_verification', 'edit'),
+    'ops_consulting_epic_add_page':                 _ap('consulting_pathway', 'epic_verification', 'edit'),
+    'ops_consulting_epic_add_save':                 _ap('consulting_pathway', 'epic_verification', 'edit'),
+    'ops_consulting_gmc_list':                      _ap('consulting_pathway', 'gmc_registration'),
+    'ops_consulting_gmc_detail':                    _ap('consulting_pathway', 'gmc_registration'),
+    'ops_consulting_gmc_add':                       _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_gmc_edit':                      _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_gmc_delete':                    _ap('consulting_pathway', 'gmc_registration', 'edit'),
+    'ops_consulting_amc_list':                      _ap('consulting_pathway', 'amc_registration'),
+    'ops_consulting_amc_detail':                    _ap('consulting_pathway', 'amc_registration'),
+    'ops_consulting_amc_add':                       _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_amc_edit':                      _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_amc_delete':                    _ap('consulting_pathway', 'amc_registration', 'edit'),
+    'ops_consulting_mentorship_list':               _ap('consulting_pathway', 'mentorship'),
+    'ops_consulting_mentorship_detail':             _ap('consulting_pathway', 'mentorship'),
+    'ops_consulting_mentorship_add':                _ap('consulting_pathway', 'mentorship', 'edit'),
+    'ops_consulting_mentorship_edit':               _ap('consulting_pathway', 'mentorship', 'edit'),
+    'ops_consulting_mentorship_delete':             _ap('consulting_pathway', 'mentorship', 'edit'),
+    # ── Operations: AMC Pathway ─────────────────────────────────────
+    'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
+    'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
+    'ops_australia_client_detail':          _ap('australia_pathway', 'registration'),
+    'ops_australia_client_edit_page':       _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_client_edit_save':       _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_client_delete':          _ap('australia_pathway', 'registration', 'edit'),
+    'ops_australia_documents_list':         _ap('australia_pathway', 'documents'),
+    'ops_australia_test_bookings_list':     _ap('australia_pathway', 'test_bookings'),
+    'ops_australia_test_bookings_detail':   _ap('australia_pathway', 'test_bookings'),
+    'ops_australia_test_bookings_edit_page':_ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_test_bookings_edit_save':_ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_test_bookings_add_page': _ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_test_bookings_add_save': _ap('australia_pathway', 'test_bookings', 'edit'),
+    'ops_australia_academic_list':          _ap('australia_pathway', 'academic'),
+    'ops_australia_academic_detail':        _ap('australia_pathway', 'academic'),
+    'ops_australia_academic_edit_page':     _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_academic_edit_save':     _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_academic_add_page':      _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_academic_add_save':      _ap('australia_pathway', 'academic', 'edit'),
+    'ops_australia_epic_list':              _ap('australia_pathway', 'epic'),
+    'ops_australia_epic_detail':            _ap('australia_pathway', 'epic'),
+    'ops_australia_epic_edit_page':         _ap('australia_pathway', 'epic', 'edit'),
+    'ops_australia_epic_edit_save':         _ap('australia_pathway', 'epic', 'edit'),
+    'ops_australia_epic_add_page':          _ap('australia_pathway', 'epic', 'edit'),
+    'ops_australia_epic_add_save':          _ap('australia_pathway', 'epic', 'edit'),
+    # X-2: AMC Registration for the AMC pathway
+    'ops_australia_amc_list':               _ap('australia_pathway', 'amc_registration'),
+    'ops_australia_amc_detail':             _ap('australia_pathway', 'amc_registration'),
+    'ops_australia_amc_add':                _ap('australia_pathway', 'amc_registration', 'edit'),
+    'ops_australia_amc_edit':               _ap('australia_pathway', 'amc_registration', 'edit'),
+    'ops_australia_amc_delete':             _ap('australia_pathway', 'amc_registration', 'edit'),
+    'ops_australia_training_list':          _ap('australia_pathway', 'training'),
+    'ops_australia_training_detail':        _ap('australia_pathway', 'training'),
+    'ops_australia_training_edit_page':     _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_training_edit_save':     _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_training_add_page':      _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_training_add_save':      _ap('australia_pathway', 'training', 'edit'),
+    'ops_australia_online_courses_list':    _ap('australia_pathway', 'online_courses'),
+    'ops_australia_online_courses_detail':  _ap('australia_pathway', 'online_courses'),
+    'ops_australia_online_courses_edit_page':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_online_courses_edit_save':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_online_courses_add_page':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_online_courses_add_save':_ap('australia_pathway', 'online_courses', 'edit'),
+    'ops_australia_payments_list':          _ap('australia_pathway', 'payments'),
+    'ops_australia_payments_detail':        _ap('australia_pathway', 'payments'),
+    'ops_australia_payments_edit_page':     _ap('australia_pathway', 'payments', 'edit'),
+    'ops_australia_payments_edit_save':     _ap('australia_pathway', 'payments', 'edit'),
+    'ops_australia_call_notes_list':        _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_tracker':     _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_not_contacted':_ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_detail':      _ap('australia_pathway', 'call_notes'),
+    'ops_australia_call_notes_edit_page':   _ap('australia_pathway', 'call_notes', 'edit'),
+    'ops_australia_call_notes_edit_save':   _ap('australia_pathway', 'call_notes', 'edit'),
+    'ops_australia_call_notes_add':         _ap('australia_pathway', 'call_notes', 'add'),
+    'ops_australia_research_list':          _ap('australia_pathway', 'research'),
+    'ops_australia_research_detail':        _ap('australia_pathway', 'research'),
+    'ops_australia_research_edit_page':     _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_research_edit_save':     _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_research_add_page':      _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_research_add_save':      _ap('australia_pathway', 'research', 'edit'),
+    'ops_australia_webinars_list':          _ap('australia_pathway', 'webinars'),
+    'ops_australia_webinars_detail':        _ap('australia_pathway', 'webinars'),
+    'ops_australia_webinars_edit_page':     _ap('australia_pathway', 'webinars', 'edit'),
+    'ops_australia_webinars_edit_save':     _ap('australia_pathway', 'webinars', 'edit'),
+    'ops_australia_webinars_add_page':      _ap('australia_pathway', 'webinars', 'edit'),
+    'ops_australia_webinars_add_save':      _ap('australia_pathway', 'webinars', 'edit'),
+
+    # ── Operations: PLAB Pathway ──────────────────────────────────────────
+    'ops_plab_list':                _ap('plab_pathway', 'registration'),
+    'ops_plab_dashboard':           _ap('plab_pathway', 'registration'),
+    'ops_plab_add':                 _ap('plab_pathway', 'registration', 'add'),
+    'ops_plab_edit':                _ap('plab_pathway', 'registration', 'edit'),
+    'ops_plab_delete':              _ap('plab_pathway', 'registration', 'edit'),
+    'ops_plab_pathway_dashboard':   _ap('plab_pathway', 'dashboard'),
+    'ops_onboarding_list':          _ap('plab_pathway', 'onboarding'),
+    'ops_onboarding_detail':        _ap('plab_pathway', 'onboarding'),
+    'ops_coaching_list':            _ap('plab_pathway', 'coaching'),
+    'ops_english_logins_list':      _ap('plab_pathway', 'english_logins'),
+    'ops_test_bookings_list':       _ap('plab_pathway', 'test_bookings'),
+    'ops_call_notes_list':          _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_tracker':       _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_not_contacted': _ap('plab_pathway', 'call_notes'),
+    'ops_call_notes_add':           _ap('plab_pathway', 'call_notes', 'add'),
+    'ops_call_notes_edit':          _ap('plab_pathway', 'call_notes', 'edit'),
+    'ops_call_notes_delete':        _ap('plab_pathway', 'call_notes', 'edit'),
+    'ops_payments_list':            _ap('plab_pathway', 'payments'),
+    'ops_documents_list':           _ap('plab_pathway', 'documents'),
+    'ops_certificates_list':        _ap('plab_pathway', 'certificates'),
+    'api_plab_client_certificates': _ap('plab_pathway', 'certificates'),
+    'ops_epic_list':                _ap('plab_pathway', 'epic'),
+    'ops_gmc_list':                 _ap('plab_pathway', 'gmc'),
+    'ops_job_stage_list':           _ap('plab_pathway', 'job_stage'),
+    'ops_job_stage_detail':         _ap('plab_pathway', 'job_stage'),
+    'ops_job_stage_add_page':       _ap('plab_pathway', 'job_stage', 'add'),
+    'ops_job_stage_add_save':       _ap('plab_pathway', 'job_stage', 'add'),
+    'ops_job_stage_edit_page':      _ap('plab_pathway', 'job_stage', 'edit'),
+    'ops_job_stage_edit_save':      _ap('plab_pathway', 'job_stage', 'edit'),
+    'ops_job_stage_delete':         _ap('plab_pathway', 'job_stage', 'edit'),
+    'ops_visa_list':                _ap('plab_pathway', 'uk_visa'),
+    'ops_cab_list':                 _ap('plab_pathway', 'uk_cab'),
+    'ops_observerships_list':       _ap('plab_pathway', 'uk_observerships'),
+    'ops_academic_list':            _ap('plab_pathway', 'academic'),
+    'ops_research_list':            _ap('plab_pathway', 'research'),
+    'ops_subscriptions_list':       _ap('plab_pathway', 'subscriptions'),
+    'ops_webinars_list':            _ap('plab_pathway', 'webinars'),
+    'ops_courses_list':             _ap('plab_pathway', 'online_courses'),
+    'ops_ngo_list':                 _ap('plab_pathway', 'ngo'),
+    'ops_mentorship_list':          _ap('plab_pathway', 'mentorship'),
+
+    # ── Operations: Shared ────────────────────────────────────────────────
+    'ops_reports':                  _ap('operations_shared', 'reports'),
+    'ops_field_manager':            _ap('operations_shared', 'field_manager'),
+    'ops_vendors_providers':        _ap('operations_shared', 'vendors_providers'),
+
+    # ── Sales ─────────────────────────────────────────────────────────────
+    'meetings_list':                _ap('sales', 'meetings'),
+    'projects_list':                _ap('sales', 'projects'),
+    'products_list':                _ap('sales', 'products'),
+    'partners':                     _ap('sales', 'partners'),
+    'sales_news':                   _ap('sales', 'news'),
+
+    # ── Sales · 12thPlus Schools CRM ──────────────────────────────────────
+    'sales_twelfthplus_dashboard':              _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_schools_list':           _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_school_add_page':        _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_add_save':        _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_detail':          _ap('sales', 'twelfthplus_schools'),
+    'sales_twelfthplus_school_edit_page':       _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_edit_save':       _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_school_delete':          _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_import_page':    _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_import_submit':  _ap('sales', 'twelfthplus_schools', 'edit'),
+    'sales_twelfthplus_schools_template':       _ap('sales', 'twelfthplus_schools'),
+    # ── Sales · 12thPlus Meetings ─────────────────────────────────────────
+    'sales_twelfthplus_meeting_add_page':       _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_add_save':       _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_detail':         _ap('sales', 'twelfthplus_meetings'),
+    'sales_twelfthplus_meeting_edit_page':      _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_edit_save':      _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_meeting_delete':         _ap('sales', 'twelfthplus_meetings', 'edit'),
+    'sales_twelfthplus_followups_list':         _ap('sales', 'twelfthplus_meetings'),
+
+    # ── HR ────────────────────────────────────────────────────────────────
+    'apply_leave':                  _ap('hr', 'leave_management', 'add'),
+    'apply_late_leave':             _ap('hr', 'late_leave', 'add'),
+    'admin_bulk_leave':             _ap('hr', 'bulk_leave', 'add'),
+    'wfh_request':                  _ap('hr', 'wfh', 'add'),
+    'attendance_log':               _ap('hr', 'attendance'),
+
+    # ── HR: On Official Travel (OOT) ─────────────────────────────────────
+    'apply_official_travel':              _ap('hr', 'official_travel', 'add'),
+    'my_official_travel_requests':        _ap('hr', 'official_travel'),
+    'official_travel_approvals':          _ap('hr', 'official_travel'),
+    'approve_official_travel':            _ap('hr', 'official_travel', 'edit'),
+    'reject_official_travel':             _ap('hr', 'official_travel', 'edit'),
+    'cancel_official_travel':             _ap('hr', 'official_travel', 'edit'),
+
+    # ── Company ───────────────────────────────────────────────────────────
+    'access_master':                _ap('company', 'access_master'),
+    'access_master_save':           _ap('company', 'access_master', 'edit'),
+    'access_master_save_bulk':      _ap('company', 'access_master', 'edit'),
+    # 'section_visibility' route deleted in Phase 6.
+    'holidays_list':                _ap('company', 'holidays'),
+    'calendar':                     _ap('company', 'calendar'),
+    'org_chart':                    _ap('company', 'org_chart'),
+
+    # ── Dashboard ─────────────────────────────────────────────────────────
+    'dashboard':                    _ap('dashboard', 'personal'),
+    'admin_dashboard':              _ap('dashboard', 'admin'),
+    'hr_dashboard':                 _ap('dashboard', 'admin'),
+}
+
+
+# Counters for the audit log so we can see "in the last hour, X different
+# users would have been denied test_bookings". Reset at process boundary;
+# good enough for the human-eye dashboard we'll build in Phase 5.
+ACCESS_AUDIT_COUNTS = {}
+
+
+def _record_access_audit(user, endpoint, main_section, sub_section, action, would_deny):
+    """Bucket-count per (emp, endpoint) so the admin can grep / extract
+    later. Also emits a structured info line for Render logs."""
+    emp_code = (user or {}).get('emp_code') if isinstance(user, dict) else None
+    if not emp_code:
+        try:
+            emp_code = user['emp_code']
+        except Exception:
+            emp_code = '<unknown>'
+    key = (emp_code, endpoint)
+    ACCESS_AUDIT_COUNTS[key] = ACCESS_AUDIT_COUNTS.get(key, 0) + 1
+    logging.info(
+        f"ACCESS_AUDIT user={emp_code} endpoint={endpoint} "
+        f"section={main_section}/{sub_section} action={action} "
+        f"would_deny={would_deny}"
+    )
+
+
+def can_access(main_section, sub_section, action='view'):
+    """Template-friendly access check used by sidebar + button gating.
+
+    Two important UX rules baked in (Phase 4 design):
+      1. Admins always see everything (consistent with the route hook).
+      2. When ACCESS_MASTER_ENFORCE is False (current log-only mode),
+         this ALWAYS returns True so navigation stays intact while we
+         build up grants from the audit data. The route-level audit
+         keeps capturing would-be-denies regardless.
+
+    Registered as a Jinja global below so templates can write
+        {% if can_access('plab_pathway', 'payments', 'view') %}...{% endif %}
+    """
+    if not ACCESS_MASTER_ENFORCE:
+        return True
+    user = get_user()
+    if not user:
+        return False
+    try:
+        if user['is_admin']:
+            return True
+    except (KeyError, IndexError, TypeError):
+        return False
+    return has_section_permission(user, main_section, sub_section, action)
+
+
+# Expose to every template (no per-route render_template change needed).
+app.jinja_env.globals['can_access'] = can_access
+app.jinja_env.globals['ACCESS_MASTER_ENFORCE'] = lambda: ACCESS_MASTER_ENFORCE
+
+
+@app.before_request
+def access_master_request_audit():
+    """Log-only access check on every request (Phase 3).
+
+    Looks up request.endpoint in ACCESS_ROUTE_MAP. If mapped and the user
+    lacks the listed (main, sub, action) permission, log an audit line.
+    Actual denial only happens when ACCESS_MASTER_ENFORCE is True
+    (Phase 5 will flip it).
+
+    Admins, anonymous requests, and routes NOT in the map are skipped.
+    """
+    endpoint = request.endpoint
+    if not endpoint:
+        return
+    rule = ACCESS_ROUTE_MAP.get(endpoint)
+    if not rule:
+        return  # route not yet in catalog — silently allow
+
+    # Best-effort user lookup. Don't run for static / health endpoints.
+    try:
+        user = get_user()
+    except Exception:
+        return
+    if not user:
+        return  # not logged in — other auth handles this layer
+    try:
+        if user['is_admin']:
+            return  # admin bypass
+    except (KeyError, IndexError, TypeError):
+        return
+
+    main_section, sub_section, action = rule
+    if has_section_permission(user, main_section, sub_section, action):
+        return  # has the permission, all good
+
+    # Would-deny path.
+    _record_access_audit(user, endpoint, main_section, sub_section, action,
+                         would_deny=ACCESS_MASTER_ENFORCE)
+
+    if ACCESS_MASTER_ENFORCE:
+        # Real denial path. JSON for API endpoints, redirect for pages.
+        if request.path.startswith('/api/') or request.is_json:
+            return jsonify({'error': 'You do not have permission for this section.'}), 403
+        flash(
+            f'Access denied: you don\'t have permission for "{main_section}/{sub_section}".',
+            'error',
+        )
+        return redirect(url_for('dashboard'))
+
+
+def has_section_permission(subject, main_section, sub_section, action='view', subject_type=None):
+    """Return True if `subject` may perform `action` on (main_section, sub_section).
+
+    Accepts either a team-member row (from get_user) or a partner row.
+    Auto-detects subject_type by checking common columns:
+      - employees have 'is_admin' + 'emp_code'
+      - partners have 'company_name' or similar
+    Caller can pass explicit subject_type='employee' or 'partner' to skip
+    detection.
+
+    Rules:
+      - Admin employees ALWAYS bypass (per user decision 2026-06-01).
+      - action must be one of 'view' | 'edit' | 'add'.
+      - Looks up user_section_permissions for the (subject_type, subject_id,
+        main, sub) row.
+      - Returns False if the row is missing or the matching flag is 0.
+
+    Note: this is the new granular helper. The older has_module_access()
+    + section_permissions table-based checks are NOT consulted here so
+    they don't override an explicit deny; callers needing legacy fallback
+    should check both during the transition.
+    """
+    if not subject:
+        return False
+
+    # Detect subject_type if not given.
+    if subject_type is None:
+        try:
+            keys = set(subject.keys()) if hasattr(subject, 'keys') else set(subject)
+        except Exception:
+            keys = set()
+        subject_type = 'partner' if ('company_name' in keys or 'partner_type' in keys) else 'employee'
+
+    # Admin employees always bypass.
+    if subject_type == 'employee':
+        try:
+            if subject['is_admin']:
+                return True
+        except (KeyError, IndexError, TypeError):
+            pass
+
+    if action not in ('view', 'edit', 'add'):
+        return False
+    column = {'view': 'can_view', 'edit': 'can_edit', 'add': 'can_add'}[action]
+
+    try:
+        subject_id = subject['id']
+    except (KeyError, IndexError, TypeError):
+        return False
+
+    conn = get_db()
+    try:
+        # Primary lookup: subject_type + subject_id.
+        row = conn.execute(
+            f"SELECT {column} AS flag FROM user_section_permissions "
+            "WHERE subject_type = ? AND subject_id = ? "
+            "  AND main_section = ? AND sub_section = ?",
+            (subject_type, subject_id, main_section, sub_section),
+        ).fetchone()
+        if row:
+            return bool(row['flag'])
+        # Back-compat: pre-Phase-1 rows used employee_id only. Honour those
+        # when subject is an employee.
+        if subject_type == 'employee':
+            row = conn.execute(
+                f"SELECT {column} AS flag FROM user_section_permissions "
+                "WHERE employee_id = ? AND main_section = ? AND sub_section = ?",
+                (subject_id, main_section, sub_section),
+            ).fetchone()
+            if row:
+                return bool(row['flag'])
+        return False
+    except Exception as e:
+        logging.error(f"has_section_permission: {e}")
+        return False
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
 def migrate_client_academics_v2():
     """Migrate client_academics to match ops_academic_details fields."""
     try:
@@ -25541,14 +32871,29 @@ migrate_client_academics_v2()
 
 
 def seed_client_form_configs():
-    """Seed default form configs for UK/PLAB pathway AND UK PGCP with all fields."""
+    """Seed default form configs for the canonical UK PGCP product.
+
+    Historical note: this seed used to also (re-)create a duplicate
+    'UK / PLAB Pathway' product whenever it couldn't find an existing
+    `%plab%` match -- which fought with the pathway-taxonomy migration
+    that's trying to delete it. The duplicate entry was removed
+    2026-06-02; the canonical 'UK PGCP' entry is kept since it's
+    exact-match and idempotent.
+    """
     try:
         conn = get_db()
 
-        # Define products to seed — each gets the same 85 fields
+        # Each product gets the same 85 fields (see configs below).
+        # S-0: Standard Consulting's 4 products share the same field set
+        # as UK PGCP -- they all collect personal / academic / sales /
+        # operations data. Listed by exact name (no LIKE) so the lookup
+        # is deterministic.
         product_definitions = [
-            {'name': 'UK / PLAB Pathway', 'search': '%plab%', 'use_like': True},
-            {'name': 'UK PGCP', 'search': 'uk pgcp', 'use_like': False},
+            {'name': 'UK PGCP',         'search': 'uk pgcp',         'use_like': False},
+            {'name': 'AMC Consulting',  'search': 'amc consulting',  'use_like': False},
+            {'name': 'UAE Consulting',  'search': 'uae consulting',  'use_like': False},
+            {'name': 'USA Consulting',  'search': 'usa consulting',  'use_like': False},
+            {'name': 'UK Consulting',   'search': 'uk consulting',   'use_like': False},
         ]
 
         # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
@@ -25688,177 +33033,456 @@ def seed_client_form_configs():
 seed_client_form_configs()
 
 
-@app.route('/admin/section-visibility')
+@app.route('/admin/access-master')
 @login_required
-def section_visibility():
+def access_master():
+    """Two flows on the same page (toggle via ?mode=):
+
+      mode=by-person (default) -- pick one team member, walk through every
+        section + sub-section, tick View/Edit/Add. Granular, one user at
+        a time.
+
+      mode=by-section -- pick one main section, choose which sub-sections
+        to grant (all pre-checked, uncheck what you don't want), set
+        View/Edit/Add, then pick the team members who should get the
+        grant. Bulk grant for many users at once.
+
+    Companion to (not replacement for) the older /admin/section-visibility
+    page.
+    """
     user = get_user()
-    if not user.get('is_admin'):
+    if not (user and user['is_admin']):
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
 
+    mode = (request.args.get('mode') or 'by-person').strip()
+    if mode not in ('by-person', 'by-section'):
+        mode = 'by-person'
+
+    subject_type = (request.args.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
+
+    # Filter the catalog by subject_type:
+    #   employee: every section EXCEPT 'partner_portal' (which is partner-only)
+    #   partner:  ONLY the 'partner_portal' section
+    if subject_type == 'partner':
+        filtered_catalog = [s for s in ACCESS_SECTION_CATALOG if s['key'] == 'partner_portal']
+    else:
+        filtered_catalog = [s for s in ACCESS_SECTION_CATALOG if s['key'] != 'partner_portal']
+
     conn = get_db()
-    # Team sections
-    sections = conn.execute("SELECT * FROM section_permissions ORDER BY sort_order, section_key").fetchall()
-    sections = [dict(s) for s in sections]
+    try:
+        # Load the right subject list.
+        if subject_type == 'partner':
+            try:
+                subjects = [dict(r) for r in conn.execute(
+                    "SELECT id, company_name AS name, contact_person, partner_type "
+                    "FROM partners ORDER BY company_name"
+                ).fetchall()]
+            except Exception:
+                subjects = []
+            employees_list = []
+            partners_list = subjects
+        else:
+            employees_list = [dict(r) for r in conn.execute(
+                "SELECT id, emp_code, name, department, designation "
+                "FROM employees WHERE is_active = 1 ORDER BY name"
+            ).fetchall()]
+            partners_list = []
+            subjects = employees_list
 
-    # Group by menu_group
-    groups = {}
-    for s in sections:
-        g = s['menu_group']
-        if g not in groups:
-            groups[g] = []
-        groups[g].append(s)
+        selected_subject = None
+        permissions_map = {}
+        if mode == 'by-person':
+            sel_id = request.args.get('subject_id', type=int) or request.args.get('emp_id', type=int)
+            if sel_id:
+                if subject_type == 'partner':
+                    sel = conn.execute(
+                        "SELECT id, company_name AS name, contact_person, partner_type "
+                        "FROM partners WHERE id = ?", (sel_id,)
+                    ).fetchone()
+                    if sel:
+                        selected_subject = dict(sel)
+                        selected_subject['_label'] = 'Partner'
+                else:
+                    sel = conn.execute(
+                        "SELECT id, emp_code, name, department, designation "
+                        "FROM employees WHERE id = ?", (sel_id,)
+                    ).fetchone()
+                    if sel:
+                        selected_subject = dict(sel)
+                        selected_subject['_label'] = 'Team Member'
 
-    # Partner sections
-    partner_sections = conn.execute("SELECT * FROM partner_section_permissions ORDER BY sort_order, section_key").fetchall()
-    partner_sections = [dict(s) for s in partner_sections]
+                if selected_subject:
+                    rows = conn.execute(
+                        "SELECT main_section, sub_section, can_view, can_edit, can_add "
+                        "FROM user_section_permissions "
+                        "WHERE subject_type = ? AND subject_id = ?",
+                        (subject_type, sel_id),
+                    ).fetchall()
+                    for r in rows:
+                        permissions_map[(r['main_section'], r['sub_section'])] = {
+                            'view': bool(r['can_view']),
+                            'edit': bool(r['can_edit']),
+                            'add':  bool(r['can_add']),
+                        }
+    finally:
+        try: conn.close()
+        except Exception: pass
 
-    # Group partner sections
-    partner_groups = {}
-    for s in partner_sections:
-        g = s['menu_group']
-        if g not in partner_groups:
-            partner_groups[g] = []
-        partner_groups[g].append(s)
+    catalog_by_main = {sec['key']: sec['sub_sections'] for sec in filtered_catalog}
 
-    # Get all employees for the selector
-    employees = conn.execute("SELECT emp_code, name, department FROM employees WHERE is_active = 1 ORDER BY name").fetchall()
-    employees = [dict(e) for e in employees]
-
-    # Get unique departments
-    departments = sorted(set(e['department'] for e in employees if e.get('department') and e['department'].strip()))
-
-    # Get all partners for the selector
-    partners = conn.execute("SELECT id, company_name, contact_person, partner_type FROM partners ORDER BY company_name").fetchall()
-    partners = [dict(p) for p in partners]
-
-    conn.close()
-
-    return render_template('section_visibility.html', user=user, groups=groups,
-                         partner_groups=partner_groups, employees=employees,
-                         departments=departments, partners=partners,
-                    active_section='company')
+    return render_template(
+        'access_master.html',
+        user=user,
+        mode=mode,
+        subject_type=subject_type,
+        subjects=subjects,
+        employees=employees_list,           # back-compat with old template var
+        partners=partners_list,
+        selected_employee=selected_subject, # template still references this name
+        selected_subject=selected_subject,
+        permissions_map=permissions_map,
+        catalog=filtered_catalog,
+        catalog_by_main=catalog_by_main,
+        active_section='company',
+    )
 
 
-@app.route('/api/section-permissions/<int:section_id>', methods=['PUT'])
+@app.route('/api/access-master/save', methods=['POST'])
 @login_required
-def update_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
+def access_master_save():
+    """Bulk upsert all permission rows for one employee.
 
-    data = request.get_json()
+    Request JSON:
+      {
+        "employee_id": 7,
+        "permissions": [
+          {"main": "operations", "sub": "call_notes", "view": 1, "edit": 1, "add": 0},
+          ...
+        ]
+      }
+
+    Behavior:
+      - Validates main/sub against ACCESS_SECTION_CATALOG (rejects unknown
+        keys so the table can't be polluted by a stale UI).
+      - Enforces the can_view-required rule: if edit or add is 1, view is
+        forced to 1 (per user decision 2026-06-01).
+      - Rows with all three flags 0 are deleted (cleaner than keeping
+        zero-rows around).
+    """
+    actor = get_user()
+    if not (actor and actor['is_admin']):
+        return jsonify({'error': 'Admin access required'}), 403
+    payload = request.get_json(silent=True) or {}
+    # Subject is either an employee or a partner. Default to employee
+    # for back-compat with older UI POSTs that only send employee_id.
+    subject_type = (payload.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
+    try:
+        subject_id = int(payload.get('subject_id') or payload.get('employee_id') or 0)
+    except (TypeError, ValueError):
+        subject_id = 0
+    if not subject_id:
+        return jsonify({'error': 'subject_id (or employee_id) required'}), 400
+    # employee_id column is only populated when the subject is an employee.
+    employee_id = subject_id if subject_type == 'employee' else None
+    perms = payload.get('permissions') or []
+    if not isinstance(perms, list):
+        return jsonify({'error': 'permissions must be a list'}), 400
+
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+
+    inserted = updated = deleted = skipped = 0
     conn = get_db()
-    conn.execute('''UPDATE section_permissions
-        SET is_admin_only = ?, allowed_roles = ?, allowed_emp_codes = ?, allowed_departments = ?, is_active = ?
-        WHERE id = ?''',
-        (data.get('is_admin_only', 0),
-         data.get('allowed_roles', ''),
-         data.get('allowed_emp_codes', ''),
-         data.get('allowed_departments', ''),
-         data.get('is_active', 1),
-         section_id))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+    try:
+        # Confirm the subject exists.
+        if subject_type == 'partner':
+            subj = conn.execute("SELECT id FROM partners WHERE id = ?", (subject_id,)).fetchone()
+            if not subj:
+                return jsonify({'error': 'Partner not found'}), 404
+        else:
+            subj = conn.execute("SELECT id FROM employees WHERE id = ?", (subject_id,)).fetchone()
+            if not subj:
+                return jsonify({'error': 'Employee not found'}), 404
+
+        for entry in perms:
+            main = (entry.get('main') or '').strip()
+            sub  = (entry.get('sub') or '').strip()
+            if (main, sub) not in valid_keys:
+                skipped += 1
+                continue
+            view = 1 if entry.get('view') else 0
+            edit = 1 if entry.get('edit') else 0
+            add  = 1 if entry.get('add')  else 0
+            # Enforce: if edit or add is set, view must be set too.
+            if edit or add:
+                view = 1
+
+            existing = conn.execute(
+                "SELECT id FROM user_section_permissions "
+                "WHERE subject_type = ? AND subject_id = ? "
+                "  AND main_section = ? AND sub_section = ?",
+                (subject_type, subject_id, main, sub),
+            ).fetchone()
+            # Legacy fallback for unmigrated rows (employee-only).
+            if not existing and subject_type == 'employee':
+                existing = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE employee_id = ? AND main_section = ? AND sub_section = ? "
+                    "  AND subject_id IS NULL",
+                    (subject_id, main, sub),
+                ).fetchone()
+
+            if not view and not edit and not add:
+                if existing:
+                    conn.execute(
+                        "DELETE FROM user_section_permissions WHERE id = ?",
+                        (existing['id'],),
+                    )
+                    deleted += 1
+                continue
+
+            if existing:
+                conn.execute(
+                    "UPDATE user_section_permissions "
+                    "SET can_view = ?, can_edit = ?, can_add = ?, "
+                    "    subject_type = ?, subject_id = ?, "
+                    "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?",
+                    (view, edit, add, subject_type, subject_id, actor['id'], existing['id']),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO user_section_permissions "
+                    "(employee_id, subject_type, subject_id, main_section, sub_section, "
+                    " can_view, can_edit, can_add, granted_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (employee_id, subject_type, subject_id, main, sub,
+                     view, edit, add, actor['id']),
+                )
+                inserted += 1
+        conn.commit()
+    except Exception as e:
+        logging.error(f"access_master_save: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return jsonify({
+        'success': True,
+        'inserted': inserted,
+        'updated': updated,
+        'deleted': deleted,
+        'skipped': skipped,
+    })
 
 
-@app.route('/api/section-permissions', methods=['POST'])
+@app.route('/admin/access-master/audit')
 @login_required
-def add_section_permission():
+def access_master_audit_view():
+    """Show what permissions everyone WOULD need based on the in-memory
+    audit counts since process boot. Helps admins set up the right
+    Access Master grants before Phase 5 flips the enforce flag.
+
+    Counts reset whenever the Render process restarts (a deploy or idle
+    timeout); this is intentional — we want a rolling view, not an
+    eternal table that grows forever.
+    """
     user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
 
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''INSERT INTO section_permissions (section_key, section_label, menu_group, is_admin_only, allowed_roles, allowed_emp_codes, allowed_departments, is_active, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-        (data.get('section_key', ''),
-         data.get('section_label', ''),
-         data.get('menu_group', 'Other'),
-         data.get('is_admin_only', 0),
-         data.get('allowed_roles', ''),
-         data.get('allowed_emp_codes', ''),
-         data.get('allowed_departments', ''),
-         data.get('is_active', 1),
-         data.get('sort_order', 99)))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+    # Bucket: emp_code -> [{ endpoint, main, sub, action, hits }, ...]
+    by_user = {}
+    for (emp_code, endpoint), hits in ACCESS_AUDIT_COUNTS.items():
+        rule = ACCESS_ROUTE_MAP.get(endpoint)
+        if not rule:
+            continue
+        main, sub, action = rule
+        by_user.setdefault(emp_code, []).append({
+            'endpoint': endpoint,
+            'main': main, 'sub': sub, 'action': action,
+            'hits': hits,
+        })
+    for emp_code in by_user:
+        by_user[emp_code].sort(key=lambda r: -r['hits'])
+
+    return render_template(
+        'access_master_audit.html',
+        user=user,
+        by_user=by_user,
+        enforce_on=ACCESS_MASTER_ENFORCE,
+        active_section='company',
+    )
 
 
-@app.route('/api/section-permissions/<int:section_id>', methods=['DELETE'])
+@app.route('/api/access-master/save-bulk', methods=['POST'])
 @login_required
-def delete_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
+def access_master_save_bulk():
+    """Bulk grant the same permissions to many employees at once.
 
+    Used by the "By Section" flow: admin picks a main section, picks the
+    sub-sections to grant, sets View/Edit/Add once, then selects N team
+    members. We apply the same permission set to each of them in a
+    single atomic transaction.
+
+    Request JSON:
+      {
+        "employee_ids": [7, 12, 18],
+        "permissions": [
+          {"main":"operations","sub":"call_notes","view":1,"edit":1,"add":0},
+          ...
+        ]
+      }
+    """
+    actor = get_user()
+    if not (actor and actor['is_admin']):
+        return jsonify({'error': 'Admin access required'}), 403
+    payload = request.get_json(silent=True) or {}
+    subject_type = (payload.get('subject_type') or 'employee').strip()
+    if subject_type not in ('employee', 'partner'):
+        subject_type = 'employee'
+
+    # Accept either subject_ids or the older employee_ids key.
+    raw_ids = payload.get('subject_ids') or payload.get('employee_ids') or []
+    if not isinstance(raw_ids, list) or not raw_ids:
+        return jsonify({'error': 'subject_ids (or employee_ids) required (non-empty list)'}), 400
+    subject_ids = []
+    for sid in raw_ids:
+        try:
+            subject_ids.append(int(sid))
+        except (TypeError, ValueError):
+            continue
+    if not subject_ids:
+        return jsonify({'error': 'No valid subject_ids'}), 400
+
+    perms = payload.get('permissions') or []
+    if not isinstance(perms, list):
+        return jsonify({'error': 'permissions must be a list'}), 400
+
+    valid_keys = set()
+    for sec in ACCESS_SECTION_CATALOG:
+        for sub_key, _label, _desc in sec['sub_sections']:
+            valid_keys.add((sec['key'], sub_key))
+
+    totals = {'inserted': 0, 'updated': 0, 'deleted': 0, 'skipped': 0}
+    affected_employees = 0
     conn = get_db()
-    conn.execute("DELETE FROM section_permissions WHERE id = ?", (section_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+    try:
+        # Confirm all subjects exist (fail fast on bad ids).
+        placeholders = ','.join(['?'] * len(subject_ids))
+        table = 'partners' if subject_type == 'partner' else 'employees'
+        existing_ids = {
+            r['id'] for r in conn.execute(
+                f"SELECT id FROM {table} WHERE id IN ({placeholders})",
+                tuple(subject_ids),
+            ).fetchall()
+        }
+        valid_employee_ids = [e for e in subject_ids if e in existing_ids]
+        if not valid_employee_ids:
+            return jsonify({'error': f'None of the supplied {subject_type}_ids exist'}), 404
+
+        for sid in valid_employee_ids:
+            touched = False
+            # employee_id stays NULL for partner subjects to avoid FK issues.
+            employee_id_for_row = sid if subject_type == 'employee' else None
+            for entry in perms:
+                main = (entry.get('main') or '').strip()
+                sub  = (entry.get('sub') or '').strip()
+                if (main, sub) not in valid_keys:
+                    totals['skipped'] += 1
+                    continue
+                view = 1 if entry.get('view') else 0
+                edit = 1 if entry.get('edit') else 0
+                add  = 1 if entry.get('add')  else 0
+                if edit or add:
+                    view = 1
+
+                existing = conn.execute(
+                    "SELECT id FROM user_section_permissions "
+                    "WHERE subject_type = ? AND subject_id = ? "
+                    "  AND main_section = ? AND sub_section = ?",
+                    (subject_type, sid, main, sub),
+                ).fetchone()
+                if not existing and subject_type == 'employee':
+                    existing = conn.execute(
+                        "SELECT id FROM user_section_permissions "
+                        "WHERE employee_id = ? AND main_section = ? AND sub_section = ? "
+                        "  AND subject_id IS NULL",
+                        (sid, main, sub),
+                    ).fetchone()
+
+                if not view and not edit and not add:
+                    if existing:
+                        conn.execute(
+                            "DELETE FROM user_section_permissions WHERE id = ?",
+                            (existing['id'],),
+                        )
+                        totals['deleted'] += 1
+                        touched = True
+                    continue
+
+                if existing:
+                    conn.execute(
+                        "UPDATE user_section_permissions "
+                        "SET can_view = ?, can_edit = ?, can_add = ?, "
+                        "    subject_type = ?, subject_id = ?, "
+                        "    granted_by = ?, updated_at = CURRENT_TIMESTAMP "
+                        "WHERE id = ?",
+                        (view, edit, add, subject_type, sid, actor['id'], existing['id']),
+                    )
+                    totals['updated'] += 1
+                else:
+                    conn.execute(
+                        "INSERT INTO user_section_permissions "
+                        "(employee_id, subject_type, subject_id, main_section, sub_section, "
+                        " can_view, can_edit, can_add, granted_by) "
+                        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                        (employee_id_for_row, subject_type, sid, main, sub,
+                         view, edit, add, actor['id']),
+                    )
+                    totals['inserted'] += 1
+                touched = True
+            if touched:
+                affected_employees += 1
+        conn.commit()
+    except Exception as e:
+        logging.error(f"access_master_save_bulk: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+    return jsonify({
+        'success': True,
+        'affected_employees': affected_employees,
+        **totals,
+    })
 
 
-# ── Partner Section Permission APIs ──
-
-@app.route('/api/partner-section-permissions/<int:section_id>', methods=['PUT'])
-@login_required
-def update_partner_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''UPDATE partner_section_permissions
-        SET allowed_partner_ids = ?, is_active = ?
-        WHERE id = ?''',
-        (data.get('allowed_partner_ids', ''),
-         data.get('is_active', 1),
-         section_id))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/partner-section-permissions', methods=['POST'])
-@login_required
-def add_partner_section_permission():
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    data = request.get_json()
-    conn = get_db()
-    conn.execute('''INSERT INTO partner_section_permissions
-        (section_key, section_label, menu_group, allowed_partner_ids, is_active, sort_order)
-        VALUES (?, ?, ?, ?, ?, ?)''',
-        (data.get('section_key', ''),
-         data.get('section_label', ''),
-         data.get('menu_group', 'Partner Portal'),
-         data.get('allowed_partner_ids', ''),
-         data.get('is_active', 1),
-         data.get('sort_order', 99)))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
-
-
-@app.route('/api/partner-section-permissions/<int:section_id>', methods=['DELETE'])
-@login_required
-def delete_partner_section_permission(section_id):
-    user = get_user()
-    if not user.get('is_admin'):
-        return jsonify({'error': 'Admin required'}), 403
-
-    conn = get_db()
-    conn.execute("DELETE FROM partner_section_permissions WHERE id = ?", (section_id,))
-    conn.commit()
-    conn.close()
-    return jsonify({'success': True})
+# ── Legacy Section Visibility editor + APIs (DELETED in Phase 6, 2026-06-01)
+#
+# The /admin/section-visibility page, its template, and the seven API endpoints
+# that backed it (PUT/POST/DELETE on section-permissions and partner-section-permissions)
+# were the old way of controlling who sees what in the sidebar. Access Master
+# replaces all of it. The legacy `section_permissions` and `partner_section_permissions`
+# tables are dropped by drop_legacy_section_tables_once() on boot.
+#
+# If you find yourself reaching for a "section visibility" page, you want
+# /admin/access-master instead — same idea, finer grain, audited.
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -27759,10 +35383,150 @@ def neetpg_catchup_publish():
         logging.error(f"neetpg_catchup_publish error: {e}")
 
 
+# ── Item F-2: 30-day check-in scheduler ─────────────────────────────
+# Daily job: find clients onboarded ~30 working days ago and fire the
+# `thirty_day_checkin` stage email (gated on the template being
+# enabled in /admin/email-templates).
+#
+# Freshness window of FRESHNESS_DAYS guards against retroactive bulk-
+# send: when an admin first enables the template, only clients due
+# within the past `FRESHNESS_DAYS` calendar days will be emailed.
+# Older candidates are silently marked `thirty_day_checkin_skipped=1`
+# so they don't keep getting reconsidered each day.
+
+THIRTY_DAY_CHECKIN_FRESHNESS_DAYS = 7
+
+
+def process_thirty_day_checkins():
+    """One pass of the 30-day check-in job. Safe to call from the
+    daily APScheduler trigger OR an admin "run now" button. Never
+    raises. Returns a summary dict for caller-side reporting.
+    """
+    summary = {'sent': 0, 'disabled': 0, 'not_due': 0,
+               'skipped_late': 0, 'error': 0, 'considered': 0}
+    conn = None
+    try:
+        from working_days import (
+            add_working_days, load_holidays_set, now_ist,
+        )
+        from datetime import datetime as _dt
+        conn = get_db()
+        holidays_set = load_holidays_set(conn)
+        today_ist = now_ist().date()
+
+        rows = conn.execute("""
+            SELECT id, client_id, registration_number,
+                   onboarding_status, updated_at,
+                   thirty_day_checkin_sent_at,
+                   thirty_day_checkin_skipped
+              FROM client_onboarding
+             WHERE LOWER(COALESCE(onboarding_status,'')) = 'completed'
+               AND thirty_day_checkin_sent_at IS NULL
+               AND COALESCE(thirty_day_checkin_skipped, 0) = 0
+        """).fetchall()
+        summary['considered'] = len(rows)
+
+        for r in rows:
+            try:
+                onboarded_str = str(r['updated_at'] or '')[:10]
+                if not onboarded_str:
+                    continue
+                try:
+                    base = _dt.strptime(onboarded_str, '%Y-%m-%d').date()
+                except Exception:
+                    continue
+                # Compute the projected due date once -- same logic
+                # the client's dashboard timeline shows.
+                due = add_working_days(
+                    base, 30, holidays_set, cutoff_hour=None)
+                days_overdue = (today_ist - due).days
+                if days_overdue < 0:
+                    summary['not_due'] += 1
+                    continue
+                if days_overdue > THIRTY_DAY_CHECKIN_FRESHNESS_DAYS:
+                    # Past the freshness window -- mark skipped so we
+                    # don't keep reconsidering this row every morning.
+                    try:
+                        conn.execute(
+                            "UPDATE client_onboarding "
+                            "  SET thirty_day_checkin_skipped = 1 "
+                            "WHERE id = ?",
+                            (r['id'],))
+                        conn.commit()
+                    except Exception: pass
+                    summary['skipped_late'] += 1
+                    continue
+
+                client_row = conn.execute(
+                    "SELECT * FROM plab_clients WHERE id = ?",
+                    (r['client_id'],)
+                ).fetchone()
+                if not client_row:
+                    continue
+                ctx = _stage_email_context_from_client(dict(client_row))
+                result = _send_stage_email(
+                    conn, 'thirty_day_checkin', r['client_id'], ctx)
+
+                if result['status'] == 'sent':
+                    conn.execute(
+                        "UPDATE client_onboarding "
+                        "  SET thirty_day_checkin_sent_at = CURRENT_TIMESTAMP "
+                        "WHERE id = ?", (r['id'],))
+                    conn.commit()
+                    summary['sent'] += 1
+                elif result['status'] == 'disabled':
+                    # Don't mark sent: when admin enables the
+                    # template, the row remains a candidate on
+                    # tomorrow's run (still within freshness).
+                    summary['disabled'] += 1
+                else:
+                    summary['error'] += 1
+            except Exception as e:
+                logging.error(
+                    f"thirty_day_checkin row {r.get('id')}: {e}")
+                summary['error'] += 1
+        logging.info(
+            f"thirty_day_checkin job: considered={summary['considered']}, "
+            f"sent={summary['sent']}, disabled={summary['disabled']}, "
+            f"not_due={summary['not_due']}, "
+            f"skipped_late={summary['skipped_late']}, "
+            f"errors={summary['error']}")
+    except Exception as e:
+        logging.error(f"process_thirty_day_checkins fatal: {e}")
+    finally:
+        try:
+            if conn is not None: conn.close()
+        except Exception: pass
+    return summary
+
+
+@app.route('/admin/email-templates/run-checkin-job-now', methods=['POST'])
+@login_required
+def admin_run_thirty_day_checkin_job():
+    """Admin-triggered immediate run of the 30-day check-in job.
+    Useful for testing after enabling the template -- no need to
+    wait for tomorrow's 9 AM IST cron."""
+    user = get_user()
+    if not (user and user['is_admin']):
+        flash('Admin access required', 'error')
+        return redirect(url_for('dashboard'))
+    summary = process_thirty_day_checkins()
+    flash(
+        f"Check-in job: considered {summary['considered']}, "
+        f"sent {summary['sent']}, disabled {summary['disabled']}, "
+        f"not due {summary['not_due']}, "
+        f"skipped (past freshness) {summary['skipped_late']}, "
+        f"errors {summary['error']}",
+        'success' if summary['sent'] else 'info'
+    )
+    return redirect(url_for('admin_email_templates_list'))
+
+
 def start_neetpg_scheduler():
     """Start background scheduler for auto-publishing PDFs at 10 AM, 1 PM and 5 PM IST.
 
-    Also runs a one-time catchup to handle any slots missed due to app restarts.
+    Also runs the daily 30-day check-in job (Item F-2) and a one-
+    time catchup to handle any slots missed due to app restarts.
     """
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
@@ -27776,8 +35540,19 @@ def start_neetpg_scheduler():
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=13, minute=0, timezone=ist), id='neetpg_publish_afternoon')
         # 5:00 PM IST daily
         scheduler.add_job(neetpg_auto_publish, CronTrigger(hour=17, minute=0, timezone=ist), id='neetpg_publish_evening')
+        # Item F-2: 30-day check-in -- 09:00 AM IST daily. Cheap
+        # query (uses thirty_day_checkin_sent_at IS NULL filter), so
+        # safe to run unconditionally even if the template is
+        # disabled (helper short-circuits with status='disabled').
+        scheduler.add_job(
+            process_thirty_day_checkins,
+            CronTrigger(hour=9, minute=0, timezone=ist),
+            id='thirty_day_checkin_daily',
+        )
         scheduler.start()
-        logging.info("NEET PG auto-publish scheduler started (10 AM + 1 PM + 5 PM IST)")
+        logging.info(
+            "Schedulers started: NEET PG auto-publish (10am+1pm+5pm IST), "
+            "30-day check-in (9am IST)")
         # Run catchup for missed slots after restarts/deploys
         neetpg_catchup_publish()
     except ImportError:
@@ -28822,6 +36597,792 @@ def wa_webhook():
 @login_required
 def landing_pages():
     return render_template('landing_pages.html', active_section='company')
+
+
+# ─────────────────────────────────────────────────────────
+#  12thPlus Schools CRM (Sales section)
+#  School outreach CRM for the 12thPlus team. Tables: schools +
+#  school_meetings (boot-migrated in ensure_crm_tables). Reminder
+#  cron + email sending intentionally deferred to a follow-up pass;
+#  meeting.next_followup_date and meeting.reminder_sent_at are
+#  written here so the reminder system can read them later.
+# ─────────────────────────────────────────────────────────
+def _twelfthplus_lookup_options(category):
+    """Fetch active lookup_options for a category (pathway NULL or 'plab' fallback).
+    Used for school_type + cochin_area dropdowns."""
+    try:
+        conn = get_db()
+        rows = conn.execute(
+            "SELECT value FROM lookup_options "
+            "WHERE category = ? AND is_active = TRUE "
+            "ORDER BY sort_order, id",
+            (category,)
+        ).fetchall()
+        conn.close()
+        seen, out = set(), []
+        for r in rows:
+            v = r['value']
+            if v not in seen:
+                seen.add(v)
+                out.append(v)
+        return out
+    except Exception as e:
+        logging.error(f"_twelfthplus_lookup_options({category}): {e}")
+        return []
+
+
+def _twelfthplus_active_employees(conn):
+    return conn.execute(
+        "SELECT id, name FROM employees WHERE is_active = 1 ORDER BY name"
+    ).fetchall()
+
+
+def _twelfthplus_school_or_404(conn, sid):
+    return conn.execute(
+        "SELECT s.*, e1.name AS assigned_name, e2.name AS created_by_name "
+        "FROM schools s "
+        "LEFT JOIN employees e1 ON s.assigned_to = e1.id "
+        "LEFT JOIN employees e2 ON s.created_by = e2.id "
+        "WHERE s.id = ?",
+        (sid,)
+    ).fetchone()
+
+
+@app.route('/sales/12thplus')
+@admin_required
+def sales_twelfthplus_dashboard():
+    from datetime import date
+    user = get_user()
+    conn = get_db()
+    try:
+        total_schools = conn.execute("SELECT COUNT(*) AS c FROM schools").fetchone()['c']
+        my_schools = conn.execute(
+            "SELECT COUNT(*) AS c FROM schools WHERE assigned_to = ?", (user['id'],)
+        ).fetchone()['c']
+        # Meetings now live in the unified b2b_meetings table. The 12thPlus
+        # dashboard reads from there so it reflects the single CRM. Each
+        # block is defensive so an empty/missing table never 500s.
+        today = date.today()
+        week_start = today - timedelta(days=today.weekday())
+        week_end = week_start + timedelta(days=6)
+        try:
+            meetings_this_week = conn.execute(
+                "SELECT COUNT(*) AS c FROM b2b_meetings WHERE meeting_date BETWEEN ? AND ?",
+                (week_start.isoformat(), week_end.isoformat())
+            ).fetchone()['c']
+        except Exception:
+            meetings_this_week = 0
+        # Follow-ups due across all entity types in the unified CRM
+        # (b2b_meetings is the source of truth going forward).
+        try:
+            followups_due = conn.execute(
+                "SELECT COUNT(*) AS c FROM b2b_meetings "
+                "WHERE next_followup_date IS NOT NULL "
+                "  AND next_followup_date <> '' "
+                "  AND next_followup_date <= ?",
+                (today.isoformat(),)
+            ).fetchone()['c']
+        except Exception:
+            followups_due = 0
+
+        try:
+            recent_meetings = conn.execute(
+                "SELECT bm.*, COALESCE(bm.meeting_with, mt.name) AS school_name, "
+                "       e.name AS handler_name, bm.trip_id AS trip_id "
+                "FROM b2b_meetings bm "
+                "LEFT JOIN meeting_types mt ON bm.meeting_type_id = mt.id "
+                "LEFT JOIN employees e ON bm.handler_employee_id = e.id "
+                "ORDER BY bm.meeting_date DESC, bm.id DESC "
+                "LIMIT 10"
+            ).fetchall()
+        except Exception:
+            recent_meetings = []
+    finally:
+        conn.close()
+
+    return render_template(
+        'sales_twelfthplus_dashboard.html',
+        user=user,
+        total_schools=total_schools,
+        my_schools=my_schools,
+        meetings_this_week=meetings_this_week,
+        followups_due=followups_due,
+        recent_meetings=recent_meetings,
+        active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools')
+@admin_required
+def sales_twelfthplus_schools_list():
+    user = get_user()
+    q = (request.args.get('q') or '').strip()
+    area_f = (request.args.get('area') or '').strip()
+    assigned_f = (request.args.get('assigned') or '').strip()
+    type_f = (request.args.get('school_type') or '').strip()
+
+    sql = (
+        "SELECT s.*, e.name AS assigned_name "
+        "FROM schools s LEFT JOIN employees e ON s.assigned_to = e.id "
+        "WHERE 1=1"
+    )
+    params = []
+    if q:
+        sql += " AND (LOWER(s.name) LIKE ? OR LOWER(COALESCE(s.principal_name,'')) LIKE ?)"
+        params += [f"%{q.lower()}%", f"%{q.lower()}%"]
+    if area_f:
+        sql += " AND s.area = ?"
+        params.append(area_f)
+    if type_f:
+        sql += " AND s.school_type = ?"
+        params.append(type_f)
+    if assigned_f:
+        try:
+            sql += " AND s.assigned_to = ?"
+            params.append(int(assigned_f))
+        except ValueError:
+            pass
+    sql += " ORDER BY s.name"
+
+    conn = get_db()
+    try:
+        records = conn.execute(sql, tuple(params)).fetchall()
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+
+    return render_template(
+        'sales_twelfthplus_schools_list.html',
+        user=user,
+        records=records,
+        employees=employees,
+        areas=_twelfthplus_lookup_options('cochin_area'),
+        school_types=_twelfthplus_lookup_options('school_type'),
+        filters={'q': q, 'area': area_f, 'assigned': assigned_f, 'school_type': type_f},
+        active_section='sales',
+    )
+
+
+def _twelfthplus_form_context(conn, record=None):
+    return {
+        'record': record,
+        'employees': _twelfthplus_active_employees(conn),
+        'areas': _twelfthplus_lookup_options('cochin_area'),
+        'school_types': _twelfthplus_lookup_options('school_type'),
+        'active_section': 'sales',
+    }
+
+
+def _twelfthplus_collect_school_form():
+    f = request.form
+    def s(k):
+        return (f.get(k) or '').strip() or None
+    student_strength = f.get('student_strength', '').strip()
+    try:
+        student_strength = int(student_strength) if student_strength else None
+    except ValueError:
+        student_strength = None
+    assigned_to = f.get('assigned_to', '').strip()
+    try:
+        assigned_to = int(assigned_to) if assigned_to else None
+    except ValueError:
+        assigned_to = None
+    return {
+        'name': s('name'),
+        'website': s('website'),
+        'area': s('area'),
+        'principal_name': s('principal_name'),
+        'contact_number': s('contact_number'),
+        'email': s('email'),
+        'address': s('address'),
+        'school_type': s('school_type'),
+        'student_strength': student_strength,
+        'assigned_to': assigned_to,
+        'status': s('status') or 'active',
+        'notes': s('notes'),
+    }
+
+
+@app.route('/sales/12thplus/schools/add', methods=['GET'])
+@admin_required
+def sales_twelfthplus_school_add_page():
+    user = get_user()
+    conn = get_db()
+    try:
+        ctx = _twelfthplus_form_context(conn)
+    finally:
+        conn.close()
+    return render_template('sales_twelfthplus_school_form.html', user=user, **ctx)
+
+
+@app.route('/sales/12thplus/schools/add', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_add_save():
+    user = get_user()
+    data = _twelfthplus_collect_school_form()
+    if not data['name']:
+        flash('School name is required', 'error')
+        return redirect(url_for('sales_twelfthplus_school_add_page'))
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "INSERT INTO schools "
+            "(name, website, area, principal_name, contact_number, email, address, "
+            " school_type, student_strength, assigned_to, status, notes, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id",
+            (
+                data['name'], data['website'], data['area'], data['principal_name'],
+                data['contact_number'], data['email'], data['address'],
+                data['school_type'], data['student_strength'], data['assigned_to'],
+                data['status'], data['notes'], user['id'],
+            ),
+        )
+        new_id = cur.fetchone()['id']
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School added', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=new_id))
+
+
+@app.route('/sales/12thplus/schools/<int:sid>')
+@admin_required
+def sales_twelfthplus_school_detail(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        meetings = conn.execute(
+            "SELECT sm.*, e.name AS handler_name "
+            "FROM school_meetings sm "
+            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+            "WHERE sm.school_id = ? "
+            "ORDER BY sm.meeting_date DESC, sm.id DESC",
+            (sid,)
+        ).fetchall()
+        # Unified meeting CRM: meetings logged against this school via the
+        # b2b meeting system (entity_id + category 'School').
+        try:
+            crm_meetings = conn.execute(
+                "SELECT bm.*, mt.name AS category, e.name AS handler_name, t.city AS trip_city "
+                "FROM b2b_meetings bm "
+                "LEFT JOIN meeting_types mt ON bm.meeting_type_id = mt.id "
+                "LEFT JOIN employees e ON bm.handler_employee_id = e.id "
+                "LEFT JOIN b2b_trips t ON bm.trip_id = t.id "
+                "WHERE bm.entity_id = ? AND LOWER(mt.name) = 'school' "
+                "ORDER BY bm.meeting_date DESC, bm.id DESC",
+                (sid,)
+            ).fetchall()
+        except Exception as e:
+            logging.error(f"school_detail crm_meetings({sid}): {e}")
+            crm_meetings = []
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_school_detail.html',
+        user=user, school=school, meetings=meetings, crm_meetings=crm_meetings,
+        active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/edit', methods=['GET'])
+@admin_required
+def sales_twelfthplus_school_edit_page(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        ctx = _twelfthplus_form_context(conn, record=school)
+    finally:
+        conn.close()
+    return render_template('sales_twelfthplus_school_form.html', user=user, **ctx)
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/edit', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_edit_save(sid):
+    data = _twelfthplus_collect_school_form()
+    if not data['name']:
+        flash('School name is required', 'error')
+        return redirect(url_for('sales_twelfthplus_school_edit_page', sid=sid))
+    conn = get_db()
+    try:
+        exists = conn.execute("SELECT id FROM schools WHERE id = ?", (sid,)).fetchone()
+        if not exists:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        conn.execute(
+            "UPDATE schools SET name=?, website=?, area=?, principal_name=?, "
+            "  contact_number=?, email=?, address=?, school_type=?, "
+            "  student_strength=?, assigned_to=?, status=?, notes=?, "
+            "  updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (
+                data['name'], data['website'], data['area'], data['principal_name'],
+                data['contact_number'], data['email'], data['address'],
+                data['school_type'], data['student_strength'], data['assigned_to'],
+                data['status'], data['notes'], sid,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School updated', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/delete', methods=['POST'])
+@admin_required
+def sales_twelfthplus_school_delete(sid):
+    conn = get_db()
+    try:
+        conn.execute("DELETE FROM schools WHERE id = ?", (sid,))
+        conn.commit()
+    finally:
+        conn.close()
+    flash('School deleted', 'success')
+    return redirect(url_for('sales_twelfthplus_schools_list'))
+
+
+# ───── Excel import / template ─────
+_TWELFTHPLUS_IMPORT_HEADERS = [
+    'School Name', 'Website', 'Area in Cochin', 'Principal Name',
+    'Contact Number', 'Email ID', 'Address', 'School Type',
+    'Student Strength', 'Assigned To',
+]
+
+
+def _twelfthplus_norm(s):
+    return (str(s or '')).strip()
+
+
+def _twelfthplus_norm_header(h):
+    return _twelfthplus_norm(h).lower().replace('_', ' ')
+
+
+@app.route('/sales/12thplus/schools/template.xlsx')
+@admin_required
+def sales_twelfthplus_schools_template():
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, PatternFill
+    wb = Workbook()
+    ws = wb.active
+    ws.title = 'Schools'
+    header_font = Font(bold=True, color='FFFFFF')
+    header_fill = PatternFill(start_color='0F1B33', end_color='0F1B33', fill_type='solid')
+    for col_idx, h in enumerate(_TWELFTHPLUS_IMPORT_HEADERS, 1):
+        cell = ws.cell(row=1, column=col_idx, value=h)
+        cell.font = header_font
+        cell.fill = header_fill
+    sample = [
+        'Bharatiya Vidya Bhavan',
+        'https://bhavansedappally.org',
+        'Edappally',
+        'Mrs. Sunitha Menon',
+        '9876543210',
+        'principal@bhavansedappally.org',
+        'Edappally Toll Junction, Kochi',
+        'CBSE',
+        1450,
+        '',  # leave Assigned To blank in template
+    ]
+    for col_idx, val in enumerate(sample, 1):
+        ws.cell(row=2, column=col_idx, value=val)
+    for col_idx in range(1, len(_TWELFTHPLUS_IMPORT_HEADERS) + 1):
+        ws.column_dimensions[ws.cell(row=1, column=col_idx).column_letter].width = 22
+    output = BytesIO()
+    wb.save(output)
+    output.seek(0)
+    return send_file(
+        output,
+        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        as_attachment=True,
+        download_name='12thplus_schools_template.xlsx',
+    )
+
+
+@app.route('/sales/12thplus/schools/import', methods=['GET'])
+@admin_required
+def sales_twelfthplus_schools_import_page():
+    user = get_user()
+    return render_template(
+        'sales_twelfthplus_schools_import.html',
+        user=user,
+        sample_headers=_TWELFTHPLUS_IMPORT_HEADERS,
+        active_section='sales',
+        summary=None,
+    )
+
+
+@app.route('/sales/12thplus/schools/import', methods=['POST'])
+@admin_required
+def sales_twelfthplus_schools_import_submit():
+    user = get_user()
+    data_file = request.files.get('xlsx_file')
+    if not data_file or not data_file.filename:
+        flash('Please upload an .xlsx file', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+    if not data_file.filename.lower().endswith('.xlsx'):
+        flash('Please upload an .xlsx file (CSV not supported here)', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+
+    import openpyxl
+    try:
+        wb = openpyxl.load_workbook(data_file.stream, read_only=True, data_only=True)
+    except Exception as e:
+        flash(f'Could not read workbook: {e}', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+    ws = wb.active
+    rows_iter = ws.iter_rows(values_only=True)
+    try:
+        header_row = next(rows_iter)
+    except StopIteration:
+        flash('Workbook is empty', 'error')
+        return redirect(url_for('sales_twelfthplus_schools_import_page'))
+
+    # Map header label -> column index (case-insensitive, trims spaces).
+    header_index = {}
+    for i, h in enumerate(header_row):
+        if h is None:
+            continue
+        header_index[_twelfthplus_norm_header(h)] = i
+
+    def get(row, label):
+        idx = header_index.get(_twelfthplus_norm_header(label))
+        if idx is None or idx >= len(row):
+            return ''
+        return _twelfthplus_norm(row[idx])
+
+    inserted = 0
+    updated = 0
+    skipped = []
+
+    conn = get_db()
+    try:
+        # Build a name-lookup map of active employees once.
+        emp_rows = _twelfthplus_active_employees(conn)
+        emp_by_name = { (e['name'] or '').strip().lower(): e['id'] for e in emp_rows }
+
+        for line_no, row in enumerate(rows_iter, start=2):
+            if row is None or all(v is None or _twelfthplus_norm(v) == '' for v in row):
+                continue  # blank row
+            name = get(row, 'School Name')
+            if not name:
+                skipped.append({'line': line_no, 'reason': 'missing School Name'})
+                continue
+            website = get(row, 'Website')
+            area = get(row, 'Area in Cochin')
+            principal = get(row, 'Principal Name')
+            contact = get(row, 'Contact Number')
+            email_v = get(row, 'Email ID')
+            address = get(row, 'Address')
+            school_type = get(row, 'School Type')
+            strength_raw = get(row, 'Student Strength')
+            try:
+                strength = int(float(strength_raw)) if strength_raw else None
+            except ValueError:
+                strength = None
+            assigned_name = get(row, 'Assigned To')
+            assigned_to = None
+            if assigned_name:
+                assigned_to = emp_by_name.get(assigned_name.lower())
+                if not assigned_to:
+                    skipped.append({
+                        'line': line_no,
+                        'reason': f"Assigned To '{assigned_name}' not matched to active employee",
+                    })
+                    # we still insert/update the school but leave assigned_to NULL
+            existing = conn.execute(
+                "SELECT id FROM schools WHERE LOWER(name) = ?",
+                (name.lower(),),
+            ).fetchone()
+            if existing:
+                conn.execute(
+                    "UPDATE schools SET website=?, area=?, principal_name=?, "
+                    "  contact_number=?, email=?, address=?, school_type=?, "
+                    "  student_strength=?, assigned_to=?, "
+                    "  updated_at = CURRENT_TIMESTAMP "
+                    "WHERE id = ?",
+                    (
+                        website or None, area or None, principal or None,
+                        contact or None, email_v or None, address or None,
+                        school_type or None, strength, assigned_to,
+                        existing['id'],
+                    ),
+                )
+                updated += 1
+            else:
+                conn.execute(
+                    "INSERT INTO schools "
+                    "(name, website, area, principal_name, contact_number, email, "
+                    " address, school_type, student_strength, assigned_to, status, "
+                    " created_by) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?)",
+                    (
+                        name, website or None, area or None, principal or None,
+                        contact or None, email_v or None, address or None,
+                        school_type or None, strength, assigned_to, user['id'],
+                    ),
+                )
+                inserted += 1
+        conn.commit()
+    finally:
+        wb.close()
+        conn.close()
+
+    summary = {
+        'inserted': inserted,
+        'updated': updated,
+        'skipped': skipped,
+    }
+    return render_template(
+        'sales_twelfthplus_schools_import.html',
+        user=user,
+        sample_headers=_TWELFTHPLUS_IMPORT_HEADERS,
+        active_section='sales',
+        summary=summary,
+    )
+
+
+# ───── Meetings ─────
+def _twelfthplus_collect_meeting_form():
+    f = request.form
+    def s(k):
+        return (f.get(k) or '').strip() or None
+    handler = f.get('handler_employee_id', '').strip()
+    try:
+        handler_id = int(handler) if handler else None
+    except ValueError:
+        handler_id = None
+    return {
+        'meeting_date': s('meeting_date'),
+        'meeting_time': s('meeting_time'),
+        'contact_type': s('contact_type'),
+        'status': s('status'),
+        'notes': s('notes'),
+        'next_followup_date': s('next_followup_date'),
+        'next_followup_note': s('next_followup_note'),
+        'handler_employee_id': handler_id,
+    }
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/meetings/add', methods=['GET'])
+@admin_required
+def sales_twelfthplus_meeting_add_page(sid):
+    user = get_user()
+    conn = get_db()
+    try:
+        school = _twelfthplus_school_or_404(conn, sid)
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_meeting_form.html',
+        user=user, school=school, employees=employees,
+        record=None, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/schools/<int:sid>/meetings/add', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_add_save(sid):
+    user = get_user()
+    data = _twelfthplus_collect_meeting_form()
+    if not data['meeting_date']:
+        flash('Meeting date is required', 'error')
+        return redirect(url_for('sales_twelfthplus_meeting_add_page', sid=sid))
+    conn = get_db()
+    try:
+        school = conn.execute("SELECT id FROM schools WHERE id = ?", (sid,)).fetchone()
+        if not school:
+            conn.close()
+            flash('School not found', 'error')
+            return redirect(url_for('sales_twelfthplus_schools_list'))
+        conn.execute(
+            "INSERT INTO school_meetings "
+            "(school_id, meeting_date, meeting_time, contact_type, status, notes, "
+            " next_followup_date, next_followup_note, handler_employee_id, created_by) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                sid, data['meeting_date'], data['meeting_time'], data['contact_type'],
+                data['status'], data['notes'], data['next_followup_date'],
+                data['next_followup_note'], data['handler_employee_id'], user['id'],
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting added', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+def _twelfthplus_meeting_or_404(conn, mid):
+    return conn.execute(
+        "SELECT sm.*, s.name AS school_name, s.id AS sid, "
+        "       e.name AS handler_name "
+        "FROM school_meetings sm "
+        "JOIN schools s ON sm.school_id = s.id "
+        "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+        "WHERE sm.id = ?",
+        (mid,)
+    ).fetchone()
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>')
+@admin_required
+def sales_twelfthplus_meeting_detail(mid):
+    user = get_user()
+    conn = get_db()
+    try:
+        meeting = _twelfthplus_meeting_or_404(conn, mid)
+    finally:
+        conn.close()
+    if not meeting:
+        flash('Meeting not found', 'error')
+        return redirect(url_for('sales_twelfthplus_dashboard'))
+    return render_template(
+        'sales_twelfthplus_meeting_detail.html',
+        user=user, meeting=meeting, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/edit', methods=['GET'])
+@admin_required
+def sales_twelfthplus_meeting_edit_page(mid):
+    user = get_user()
+    conn = get_db()
+    try:
+        meeting = _twelfthplus_meeting_or_404(conn, mid)
+        if not meeting:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        school = conn.execute(
+            "SELECT * FROM schools WHERE id = ?", (meeting['school_id'],)
+        ).fetchone()
+        employees = _twelfthplus_active_employees(conn)
+    finally:
+        conn.close()
+    return render_template(
+        'sales_twelfthplus_meeting_form.html',
+        user=user, school=school, employees=employees,
+        record=meeting, active_section='sales',
+    )
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/edit', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_edit_save(mid):
+    data = _twelfthplus_collect_meeting_form()
+    if not data['meeting_date']:
+        flash('Meeting date is required', 'error')
+        return redirect(url_for('sales_twelfthplus_meeting_edit_page', mid=mid))
+    conn = get_db()
+    try:
+        meeting = conn.execute(
+            "SELECT school_id FROM school_meetings WHERE id = ?", (mid,)
+        ).fetchone()
+        if not meeting:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        sid = meeting['school_id']
+        conn.execute(
+            "UPDATE school_meetings SET "
+            "  meeting_date=?, meeting_time=?, contact_type=?, status=?, notes=?, "
+            "  next_followup_date=?, next_followup_note=?, handler_employee_id=?, "
+            "  updated_at = CURRENT_TIMESTAMP "
+            "WHERE id = ?",
+            (
+                data['meeting_date'], data['meeting_time'], data['contact_type'],
+                data['status'], data['notes'], data['next_followup_date'],
+                data['next_followup_note'], data['handler_employee_id'], mid,
+            ),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting updated', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/meetings/<int:mid>/delete', methods=['POST'])
+@admin_required
+def sales_twelfthplus_meeting_delete(mid):
+    conn = get_db()
+    try:
+        m = conn.execute(
+            "SELECT school_id FROM school_meetings WHERE id = ?", (mid,)
+        ).fetchone()
+        if not m:
+            conn.close()
+            flash('Meeting not found', 'error')
+            return redirect(url_for('sales_twelfthplus_dashboard'))
+        sid = m['school_id']
+        conn.execute("DELETE FROM school_meetings WHERE id = ?", (mid,))
+        conn.commit()
+    finally:
+        conn.close()
+    flash('Meeting deleted', 'success')
+    return redirect(url_for('sales_twelfthplus_school_detail', sid=sid))
+
+
+@app.route('/sales/12thplus/followups')
+@admin_required
+def sales_twelfthplus_followups_list():
+    user = get_user()
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT sm.*, s.name AS school_name, s.id AS sid, "
+            "       e.name AS handler_name "
+            "FROM school_meetings sm "
+            "JOIN schools s ON sm.school_id = s.id "
+            "LEFT JOIN employees e ON sm.handler_employee_id = e.id "
+            "WHERE sm.next_followup_date IS NOT NULL "
+            "  AND sm.next_followup_date <> '' "
+            "ORDER BY sm.next_followup_date ASC, sm.id ASC"
+        ).fetchall()
+    finally:
+        conn.close()
+    # Group by date for the template.
+    grouped = []
+    current_date = None
+    bucket = None
+    for r in rows:
+        d = r['next_followup_date']
+        if d != current_date:
+            bucket = {'date': d, 'items': []}
+            grouped.append(bucket)
+            current_date = d
+        bucket['items'].append(r)
+    from datetime import date
+    return render_template(
+        'sales_twelfthplus_followups_list.html',
+        user=user, grouped=grouped, today=date.today().isoformat(),
+        active_section='sales',
+    )
+
+
+# ─────────────────────────────────────────────────────────
+#  Register migrated Operations sub-area modules
+#  Each module owns a slice of /operations/* (see routes/operations/__init__.py).
+# ─────────────────────────────────────────────────────────
+from routes.operations import register_operations_modules
+register_operations_modules(app)
 
 
 if __name__ == '__main__':

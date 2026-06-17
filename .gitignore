@@ -1,3 +1,6 @@
+# Claude Code scratch (worktrees, tool outputs, transcripts)
+.claude/
+
 # Database
 *.db
 
@@ -21,3 +24,5 @@ emp_cookies.txt
 update_employees.py
 add_management.py
 import_photos.py
+_backup_db.py
+goocampus_backups/

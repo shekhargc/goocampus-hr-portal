@@ -334,6 +334,153 @@
                 <div class="step-label">Step {{ reg.current_step }} of 4</div>
             </div>
 
+            {# ── Item D: "Your onboarding journey" -- 5-step live
+                timeline of the client's onboarding progress. Visible
+                once a registration_number exists (i.e. they've passed
+                sign-up). Steps go grey -> orange-with-✓ as Ops marks
+                each milestone in the operations onboarding screen. ── #}
+            {% if reg.registration_number and reg.timeline %}
+            <div style="margin-top:1rem;padding:1.1rem 1.1rem 0.9rem;background:white;border:1px solid #E5E7EB;border-radius:0.75rem;">
+                <h6 style="margin:0 0 1rem;font-size:0.85rem;font-weight:700;color:#0F172A;">
+                    <i class="bi bi-signpost-2-fill me-1" style="color:#F97316;"></i> Your onboarding journey
+                </h6>
+                <div style="display:flex;align-items:flex-start;justify-content:space-between;">
+                    {% for step in reg.timeline %}
+                    <div style="flex:1;text-align:center;position:relative;padding:0 4px;min-width:0;">
+                        {# connector line to the next step -- coloured orange when this step is done #}
+                        {% if not loop.last %}
+                        <div style="position:absolute;top:14px;left:50%;width:100%;height:3px;background:{% if step.done %}#F97316{% else %}#E5E7EB{% endif %};z-index:0;"></div>
+                        {% endif %}
+                        {# milestone dot #}
+                        <div style="width:28px;height:28px;border-radius:50%;margin:0 auto 0.45rem;position:relative;z-index:1;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;
+                            {% if step.done %}background:#F97316;color:white;
+                            {% elif step.current %}background:white;border:3px solid #F97316;color:#F97316;
+                            {% else %}background:#E5E7EB;color:transparent;{% endif %}">
+                            {% if step.done %}✓{% endif %}
+                        </div>
+                        <div style="font-size:0.7rem;font-weight:600;line-height:1.2;color:{% if step.done or step.current %}#0F172A{% else %}#94A3B8{% endif %};">{{ step.label }}</div>
+                        {% if step.date and step.projected %}
+                        {# Item F: working-day projection -- shown with ~ to flag forecast vs recorded #}
+                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;" title="Projected from your Onboarded date (30 working days, weekends + holidays skipped)">~ {{ step.date }}</div>
+                        {% elif step.date %}
+                        <div style="font-size:0.62rem;color:#64748B;margin-top:0.2rem;">{{ step.date }}</div>
+                        {% elif step.current and not step.done %}
+                        <div style="font-size:0.62rem;color:#F97316;margin-top:0.2rem;font-weight:600;">Up next</div>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                </div>
+                <p style="margin:0.8rem 0 0;font-size:0.68rem;color:#64748B;text-align:center;">
+                    <i class="bi bi-info-circle me-1"></i>Your counsellor and the operations team update each step as it happens.
+                </p>
+            </div>
+            {% endif %}
+
+            {# ── Item C-2: "What you signed up for" -- read-only summary
+                of plan / package / installments + counsellor contact,
+                visible only if Sales captured them upfront. ── #}
+            {% if reg.plan_type or reg.package_amount or reg.counsellor_full_name %}
+            <div style="margin-top:1rem;padding:1rem 1.1rem;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:0.75rem;">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem;">
+                    <h6 style="margin:0;font-size:0.85rem;font-weight:700;color:#9A3412;">
+                        <i class="bi bi-bag-check-fill me-1"></i> What you signed up for
+                    </h6>
+                    {% if reg.updated_at %}
+                    <small style="font-size:0.7rem;color:#9A3412;opacity:0.7;">
+                        Last updated {{ reg.updated_at.strftime('%d %b %Y, %H:%M') if reg.updated_at.strftime else reg.updated_at }}
+                    </small>
+                    {% endif %}
+                </div>
+
+                {# Counsellor card #}
+                {% if reg.counsellor_full_name %}
+                <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:0.7rem;">
+                    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your counsellor</div>
+                    <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.counsellor_full_name }}</div>
+                    <div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;display:flex;flex-wrap:wrap;gap:0.7rem;">
+                        {% if reg.counsellor_email_addr %}<span><i class="bi bi-envelope me-1"></i>{{ reg.counsellor_email_addr }}</span>{% endif %}
+                        {% if reg.counsellor_phone_no %}<span><i class="bi bi-telephone me-1"></i>{{ reg.counsellor_phone_no }}</span>{% endif %}
+                    </div>
+                </div>
+                {% endif %}
+
+                {# Plan + Package summary tiles #}
+                {% if reg.plan_type or reg.package_amount or reg.final_package %}
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.6rem;margin-bottom:0.7rem;">
+                    {% if reg.plan_type %}
+                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
+                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Plan</div>
+                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">{{ reg.plan_type }}</div>
+                    </div>
+                    {% endif %}
+                    {% if reg.package_amount %}
+                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
+                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Package</div>
+                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.package_amount|float) }}</div>
+                    </div>
+                    {% endif %}
+                    {% if reg.discount_allowed %}
+                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
+                        <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Discount</div>
+                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">- ₹{{ '{:,.0f}'.format(reg.discount_allowed|float) }}</div>
+                    </div>
+                    {% endif %}
+                    {% if reg.final_package %}
+                    <div style="background:#FB923C;border:1px solid #EA580C;border-radius:0.45rem;padding:0.55rem 0.7rem;">
+                        <div style="font-size:0.66rem;color:white;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Final</div>
+                        <div style="font-size:0.96rem;font-weight:700;color:white;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.final_package|float) }}</div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% endif %}
+
+                {# Installments table #}
+                {% if reg.installments %}
+                <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;overflow:hidden;">
+                    <div style="padding:0.5rem 0.9rem;background:#FFEDD5;font-size:0.7rem;font-weight:600;color:#9A3412;text-transform:uppercase;letter-spacing:0.05em;">
+                        Payment Schedule
+                    </div>
+                    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
+                        <thead>
+                            <tr>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">#</th>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Amount</th>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Due Date</th>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Note</th>
+                                <th style="text-align:right;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for inst in reg.installments %}
+                            <tr>
+                                <td style="padding:0.45rem 0.9rem;font-weight:600;color:#0F172A;">{{ inst.n }}</td>
+                                <td style="padding:0.45rem 0.9rem;color:#0F172A;">{% if inst.amount %}₹{{ '{:,.0f}'.format(inst.amount) }}{% else %}—{% endif %}</td>
+                                <td style="padding:0.45rem 0.9rem;color:#475569;">{{ inst.date or '—' }}</td>
+                                <td style="padding:0.45rem 0.9rem;color:#64748B;font-size:0.78rem;">{{ inst.note or '—' }}</td>
+                                <td style="padding:0.45rem 0.9rem;text-align:right;">
+                                    {% if inst.paid %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Paid</span>
+                                    {% else %}<span style="background:#FEF3C7;color:#92400E;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Pending</span>{% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% endif %}
+
+                {% if reg.additional_notes %}
+                <div style="margin-top:0.6rem;padding:0.55rem 0.8rem;background:white;border:1px solid #FED7AA;border-radius:0.45rem;">
+                    <div style="font-size:0.68rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:0.2rem;">Notes</div>
+                    <div style="font-size:0.82rem;color:#0F172A;line-height:1.5;">{{ reg.additional_notes }}</div>
+                </div>
+                {% endif %}
+
+                <p style="margin:0.7rem 0 0;font-size:0.7rem;color:#9A3412;opacity:0.75;">
+                    <i class="bi bi-shield-check me-1"></i>This is what your counsellor recorded at sign-up. If anything looks off, contact them directly.
+                </p>
+            </div>
+            {% endif %}
+
             <!-- Actions & Date -->
             <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-2">
                 <div>

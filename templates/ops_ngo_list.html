@@ -91,7 +91,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                     {% for record in records %}
                     <tr class="clickable-row" id="row-{{ record.id }}" onclick="openNgoDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
-                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number or '—' }}</td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ record.registration_number|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.ngo_vendor_name or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.activity_type or '—' }}</td>
                         <td style="padding:12px 16px;">{{ record.batch_name_no or '—' }}</td>
@@ -181,8 +181,8 @@ function openNgoDetail(id) {
 
     document.getElementById('ngoDrawerBody').innerHTML = html;
     document.getElementById('ngoDrawerActions').innerHTML = `
-        <a href="/operations/ngo-activities/${r.id}/edit" style="background:var(--orange);color:white;">Edit Record</a>
-        <a href="/operations/plab/dashboard/${encodeURIComponent(r.registration_number)}" style="background:var(--navy);color:white;">View PLAB Profile</a>
+        <a href="/operations/ngo-activities/${r.id}/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/plab/by-reg/${encodeURIComponent(r.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
     document.getElementById('ngoDrawer').classList.add('open');

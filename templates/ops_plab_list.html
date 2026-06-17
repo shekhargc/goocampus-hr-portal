@@ -597,28 +597,7 @@
       </span>
     </div>
     <div class="plab-header-actions">
-      <a href="/operations/plab/add" class="btn-primary">+ Add Client</a>
-      <a href="/operations/plab/import" class="btn-secondary">📥 Import CSV</a>
-    </div>
-  </div>
-
-  <!-- Stats Cards -->
-  <div class="stat-card-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Clients</div>
-      <div class="stat-value">{{ total }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Active Clients</div>
-      <div class="stat-value">{{ active_count }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Package Value</div>
-      <div class="stat-value" id="total-package">₹{{ "{:,.2f}".format(total_package) }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Collected</div>
-      <div class="stat-value" id="total-collected">₹{{ "{:,.2f}".format(total_collected) }}</div>
+      <a href="/operations/plab/add" class="btn-primary">+ Add Record</a>
     </div>
   </div>
 
@@ -818,8 +797,8 @@
 
       document.getElementById('plabDrawerBody').innerHTML = html;
       document.getElementById('plabDrawerActions').innerHTML =
-          '<a href="/operations/plab/' + r.id + '" style="background:var(--orange);color:white;">View Full Profile</a>' +
-          '<a href="/operations/plab/dashboard/' + encodeURIComponent(r.registration_number) + '" style="background:var(--navy);color:white;">PLAB Dashboard</a>';
+          '<a href="/operations/plab/' + r.id + '/edit" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>'
+        + '<a href="/operations/plab/' + r.id + '" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>';
       document.getElementById('plabDrawer').classList.add('open');
       document.getElementById('plabDrawer').setAttribute('aria-hidden', 'false');
       document.getElementById('plabBackdrop').classList.add('open');

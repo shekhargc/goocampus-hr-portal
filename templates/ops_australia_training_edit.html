@@ -1,0 +1,132 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}{% if record.id %}Edit{% else %}Add{% endif %} Training - {{ record.english_training or record.course_type or 'Training' }}{% endblock %}
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        {% if record.id %}
+        <a href="{{ url_for('ops_australia_training_detail', rid=record.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Training</a>
+        {% else %}
+        <a href="{{ url_for('ops_australia_training_list') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to List</a>
+        {% endif %}
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record.id %}Edit{% else %}Add{% endif %} Training</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record.id %}Update{% else %}Create a new{% endif %} AMC Pathway training program details, schedule, and vendor.
+        </p>
+
+        <form method="POST" action="{% if record.id %}{{ url_for('ops_australia_training_edit_save', rid=record.id) }}{% else %}{{ url_for('ops_australia_training_add_save') }}{% endif %}">
+
+            <!-- ===== CONTEXT (read-only) ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number{% if not record.id %} <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    {% if record.id %}
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% else %}
+                    <input type="text" name="registration_number" value="" required placeholder="e.g. AUS-2026-0001" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    {% endif %}
+                </div>
+                {% if record.id %}
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
+                    <input type="text" value="{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ===== PROGRAM ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Program</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training / Program</label>
+                    <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for tp in training_programs %}
+                        <option value="{{ tp }}" {% if record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type</label>
+                    <select name="course_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for course_type in course_types %}
+                        <option value="{{ course_type }}" {% if record.course_type == course_type %}selected{% endif %}>{{ course_type }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Method</label>
+                    <select name="coaching_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for method in coaching_methods %}
+                        <option value="{{ method }}" {% if record.coaching_method == method %}selected{% endif %}>{{ method }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Status</label>
+                    <select name="coaching_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for status in coaching_statuses %}
+                        <option value="{{ status }}" {% if record.coaching_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== VENDOR ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Vendor / Provider</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor / Provider</label>
+                    <input type="text" name="vendor_provider" value="{{ record.vendor_provider or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Vendor</label>
+                    <input type="text" name="other_vendor" value="{{ record.other_vendor or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== SCHEDULE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Schedule</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Year</label>
+                    <input type="text" name="batch_year" value="{{ record.batch_year or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Month</label>
+                    <select name="batch_month" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for m in batch_months %}
+                        <option value="{{ m }}" {% if record.batch_month == m %}selected{% endif %}>{{ m }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Start Date</label>
+                    <input type="date" name="start_date" value="{{ record.start_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">End Date</label>
+                    <input type="date" name="end_date" value="{{ record.end_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="display:flex;gap:0.8rem;justify-content:flex-end;margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--gray-200);">
+                <a href="{% if record.id %}{{ url_for('ops_australia_training_detail', rid=record.id) }}{% else %}{{ url_for('ops_australia_training_list') }}{% endif %}" style="padding:0.7rem 1.4rem;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:8px;font-weight:600;font-size:0.9rem;text-decoration:none;">Cancel</a>
+                <button type="submit" style="padding:0.7rem 1.4rem;background:var(--orange);color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">{% if record.id %}Save Changes{% else %}Add Training{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

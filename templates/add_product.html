@@ -176,6 +176,19 @@
             </div>
 
             <div class="add-prod-form-group">
+                <label class="add-prod-label">Pathway <span style="color:var(--gray-500);font-weight:400;">(routes the client to PLAB / Australia ops)</span></label>
+                <select name="pathway" class="add-prod-select">
+                    <option value="">— Unassigned —</option>
+                    <option value="plab">PLAB Pathway</option>
+                    <option value="australia">AMC Pathway</option>
+                    <option value="standard_consulting">Standard Consulting Pathway</option>
+                    <option value="germany">Germany Pathway</option>
+                    <option value="amc_training">AMC Training</option>
+                </select>
+                <div style="font-size:0.72rem;color:var(--gray-500);margin-top:0.35rem;">When sales adds a closed client with this product, the invitation routes to the picked pathway's Ops team.</div>
+            </div>
+
+            <div class="add-prod-form-group">
                 <label class="add-prod-label">Revenue Stream</label>
                 {% if streams %}
                 <select name="revenue_stream_id" class="add-prod-select">

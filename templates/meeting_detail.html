@@ -124,11 +124,11 @@
 <!-- Meetings List -->
 <div class="panel">
     <div class="panel-header">
-        <div class="panel-title">Meetings ({{ trip.meetings | length if trip.meetings else 0 }})</div>
+        <div class="panel-title">Meetings ({{ meetings | length if meetings else 0 }})</div>
     </div>
     <div class="panel-body">
-        {% if trip.meetings %}
-        {% for meeting in trip.meetings %}
+        {% if meetings %}
+        {% for meeting in meetings %}
         <div class="meeting-row">
             <div class="meeting-date-box">
                 <div class="meeting-date-day">{{ meeting.meeting_date[8:] | int }}</div>
@@ -140,9 +140,13 @@
             <div class="meeting-body">
                 <div class="meeting-title">{{ meeting.meeting_with }} <span class="client-tag">{{ meeting.meeting_type_name }}</span></div>
                 <div class="meeting-meta">
+                    {% if meeting.contact_type %}<span class="client-tag" style="background:var(--blue-light);color:var(--blue-dark);">{{ meeting.contact_type }}</span>{% endif %}
+                    {% if meeting.status %}<span class="client-tag" style="background:var(--success-light);color:#166534;">{{ meeting.status }}</span>{% endif %}
+                    <br>
                     {% if meeting.meeting_location %}<span><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg> {{ meeting.meeting_location }}</span>{% endif %}
                     {% if meeting.contact_person %}<span> &middot; {{ meeting.contact_person }}</span>{% endif %}
                     {% if meeting.contact_phone %}<span> &middot; {{ meeting.contact_phone }}</span>{% endif %}
+                    {% if meeting.handler_name %}<span> &middot; Handled by {{ meeting.handler_name }}</span>{% endif %}
                 </div>
                 {% if meeting.outcome %}
                 <div class="outcome-box">
@@ -150,20 +154,19 @@
                     <div class="outcome-text">{{ meeting.outcome }}</div>
                 </div>
                 {% endif %}
-                <button type="button" class="outcome-toggle" onclick="document.getElementById('outcome-{{ meeting.id }}').classList.toggle('open')">
-                    {{ 'Update Outcome' if meeting.outcome else 'Add Outcome' }}
-                </button>
-                <form method="POST" action="/b2b/meeting/{{ meeting.id }}/outcome" class="outcome-form" id="outcome-{{ meeting.id }}">
-                    <div class="form-group">
-                        <label>Outcome</label>
-                        <textarea name="outcome" placeholder="Meeting outcome...">{{ meeting.outcome or '' }}</textarea>
-                    </div>
-                    <div class="form-group">
-                        <label>Notes</label>
-                        <textarea name="notes" placeholder="Additional notes...">{{ meeting.notes or '' }}</textarea>
-                    </div>
-                    <button type="submit" class="btn-sm">Save</button>
-                </form>
+                {% if meeting.notes %}
+                <div class="outcome-box" style="border-left-color:var(--gray-300);">
+                    <div class="outcome-label" style="color:var(--gray-500);">Notes</div>
+                    <div class="outcome-text">{{ meeting.notes }}</div>
+                </div>
+                {% endif %}
+                {% if meeting.next_followup_date %}
+                <div class="outcome-box" style="border-left-color:var(--orange);">
+                    <div class="outcome-label" style="color:var(--orange);">Next Follow-up &middot; {{ meeting.next_followup_date }}</div>
+                    {% if meeting.next_followup_note %}<div class="outcome-text">{{ meeting.next_followup_note }}</div>{% endif %}
+                </div>
+                {% endif %}
+                <a href="{{ url_for('edit_b2b_meeting', meeting_id=meeting.id) }}" class="outcome-toggle" style="display:inline-block;margin-top:0.65rem;text-decoration:none;">Edit / Add Outcome &rarr;</a>
             </div>
         </div>
         {% endfor %}

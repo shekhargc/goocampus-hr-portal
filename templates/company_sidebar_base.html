@@ -4,37 +4,57 @@
 
 {% block sidebar_nav %}
 {% if session.get('is_admin') %}
+    {% if can_access('company','holidays','view') %}
     <a href="/admin/holidays" class="sec-nav-item" data-tooltip="Holidays">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/><path d="M8 14h.01M12 14h.01M16 14h.01M8 18h.01M12 18h.01"/></svg></span>
         <span class="sec-nav-text">Holidays</span>
     </a>
+    {% endif %}
+    {% if can_access('company','calendar','view') %}
     <a href="/admin/calendar" class="sec-nav-item" data-tooltip="Calendar">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
         <span class="sec-nav-text">Calendar</span>
     </a>
+    {% endif %}
+    {% if can_access('company','org_chart','view') %}
     <a href="/admin/org-chart" class="sec-nav-item" data-tooltip="Org Chart">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="4" rx="1"/><rect x="2" y="18" width="6" height="4" rx="1"/><rect x="16" y="18" width="6" height="4" rx="1"/><path d="M12 6v6m0 0H5m7 0h7M5 12v6m14-6v6"/></svg></span>
         <span class="sec-nav-text">Org Chart</span>
     </a>
+    {% endif %}
+    {% if can_access('company','state_city','view') %}
     <a href="/company/locations" class="sec-nav-item" data-tooltip="State & City Settings">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg></span>
         <span class="sec-nav-text">State &amp; City Settings</span>
     </a>
+    {% endif %}
+    {% if can_access('company','announcements','view') %}
     <a href="/landing-pages" class="sec-nav-item" data-tooltip="Landing Pages">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
         <span class="sec-nav-text">Landing Pages</span>
     </a>
+    {% endif %}
 
     {% if session.get('emp_code') == 'admin' %}
     <div class="sec-nav-group-label">Admin</div>
+    {% if can_access('company','reset_passwords','view') %}
     <a href="/admin/reset-passwords" class="sec-nav-item" data-tooltip="Reset Passwords">
         <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg></span>
         <span class="sec-nav-text">Reset Passwords</span>
     </a>
-    <a href="/admin/section-visibility" class="sec-nav-item" data-tooltip="Section Visibility">
-        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <span class="sec-nav-text">Section Visibility</span>
+    {% endif %}
+    {% if can_access('company','email_templates','view') %}
+    <a href="/admin/email-templates" class="sec-nav-item {% if request.path.startswith('/admin/email-templates') %}active{% endif %}" data-tooltip="Email Templates (onboarding-stage emails)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg></span>
+        <span class="sec-nav-text">Email Templates</span>
     </a>
+    {% endif %}
+    {% if can_access('company','access_master','view') %}
+    <a href="/admin/access-master" class="sec-nav-item {% if active_ops_page == 'access-master' or request.path == '/admin/access-master' %}active{% endif %}" data-tooltip="Access Master (per-user permissions)">
+        <span class="sec-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></span>
+        <span class="sec-nav-text">Access Master</span>
+    </a>
+    {% endif %}
     {% endif %}
 {% else %}
     <a href="/holidays" class="sec-nav-item" data-tooltip="Holidays">
