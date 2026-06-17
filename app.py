@@ -180,13 +180,10 @@ def inject_manager_status():
                         for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
         ops_access = plab_ok or aus_ok or cons_ok or shared_ok
 
-        # Smart landing URL — first pathway the user has access to.
-        if plab_ok:
-            ops_landing = '/operations/uk-pathway'
-        elif aus_ok:
-            ops_landing = '/operations/australia-pathway'
-        elif cons_ok:
-            ops_landing = '/operations/consulting'
+        # Smart landing URL — unified Operations dashboard when the user
+        # has any pathway dashboard; otherwise fall back to Reports.
+        if plab_ok or aus_ok or cons_ok:
+            ops_landing = '/operations/dashboard'
         else:
             # operations_shared only -> Reports is the safest default
             ops_landing = '/operations/reports'
@@ -2889,6 +2886,35 @@ def dashboard():
         ORDER BY e.name
     ''', (today,)).fetchall()
 
+    # Working from home today (approved WFH overlapping today)
+    try:
+        wfh_today = conn.execute('''
+            SELECT e.name, e.photo_url, e.department
+            FROM wfh_requests w JOIN employees e ON w.employee_id = e.id
+            WHERE w.status = 'approved' AND w.from_date <= ? AND w.to_date >= ?
+            ORDER BY e.name
+        ''', (today, today)).fetchall()
+    except Exception:
+        wfh_today = []
+
+    # Travelling / off-site today: approved official travel + B2B trips overlapping today
+    try:
+        travel_today = conn.execute('''
+            SELECT e.name, e.photo_url, e.department, t.city AS place, 'Travel' AS kind
+            FROM official_travel_requests t JOIN employees e ON t.employee_id = e.id
+            WHERE t.status = 'approved' AND t.from_date <= ? AND t.to_date >= ?
+            UNION ALL
+            SELECT e.name, e.photo_url, e.department,
+                   COALESCE(NULLIF(TRIM(b.notes), ''), INITCAP(b.trip_type)) AS place,
+                   'Off-site' AS kind
+            FROM b2b_trips b JOIN employees e ON b.employee_id = e.id
+            WHERE COALESCE(b.status,'approved') <> 'cancelled'
+              AND b.from_date <= ? AND COALESCE(b.to_date, b.from_date) >= ?
+            ORDER BY name
+        ''', (today, today, today, today)).fetchall()
+    except Exception:
+        travel_today = []
+
     # Recent announcements
     announcements = conn.execute('''
         SELECT a.*, e.name as posted_by_name FROM announcements a
@@ -3230,6 +3256,8 @@ def dashboard():
                          my_unread_notifs=my_unread_notifs,
                          my_kra_score=my_kra_score,
                          team_pending_approvals=team_pending_approvals,
+                         wfh_today=wfh_today,
+                         travel_today=travel_today,
                          today=today)
 
 @app.route('/profile', methods=['GET', 'POST'])
@@ -15332,6 +15360,79 @@ def _next_registration_number(conn):
 
 
 # ─── PATHWAY LANDING PAGES ───
+
+@app.route('/operations/dashboard')
+@admin_required
+def ops_main_dashboard():
+    """Unified Operations dashboard — aggregate stats across PLAB, AMC
+    (australia) and Standard Consulting. Each pathway card is shown only
+    if the user has dashboard access to it (admins see all)."""
+    user = get_user()
+    is_admin = bool(user and user.get('is_admin'))
+
+    def can(section):
+        return is_admin or (user and has_section_permission(user, section, 'dashboard', 'view'))
+
+    visible = []
+    if can('plab_pathway'):
+        visible.append(('plab', 'PLAB Pathway', url_for('ops_plab_pathway_dashboard'), '#1F3A5F'))
+    if can('australia_pathway'):
+        visible.append(('australia', 'AMC Pathway', '/operations/australia-pathway', '#0369A1'))
+    if can('consulting_pathway'):
+        visible.append(('consulting', 'Standard Consulting', '/operations/consulting', '#B45309'))
+
+    conn = get_db()
+
+    def one(sql, args):
+        try:
+            r = conn.execute(sql, args).fetchone()
+            return r['c'] if r else 0
+        except Exception:
+            return 0
+
+    def stats(pw):
+        d = {}
+        d['total'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['active'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='In Process'", (pw,))
+        d['dropped'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status ILIKE '%drop%'", (pw,))
+        try:
+            r = conn.execute("SELECT COALESCE(SUM(amount_paid),0) s FROM ops_payments WHERE COALESCE(pathway,'plab')=?", (pw,)).fetchone()
+            d['collected'] = float(r['s'] or 0)
+        except Exception:
+            d['collected'] = 0.0
+        d['tests'] = one("SELECT COUNT(*) c FROM ops_test_bookings WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['coaching'] = one("SELECT COUNT(*) c FROM ops_coaching WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['epic'] = one("SELECT COUNT(*) c FROM ops_epic_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        d['call_notes'] = one("SELECT COUNT(*) c FROM ops_call_notes WHERE COALESCE(pathway,'plab')=?", (pw,))
+        if pw == 'plab':
+            d['reg_label'] = 'GMC Reg'
+            d['reg'] = one("SELECT COUNT(*) c FROM ops_gmc_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        else:
+            d['reg_label'] = 'AMC Reg'
+            d['reg'] = one("SELECT COUNT(*) c FROM ops_amc_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
+        try:
+            d['recent'] = [dict(r) for r in conn.execute(
+                "SELECT registration_number, prefix, first_name, last_name, account_status, current_stage "
+                "FROM plab_clients WHERE COALESCE(pathway,'plab')=? ORDER BY id DESC LIMIT 5", (pw,)).fetchall()]
+        except Exception:
+            d['recent'] = []
+        return d
+
+    cards = []
+    for pw, label, url, color in visible:
+        d = stats(pw)
+        d.update({'key': pw, 'label': label, 'url': url, 'color': color})
+        cards.append(d)
+    conn.close()
+
+    totals = {
+        'clients': sum(c['total'] for c in cards),
+        'active': sum(c['active'] for c in cards),
+        'collected': sum(c['collected'] for c in cards),
+    }
+    return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
+                           active_ops_page='ops-dashboard', user=user)
+
 
 @app.route('/operations/uk-pathway')
 @admin_required

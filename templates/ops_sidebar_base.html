@@ -351,6 +351,11 @@
             </button>
         </div>
         <nav class="ops-sidebar-nav">
+            {# ─── Unified Operations dashboard (all pathways) ─── #}
+            <a href="/operations/dashboard" class="ops-nav-item {% if active_ops_page == 'ops-dashboard' %}active{% endif %}" data-tooltip="Operations Dashboard">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 13h8V3H3z"/><path d="M13 21h8V11h-8z"/><path d="M13 3v6h8V3z"/><path d="M3 21h8v-6H3z"/></svg></span>
+                <span class="ops-nav-text">Operations Dashboard</span>
+            </a>
             {% if active_pathway == 'australia' %}
             {# ─── AUSTRALIA PATHWAY SIDEBAR (per-item gated via can_access) ─── #}
             <!-- Overview -->

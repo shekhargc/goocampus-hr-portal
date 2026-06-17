@@ -1247,112 +1247,63 @@
   </div>
   {% endif %}
 
-  <!-- Department Cards (Admin only) -->
-  {% if session.get('is_admin') %}
-  <div class="department-cards">
-    <!-- HR Department Card -->
-    <div class="dept-card">
-      <div class="dept-card__accent blue"></div>
-      <div class="dept-card__content">
-        <div class="dept-card__header">
-          <div class="dept-card__icon blue">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
-              <circle cx="9" cy="7" r="4"></circle>
-              <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
-              <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
-            </svg>
+  <!-- Team Status Today: WFH + Travel/Off-site -->
+  <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; margin-bottom: 2.5rem;">
+    <!-- Working From Home Today -->
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #8B5CF6, #6D28D9); border-radius: 12px 12px 0 0;">
+        <span style="font-size: 1.2rem;">🏠</span>
+        <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Working From Home Today</h3>
+        <span style="margin-left:auto; background: rgba(255,255,255,0.25); color:#fff; font-size:0.75rem; font-weight:700; padding:0.1rem 0.55rem; border-radius:999px;">{{ wfh_today|length }}</span>
+      </div>
+      <div style="padding: 1rem 1.2rem;">
+        {% if wfh_today %}
+        <div style="display: flex; flex-direction: column; gap: 0.55rem;">
+          {% for emp in wfh_today[:6] %}
+          <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.6rem; border-radius: 0.5rem; background: #F5F3FF; border: 1px solid #DDD6FE;">
+            {% if emp.photo_url %}<img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">{% else %}<div style="width:32px;height:32px;border-radius:50%;background:#8B5CF6;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;">{{ emp.name[0] }}</div>{% endif %}
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:0.88rem;color:var(--navy);">{{ emp.name }}</div>
+              <div style="font-size:0.75rem;color:var(--gray-500);">{{ emp.department or '' }}</div>
+            </div>
           </div>
-          <h3 class="dept-card__title">Human Resources</h3>
+          {% endfor %}
         </div>
-
-        <div class="dept-card__stats">
-          {% set hr_dept = departments|selectattr('department', 'equalto', 'HR')|first %}
-          <div class="stat-item">
-            <div class="stat-item__value">{{ hr_dept.count if hr_dept else 0 }}</div>
-            <div class="stat-item__label">Employees</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ leaves_today }}</div>
-            <div class="stat-item__label">On Leave</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ pending_leaves }}</div>
-            <div class="stat-item__label">Pending</div>
-          </div>
-        </div>
-
-        <a href="/hr-dashboard" class="dept-card__link">Go to HR Dashboard</a>
+        {% if wfh_today|length > 6 %}<div style="margin-top:0.6rem;font-size:0.78rem;color:var(--gray-500);">+ {{ wfh_today|length - 6 }} more</div>{% endif %}
+        {% else %}
+        <p style="color: var(--gray-400); font-size: 0.85rem; margin: 0.5rem 0; text-align:center;">No one is working from home today.</p>
+        {% endif %}
       </div>
     </div>
 
-    <!-- Sales Department Card -->
-    <div class="dept-card">
-      <div class="dept-card__accent orange"></div>
-      <div class="dept-card__content">
-        <div class="dept-card__header">
-          <div class="dept-card__icon orange">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <circle cx="12" cy="12" r="1"></circle>
-              <path d="M12 1v6m8-8l-4.24 4.24m6.24 4.76h-6m0 8l4.24-4.24m-4.24 4.24l-4.24-4.24m-4.24 4.24h6m0-8l-4.24 4.24M3 12c0 4.97 4.03 9 9 9s9-4.03 9-9-4.03-9-9-9"></path>
-            </svg>
-          </div>
-          <h3 class="dept-card__title">Sales & CRM</h3>
-        </div>
-
-        <div class="dept-card__stats">
-          <div class="stat-item">
-            <div class="stat-item__value">{{ active_projects }}</div>
-            <div class="stat-item__label">Projects</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ total_meetings }}</div>
-            <div class="stat-item__label">Meetings</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ total_news }}</div>
-            <div class="stat-item__label">News</div>
-          </div>
-        </div>
-
-        <a href="/sales" class="dept-card__link">Go to Sales Dashboard</a>
+    <!-- Travelling / Off-site Today -->
+    <div class="panel" style="background: white; border-radius: 12px; border: 1px solid var(--gray-200); padding: 0; box-shadow: 0 2px 8px rgba(0,0,0,0.04); overflow: hidden;">
+      <div style="display: flex; align-items: center; gap: 0.6rem; padding: 0.9rem 1.2rem; background: linear-gradient(135deg, #0EA5E9, #0369A1); border-radius: 12px 12px 0 0;">
+        <span style="font-size: 1.2rem;">✈️</span>
+        <h3 style="font-size: 0.95rem; font-weight: 700; color: white; margin: 0;">Travelling / Off-site Today</h3>
+        <span style="margin-left:auto; background: rgba(255,255,255,0.25); color:#fff; font-size:0.75rem; font-weight:700; padding:0.1rem 0.55rem; border-radius:999px;">{{ travel_today|length }}</span>
       </div>
-    </div>
-
-    <!-- Operations Department Card -->
-    <div class="dept-card">
-      <div class="dept-card__accent green"></div>
-      <div class="dept-card__content">
-        <div class="dept-card__header">
-          <div class="dept-card__icon green">
-            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8 14 8.67 14 9.5s.67 1.5 1.5 1.5zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8 7 8.67 7 9.5 7.67 11 8.5 11zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5z"></path>
-            </svg>
+      <div style="padding: 1rem 1.2rem;">
+        {% if travel_today %}
+        <div style="display: flex; flex-direction: column; gap: 0.55rem;">
+          {% for emp in travel_today[:6] %}
+          <div style="display: flex; align-items: center; gap: 0.75rem; padding: 0.45rem 0.6rem; border-radius: 0.5rem; background: #F0F9FF; border: 1px solid #BAE6FD;">
+            {% if emp.photo_url %}<img src="{{ emp.photo_url if emp.photo_url.startswith('http') else '/static/photos/' ~ emp.photo_url }}" style="width:32px;height:32px;border-radius:50%;object-fit:cover;">{% else %}<div style="width:32px;height:32px;border-radius:50%;background:#0EA5E9;color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:0.8rem;">{{ emp.name[0] }}</div>{% endif %}
+            <div style="flex:1;min-width:0;">
+              <div style="font-weight:600;font-size:0.88rem;color:var(--navy);">{{ emp.name }}</div>
+              <div style="font-size:0.75rem;color:var(--gray-500);">{{ emp.place or emp.department or '' }}</div>
+            </div>
+            <span style="font-size:0.68rem;font-weight:700;color:#0369A1;background:#E0F2FE;border:1px solid #BAE6FD;padding:0.1rem 0.45rem;border-radius:999px;white-space:nowrap;">{{ emp.kind }}</span>
           </div>
-          <h3 class="dept-card__title">Operations</h3>
+          {% endfor %}
         </div>
-
-        <div class="dept-card__stats">
-          {% set ops_dept = departments|selectattr('department', 'equalto', 'Operations')|first %}
-          <div class="stat-item">
-            <div class="stat-item__value">{{ total_departments }}</div>
-            <div class="stat-item__label">Departments</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ meetings_this_week }}</div>
-            <div class="stat-item__label">This Week</div>
-          </div>
-          <div class="stat-item">
-            <div class="stat-item__value">{{ total_employees }}</div>
-            <div class="stat-item__label">All Employees</div>
-          </div>
-        </div>
-
-        <a href="#" class="dept-card__link">Go to Operations</a>
+        {% if travel_today|length > 6 %}<div style="margin-top:0.6rem;font-size:0.78rem;color:var(--gray-500);">+ {{ travel_today|length - 6 }} more</div>{% endif %}
+        {% else %}
+        <p style="color: var(--gray-400); font-size: 0.85rem; margin: 0.5rem 0; text-align:center;">No one is travelling or off-site today.</p>
+        {% endif %}
       </div>
     </div>
   </div>
-  {% endif %}
 
   <!-- Two Column Section: Activity Feed + Sidebar -->
   <div class="dashboard-grid">

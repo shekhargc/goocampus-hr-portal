@@ -601,26 +601,6 @@
     </div>
   </div>
 
-  <!-- Stats Cards -->
-  <div class="stat-card-grid">
-    <div class="stat-card">
-      <div class="stat-label">Total Clients</div>
-      <div class="stat-value">{{ total }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Active Clients</div>
-      <div class="stat-value">{{ active_count }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Package Value</div>
-      <div class="stat-value" id="total-package">₹{{ "{:,.2f}".format(total_package) }}</div>
-    </div>
-    <div class="stat-card">
-      <div class="stat-label">Total Collected</div>
-      <div class="stat-value" id="total-collected">₹{{ "{:,.2f}".format(total_collected) }}</div>
-    </div>
-  </div>
-
   <!-- Filter Section -->
   <div class="filter-section">
     <form method="GET" class="filter-form">

@@ -1,0 +1,101 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Operations Dashboard - GooCampus{% endblock %}
+
+{% block ops_extra_css %}
+<style>
+  .od-head { margin-bottom: 1.5rem; }
+  .od-head h1 { margin: 0; font-size: 1.6rem; color: var(--navy); font-weight: 800; }
+  .od-head p { margin: .35rem 0 0; color: var(--gray-500); font-size: .92rem; }
+
+  .od-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.75rem; }
+  .od-total { background: #fff; border: 1px solid var(--gray-200); border-radius: .9rem; padding: 1.1rem 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
+  .od-total .lbl { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--gray-500); font-weight: 700; }
+  .od-total .val { font-size: 1.7rem; font-weight: 800; color: var(--navy); margin-top: .3rem; }
+
+  .od-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(330px, 1fr)); gap: 1.25rem; }
+  .od-card { background: #fff; border: 1px solid var(--gray-200); border-radius: 1rem; overflow: hidden; box-shadow: 0 2px 10px rgba(0,0,0,.05); display: flex; flex-direction: column; }
+  .od-card__top { padding: .9rem 1.2rem; color: #fff; display: flex; align-items: center; justify-content: space-between; }
+  .od-card__top h2 { margin: 0; font-size: 1.05rem; font-weight: 800; }
+  .od-card__top .pill { background: rgba(255,255,255,.22); padding: .15rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
+  .od-card__body { padding: 1rem 1.2rem; flex: 1; }
+  .od-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: .9rem; }
+  .od-kpi { text-align: center; background: var(--gray-50, #f8fafc); border: 1px solid var(--gray-100, #eef2f7); border-radius: .6rem; padding: .55rem .3rem; }
+  .od-kpi .n { font-size: 1.25rem; font-weight: 800; color: var(--navy); }
+  .od-kpi .l { font-size: .68rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: .02em; margin-top: .15rem; }
+  .od-collected { background: #ecfdf5; border: 1px solid #a7f3d0; border-radius: .6rem; padding: .55rem .8rem; margin-bottom: .9rem; display: flex; justify-content: space-between; align-items: center; }
+  .od-collected .l { font-size: .78rem; color: #047857; font-weight: 700; }
+  .od-collected .v { font-size: 1.05rem; font-weight: 800; color: #065f46; }
+  .od-sections { display: flex; flex-wrap: wrap; gap: .4rem; margin-bottom: .9rem; }
+  .od-chip { font-size: .75rem; background: #f1f5f9; border: 1px solid #e2e8f0; color: #334155; padding: .25rem .55rem; border-radius: 999px; }
+  .od-chip b { color: var(--navy); }
+  .od-recent { border-top: 1px dashed var(--gray-200); padding-top: .7rem; }
+  .od-recent .h { font-size: .72rem; text-transform: uppercase; letter-spacing: .03em; color: var(--gray-400); font-weight: 700; margin-bottom: .45rem; }
+  .od-recent .row { display: flex; justify-content: space-between; gap: .5rem; font-size: .82rem; padding: .2rem 0; }
+  .od-recent .row .nm { color: var(--navy); font-weight: 600; }
+  .od-recent .row .st { color: var(--gray-500); font-size: .76rem; }
+  .od-card__foot { padding: .85rem 1.2rem; border-top: 1px solid var(--gray-100, #eef2f7); }
+  .od-card__foot a { display: inline-block; font-weight: 700; font-size: .85rem; color: #fff; padding: .5rem .9rem; border-radius: .55rem; text-decoration: none; }
+  .od-empty { background:#fff; border:1px dashed var(--gray-300,#cbd5e1); border-radius:1rem; padding:2.5rem; text-align:center; color:var(--gray-500); }
+</style>
+{% endblock %}
+
+{% block ops_content %}
+<div class="od-head">
+  <h1>Operations Dashboard</h1>
+  <p>Live snapshot across all pathways you manage — PLAB, AMC &amp; Standard Consulting.</p>
+</div>
+
+{% if cards %}
+<div class="od-totals">
+  <div class="od-total"><div class="lbl">Total Clients</div><div class="val">{{ totals.clients }}</div></div>
+  <div class="od-total"><div class="lbl">Active Clients</div><div class="val">{{ totals.active }}</div></div>
+  <div class="od-total"><div class="lbl">Total Collected</div><div class="val">₹{{ "{:,.0f}".format(totals.collected) }}</div></div>
+</div>
+
+<div class="od-grid">
+  {% for c in cards %}
+  <div class="od-card">
+    <div class="od-card__top" style="background: {{ c.color }};">
+      <h2>{{ c.label }}</h2>
+      <span class="pill">{{ c.total }} clients</span>
+    </div>
+    <div class="od-card__body">
+      <div class="od-kpis">
+        <div class="od-kpi"><div class="n">{{ c.active }}</div><div class="l">Active</div></div>
+        <div class="od-kpi"><div class="n">{{ c.total }}</div><div class="l">Total</div></div>
+        <div class="od-kpi"><div class="n">{{ c.dropped }}</div><div class="l">Dropped</div></div>
+      </div>
+      <div class="od-collected">
+        <span class="l">Total Collected</span>
+        <span class="v">₹{{ "{:,.0f}".format(c.collected) }}</span>
+      </div>
+      <div class="od-sections">
+        <span class="od-chip">Tests <b>{{ c.tests }}</b></span>
+        <span class="od-chip">Coaching <b>{{ c.coaching }}</b></span>
+        <span class="od-chip">{{ c.reg_label }} <b>{{ c.reg }}</b></span>
+        <span class="od-chip">EPIC <b>{{ c.epic }}</b></span>
+        <span class="od-chip">Call Notes <b>{{ c.call_notes }}</b></span>
+      </div>
+      {% if c.recent %}
+      <div class="od-recent">
+        <div class="h">Recent Registrations</div>
+        {% for r in c.recent %}
+        <div class="row">
+          <span class="nm">{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</span>
+          <span class="st">{{ r.current_stage or r.account_status or '' }}</span>
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+    </div>
+    <div class="od-card__foot">
+      <a href="{{ c.url }}" style="background: {{ c.color }};">Open {{ c.label }} →</a>
+    </div>
+  </div>
+  {% endfor %}
+</div>
+{% else %}
+<div class="od-empty">You don't have access to any pathway dashboards yet. Contact an admin via Access Master.</div>
+{% endif %}
+{% endblock %}
