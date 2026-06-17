@@ -74,8 +74,12 @@ def _reg_variants(reg):
         return
     middles = [middle]
     if '-' not in middle and middle.isdigit() and len(middle) == 4:
-        y = int(middle); yy = y % 100; yyn = (y + 1) % 100
-        middles.append(f"{yy:02d}-{yyn:02d}")
+        y = int(middle)
+        # A 4-digit year in the Zoho export can mean either the fiscal year
+        # STARTING in that year (e.g. 2024 -> 24-25) or ENDING in it
+        # (2024 -> 23-24, i.e. registered Jan-Mar 2024). Emit both.
+        middles.append(f"{y % 100:02d}-{(y + 1) % 100:02d}")
+        middles.append(f"{(y - 1) % 100:02d}-{y % 100:02d}")
     elif '-' in middle:
         start = middle.split('-', 1)[0]
         if start.isdigit() and len(start) == 2:
