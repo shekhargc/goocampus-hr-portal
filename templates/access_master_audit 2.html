@@ -1,0 +1,116 @@
+{% extends "base.html" %}
+
+{% block title %}Access Master &mdash; Audit Log{% endblock %}
+
+{% block content %}
+<style>
+    .am-page { max-width: 1100px; margin: 0 auto; padding: 1.5rem 2rem; }
+    .am-head {
+        background: linear-gradient(135deg, var(--navy) 0%, #2A3F66 100%);
+        color: white; border-radius: 0.75rem; padding: 1.5rem 1.75rem; margin-bottom: 1.5rem;
+    }
+    .am-head h1 { margin: 0 0 0.3rem; font-size: 1.5rem; font-weight: 700; }
+    .am-head h1 span { color: var(--orange); }
+    .am-head .sub { font-size: 0.85rem; color: rgba(255,255,255,0.7); margin: 0; }
+
+    .mode-pill {
+        display: inline-block; padding: 0.3rem 0.7rem; border-radius: 999px;
+        font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em;
+        margin-top: 0.5rem;
+    }
+    .mode-pill.log {     background: #FEF3C7; color: #92400E; }
+    .mode-pill.enforce { background: #FEE2E2; color: #991B1B; }
+
+    .am-card {
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        margin-bottom: 1rem; overflow: hidden;
+    }
+    .am-card-head {
+        padding: 0.85rem 1.1rem; background: var(--gray-50);
+        display: flex; justify-content: space-between; align-items: center;
+        border-bottom: 1px solid var(--gray-200);
+    }
+    .am-card-head .who {
+        font-weight: 700; color: var(--navy); font-size: 0.95rem;
+    }
+    .am-card-head .total {
+        font-size: 0.78rem; color: var(--gray-500); font-weight: 600;
+    }
+    table.audit { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    table.audit th, table.audit td {
+        padding: 0.55rem 1.1rem; text-align: left;
+        border-bottom: 1px solid var(--gray-100);
+    }
+    table.audit th {
+        background: white; font-size: 0.7rem; color: var(--gray-500);
+        text-transform: uppercase; letter-spacing: 0.04em; font-weight: 600;
+    }
+    table.audit td.hits {
+        text-align: right; font-weight: 600; color: var(--orange);
+    }
+    table.audit td.endpoint { font-family: ui-monospace, Menlo, monospace; font-size: 0.78rem; color: var(--gray-600); }
+    .badge-act {
+        display: inline-block; padding: 0.15rem 0.5rem; border-radius: 0.3rem;
+        font-size: 0.7rem; font-weight: 600; text-transform: uppercase;
+    }
+    .badge-act.view { background: #DBEAFE; color: #1D4ED8; }
+    .badge-act.edit { background: #FEF3C7; color: #92400E; }
+    .badge-act.add  { background: #D1FAE5; color: #065F46; }
+
+    .empty {
+        background: white; border: 1px solid var(--gray-200); border-radius: 0.75rem;
+        padding: 2rem; text-align: center; color: var(--gray-500); font-size: 0.9rem;
+    }
+</style>
+
+<div class="am-page">
+    <div class="am-head">
+        <h1><span>Access Master</span> &middot; Audit Log</h1>
+        <p class="sub">
+            Every time a non-admin user hits a page they don't have permission for, it gets recorded here.
+            Use this to figure out which Access Master grants you need to set up <em>before</em> flipping enforce mode on.
+        </p>
+        <div class="mode-pill {% if enforce_on %}enforce{% else %}log{% endif %}">
+            {% if enforce_on %}🔴 ENFORCE MODE &middot; users are being denied{% else %}🟡 LOG-ONLY MODE &middot; nothing is actually blocked yet{% endif %}
+        </div>
+    </div>
+
+    {% if not by_user %}
+    <div class="empty">
+        No would-be-denied requests recorded yet since the last server restart.
+        Either everyone has the access they need (👍) or no non-admins have visited mapped routes yet.
+    </div>
+    {% else %}
+        {% for emp_code, entries in by_user.items() %}
+        <div class="am-card">
+            <div class="am-card-head">
+                <div class="who">👤 {{ emp_code }}</div>
+                <div class="total">{{ entries|length }} unique endpoint{{ 's' if entries|length != 1 else '' }} · {{ entries|sum(attribute='hits') }} total hit{{ 's' if entries|sum(attribute='hits') != 1 else '' }}</div>
+            </div>
+            <table class="audit">
+                <thead>
+                    <tr>
+                        <th>Section / Sub-section</th>
+                        <th>Action</th>
+                        <th>Endpoint</th>
+                        <th style="text-align:right;">Hits</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for e in entries %}
+                    <tr>
+                        <td>
+                            <strong>{{ e.main }}</strong> &rsaquo; {{ e.sub }}
+                        </td>
+                        <td><span class="badge-act {{ e.action }}">{{ e.action }}</span></td>
+                        <td class="endpoint">{{ e.endpoint }}</td>
+                        <td class="hits">{{ e.hits }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {% endfor %}
+    {% endif %}
+</div>
+{% endblock %}

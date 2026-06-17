@@ -26,7 +26,12 @@
                     {% if record.id %}
                     <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
                     {% else %}
-                    <input type="text" name="registration_number" value="" required placeholder="e.g. AUS-2026-0001" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="" />
+                    <div style="position:relative;">
+                        <input type="text" id="client_search" autocomplete="off" placeholder="Type candidate name..." required
+                            style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                        <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                    </div>
                     {% endif %}
                 </div>
                 {% if record.id %}
@@ -155,4 +160,81 @@
         </form>
     </div>
 </div>
+
+<!-- Client autocomplete (ADD mode only) — pathway-scoped to australia so only australia clients are suggested. -->
+<script>
+(function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput || !hiddenInput || !dropdown) return;  // edit mode: no autocomplete
+    let debounceTimer = null, highlightIdx = -1, items = [];
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    searchInput.closest('form').addEventListener('submit', function(e) {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
+    });
+
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?pathway=australia&q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        selectItem(items[parseInt(this.dataset.idx)]);
+                    });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) {
+        searchInput.value = item.name;
+        hiddenInput.value = item.reg;
+        searchInput.style.borderColor = '#10B981';
+        hide();
+    }
+
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() {
+        dropdown.querySelectorAll('[data-idx]').forEach((el, i) => {
+            el.style.background = i === highlightIdx ? '#f9fafb' : 'white';
+        });
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+
 {% endblock %}

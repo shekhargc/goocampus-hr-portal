@@ -1,0 +1,109 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}{% if record %}Edit Job Stage{% else %}Add Job Stage{% endif %} - Operations{% endblock %}
+
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="/operations/job-stage" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Job Stage</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record %}Edit Job Stage{% else %}Add Job Stage{% endif %}</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record %}Update job placement details for the client.{% else %}Add a new job placement record for a client.{% endif %}
+        </p>
+
+        <form method="POST">
+
+            <!-- ===== REGISTRATION ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number{% if not record %} *{% endif %}</label>
+                    {% if record %}
+                    <input type="hidden" name="registration_number" value="{{ record.registration_number or '' }}" />
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% else %}
+                    <input type="text" name="registration_number" value="{{ pre_reg or '' }}" required placeholder="e.g. GCUKIP/2021/047" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                    {% endif %}
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
+                    <input type="text" value="{% if record %}{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }}{% endif %}" readonly placeholder="{% if not record %}Resolved from registration number{% endif %}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+            </div>
+
+            <!-- ===== JOB DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Job Details</h3>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Hospital Name</label>
+                <input type="text" name="hospital_name" value="{{ record.hospital_name or '' if record else '' }}" placeholder="Enter hospital name" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Designation</label>
+                    <input type="text" name="designation" value="{{ record.designation or '' if record else '' }}" placeholder="e.g. FY2, Junior Clinical Fellow" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Joined Date</label>
+                    <input type="date" name="joined_date" value="{{ record.joined_date or '' if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Job Location</label>
+                    <input type="text" name="job_location" value="{{ record.job_location or '' if record else '' }}" placeholder="City / region" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Job Confirmed By</label>
+                    <select name="job_confirmed_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select</option>
+                        {% for opt in job_confirmed_by_options %}
+                        <option value="{{ opt }}" {% if record and record.job_confirmed_by == opt %}selected{% endif %}>{{ opt }}</option>
+                        {% endfor %}
+                        {% if record and record.job_confirmed_by and record.job_confirmed_by not in job_confirmed_by_options %}
+                        <option value="{{ record.job_confirmed_by }}" selected>{{ record.job_confirmed_by }}</option>
+                        {% endif %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Offered Salary (£)</label>
+                <input type="text" name="offered_salary" value="{{ record.offered_salary or '' if record else '' }}" placeholder="e.g. 45000 or 45,000 per annum" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== CONTACT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Contact Information</h3>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile Number</label>
+                    <input type="tel" name="mobile_number" value="{{ record.mobile_number or '' if record else '' }}" placeholder="+91 XXXXX XXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Email</label>
+                    <input type="email" name="candidate_email" value="{{ record.candidate_email or '' if record else '' }}" placeholder="email@example.com" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes</label>
+                <textarea name="additional_notes" rows="4" placeholder="Any additional information..." style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ record.additional_notes or '' if record else '' }}</textarea>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="margin-top:2rem;padding-top:1.5rem;border-top:1px solid var(--gray-200);">
+                <button type="submit" style="width:100%;padding:0.7rem;background:var(--orange);color:white;border:none;border-radius:8px;font-size:0.95rem;font-weight:600;cursor:pointer;">
+                    {% if record %}Update Job Stage{% else %}Add Job Stage{% endif %}
+                </button>
+                <a href="/operations/job-stage" style="display:block;text-align:center;margin-top:0.8rem;color:var(--gray-500);text-decoration:none;font-size:0.85rem;font-weight:600;">Cancel</a>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

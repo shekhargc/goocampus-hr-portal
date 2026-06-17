@@ -1,0 +1,471 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Documents{% endblock %}
+{% block ops_content %}
+<style>
+.doc-progress{height:8px;background:var(--gray-200);border-radius:4px;overflow:hidden;margin-top:4px}
+.doc-progress-bar{height:100%;border-radius:4px;transition:width .3s}
+/* Autocomplete */
+.autocomplete-wrap{position:relative}
+.suggestions-dropdown{display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto}
+.suggestions-dropdown.visible{display:block}
+.suggestion-item{padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid var(--gray-100);display:flex;justify-content:space-between;align-items:center}
+.suggestion-item:last-child{border-bottom:none}
+.suggestion-item:hover,.suggestion-item.highlighted{background:var(--gray-50)}
+.suggestion-name{color:var(--gray-700);font-weight:500}
+.suggestion-reg{color:var(--gray-500);font-size:0.75rem}
+/* Drawer */
+.drawer-backdrop{position:fixed;inset:0;background:rgba(15,27,51,0.35);opacity:0;visibility:hidden;transition:opacity .25s,visibility .25s;z-index:900}
+.drawer-backdrop.open{opacity:1;visibility:visible}
+.drawer{position:fixed;top:0;right:0;bottom:0;width:560px;max-width:100%;background:white;box-shadow:-8px 0 30px rgba(15,27,51,0.15);transform:translateX(100%);transition:transform .3s ease;z-index:950;display:flex;flex-direction:column;overflow:hidden}
+.drawer.open{transform:translateX(0)}
+.drawer-head{display:flex;align-items:center;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.drawer-head h3{margin:0;font-size:18px;font-weight:700;color:var(--navy)}
+.drawer-close{background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;padding:0;line-height:1}
+.drawer-close:hover{color:var(--navy)}
+.drawer-body{flex:1;overflow-y:auto;padding:24px}
+.drawer-actions{padding:16px 24px;border-top:1px solid var(--gray-200);display:flex;gap:10px}
+.drawer-actions a{flex:1;text-align:center;padding:10px;border-radius:6px;font-weight:600;font-size:14px;text-decoration:none}
+tr.clickable-row{cursor:pointer;transition:background .15s}
+tr.clickable-row:hover{background:var(--gray-50)!important}
+tr.clickable-row.active-row{background:#FFF7ED!important}
+/* Document viewer modal */
+.doc-viewer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1100;display:none;align-items:center;justify-content:center}
+.doc-viewer-overlay.visible{display:flex}
+.doc-viewer-box{background:white;border-radius:12px;width:90vw;max-width:1000px;height:85vh;display:flex;flex-direction:column;overflow:hidden}
+.doc-viewer-header{display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-200);background:var(--gray-50)}
+.doc-viewer-header h4{margin:0;font-size:16px;font-weight:700;color:var(--navy)}
+.doc-viewer-body{flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8f8f8}
+.doc-viewer-body iframe,.doc-viewer-body img{max-width:100%;max-height:100%;width:100%;height:100%;object-fit:contain}
+/* Pagination */
+.pagination{display:flex;align-items:center;justify-content:center;gap:6px;padding:16px 0}
+.pagination a,.pagination span{padding:8px 14px;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;border:1px solid var(--gray-200)}
+.pagination a{color:var(--navy);background:white}
+.pagination a:hover{background:var(--gray-50);border-color:var(--gray-300)}
+.pagination .active{background:var(--navy);color:white;border-color:var(--navy)}
+.pagination .disabled{color:var(--gray-400);pointer-events:none;background:var(--gray-50)}
+</style>
+
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:24px;flex-wrap:wrap;gap:16px;">
+        <div>
+            <h1 style="margin:0;font-size:28px;font-weight:700;color:var(--navy);">Documents</h1>
+            <p style="margin:8px 0 0 0;font-size:14px;color:var(--gray-500);">Track AMC client document uploads and verification status &middot; Click a row to view documents</p>
+        </div>
+    </div>
+
+    <!-- Summary Cards -->
+    <div class="summary-cards" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:16px;margin-bottom:24px;">
+        <div class="summary-card" style="background:white;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);border-left:4px solid var(--navy);">
+            <div class="value" style="font-size:28px;font-weight:700;color:var(--navy);">{{ total_clients }}</div>
+            <div class="label" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;">Total Clients</div>
+        </div>
+        <div class="summary-card" style="background:white;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);border-left:4px solid #6366f1;">
+            <div class="value" style="font-size:28px;font-weight:700;color:#6366f1;">{{ total_documents }}</div>
+            <div class="label" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;">Total Documents</div>
+        </div>
+        <div class="summary-card" style="background:white;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);border-left:4px solid #22c55e;">
+            <div class="value" style="font-size:28px;font-weight:700;color:#22c55e;">{{ complete_count }}</div>
+            <div class="label" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;">All Docs Complete</div>
+        </div>
+        <div class="summary-card" style="background:white;border-radius:10px;padding:20px;box-shadow:0 1px 4px rgba(0,0,0,0.06);border-left:4px solid var(--orange);">
+            <div class="value" style="font-size:28px;font-weight:700;color:var(--orange);">{{ total_clients - complete_count }}</div>
+            <div class="label" style="font-size:12px;font-weight:600;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);margin-top:4px;">Docs Pending</div>
+        </div>
+    </div>
+
+    <!-- Filters -->
+    <div style="background:white;border-radius:10px;padding:16px 20px;margin-bottom:20px;box-shadow:0 1px 3px rgba(0,0,0,0.04);display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+        <form method="GET" action="/operations/australia/documents" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;flex:1;" id="docFilterForm">
+            <div class="autocomplete-wrap" style="flex:1;min-width:200px;">
+                <input type="text" name="search" value="{{ search }}" placeholder="Search by name or registration number..."
+                       style="width:100%;padding:10px 14px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;" id="docSearch" autocomplete="off">
+                <div class="suggestions-dropdown" id="suggestionsDropdown"></div>
+            </div>
+            <select name="status" style="padding:10px 14px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;min-width:160px;" onchange="this.form.submit()">
+                <option value="">All Statuses</option>
+                <option value="complete" {% if status_filter == 'complete' %}selected{% endif %}>All Docs Complete</option>
+                <option value="incomplete" {% if status_filter == 'incomplete' %}selected{% endif %}>Docs Incomplete</option>
+                <option value="none" {% if status_filter == 'none' %}selected{% endif %}>No Docs Uploaded</option>
+            </select>
+            <button type="submit" style="padding:10px 20px;background:var(--navy);color:white;border:none;border-radius:6px;font-weight:600;font-size:14px;cursor:pointer;">Search</button>
+            {% if search or status_filter %}
+            <a href="/operations/australia/documents" style="padding:10px 16px;border:1px solid var(--gray-300);border-radius:6px;font-size:14px;color:var(--gray-600);text-decoration:none;">Reset</a>
+            {% endif %}
+        </form>
+    </div>
+
+    <!-- Table -->
+    <div style="background:white;border-radius:10px;box-shadow:0 1px 3px rgba(0,0,0,0.04);overflow:hidden;">
+        <div class="table-wrapper" style="overflow-x:auto;">
+            <table class="data-table" style="width:100%;border-collapse:collapse;">
+                <thead>
+                    <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);width:50px;">S.No</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Client</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Stage</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Uploaded</th>
+                        <th style="padding:12px 16px;text-align:center;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Verified</th>
+                        <th style="padding:12px 16px;text-align:left;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:0.5px;color:var(--gray-500);">Progress</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for c in clients %}
+                    {% set pct = ((c.doc_count / total_required * 100) if total_required > 0 else 0)|int %}
+                    {% set bar_color = '#22c55e' if pct >= 100 else ('#f59e0b' if pct >= 50 else '#ef4444') %}
+                    <tr class="clickable-row" data-client-id="{{ c.id }}" onclick="openDrawer({{ c.id }})" style="border-bottom:1px solid var(--gray-100);{% if pct >= 100 %}background:#f0fdf4;{% endif %}">
+                        <td style="padding:12px 16px;text-align:center;font-size:13px;color:var(--gray-500);font-weight:600;">{{ start_index + loop.index }}</td>
+                        <td style="padding:12px 16px;">
+                            <div style="font-weight:600;color:var(--navy);font-size:14px;">{{ c.name }}</div>
+                            <div style="font-size:12px;color:var(--gray-500);margin-top:2px;">{{ c.registration_number|format_reg }}</div>
+                        </td>
+                        <td style="padding:12px 16px;font-size:13px;color:var(--gray-700);">{{ c.current_stage or '—' }}</td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            <span style="font-weight:700;font-size:16px;color:var(--navy);">{{ c.doc_count }}</span>
+                            <span style="font-size:12px;color:var(--gray-500);">/ {{ total_required }}</span>
+                        </td>
+                        <td style="padding:12px 16px;text-align:center;">
+                            {% if c.verified_count > 0 %}
+                            <span style="background:#dcfce7;color:#166534;padding:3px 10px;border-radius:12px;font-size:12px;font-weight:600;">{{ c.verified_count }}</span>
+                            {% else %}
+                            <span style="color:var(--gray-400);">—</span>
+                            {% endif %}
+                        </td>
+                        <td style="padding:12px 16px;min-width:140px;">
+                            <div style="display:flex;align-items:center;gap:8px;">
+                                <div class="doc-progress" style="flex:1;">
+                                    <div class="doc-progress-bar" style="width:{{ pct }}%;background:{{ bar_color }};"></div>
+                                </div>
+                                <span style="font-size:12px;font-weight:600;color:{{ bar_color }};min-width:36px;">{{ pct }}%</span>
+                            </div>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                    {% if not clients %}
+                    <tr>
+                        <td colspan="6" style="padding:40px;text-align:center;color:var(--gray-500);font-size:14px;">
+                            No clients found matching your criteria.
+                        </td>
+                    </tr>
+                    {% endif %}
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Pagination -->
+        {% if total_pages > 1 %}
+        <div class="pagination">
+            {% if page > 1 %}
+            <a href="?page={{ page - 1 }}&search={{ search }}&status={{ status_filter }}">&laquo; Prev</a>
+            {% else %}
+            <span class="disabled">&laquo; Prev</span>
+            {% endif %}
+
+            {% set start_page = [1, page - 2]|max %}
+            {% set end_page = [total_pages, page + 2]|min %}
+
+            {% if start_page > 1 %}
+            <a href="?page=1&search={{ search }}&status={{ status_filter }}">1</a>
+            {% if start_page > 2 %}<span class="disabled">...</span>{% endif %}
+            {% endif %}
+
+            {% for p in range(start_page, end_page + 1) %}
+            {% if p == page %}
+            <span class="active">{{ p }}</span>
+            {% else %}
+            <a href="?page={{ p }}&search={{ search }}&status={{ status_filter }}">{{ p }}</a>
+            {% endif %}
+            {% endfor %}
+
+            {% if end_page < total_pages %}
+            {% if end_page < total_pages - 1 %}<span class="disabled">...</span>{% endif %}
+            <a href="?page={{ total_pages }}&search={{ search }}&status={{ status_filter }}">{{ total_pages }}</a>
+            {% endif %}
+
+            {% if page < total_pages %}
+            <a href="?page={{ page + 1 }}&search={{ search }}&status={{ status_filter }}">Next &raquo;</a>
+            {% else %}
+            <span class="disabled">Next &raquo;</span>
+            {% endif %}
+
+            <span style="margin-left:12px;font-size:13px;color:var(--gray-500);">Page {{ page }} of {{ total_pages }} ({{ total_clients }} clients)</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- Drawer -->
+<div class="drawer-backdrop" id="drawerBackdrop" onclick="closeDrawer()"></div>
+<div class="drawer" id="docDrawer">
+    <div class="drawer-head">
+        <h3 id="drawerTitle">Client Documents</h3>
+        <button class="drawer-close" onclick="closeDrawer()">&times;</button>
+    </div>
+    <div class="drawer-body" id="drawerBody">
+        <div style="text-align:center;padding:40px;color:var(--gray-400);">Loading...</div>
+    </div>
+    <div class="drawer-actions" id="drawerActions">
+        <a href="#" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="#" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
+    </div>
+</div>
+
+<!-- Document Viewer Modal -->
+<div class="doc-viewer-overlay" id="docViewerOverlay" onclick="if(event.target===this)closeDocViewer()">
+    <div class="doc-viewer-box">
+        <div class="doc-viewer-header">
+            <h4 id="docViewerTitle">Document</h4>
+            <div style="display:flex;gap:10px;align-items:center;">
+                <a href="#" id="docViewerDownload" download style="padding:6px 14px;background:var(--navy);color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Download</a>
+                <button onclick="closeDocViewer()" style="background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;line-height:1;">&times;</button>
+            </div>
+        </div>
+        <div class="doc-viewer-body" id="docViewerBody"></div>
+    </div>
+</div>
+
+<script>
+// ===== Auto-search with suggestions =====
+let searchTimer, sugHighlight = -1;
+const searchInput = document.getElementById('docSearch');
+const sugBox = document.getElementById('suggestionsDropdown');
+const filterForm = document.getElementById('docFilterForm');
+
+if (searchInput) {
+    searchInput.addEventListener('input', function() {
+        clearTimeout(searchTimer);
+        const val = this.value.trim();
+        if (val.length >= 2) {
+            searchTimer = setTimeout(() => fetchSuggestions(val), 300);
+        } else {
+            sugBox.classList.remove('visible');
+            if (val.length === 0) {
+                searchTimer = setTimeout(() => filterForm.submit(), 400);
+            }
+        }
+    });
+    searchInput.addEventListener('keydown', function(e) {
+        const items = sugBox.querySelectorAll('.suggestion-item');
+        if (!sugBox.classList.contains('visible') || !items.length) {
+            if (e.key === 'Enter') { e.preventDefault(); filterForm.submit(); }
+            return;
+        }
+        if (e.key === 'ArrowDown') { e.preventDefault(); sugHighlight = Math.min(sugHighlight + 1, items.length - 1); highlightSug(items); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); sugHighlight = Math.max(sugHighlight - 1, 0); highlightSug(items); }
+        else if (e.key === 'Enter') { e.preventDefault(); if (sugHighlight >= 0 && items[sugHighlight]) items[sugHighlight].click(); else filterForm.submit(); }
+        else if (e.key === 'Escape') { sugBox.classList.remove('visible'); }
+    });
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !sugBox.contains(e.target)) sugBox.classList.remove('visible');
+    });
+}
+
+function fetchSuggestions(q) {
+    fetch('/api/plab-search?q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(data => {
+            if (!data.length) { sugBox.classList.remove('visible'); return; }
+            sugHighlight = -1;
+            sugBox.innerHTML = data.map(c =>
+                `<div class="suggestion-item" onclick="selectSuggestion('${c.name.replace(/'/g,"\\'")}')">
+                    <span class="suggestion-name">${c.name}</span>
+                    <span class="suggestion-reg">${c.reg}</span>
+                </div>`
+            ).join('');
+            sugBox.classList.add('visible');
+        }).catch(() => sugBox.classList.remove('visible'));
+}
+function highlightSug(items) {
+    items.forEach((el, i) => el.classList.toggle('highlighted', i === sugHighlight));
+}
+function selectSuggestion(name) {
+    searchInput.value = name;
+    sugBox.classList.remove('visible');
+    filterForm.submit();
+}
+
+// ===== Drawer =====
+let activeRow = null;
+function openDrawer(clientId) {
+    const backdrop = document.getElementById('drawerBackdrop');
+    const drawer = document.getElementById('docDrawer');
+    const body = document.getElementById('drawerBody');
+    const title = document.getElementById('drawerTitle');
+
+    // Highlight active row
+    if (activeRow) activeRow.classList.remove('active-row');
+    activeRow = document.querySelector(`tr[data-client-id="${clientId}"]`);
+    if (activeRow) activeRow.classList.add('active-row');
+
+    // Set links
+    document.getElementById('btnEditRecord').href = `/operations/australia/clients/${clientId}/edit`;
+    document.getElementById('btnViewProfile').href = `/operations/australia/clients/${clientId}`;
+
+    body.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400);">Loading documents...</div>';
+    backdrop.classList.add('open');
+    drawer.classList.add('open');
+
+    fetch(`/api/plab-client-docs/${clientId}`)
+        .then(r => r.json())
+        .then(data => {
+            title.textContent = data.client ? data.client.name : 'Client Documents';
+            let html = '';
+
+            // Client info bar
+            if (data.client) {
+                html += `<div style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);">
+                    <div style="width:48px;height:48px;border-radius:50%;background:var(--orange);color:white;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;flex-shrink:0;">
+                        ${(data.client.first_name || '?')[0]}${(data.client.last_name || '?')[0]}
+                    </div>
+                    <div>
+                        <div style="font-size:16px;font-weight:700;color:var(--navy);">${data.client.name}</div>
+                        <div style="font-size:13px;color:var(--gray-500);margin-top:2px;">${data.client.registration_number} &middot; ${data.client.current_stage || '—'}</div>
+                    </div>
+                    <div style="margin-left:auto;">
+                        <span style="font-weight:700;font-size:20px;color:var(--navy);">${data.count}</span>
+                        <span style="font-size:13px;color:var(--gray-500);">/ ${data.total_required}</span>
+                    </div>
+                </div>`;
+            }
+
+            // ===== Upload Document panel (Y-6 Phase 2) =====
+            const knownTypes = ['Photograph','Passport Copy (Front)','Passport Copy (Back)','MBBS Final Certificate','MBBS Course Completion Certificate','Internship Certificate','State Registration Certificate','Aadhar Copy (Optional)','Passport size Photograph','Other'];
+            const allTypes = Array.from(new Set([...(data.missing||[]), ...knownTypes]));
+            const defaultType = (data.missing && data.missing.length > 0) ? data.missing[0] : '';
+            html += `<div id="uploadPanel_${clientId}" style="margin-bottom:18px;padding:14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;">
+                <h4 style="margin:0 0 10px 0;font-size:12px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#0c4a6e;">+ Upload Document</h4>
+                <div style="display:grid;grid-template-columns:1fr;gap:8px;">
+                    <select id="upDocType_${clientId}" style="padding:8px 10px;border:1px solid #bae6fd;border-radius:6px;font-size:13px;background:white;">
+                        ${allTypes.map(t => `<option value="${t}"${t === defaultType ? ' selected' : ''}>${t}</option>`).join('')}
+                    </select>
+                    <input type="file" id="upDocFile_${clientId}" accept="image/*,.pdf,.doc,.docx" style="padding:6px;border:1px solid #bae6fd;border-radius:6px;font-size:13px;background:white;">
+                    <button type="button" onclick="uploadDocFromDrawer(${clientId}, this)" style="padding:8px 16px;background:#0284c7;color:white;border:none;border-radius:6px;font-weight:600;font-size:13px;cursor:pointer;">Upload</button>
+                    <div id="upDocMsg_${clientId}" style="font-size:11px;color:var(--gray-500);"></div>
+                </div>
+            </div>`;
+
+            // Uploaded documents
+            if (data.docs && data.docs.length > 0) {
+                html += `<h4 style="font-size:13px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:var(--gray-500);margin:0 0 12px 0;">Uploaded Documents (${data.docs.length})</h4>`;
+                data.docs.forEach(doc => {
+                    const ext = (doc.file_name || '').split('.').pop().toLowerCase();
+                    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+                    const isPdf = ext === 'pdf';
+                    const icon = isImage ? '🖼️' : (isPdf ? '📄' : '📎');
+                    const statusColor = doc.status === 'verified' ? '#065f46' : (doc.status === 'rejected' ? '#991b1b' : '#92400e');
+                    const statusBg = doc.status === 'verified' ? '#d1fae5' : (doc.status === 'rejected' ? '#fee2e2' : '#fef3c7');
+                    html += `<div style="display:flex;align-items:center;gap:12px;padding:10px 12px;border:1px solid var(--gray-100);border-radius:8px;margin-bottom:8px;transition:background .15s;" onmouseover="this.style.background='var(--gray-50)'" onmouseout="this.style.background='white'">
+                        <span style="font-size:20px;cursor:pointer;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')">${icon}</span>
+                        <div style="flex:1;min-width:0;cursor:pointer;" onclick="openDocViewer(${doc.id},'${doc.doc_type}','${ext}')">
+                            <div style="font-weight:600;font-size:13px;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.doc_type}</div>
+                            <div style="font-size:11px;color:var(--gray-500);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${doc.file_name}</div>
+                        </div>
+                        <span style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;background:${statusBg};color:${statusColor};white-space:nowrap;">${doc.status}</span>
+                        <button type="button" onclick="event.stopPropagation();deleteDocFromDrawer(${doc.id}, ${clientId}, this)" title="Delete document" style="background:none;border:none;color:#991b1b;font-size:18px;cursor:pointer;padding:2px 6px;line-height:1;">&times;</button>
+                    </div>`;
+                });
+            } else {
+                html += '<div style="text-align:center;padding:20px;color:var(--gray-500);font-size:13px;">No documents uploaded yet</div>';
+            }
+
+            // Missing documents
+            if (data.missing && data.missing.length > 0) {
+                html += `<div style="margin-top:20px;padding:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+                    <h4 style="margin:0 0 10px 0;font-size:12px;font-weight:700;color:#9a3412;">Missing Documents (${data.missing.length})</h4>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;">
+                        ${data.missing.map(m => `<span style="font-size:11px;padding:3px 8px;background:white;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;">${m}</span>`).join('')}
+                    </div>
+                </div>`;
+            }
+
+            body.innerHTML = html;
+        })
+        .catch(err => {
+            body.innerHTML = `<div style="text-align:center;padding:40px;color:#ef4444;">Error loading documents</div>`;
+        });
+}
+
+function closeDrawer() {
+    document.getElementById('drawerBackdrop').classList.remove('open');
+    document.getElementById('docDrawer').classList.remove('open');
+    if (activeRow) { activeRow.classList.remove('active-row'); activeRow = null; }
+}
+
+// ===== Document Viewer =====
+function openDocViewer(docId, docType, ext) {
+    const overlay = document.getElementById('docViewerOverlay');
+    const body = document.getElementById('docViewerBody');
+    const titleEl = document.getElementById('docViewerTitle');
+    const dlBtn = document.getElementById('docViewerDownload');
+
+    // Shared PLAB doc routes serve every pathway -- file_path detection
+    // in app.py routes between R2 presigned URLs and legacy BYTEA.
+    const fileUrl = '/operations/plab/doc/' + docId + '/file';
+    const downloadUrl = '/operations/plab/doc/' + docId + '/download';
+    titleEl.textContent = docType;
+    dlBtn.href = downloadUrl;
+
+    const isImage = ['jpg','jpeg','png','gif','webp'].includes(ext);
+    const isPdf = ext === 'pdf';
+
+    if (isImage) {
+        body.innerHTML = `<img src="${fileUrl}" alt="${docType}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
+    } else if (isPdf) {
+        body.innerHTML = `<iframe src="${fileUrl}" style="width:100%;height:100%;border:none;"></iframe>`;
+    } else {
+        body.innerHTML = `<div style="text-align:center;padding:40px;">
+            <p style="font-size:16px;color:var(--gray-500);margin-bottom:16px;">Preview not available for this file type</p>
+            <a href="${downloadUrl}" style="padding:10px 24px;background:var(--orange);color:white;border-radius:8px;font-weight:600;text-decoration:none;">Download File</a>
+        </div>`;
+    }
+    overlay.classList.add('visible');
+}
+
+function closeDocViewer() {
+    const overlay = document.getElementById('docViewerOverlay');
+    overlay.classList.remove('visible');
+    document.getElementById('docViewerBody').innerHTML = '';
+}
+
+// Close viewer on Escape
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        if (document.getElementById('docViewerOverlay').classList.contains('visible')) closeDocViewer();
+        else if (document.getElementById('docDrawer').classList.contains('open')) closeDrawer();
+    }
+});
+
+// ===== Y-6 Phase 2: Upload + Delete from drawer =====
+function uploadDocFromDrawer(clientId, btn) {
+    const fileInput = document.getElementById('upDocFile_' + clientId);
+    const typeSelect = document.getElementById('upDocType_' + clientId);
+    const msgEl = document.getElementById('upDocMsg_' + clientId);
+    if (!fileInput || !fileInput.files.length) { msgEl.textContent = 'Pick a file first.'; msgEl.style.color = '#991b1b'; return; }
+    const file = fileInput.files[0];
+    if (file.size > 12 * 1024 * 1024) { msgEl.textContent = 'File too large (max 12 MB).'; msgEl.style.color = '#991b1b'; return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('doc_type', typeSelect.value || 'Other');
+    fd.append('doc_category', 'personal');
+    btn.disabled = true; btn.textContent = 'Uploading...';
+    msgEl.textContent = ''; msgEl.style.color = '';
+    fetch('/operations/plab/' + clientId + '/upload-doc', { method: 'POST', body: fd })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { openDrawer(clientId); }
+            else { msgEl.textContent = data.error || 'Upload failed'; msgEl.style.color = '#991b1b'; btn.disabled = false; btn.textContent = 'Upload'; }
+        })
+        .catch(() => { msgEl.textContent = 'Upload failed'; msgEl.style.color = '#991b1b'; btn.disabled = false; btn.textContent = 'Upload'; });
+}
+function deleteDocFromDrawer(docId, clientId, btn) {
+    if (!confirm('Delete this document? This cannot be undone.')) return;
+    btn.disabled = true;
+    fetch('/operations/plab/doc/' + docId + '/delete', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) { openDrawer(clientId); }
+            else { alert(data.error || 'Delete failed'); btn.disabled = false; }
+        })
+        .catch(() => { alert('Delete failed'); btn.disabled = false; });
+}
+</script>
+{% endblock %}

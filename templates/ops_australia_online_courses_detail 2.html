@@ -1,0 +1,140 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Online Course Subscription - {{ record.online_subscription or record.registration_number|format_reg }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_australia_online_courses_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to Online Courses &amp; Subscriptions
+    </a>
+  </div>
+
+  <!-- ── Header Card ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
+          {{ record.online_subscription or 'Online Subscription' }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          {% if record.first_name or record.last_name %}
+            {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+            &middot;
+          {% endif %}
+          Registration #{{ record.registration_number|format_reg }}
+        </p>
+        {% if record.issued_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Issued: {{ record.issued_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        {% if record.activation_type %}
+          {% set a = (record.activation_type or '')|lower %}
+          {% set bg = '#F3F4F6' %}{% set fg = '#374151' %}
+          {% if 'new' in a %}{% set bg = '#DBEAFE' %}{% set fg = '#1D4ED8' %}
+          {% elif 'renew' in a %}{% set bg = '#D1FAE5' %}{% set fg = '#065F46' %}
+          {% elif 'exten' in a %}{% set bg = '#FEF3C7' %}{% set fg = '#92400E' %}
+          {% endif %}
+          <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:{{ bg }};color:{{ fg }};">
+            {{ record.activation_type }}
+          </div>
+        {% endif %}
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_australia_online_courses_edit_page', rid=record.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Subscription
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Subscription Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Subscription Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Course / Subscription:</span><span style="color:var(--navy);font-weight:600;">{{ record.online_subscription or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Activation Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.activation_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Issued Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.issued_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Booked By:</span><span style="color:var(--navy);font-weight:600;">{{ record.booked_by or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Candidate Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Name:</span>
+            <span style="color:var(--navy);font-weight:600;">
+              {% if record.first_name or record.last_name %}
+                {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+              {% else %}
+                <span style="color:var(--gray-400);">—</span>
+              {% endif %}
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;">{{ record.registration_number|format_reg }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if record.client_email %}
+              <a href="mailto:{{ record.client_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.client_email }}</a>
+            {% else %}
+              <span style="color:var(--gray-400);font-weight:600;">—</span>
+            {% endif %}
+          </div>
+          {% if record.mobile_number %}
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile_number }}</span></div>
+          {% endif %}
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Access / Login Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Access Credentials</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Login ID:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;">{{ record.login_id or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Password:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,Monaco,monospace;font-size:13px;">{{ record.password or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Metadata Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Record Info</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Record ID:</span><span style="color:var(--navy);font-weight:600;">#{{ record.id }}</span></div>
+          {% if record.created_at %}
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Created:</span><span style="color:var(--navy);font-weight:600;">{{ record.created_at }}</span></div>
+          {% endif %}
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Pathway:</span><span style="color:var(--navy);font-weight:600;">Australia</span></div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Notes (full width) ── -->
+  {% if record.notes %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Notes</h3>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ record.notes }}</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

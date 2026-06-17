@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Pick a time for your welcome call - GooCampus</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+  <style>
+    :root { --orange:#F97316; --navy:#0F172A; }
+    *,*::before,*::after { box-sizing:border-box; }
+    body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif; background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%); margin:0; min-height:100vh; padding:20px; color:var(--navy); }
+    .wrap { max-width:780px; margin:0 auto; }
+    .header { text-align:center; padding:24px 16px 8px; }
+    .logo { font-size:1.3rem; font-weight:800; color:var(--navy); letter-spacing:-0.02em; }
+    .logo .orange { color:var(--orange); }
+    .panel { background:#fff; border-radius:14px; box-shadow:0 10px 30px rgba(15,23,42,0.08); padding:24px; margin-top:16px; }
+    h1 { font-size:1.25rem; font-weight:700; margin:0 0 6px; color:var(--navy); }
+    .sub { font-size:0.92rem; color:#475569; line-height:1.55; }
+    .day-block { margin-top:18px; }
+    .day-label { font-size:0.78rem; font-weight:700; color:var(--orange); text-transform:uppercase; letter-spacing:0.06em; margin-bottom:10px; }
+    .day-date { color:#64748B; font-weight:500; text-transform:none; letter-spacing:0; margin-left:6px; }
+    .slot-grid { display:grid; grid-template-columns:repeat(auto-fill, minmax(110px, 1fr)); gap:8px; }
+    .slot-btn { padding:11px 0; background:#fff; border:1.5px solid #E5E7EB; border-radius:8px; font-size:0.92rem; font-weight:600; color:var(--navy); cursor:pointer; transition:all 0.15s; font-family:inherit; }
+    .slot-btn:hover { border-color:var(--orange); background:#FFF7ED; color:var(--orange); transform:translateY(-1px); }
+    .submit-bar { margin-top:22px; display:flex; justify-content:space-between; align-items:center; gap:12px; flex-wrap:wrap; }
+    .submit-btn { padding:12px 28px; background:var(--orange); color:#fff; border:none; border-radius:8px; font-weight:700; font-size:0.95rem; cursor:pointer; font-family:inherit; opacity:0.5; pointer-events:none; transition:opacity 0.15s; }
+    .submit-btn.ready { opacity:1; pointer-events:auto; }
+    .submit-btn:hover { background:#EA580C; }
+    .picked-banner { background:#ECFDF5; border:1px solid #6EE7B7; border-radius:10px; padding:14px 16px; font-size:0.92rem; color:#065F46; display:flex; align-items:center; gap:10px; }
+    .err-banner { background:#FEE2E2; border:1px solid #FCA5A5; border-radius:10px; padding:14px 16px; font-size:0.92rem; color:#991B1B; display:flex; align-items:center; gap:10px; }
+    .footnote { font-size:0.75rem; color:#94A3B8; margin-top:18px; line-height:1.55; }
+    .selected-info { font-size:0.84rem; color:var(--orange); font-weight:700; }
+    @media (max-width:480px) {
+      .panel { padding:16px; }
+      h1 { font-size:1.1rem; }
+      .slot-grid { grid-template-columns:repeat(auto-fill, minmax(86px, 1fr)); }
+      .slot-btn { padding:10px 0; font-size:0.86rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+
+    <div class="header">
+      <div class="logo">Goo<span class="orange">Campus</span></div>
+    </div>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for category, message in messages %}
+        <div class="{% if category == 'error' %}err-banner{% else %}picked-banner{% endif %}" style="margin-bottom:14px;">
+          <i class="bi {% if category == 'error' %}bi-exclamation-octagon-fill{% else %}bi-check-circle-fill{% endif %}"></i>
+          <span>{{ message }}</span>
+        </div>
+      {% endfor %}
+    {% endwith %}
+
+    {% if error %}
+      <div class="panel">
+        <div class="err-banner">
+          <i class="bi bi-exclamation-octagon-fill"></i>
+          <span>{{ error }}</span>
+        </div>
+      </div>
+    {% elif row and row.status == 'confirmed' and row.chosen_slot %}
+      {# Confirmed view -- show the chosen slot #}
+      <div class="panel">
+        <div class="picked-banner" style="font-size:1rem;">
+          <i class="bi bi-calendar-check-fill" style="font-size:1.4rem;color:#059669;"></i>
+          <div>
+            <div style="font-weight:700;">Your welcome call is confirmed</div>
+            <div style="margin-top:4px;font-weight:500;">
+              {{ row.chosen_slot.strftime('%A, %d %B %Y at %H:%M') if row.chosen_slot.strftime else row.chosen_slot }} IST
+            </div>
+          </div>
+        </div>
+        <p class="footnote" style="margin-top:14px;">
+          Your counsellor will call you at this time. If you need to reschedule, just message them directly.
+        </p>
+      </div>
+    {% elif row and row.status == 'expired' %}
+      <div class="panel">
+        <div class="err-banner">
+          <i class="bi bi-exclamation-octagon-fill"></i>
+          <span>This link has expired. Please contact your counsellor for a new one.</span>
+        </div>
+      </div>
+    {% elif row and slots_by_day %}
+      <div class="panel">
+        <h1>Hi{% if client_name %} {{ client_name.split(' ')[1] if ' ' in client_name else client_name }}{% endif %}, pick a time that works.</h1>
+        <p class="sub">Your counsellor will give you a quick welcome call to walk through your plan. Tap any of the slots below.</p>
+
+        <form method="POST" action="/slot/{{ row.token }}/pick">
+          <input type="hidden" name="chosen_slot" id="chosen-slot-input" value="">
+
+          {% for day, slots in slots_by_day.items() %}
+          <div class="day-block">
+            <div class="day-label">
+              {% set day_dt = day.split('-') %}
+              {{ ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][(day_dt[2]|int) % 7] if day_dt|length == 3 else day }}
+              <span class="day-date">{{ day }}</span>
+            </div>
+            <div class="slot-grid">
+              {% for iso in slots %}
+              <button type="button" class="slot-btn" data-iso="{{ iso }}">
+                {{ iso[11:16] }}
+              </button>
+              {% endfor %}
+            </div>
+          </div>
+          {% endfor %}
+
+          <div class="submit-bar">
+            <div class="selected-info" id="selected-info"></div>
+            <button type="submit" class="submit-btn" id="submit-btn">
+              <i class="bi bi-check2-circle"></i> Confirm slot
+            </button>
+          </div>
+        </form>
+
+        <p class="footnote">
+          We hold this slot for you the moment you tap Confirm. You'll get a call from your counsellor at the chosen time.
+        </p>
+      </div>
+
+      <script>
+        (function() {
+          var btns = document.querySelectorAll('.slot-btn');
+          var hidden = document.getElementById('chosen-slot-input');
+          var info = document.getElementById('selected-info');
+          var submit = document.getElementById('submit-btn');
+          btns.forEach(function(b) {
+            b.addEventListener('click', function() {
+              btns.forEach(function(x) {
+                x.style.background = '#fff';
+                x.style.borderColor = '#E5E7EB';
+                x.style.color = '#0F172A';
+              });
+              b.style.background = '#F97316';
+              b.style.borderColor = '#EA580C';
+              b.style.color = '#fff';
+              hidden.value = b.dataset.iso;
+              var iso = b.dataset.iso;
+              info.textContent = 'Selected: ' + iso.replace('T', ' at ').slice(0, 16) + ' IST';
+              submit.classList.add('ready');
+            });
+          });
+        })();
+      </script>
+    {% else %}
+      <div class="panel">
+        <div class="err-banner">
+          <i class="bi bi-exclamation-octagon-fill"></i>
+          <span>No time slots are available right now. Please contact your counsellor.</span>
+        </div>
+      </div>
+    {% endif %}
+
+  </div>
+</body>
+</html>
