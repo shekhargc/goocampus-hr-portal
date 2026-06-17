@@ -25883,6 +25883,7 @@ ensure_budget_tables()
 ensure_ops_tables()
 ensure_pathway_columns_on_ops_tables()
 ensure_pathway_column_on_lookup_options()
+seed_plan_type_product_links()
 ensure_pathway_column_on_plab_clients()
 
 
@@ -25939,6 +25940,85 @@ def ensure_ops_amc_registration_table():
 
 
 ensure_ops_amc_registration_table()
+
+
+def seed_plan_type_product_links():
+    """Phase 2: link each plan_type option to its Product/Service so the
+    registration form can cascade Pathway -> Product -> Plan Type
+    (per 'Pathway, Project, Plan Type' mapping). Additive + idempotent:
+      - adds lookup_options.product_name (live ignores it until the form code ships)
+      - sets product_name on every plan_type row from its pathway (+ CSS country
+        for consulting, which has multiple products)
+      - seeds Training/Portfolio plan types + tags their products' pathway
+    """
+    try:
+        conn = get_db()
+    except Exception:
+        return
+    try:
+        try:
+            conn.execute("ALTER TABLE lookup_options ADD COLUMN product_name TEXT")
+            conn.commit()
+            logging.info("Migration: added product_name column to lookup_options")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        # Single-product pathways -> one product each
+        single = {'plab': 'UK PGCP', 'australia': 'AUS PGCP',
+                  'training': 'AMC MCQ', 'portfolio': 'Portfolio Services'}
+        for pw, prod in single.items():
+            try:
+                conn.execute(
+                    "UPDATE lookup_options SET product_name = ? "
+                    "WHERE category='plan_type' AND COALESCE(pathway,'plab')=?", (prod, pw))
+            except Exception:
+                conn.rollback()
+        # Consulting -> product by CSS country prefix in the plan-type value
+        cons_map = [('Australia', 'AMC Consulting'), ('UK', 'UK Consulting'),
+                    ('USA', 'USA Consulting'), ('UAE', 'UAE Consulting')]
+        for prefix, prod in cons_map:
+            try:
+                conn.execute(
+                    "UPDATE lookup_options SET product_name = ? "
+                    "WHERE category='plan_type' AND COALESCE(pathway,'plab')='consulting' "
+                    "AND value ILIKE ?", (prod, prefix + '%'))
+            except Exception:
+                conn.rollback()
+        conn.commit()
+
+        # Seed Training + Portfolio plan types (new pathways)
+        new_plans = [
+            ('training', 'AMC MCQ', ['AMC 1', 'AMC 2']),
+            ('portfolio', 'Portfolio Services', ['Portfolio Plus']),
+        ]
+        for pw, prod, vals in new_plans:
+            for v in vals:
+                try:
+                    ex = conn.execute(
+                        "SELECT id FROM lookup_options WHERE category='plan_type' "
+                        "AND COALESCE(pathway,'plab')=? AND value=?", (pw, v)).fetchone()
+                    if not ex:
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, pathway, product_name, is_active) "
+                            "VALUES ('plan_type', ?, ?, ?, ?, true)", (v, v, pw, prod))
+                except Exception:
+                    conn.rollback()
+        conn.commit()
+
+        # Tag the new-pathway products (live doesn't query these pathways yet)
+        for prod, pw in [('AMC MCQ', 'training'), ('Portfolio Services', 'portfolio')]:
+            try:
+                conn.execute("UPDATE products_services SET pathway = ? WHERE name = ?", (pw, prod))
+            except Exception:
+                conn.rollback()
+        conn.commit()
+        logging.info("seed_plan_type_product_links: done")
+    except Exception as e:
+        logging.error(f"seed_plan_type_product_links: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 
 def ensure_lookup_category_on_form_configs():
