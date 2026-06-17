@@ -436,8 +436,18 @@ LOOKUP_SRC = [
     ('ops_payments','payment_method','payment_method'), ('ops_payments','instalment','instalment'),
 ]
 VENDOR_SRC = [
-    ('ops_coaching','other_vendor','Training'), ('ops_research_publication','research_provider','Research'),
+    ('ops_coaching','other_vendor','Training Programs'),
+    ('ops_research_publication','research_provider','Research & Publications'),
 ]
+AU_VENDOR_COUNTRY = 'AMC Pathway'
+# Values that are booking/payment arrangements, NOT vendors — never seed these
+# (they belong to the Booked-By dropdown). Guards against the overloaded
+# "Training Vendor Name" column re-polluting vendors_providers on re-import.
+_NON_VENDOR = {
+    'booked & paid by goocampus', 'booked by gc / paid by client',
+    'booking included in package', 'booking included in the package',
+    'booked and paid by client',
+}
 
 def step_lookups():
     conn = _pg(); cur = conn.cursor()
@@ -467,8 +477,9 @@ def step_lookups():
         for r in cur.fetchall():
             nm = (r[0] or '').strip()
             if not nm or len(nm) > 120 or nm.lower() in have_v: continue
+            if nm.lower() in _NON_VENDOR: continue  # skip booking-arrangement values
             if DRY: added_vn += 1; have_v.add(nm.lower()); continue
-            cur.execute("INSERT INTO vendors_providers (name, category, is_active) VALUES (%s,%s,true)", (nm, category))
+            cur.execute("INSERT INTO vendors_providers (name, category, country, is_active) VALUES (%s,%s,%s,true)", (nm, category, AU_VENDOR_COUNTRY))
             have_v.add(nm.lower()); added_vn += 1
     if not DRY: conn.commit()
     cur.close(); conn.close()

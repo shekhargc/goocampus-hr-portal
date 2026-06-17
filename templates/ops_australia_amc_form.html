@@ -186,7 +186,7 @@
     });
 
     function fetchSuggestions(q) {
-        fetch('/operations/api/client-search?q=' + encodeURIComponent(q))
+        fetch('/operations/api/client-search?pathway=australia&q=' + encodeURIComponent(q))
             .then(r => r.json())
             .then(data => {
                 items = data; highlightIdx = -1;
