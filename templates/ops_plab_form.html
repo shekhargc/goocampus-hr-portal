@@ -172,8 +172,17 @@
                     </select>
                 </div>
                 <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Product / Service</label>
+                    <select name="product_id" id="product_id" data-pathway="plab" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">— Select —</option>
+                        {% for prod in products %}
+                        <option value="{{ prod.id }}" data-name="{{ prod.name }}" {% if item and item.product_id == prod.id %}selected{% endif %}>{{ prod.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Plan Type</label>
-                    <select name="plan_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="plan_type" id="plan_type" data-current="{{ item.plan_type if item else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">— Select —</option>
                         {% for plan in plan_types %}
                         <option value="{{ plan }}" {% if item and item.plan_type == plan %}selected{% endif %}>{{ plan }}</option>
@@ -181,6 +190,42 @@
                     </select>
                 </div>
             </div>
+
+            <!-- Pathway -> Product -> Plan Type cascade -->
+            <script>
+            (function() {
+                var prodSel = document.getElementById('product_id');
+                var planSel = document.getElementById('plan_type');
+                if (!prodSel || !planSel) return;
+                var pathway = prodSel.getAttribute('data-pathway') || 'plab';
+                function repopulatePlans(keepValue) {
+                    var opt = prodSel.options[prodSel.selectedIndex];
+                    var prodName = opt ? (opt.getAttribute('data-name') || '') : '';
+                    var url = '/operations/api/plan-types?pathway=' + encodeURIComponent(pathway);
+                    if (prodName) url += '&product=' + encodeURIComponent(prodName);
+                    fetch(url).then(function(r){ return r.json(); }).then(function(plans){
+                        var current = keepValue ? (planSel.getAttribute('data-current') || '') : '';
+                        planSel.innerHTML = '<option value="">— Select —</option>';
+                        var found = false;
+                        plans.forEach(function(p){
+                            var o = document.createElement('option');
+                            o.value = p; o.textContent = p;
+                            if (current && p === current) { o.selected = true; found = true; }
+                            planSel.appendChild(o);
+                        });
+                        // Preserve a saved plan_type even if it's not in the new product's list.
+                        if (current && !found) {
+                            var o = document.createElement('option');
+                            o.value = current; o.textContent = current; o.selected = true;
+                            planSel.appendChild(o);
+                        }
+                    }).catch(function(){});
+                }
+                prodSel.addEventListener('change', function(){ repopulatePlans(false); });
+                // On initial load, if a product is preselected, fetch its plans but keep saved plan_type.
+                if (prodSel.value) { repopulatePlans(true); }
+            })();
+            </script>
 
             <!-- ===== CLIENT STATUS (Edit only) ===== -->
             {% if mode == 'edit' %}

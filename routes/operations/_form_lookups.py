@@ -36,6 +36,28 @@ dropdowns shouldn't happen as long as PLAB has values seeded.
 """
 
 from app import get_lookup_options
+from db import get_db
+
+
+def section_client_products(pathway):
+    """Active Products/Services for a pathway as {'products': [ {id, name}, ... ]}.
+
+    Drives the Product/Service <select> on the AMC / Consulting client edit
+    forms. Plan Type then cascades from the chosen product via the
+    /operations/api/plan-types endpoint (client-side JS in the template).
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            ((pathway or '').strip().lower(),)).fetchall()
+        products = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception:
+        products = []
+    finally:
+        conn.close()
+    return {'products': products}
 
 
 # ── Per-section dropdown maps ──────────────────────────────────────────────

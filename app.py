@@ -18295,7 +18295,7 @@ def ops_plab_add():
                 mobile, whatsapp1, whatsapp2, email, dob, city, state,
                 instagram, facebook, linkedin,
                 father_name, father_phone, mother_name, mother_phone, parents_email,
-                joined_stage, plan_type,
+                joined_stage, plan_type, product_id,
                 account_status, current_stage, switched_program,
                 counsellor, counsellor_email, counsellor_number,
                 lead_source, referral_type, operations_referral,
@@ -18313,7 +18313,7 @@ def ops_plab_add():
                 comm_city_district, comm_state_province, comm_postal_code, comm_country,
                 created_by
             ) VALUES (
-                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             )''', (
                 reg_num, f.get('registration_date') or datetime.now().strftime('%Y-%m-%d'),
                 f.get('customer_id') or '',
@@ -18324,6 +18324,7 @@ def ops_plab_add():
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
+                f.get('product_id') or None,
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
@@ -18386,6 +18387,7 @@ def ops_plab_add():
 
     conn.close()
     return render_template('ops_plab_form.html', mode='add', item=None,
+                           products=_products_for_pathway('plab'),
                            plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
@@ -18415,7 +18417,7 @@ def ops_plab_edit(client_id):
                 mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
                 instagram=?, facebook=?, linkedin=?,
                 father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
-                joined_stage=?, plan_type=?,
+                joined_stage=?, plan_type=?, product_id=?,
                 account_status=?, current_stage=?, switched_program=?,
                 dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
@@ -18448,6 +18450,7 @@ def ops_plab_edit(client_id):
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
+                f.get('product_id') or None,
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('dropped_date', ''),
@@ -18505,6 +18508,7 @@ def ops_plab_edit(client_id):
         documents = []
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
+                           products=_products_for_pathway('plab'),
                            plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
@@ -20177,6 +20181,26 @@ def ops_products_api():
         out = []
     conn.close()
     return jsonify(out)
+
+
+def _products_for_pathway(pathway):
+    """Active Products/Services for a pathway as a list of dict rows.
+
+    Used to populate the server-side Product/Service <select> on the
+    registration (client add/edit) forms. Mirrors ops_products_api().
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            ((pathway or 'plab').strip().lower(),)).fetchall()
+        out = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception as e:
+        logging.error(f"_products_for_pathway: {e}")
+        out = []
+    conn.close()
+    return out
 
 
 @app.route('/operations/call-notes/tracker')

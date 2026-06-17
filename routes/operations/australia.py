@@ -23,7 +23,7 @@ from db import get_db
 # Plan Type / Account Status / Current Stage / Counsellor / Lead Source
 # <select>s render the same options PLAB uses (sourced from the AMC tab
 # of Field Manager).
-from routes.operations._form_lookups import section_client_lookups
+from routes.operations._form_lookups import section_client_lookups, section_client_products
 
 
 @admin_required
@@ -351,7 +351,7 @@ AU_EDITABLE_COLUMNS = [
     'instagram', 'facebook', 'linkedin',
     'father_name', 'father_phone', 'mother_name', 'mother_phone', 'parents_email',
     # Service
-    'plan_type', 'account_status', 'current_stage', 'switched_program',
+    'plan_type', 'product_id', 'account_status', 'current_stage', 'switched_program',
     'counsellor', 'counsellor_email', 'counsellor_number',
     'lead_source', 'registration_date',
     # Financials
@@ -498,6 +498,7 @@ def ops_australia_client_edit_page(client_id):
         # Switched Program, Counsellor, Lead Source. Sourced from
         # lookup_options where pathway='australia'.
         **section_client_lookups('australia'),
+        **section_client_products('australia'),
     )
 
 
@@ -531,6 +532,9 @@ def ops_australia_client_edit_save(client_id):
                         val = float(val) if val else 0
                     except ValueError:
                         val = 0
+                # product_id: empty selection -> NULL (legacy rows stay clean).
+                elif col == 'product_id':
+                    val = val or None
                 sets.append(f"{col} = ?")
                 params.append(val)
         if sets:
