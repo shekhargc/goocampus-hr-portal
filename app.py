@@ -15437,8 +15437,9 @@ def ops_main_dashboard():
             d['reg'] = one("SELECT COUNT(*) c FROM ops_amc_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
         try:
             d['recent'] = [dict(r) for r in conn.execute(
-                "SELECT registration_number, prefix, first_name, last_name, account_status, current_stage "
-                "FROM plab_clients WHERE COALESCE(pathway,'plab')=? ORDER BY id DESC LIMIT 5", (pw,)).fetchall()]
+                "SELECT registration_number, prefix, first_name, last_name, account_status, current_stage, registration_date "
+                "FROM plab_clients WHERE COALESCE(pathway,'plab')=? "
+                "ORDER BY registration_date DESC NULLS LAST, id DESC LIMIT 5", (pw,)).fetchall()]
         except Exception:
             d['recent'] = []
         return d

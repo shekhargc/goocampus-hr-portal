@@ -83,7 +83,7 @@
         {% for r in c.recent %}
         <div class="row">
           <span class="nm">{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</span>
-          <span class="st">{{ r.current_stage or r.account_status or '' }}</span>
+          <span class="st">{{ r.registration_date or r.current_stage or r.account_status or '' }}</span>
         </div>
         {% endfor %}
       </div>
