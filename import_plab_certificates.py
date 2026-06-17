@@ -3,74 +3,69 @@ import_plab_certificates.py -- run LOCALLY to bulk-import PLAB client
 certificates into plab_client_documents with doc_category='certificate'.
 
 Files go to Cloudflare R2 (object storage); only the R2 object key is
-stored in plab_client_documents.file_path. This is the certificate
-equivalent of bulk_import_documents.py, driven by a Zoho mapping report
-instead of structured filenames.
+stored in plab_client_documents.file_path.
 
-Inputs
-======
-  1. Mapping report (xlsx), default:
-       /Users/Santosh/Desktop/Zoho Data/UK GC/CLient's Additional Doc & Certificates Report.xlsx
-     Columns:
-       - 'Upload Doc / Certificate'  -> the actual filename in the folder
-       - 'GC UK Registration'        -> client name with embedded reg
-                                        (e.g. " Dr. Anushka Mathur -GCUKIP/25-26/009")
-       - 'Doc / Certificate Name'    -> the certificate label (doc_type)
-     Override with env REPORT=/path/to/report.xlsx
+Driven by cert_manifest.json
+============================
+The certificate files were pulled directly from Zoho Creator's
+"CLient's Additional Doc & Certificates Report" via the logged-in browser
+(2026-06-17). Each file is saved in the folder named by its Zoho RECORD ID:
+    <record_id>.<ext>     e.g. 104951000003371027.pdf
+and cert_manifest.json maps every record to its client + label:
+    [{ "id": "...", "fname": "Adhar.pdf", "reg": "GCUKIP/2022/004",
+       "label": "AAdhar" }, ...]
 
-  2. A folder of the actual certificate files, env CERT_FOLDER (required).
+We use the manifest (NOT the Zoho xlsx) because Zoho's exported xlsx stores
+the internal epoch-prefixed filename, while the downloaded files use the
+record id; the manifest is the authoritative join.
 
-Behavior (per report row)
-=========================
-  1. Extract reg number from 'GC UK Registration' via regex
-     GC[A-Z]*/[0-9A-Za-z-]+/\\d+  ; look up client_id in plab_clients
-     (pathway='plab') by registration_number (with padding-variant
-     fallbacks, same as bulk_import_documents.py).
-  2. Find the file in CERT_FOLDER by exact 'Upload Doc / Certificate'
-     filename; fall back to a basename match if the exact path fails.
+Behavior (per manifest record)
+==============================
+  1. reg -> client_id in plab_clients (pathway='plab') by
+     registration_number, with padding/year-format variant fallbacks.
+  2. Locate the file in CERT_FOLDER as <id>.* (any extension).
   3. Upload bytes to R2 via core.storage.upload_bytes with key
-     storage.make_doc_key('plab', reg, 'Certificate', filename).
+     storage.make_doc_key('plab', reg, 'Certificate', <original fname>).
   4. INSERT plab_client_documents row:
-       client_id, doc_type = 'Doc / Certificate Name' (fallback to
-       filename), doc_category='certificate', file_name, file_path=r2_key,
-       file_size, content_type (guessed from ext), status='uploaded',
+       client_id, doc_type = label (fallback: original fname),
+       doc_category='certificate', file_name = original fname,
+       file_path = r2_key, file_size, content_type, status='uploaded',
        uploaded_by='cert_import'.
-  Skipped + reported: file-not-in-folder, client-not-matched, >12MB.
+  Skipped + reported: file-not-in-folder, client-not-matched, >25MB.
 
 Wipe (optional)
 ===============
-  WIPE=1 deletes existing doc_category='certificate' rows (DB) and the
-  matching R2 objects under plab/.../Certificate/ before importing, so
-  re-runs don't duplicate. Off by default.
+  WIPE=1 deletes existing doc_category='certificate' rows created by THIS
+  importer (uploaded_by='cert_import') and their R2 objects before
+  importing, so re-runs don't duplicate. Manual portal cert uploads
+  (uploaded_by != 'cert_import') survive. Off by default.
 
 Run
 ===
-  CERT_FOLDER="/path/to/certificate files" \
+  CERT_FOLDER="/Users/Santosh/Desktop/Zoho Data/UK GC/Certificates" \
   DATABASE_URL=postgresql://... \
   R2_ACCOUNT_ID=... R2_ACCESS_KEY_ID=... R2_SECRET_ACCESS_KEY=... \
   R2_BUCKET_NAME=goocampus-client-docs \
   R2_ENDPOINT=https://<acct>.r2.cloudflarestorage.com \
   python3 import_plab_certificates.py
 
-  Add WIPE=1 to clear existing certificate rows first.
   Add DRY_RUN=1 to parse + match only (no R2 upload, no DB writes).
+  Add WIPE=1 to clear prior cert_import rows first.
+  Override manifest path with MANIFEST=/path/to/cert_manifest.json
 """
 
 import os
 import re
 import sys
+import json
 import time
 
 from db import get_db
 
 
-DEFAULT_REPORT = "/Users/Santosh/Desktop/Zoho Data/UK GC/CLient's Additional Doc & Certificates Report.xlsx"
-MAX_FILE_SIZE_MB = 12
+MAX_FILE_SIZE_MB = 25
 
-# Embedded reg pattern, e.g. "GCUKIP/25-26/009" inside a name string.
 _REG_RE = re.compile(r'(GC[A-Z]*/[0-9A-Za-z-]+/\d+)')
-
-# Split a reg into prefix/middle/tail for padding-variant fallback.
 _REG_SPLIT_RE = re.compile(r'^(GC[A-Z]*)/([0-9A-Za-z-]+)/(\d{1,4})$')
 
 EXT_TO_MIME = {
@@ -79,6 +74,7 @@ EXT_TO_MIME = {
     '.pdf':  'application/pdf',
     '.doc':  'application/msword',
     '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    '.eml':  'message/rfc822',
 }
 
 
@@ -149,80 +145,47 @@ def lookup_client_id(lookup, reg):
     return None
 
 
-def build_file_index(folder):
-    """Map basename -> full path for fallback matching."""
+def build_id_index(folder):
+    """Map record-id (filename without extension) -> full path."""
     index = {}
-    for root, _dirs, files in os.walk(folder):
-        for f in files:
-            if f.startswith('.'):
-                continue
-            index.setdefault(f, os.path.join(root, f))
+    for f in os.listdir(folder):
+        if f.startswith('.') or f == 'cert_manifest.json':
+            continue
+        full = os.path.join(folder, f)
+        if not os.path.isfile(full):
+            continue
+        stem = os.path.splitext(f)[0]
+        index.setdefault(stem, full)
     return index
 
 
-def find_file(folder, file_index, fname):
-    """Exact path under folder first; then basename match anywhere."""
-    if not fname:
-        return None
-    direct = os.path.join(folder, fname)
-    if os.path.isfile(direct):
-        return direct
-    base = os.path.basename(str(fname).strip())
-    return file_index.get(base)
-
-
 def main():
-    report = os.environ.get('REPORT', DEFAULT_REPORT)
     folder = os.environ.get('CERT_FOLDER')
     dry_run = os.environ.get('DRY_RUN') in ('1', 'true', 'True')
     wipe = os.environ.get('WIPE') in ('1', 'true', 'True')
 
-    if not os.path.isfile(report):
-        print(f"ERROR: report not found: {report}", file=sys.stderr)
-        sys.exit(1)
     if not folder:
         print("ERROR: CERT_FOLDER env var required (folder of certificate files).", file=sys.stderr)
         sys.exit(1)
     if not os.path.isdir(folder):
         print(f"ERROR: CERT_FOLDER not found: {folder}", file=sys.stderr)
         sys.exit(1)
+
+    manifest_path = os.environ.get('MANIFEST', os.path.join(folder, 'cert_manifest.json'))
+    if not os.path.isfile(manifest_path):
+        print(f"ERROR: manifest not found: {manifest_path}", file=sys.stderr)
+        sys.exit(1)
     if not os.environ.get('DATABASE_URL') and not dry_run:
         print("ERROR: DATABASE_URL env var required (or set DRY_RUN=1).", file=sys.stderr)
         sys.exit(1)
 
-    import openpyxl
-    wb = openpyxl.load_workbook(report, read_only=True, data_only=True)
-    ws = wb.active
-    it = ws.iter_rows(values_only=True)
-    headers = [str(h).strip() if h is not None else '' for h in next(it)]
-    hidx = {h: i for i, h in enumerate(headers)}
+    with open(manifest_path, encoding='utf-8') as fh:
+        records = json.load(fh)
+    print(f"Manifest records: {len(records)}")
 
-    col_file = hidx.get('Upload Doc / Certificate')
-    col_reg = hidx.get('GC UK Registration')
-    col_name = hidx.get('Doc / Certificate Name')
-    if col_file is None or col_reg is None:
-        print(f"ERROR: required columns missing. Found headers: {headers}", file=sys.stderr)
-        sys.exit(1)
+    id_index = build_id_index(folder)
+    print(f"Files found in CERT_FOLDER: {len(id_index)}")
 
-    rows = []
-    for r in it:
-        if not any(v not in (None, '') for v in r):
-            continue
-        def g(i):
-            return r[i] if (i is not None and i < len(r)) else None
-        fname = (str(g(col_file)).strip() if g(col_file) is not None else '')
-        reg_raw = g(col_reg)
-        label = (str(g(col_name)).strip() if g(col_name) is not None else '')
-        if not fname:
-            continue
-        rows.append((fname, reg_raw, label))
-    wb.close()
-    print(f"Report rows with a filename: {len(rows)}")
-
-    file_index = build_file_index(folder)
-    print(f"Files found in CERT_FOLDER: {len(file_index)}")
-
-    # Storage + DB
     from core import storage
     if not dry_run and not storage.is_configured():
         print("ERROR: R2 not configured (R2_* env vars). Set them or use DRY_RUN=1.", file=sys.stderr)
@@ -230,16 +193,14 @@ def main():
 
     conn = None
     reg_lookup = {}
-    if not dry_run:
+    # Connect whenever a DB is configured -- even in DRY_RUN -- so we can
+    # validate client matching before committing to the real upload.
+    if os.environ.get('DATABASE_URL'):
         conn = get_db()
         reg_lookup = build_reg_lookup(conn)
         print(f"PLAB clients indexed by reg: {len(reg_lookup)}")
 
-        if wipe:
-            # SAFE wipe: only touch rows this importer created
-            # (uploaded_by='cert_import'). Manual cert uploads from the
-            # portal UI (uploaded_by='ops_team') survive. Delete each
-            # row's R2 object first, then the DB rows.
+        if wipe and not dry_run:
             try:
                 prior = conn.execute(
                     "SELECT id, file_path FROM plab_client_documents "
@@ -248,7 +209,7 @@ def main():
                 print(f"Wiping {len(prior)} prior cert_import rows (+ their R2 objects)")
                 for row in prior:
                     fp = row['file_path']
-                    if fp and not str(fp).startswith('db://') and '://' not in str(fp):
+                    if fp and '://' not in str(fp):
                         try:
                             storage.delete_object(str(fp))
                         except Exception as e:
@@ -264,32 +225,29 @@ def main():
                 print(f"  Wipe failed: {e}")
 
     summary = {
-        'rows': len(rows), 'uploaded': 0,
+        'records': len(records), 'uploaded': 0,
         'file_missing': [], 'unmatched_reg': [], 'skipped_big': [],
         'errors': 0,
     }
 
-    for i, (fname, reg_raw, label) in enumerate(rows, 1):
+    for i, rec in enumerate(records, 1):
+        rid = str(rec.get('id') or '').strip()
+        fname = (rec.get('fname') or '').strip() or f'{rid}.bin'
+        reg = extract_reg(rec.get('reg'))
+        label = (rec.get('label') or '').strip()
         try:
-            reg = extract_reg(reg_raw)
-            fpath = find_file(folder, file_index, fname)
+            fpath = id_index.get(rid)
             if not fpath:
                 if len(summary['file_missing']) < 20:
-                    summary['file_missing'].append(fname)
+                    summary['file_missing'].append(rid)
                 continue
 
-            client_id = None
-            if not dry_run:
-                client_id = lookup_client_id(reg_lookup, reg)
-                if not client_id:
-                    if len(summary['unmatched_reg']) < 20:
-                        summary['unmatched_reg'].append(reg or str(reg_raw))
-                    continue
-            else:
-                # dry-run: still note unmatched-looking regs (no DB)
-                if not reg:
-                    if len(summary['unmatched_reg']) < 20:
-                        summary['unmatched_reg'].append(str(reg_raw))
+            # Match client whenever we have a reg_lookup (both modes).
+            client_id = lookup_client_id(reg_lookup, reg) if reg_lookup else None
+            if reg_lookup and not client_id:
+                if len(summary['unmatched_reg']) < 40:
+                    summary['unmatched_reg'].append(reg or str(rec.get('reg')))
+                continue
 
             try:
                 size = os.path.getsize(fpath)
@@ -299,10 +257,11 @@ def main():
                 summary['skipped_big'].append((fname, size))
                 continue
 
-            doc_type = label or os.path.basename(fpath)
-            ext = os.path.splitext(fpath)[1].lower()
+            doc_type = label or fname
+            # Use the original Zoho filename for display/key; the on-disk
+            # name is the record id, which we don't want to surface.
+            ext = os.path.splitext(fname)[1].lower() or os.path.splitext(fpath)[1].lower()
             content_type = EXT_TO_MIME.get(ext, 'application/octet-stream')
-            leaf = os.path.basename(fpath)
 
             if dry_run:
                 summary['uploaded'] += 1
@@ -311,13 +270,12 @@ def main():
             with open(fpath, 'rb') as fh:
                 data = fh.read()
 
-            r2_key = storage.make_doc_key('plab', reg or f'client_{client_id}', 'Certificate', leaf)
+            r2_key = storage.make_doc_key('plab', reg or f'client_{client_id}', 'Certificate', fname)
             if not storage.upload_bytes(r2_key, data, content_type):
-                print(f"  R2 upload failed: {leaf}")
+                print(f"  R2 upload failed: {fname}")
                 summary['errors'] += 1
                 continue
 
-            # Insert with up to 3 reconnect attempts.
             inserted = False
             for attempt in range(3):
                 try:
@@ -326,7 +284,7 @@ def main():
                         "  (client_id, doc_type, doc_category, file_name, file_path, "
                         "   file_size, content_type, status, uploaded_by) "
                         "VALUES (?, ?, ?, ?, ?, ?, ?, 'uploaded', 'cert_import')",
-                        (client_id, doc_type, 'certificate', leaf, r2_key,
+                        (client_id, doc_type, 'certificate', fname, r2_key,
                          len(data), content_type),
                     )
                     conn.commit()
@@ -338,7 +296,7 @@ def main():
                     except Exception:
                         pass
                     if attempt < 2:
-                        print(f"  insert retry {attempt+1} for {leaf}: {e}")
+                        print(f"  insert retry {attempt+1} for {fname}: {e}")
                         time.sleep(2 ** attempt)
                         try:
                             conn.close()
@@ -346,17 +304,17 @@ def main():
                             pass
                         conn = get_db()
                     else:
-                        print(f"  insert failed {leaf}: {e}")
+                        print(f"  insert failed {fname}: {e}")
                         storage.delete_object(r2_key)
                         summary['errors'] += 1
             if inserted:
                 summary['uploaded'] += 1
         except Exception as e:
-            print(f"  row {i} error ({fname}): {e}")
+            print(f"  record {i} error ({rid}): {e}")
             summary['errors'] += 1
 
-        if i % 25 == 0 or i == len(rows):
-            print(f"  progress: {i}/{len(rows)} (uploaded={summary['uploaded']}, "
+        if i % 25 == 0 or i == len(records):
+            print(f"  progress: {i}/{len(records)} (uploaded={summary['uploaded']}, "
                   f"missing={len(summary['file_missing'])}, "
                   f"unmatched={len(summary['unmatched_reg'])}, errors={summary['errors']})")
 
@@ -369,11 +327,11 @@ def main():
     print()
     print("=== Certificate Import Summary ===")
     print(f"  Mode:                      {'DRY RUN' if dry_run else 'LIVE'}")
-    print(f"  Report rows:               {summary['rows']}")
+    print(f"  Manifest records:          {summary['records']}")
     print(f"  Uploaded / inserted:       {summary['uploaded']}")
     print(f"  File not found in folder:  {len(summary['file_missing'])}  {summary['file_missing'][:5]}")
     print(f"  Client not matched:        {len(summary['unmatched_reg'])}  {summary['unmatched_reg'][:5]}")
-    print(f"  Skipped (>12 MB):          {len(summary['skipped_big'])}  {[f for f,_ in summary['skipped_big'][:5]]}")
+    print(f"  Skipped (>{MAX_FILE_SIZE_MB} MB):          {len(summary['skipped_big'])}  {[f for f,_ in summary['skipped_big'][:5]]}")
     print(f"  Errors:                    {summary['errors']}")
 
 
