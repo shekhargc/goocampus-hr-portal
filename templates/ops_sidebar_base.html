@@ -664,6 +664,12 @@
                 <span class="ops-nav-text">GMC Registration</span>
             </a>
             {% endif %}
+            {% if can_access('plab_pathway','job_stage','view') %}
+            <a href="/operations/job-stage" class="ops-nav-item {% if active_ops_page == 'job-stage' %}active{% endif %}" data-tooltip="Job Stage">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg></span>
+                <span class="ops-nav-text">Job Stage</span>
+            </a>
+            {% endif %}
 
             <!-- UK Logistics -->
             <div class="ops-nav-group-label">UK Logistics</div>

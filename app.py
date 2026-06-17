@@ -13465,6 +13465,24 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # ── Job Stage (PLAB job placement tracking) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_job_stage (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            hospital_name TEXT,
+            designation TEXT,
+            joined_date TEXT,
+            job_location TEXT,
+            job_confirmed_by TEXT,
+            offered_salary TEXT,
+            mobile_number TEXT,
+            candidate_email TEXT,
+            additional_notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT NOW(),
+            pathway TEXT DEFAULT 'plab'
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_job_stage_reg ON ops_job_stage(registration_number)")
         # ── Online Subscriptions ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_online_subscriptions (
             id SERIAL PRIMARY KEY,
@@ -20765,6 +20783,159 @@ def ops_gmc_delete(gid):
     conn.close()
     flash('GMC registration record deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_gmc_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  OPERATIONS – Job Stage (PLAB job placement tracking)
+# ─────────────────────────────────────────────────────────
+
+JOB_CONFIRMED_BY_OPTIONS = ['Job by GooCampus', 'Interview by GooCampus', 'By Candidate']
+
+
+@app.route('/operations/job-stage')
+@admin_required
+def ops_job_stage_list():
+    """List all PLAB Job Stage records with search + Job Confirmed By filter."""
+    conn = get_db()
+    search = request.args.get('q', '')
+    confirmed_filter = request.args.get('confirmed_by', '')
+    try:
+        sql = '''SELECT j.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_job_stage j
+                 LEFT JOIN plab_clients p
+                        ON j.registration_number = p.registration_number
+                       AND COALESCE(p.pathway, 'plab') = 'plab'
+                 WHERE COALESCE(j.pathway, 'plab') = 'plab' '''
+        params = []
+        if confirmed_filter:
+            sql += ' AND j.job_confirmed_by = ?'
+            params.append(confirmed_filter)
+        if search:
+            sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR j.registration_number ILIKE ?
+                OR j.hospital_name ILIKE ? OR j.designation ILIKE ?
+                OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
+            params.extend([f'%{search}%'] * 6)
+        sql += ' ORDER BY j.joined_date DESC NULLS LAST, j.id DESC'
+        records = conn.execute(sql, params).fetchall()
+    except Exception as e:
+        logging.error(f"ops_job_stage_list: {e}")
+        records = []
+    conn.close()
+    return render_template('ops_job_stage_list.html', records=records,
+                           search=search, confirmed_filter=confirmed_filter,
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+@app.route('/operations/job-stage/add', methods=['GET', 'POST'])
+@admin_required
+def ops_job_stage_add_page():
+    """Add a Job Stage record (GET form / POST save share this endpoint)."""
+    if request.method == 'POST':
+        return ops_job_stage_add_save()
+    pre_reg = request.args.get('reg', '') or request.args.get('client', '')
+    return render_template('ops_job_stage_form.html', record=None, pre_reg=pre_reg,
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+def ops_job_stage_add_save():
+    """Persist a new Job Stage record."""
+    conn = get_db()
+    f = request.form
+    conn.execute('''INSERT INTO ops_job_stage (
+        registration_number, hospital_name, designation, joined_date,
+        job_location, job_confirmed_by, offered_salary, mobile_number,
+        candidate_email, additional_notes, created_by, pathway
+    ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        f.get('registration_number'), f.get('hospital_name'), f.get('designation'),
+        f.get('joined_date'), f.get('job_location'), f.get('job_confirmed_by'),
+        f.get('offered_salary'), f.get('mobile_number'), f.get('candidate_email'),
+        f.get('additional_notes'), session.get('user_id', 0), 'plab'
+    ))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record added', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
+
+
+@app.route('/operations/job-stage/<int:rid>')
+@admin_required
+def ops_job_stage_detail(rid):
+    """Read-only detail view of a Job Stage record."""
+    conn = get_db()
+    record = conn.execute(
+        '''SELECT j.*, p.first_name, p.last_name, p.prefix
+             FROM ops_job_stage j
+        LEFT JOIN plab_clients p
+               ON j.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE j.id = ?
+              AND COALESCE(j.pathway, 'plab') = 'plab' ''',
+        (rid,)
+    ).fetchone()
+    conn.close()
+    if not record:
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_job_stage_list'))
+    return render_template('ops_job_stage_detail.html', record=record,
+                           active_ops_page='job-stage')
+
+
+@app.route('/operations/job-stage/<int:rid>/edit', methods=['GET', 'POST'])
+@admin_required
+def ops_job_stage_edit_page(rid):
+    """Edit a Job Stage record (GET form / POST save share this endpoint)."""
+    if request.method == 'POST':
+        return ops_job_stage_edit_save(rid)
+    conn = get_db()
+    record = conn.execute(
+        '''SELECT j.*, p.first_name, p.last_name, p.prefix
+             FROM ops_job_stage j
+        LEFT JOIN plab_clients p
+               ON j.registration_number = p.registration_number
+              AND COALESCE(p.pathway, 'plab') = 'plab'
+            WHERE j.id = ?
+              AND COALESCE(j.pathway, 'plab') = 'plab' ''',
+        (rid,)
+    ).fetchone()
+    conn.close()
+    if not record:
+        flash('Record not found', 'error')
+        return redirect(url_for('ops_job_stage_list'))
+    return render_template('ops_job_stage_form.html', record=record, pre_reg='',
+                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           active_ops_page='job-stage')
+
+
+def ops_job_stage_edit_save(rid):
+    """Persist edits to a Job Stage record."""
+    conn = get_db()
+    f = request.form
+    conn.execute('''UPDATE ops_job_stage SET
+        registration_number=?, hospital_name=?, designation=?, joined_date=?,
+        job_location=?, job_confirmed_by=?, offered_salary=?, mobile_number=?,
+        candidate_email=?, additional_notes=? WHERE id=?''', (
+        f.get('registration_number'), f.get('hospital_name'), f.get('designation'),
+        f.get('joined_date'), f.get('job_location'), f.get('job_confirmed_by'),
+        f.get('offered_salary'), f.get('mobile_number'), f.get('candidate_email'),
+        f.get('additional_notes'), rid
+    ))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record updated', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
+
+
+@app.route('/operations/job-stage/<int:rid>/delete', methods=['POST'])
+@admin_required
+def ops_job_stage_delete(rid):
+    conn = get_db()
+    conn.execute("DELETE FROM ops_job_stage WHERE id = ?", (rid,))
+    conn.commit()
+    conn.close()
+    flash('Job Stage record deleted', 'success')
+    return redirect(request.args.get('next') or url_for('ops_job_stage_list'))
 
 
 # ─────────────────────────────────────────────────────────
@@ -29130,6 +29301,7 @@ ACCESS_SECTION_CATALOG = [
             ('online_courses',    'Online Courses',          'PLAB online courses'),
             ('epic',              'EPIC Registration',       'EPIC + Notary Cam workflow'),
             ('gmc',               'GMC Registration',        'UK GMC registration tracking'),
+            ('job_stage',         'Job Stage',               'PLAB job placement tracking (hospital, designation, offer)'),
             ('uk_visa',           'UK Visa & Travel',        'UK visa + travel logistics'),
             ('uk_cab',            'UK Cab Bookings',         'UK cab bookings'),
             ('uk_observerships',  'UK Observerships',        'UK observership tracking'),
@@ -32173,6 +32345,13 @@ ACCESS_ROUTE_MAP = {
     'ops_documents_list':           _ap('plab_pathway', 'documents'),
     'ops_epic_list':                _ap('plab_pathway', 'epic'),
     'ops_gmc_list':                 _ap('plab_pathway', 'gmc'),
+    'ops_job_stage_list':           _ap('plab_pathway', 'job_stage'),
+    'ops_job_stage_detail':         _ap('plab_pathway', 'job_stage'),
+    'ops_job_stage_add_page':       _ap('plab_pathway', 'job_stage', 'add'),
+    'ops_job_stage_add_save':       _ap('plab_pathway', 'job_stage', 'add'),
+    'ops_job_stage_edit_page':      _ap('plab_pathway', 'job_stage', 'edit'),
+    'ops_job_stage_edit_save':      _ap('plab_pathway', 'job_stage', 'edit'),
+    'ops_job_stage_delete':         _ap('plab_pathway', 'job_stage', 'edit'),
     'ops_visa_list':                _ap('plab_pathway', 'uk_visa'),
     'ops_cab_list':                 _ap('plab_pathway', 'uk_cab'),
     'ops_observerships_list':       _ap('plab_pathway', 'uk_observerships'),
