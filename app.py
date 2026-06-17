@@ -15419,12 +15419,10 @@ def ops_main_dashboard():
         d = {}
         d['total'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=?", (pw,))
         d['active'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='In Process'", (pw,))
+        d['on_hold'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='On Hold'", (pw,))
+        d['completed'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='Completed'", (pw,))
+        # 'Dropped' = Dropped Out + Dropped and Refunded (excludes Switched Program)
         d['dropped'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status ILIKE '%drop%'", (pw,))
-        try:
-            r = conn.execute("SELECT COALESCE(SUM(amount_paid),0) s FROM ops_payments WHERE COALESCE(pathway,'plab')=?", (pw,)).fetchone()
-            d['collected'] = float(r['s'] or 0)
-        except Exception:
-            d['collected'] = 0.0
         d['tests'] = one("SELECT COUNT(*) c FROM ops_test_bookings WHERE COALESCE(pathway,'plab')=?", (pw,))
         d['coaching'] = one("SELECT COUNT(*) c FROM ops_coaching WHERE COALESCE(pathway,'plab')=?", (pw,))
         d['epic'] = one("SELECT COUNT(*) c FROM ops_epic_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
@@ -15454,7 +15452,8 @@ def ops_main_dashboard():
     totals = {
         'clients': sum(c['total'] for c in cards),
         'active': sum(c['active'] for c in cards),
-        'collected': sum(c['collected'] for c in cards),
+        'on_hold': sum(c['on_hold'] for c in cards),
+        'dropped': sum(c['dropped'] for c in cards),
     }
     return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
                            active_ops_page='ops-dashboard', user=user)

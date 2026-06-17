@@ -8,7 +8,7 @@
   .od-head h1 { margin: 0; font-size: 1.6rem; color: var(--navy); font-weight: 800; }
   .od-head p { margin: .35rem 0 0; color: var(--gray-500); font-size: .92rem; }
 
-  .od-totals { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; margin-bottom: 1.75rem; }
+  .od-totals { display: grid; grid-template-columns: repeat(4, 1fr); gap: 1rem; margin-bottom: 1.75rem; }
   .od-total { background: #fff; border: 1px solid var(--gray-200); border-radius: .9rem; padding: 1.1rem 1.25rem; box-shadow: 0 2px 8px rgba(0,0,0,.04); }
   .od-total .lbl { font-size: .78rem; text-transform: uppercase; letter-spacing: .03em; color: var(--gray-500); font-weight: 700; }
   .od-total .val { font-size: 1.7rem; font-weight: 800; color: var(--navy); margin-top: .3rem; }
@@ -19,7 +19,7 @@
   .od-card__top h2 { margin: 0; font-size: 1.05rem; font-weight: 800; }
   .od-card__top .pill { background: rgba(255,255,255,.22); padding: .15rem .6rem; border-radius: 999px; font-size: .78rem; font-weight: 700; }
   .od-card__body { padding: 1rem 1.2rem; flex: 1; }
-  .od-kpis { display: grid; grid-template-columns: repeat(3, 1fr); gap: .6rem; margin-bottom: .9rem; }
+  .od-kpis { display: grid; grid-template-columns: repeat(4, 1fr); gap: .5rem; margin-bottom: .9rem; }
   .od-kpi { text-align: center; background: var(--gray-50, #f8fafc); border: 1px solid var(--gray-100, #eef2f7); border-radius: .6rem; padding: .55rem .3rem; }
   .od-kpi .n { font-size: 1.25rem; font-weight: 800; color: var(--navy); }
   .od-kpi .l { font-size: .68rem; color: var(--gray-500); text-transform: uppercase; letter-spacing: .02em; margin-top: .15rem; }
@@ -50,7 +50,8 @@
 <div class="od-totals">
   <div class="od-total"><div class="lbl">Total Clients</div><div class="val">{{ totals.clients }}</div></div>
   <div class="od-total"><div class="lbl">Active Clients</div><div class="val">{{ totals.active }}</div></div>
-  <div class="od-total"><div class="lbl">Total Collected</div><div class="val">₹{{ "{:,.0f}".format(totals.collected) }}</div></div>
+  <div class="od-total"><div class="lbl">On Hold</div><div class="val">{{ totals.on_hold }}</div></div>
+  <div class="od-total"><div class="lbl">Dropped Out</div><div class="val">{{ totals.dropped }}</div></div>
 </div>
 
 <div class="od-grid">
@@ -63,12 +64,9 @@
     <div class="od-card__body">
       <div class="od-kpis">
         <div class="od-kpi"><div class="n">{{ c.active }}</div><div class="l">Active</div></div>
-        <div class="od-kpi"><div class="n">{{ c.total }}</div><div class="l">Total</div></div>
-        <div class="od-kpi"><div class="n">{{ c.dropped }}</div><div class="l">Dropped</div></div>
-      </div>
-      <div class="od-collected">
-        <span class="l">Total Collected</span>
-        <span class="v">₹{{ "{:,.0f}".format(c.collected) }}</span>
+        <div class="od-kpi"><div class="n">{{ c.on_hold }}</div><div class="l">On Hold</div></div>
+        <div class="od-kpi"><div class="n">{{ c.completed }}</div><div class="l">Completed</div></div>
+        <div class="od-kpi"><div class="n">{{ c.dropped }}</div><div class="l">Dropped Out</div></div>
       </div>
       <div class="od-sections">
         <span class="od-chip">Tests <b>{{ c.tests }}</b></span>
