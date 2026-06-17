@@ -15386,6 +15386,16 @@ def _next_registration_number(conn):
 
 # ─── PATHWAY LANDING PAGES ───
 
+# (display label, exact account_status value) — full client lifecycle breakdown
+STATUS_DEFS = [
+    ('In Process',           'In Process'),
+    ('On Hold',              'On Hold'),
+    ('Completed',            'Completed'),
+    ('Dropped Out',          'Dropped Out'),
+    ('Dropped & Refunded',   'Dropped and Refunded'),
+    ('Switched Program',     'Switched Program'),
+]
+
 @app.route('/operations/dashboard')
 @admin_required
 def ops_main_dashboard():
@@ -15418,11 +15428,12 @@ def ops_main_dashboard():
     def stats(pw):
         d = {}
         d['total'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=?", (pw,))
-        d['active'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='In Process'", (pw,))
-        d['on_hold'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='On Hold'", (pw,))
-        d['completed'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status='Completed'", (pw,))
-        # 'Dropped' = Dropped Out + Dropped and Refunded (excludes Switched Program)
-        d['dropped'] = one("SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status ILIKE '%drop%'", (pw,))
+        # Full account-status breakdown (label, exact DB value)
+        d['status'] = {}
+        for label, val in STATUS_DEFS:
+            d['status'][label] = one(
+                "SELECT COUNT(*) c FROM plab_clients WHERE COALESCE(pathway,'plab')=? AND account_status=?",
+                (pw, val))
         d['tests'] = one("SELECT COUNT(*) c FROM ops_test_bookings WHERE COALESCE(pathway,'plab')=?", (pw,))
         d['coaching'] = one("SELECT COUNT(*) c FROM ops_coaching WHERE COALESCE(pathway,'plab')=?", (pw,))
         d['epic'] = one("SELECT COUNT(*) c FROM ops_epic_registration WHERE COALESCE(pathway,'plab')=?", (pw,))
@@ -15451,11 +15462,10 @@ def ops_main_dashboard():
 
     totals = {
         'clients': sum(c['total'] for c in cards),
-        'active': sum(c['active'] for c in cards),
-        'on_hold': sum(c['on_hold'] for c in cards),
-        'dropped': sum(c['dropped'] for c in cards),
+        'status': {label: sum(c['status'][label] for c in cards) for label, _ in STATUS_DEFS},
     }
     return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
+                           status_labels=[label for label, _ in STATUS_DEFS],
                            active_ops_page='ops-dashboard', user=user)
 
 
