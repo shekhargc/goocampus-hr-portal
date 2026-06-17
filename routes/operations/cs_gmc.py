@@ -80,7 +80,7 @@ def ops_consulting_gmc_list():
                         OR g.registration_number ILIKE ?
                         OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?) """
             params.extend([f'%{search}%'] * 4)
-        sql += " ORDER BY g.created_at DESC"
+        sql += " ORDER BY g.id DESC"
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_consulting_gmc_list: {e}")

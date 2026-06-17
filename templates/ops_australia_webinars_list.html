@@ -154,7 +154,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_webinars_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, event name…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, event name…" autocomplete="off" data-pathway="australia">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="event_type">
         <option value="">All event types</option>
         {% for e in event_types %}
@@ -352,4 +355,5 @@
       if (e.key === 'Escape') closeAuWebinarDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

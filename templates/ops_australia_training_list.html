@@ -151,7 +151,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_training_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, vendor, or program…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, vendor, or program…" autocomplete="off" data-pathway="australia">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="course">
         <option value="">All course types</option>
         {% for c in courses %}
@@ -350,4 +353,5 @@
       if (e.key === 'Escape') closeAuTrainingDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

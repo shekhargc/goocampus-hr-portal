@@ -154,7 +154,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_research_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, topic, or journal…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, topic, or journal…" autocomplete="off" data-pathway="australia">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="status">
         <option value="">All statuses</option>
         {% for s in statuses %}
@@ -355,4 +358,5 @@
       if (e.key === 'Escape') closeAuDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

@@ -70,7 +70,7 @@ def ops_consulting_mentorship_list():
                         OR p.registration_number ILIKE ?
                         OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?) """
             params.extend([f'%{search}%'] * 5)
-        sql += " ORDER BY m.created_at DESC"
+        sql += " ORDER BY m.id DESC"
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_consulting_mentorship_list: {e}")

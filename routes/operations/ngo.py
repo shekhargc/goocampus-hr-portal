@@ -32,7 +32,7 @@ def ops_ngo_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY n.created_at DESC'
+        sql += ' ORDER BY n.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_ngo_list: {e}")

@@ -174,7 +174,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_payments_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, or notes…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, or notes…" autocomplete="off" data-pathway="australia">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="instalment">
         <option value="">All instalments</option>
         {% for i in instalments %}
@@ -363,4 +366,5 @@
       if (e.key === 'Escape') closeAuPaymentDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

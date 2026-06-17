@@ -154,7 +154,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_online_courses_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, course, or email…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, course, or email…" autocomplete="off" data-pathway="australia">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="course">
         <option value="">All courses</option>
         {% for c in courses %}
@@ -349,4 +352,5 @@
       if (e.key === 'Escape') closeAuOcDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

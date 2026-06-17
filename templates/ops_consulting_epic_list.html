@@ -156,7 +156,10 @@
 </div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_consulting_epic_list') }}">
-    <input type="search" name="q" value="{{ search }}" placeholder="Search by name, reg no, EPIC ID, or login…">
+    <div class="autocomplete-wrap">
+        <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, EPIC ID, or login…" autocomplete="off" data-pathway="consulting">
+        <div id="ops-search-suggestions" class="suggestions-dropdown"></div>
+    </div>
     <select name="epic_registration">
         <option value="">All registration statuses</option>
         {% for s in epic_registrations %}
@@ -383,4 +386,5 @@
       if (e.key === 'Escape') closeAuEpicDetail();
   });
 </script>
+{% include '_ops_name_search.html' %}
 {% endblock %}

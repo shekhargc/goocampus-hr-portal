@@ -282,7 +282,7 @@ def ops_consulting_clients_list():
                        lead_source
                  FROM plab_clients
                  WHERE {where_sql}
-                 ORDER BY id DESC""",
+                 ORDER BY registration_date DESC NULLS LAST, id DESC""",
             params,
         ).fetchall()
 

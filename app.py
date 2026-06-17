@@ -19429,7 +19429,7 @@ def ops_coaching_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_coaching_list: {e}")
@@ -19664,7 +19664,7 @@ def ops_english_logins_list():
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY e.created_at DESC'
+        sql += ' ORDER BY e.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_english_logins_list: {e}")
@@ -19788,7 +19788,7 @@ def ops_test_bookings_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.created_at DESC'
+        sql += ' ORDER BY t.exam_date DESC NULLS LAST, t.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_test_bookings_list: {e}")
@@ -20057,7 +20057,7 @@ def ops_call_notes_list():
             offset = (page - 1) * per_page
 
         # Get paginated records
-        sql = sql_base + ' ORDER BY n.call_date DESC NULLS LAST, n.created_at DESC LIMIT ? OFFSET ?'
+        sql = sql_base + ' ORDER BY n.call_date DESC NULLS LAST, n.id DESC LIMIT ? OFFSET ?'
         sql_params = params + [per_page, offset]
         records = conn.execute(sql, sql_params).fetchall()
     except Exception as e:
@@ -20574,7 +20574,7 @@ def ops_payments_list():
             offset = (page - 1) * per_page
 
         # Get paginated records
-        sql = sql_base + ' ORDER BY p.payment_date DESC NULLS LAST, p.created_at DESC LIMIT ? OFFSET ?'
+        sql = sql_base + ' ORDER BY p.payment_date DESC NULLS LAST, p.id DESC LIMIT ? OFFSET ?'
         sql_params = params + [per_page, offset]
         records = conn.execute(sql, sql_params).fetchall()
 
@@ -20744,7 +20744,7 @@ def ops_epic_list():
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR e.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY e.created_at DESC'
+        sql += ' ORDER BY e.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_epic_list: {e}")
@@ -20887,7 +20887,7 @@ def ops_gmc_list():
             sql += """ AND (p.first_name ILIKE ? OR p.last_name ILIKE ? OR g.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY g.created_at DESC'
+        sql += ' ORDER BY g.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_gmc_list: {e}")
@@ -21174,7 +21174,7 @@ def ops_research_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY r.created_at DESC'
+        sql += ' ORDER BY r.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_research_list: {e}")
@@ -21361,7 +21361,7 @@ def ops_subscriptions_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY s.created_at DESC'
+        sql += ' ORDER BY s.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_subscriptions_list: {e}")
@@ -21539,7 +21539,7 @@ def ops_webinars_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY w.created_at DESC'
+        sql += ' ORDER BY w.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_webinars_list: {e}")
@@ -21731,7 +21731,7 @@ def ops_visa_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 4)
-        sql += ' ORDER BY v.created_at DESC'
+        sql += ' ORDER BY v.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_visa_list: {e}")
@@ -21971,7 +21971,7 @@ def ops_academic_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY a.created_at DESC'
+        sql += ' ORDER BY a.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_academic_list: {e}")
@@ -22090,7 +22090,7 @@ def ops_courses_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_courses_list: {e}")
@@ -22199,7 +22199,7 @@ def ops_observerships_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY o.created_at DESC'
+        sql += ' ORDER BY o.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_observerships_list: {e}")
@@ -22294,7 +22294,7 @@ def ops_mentorship_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY m.created_at DESC'
+        sql += ' ORDER BY m.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_mentorship_list: {e}")
@@ -22397,7 +22397,7 @@ def ops_cab_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.created_at DESC'
+        sql += ' ORDER BY c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_cab_list: {e}")
