@@ -25883,7 +25883,6 @@ ensure_budget_tables()
 ensure_ops_tables()
 ensure_pathway_columns_on_ops_tables()
 ensure_pathway_column_on_lookup_options()
-seed_plan_type_product_links()
 ensure_pathway_column_on_plab_clients()
 
 
@@ -26020,6 +26019,8 @@ def seed_plan_type_product_links():
         try: conn.close()
         except Exception: pass
 
+
+seed_plan_type_product_links()
 
 def ensure_lookup_category_on_form_configs():
     """Migration: client_form_configs gets a `lookup_category` column.
