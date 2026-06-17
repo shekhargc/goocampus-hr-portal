@@ -4741,18 +4741,35 @@ def admin_employee_edit(emp_id):
         emergency_contact_phone = request.form.get('emergency_contact_phone', '').strip()
         emergency_contact_relation = request.form.get('emergency_contact_relation', '').strip()
 
+        # Phase B — employment status / exit process. Anything other than
+        # 'active' flips is_active=0 so the employee can no longer log in.
+        employment_status = (request.form.get('employment_status') or 'active').strip().lower()
+        is_active = 1 if employment_status == 'active' else 0
+        if employment_status == 'active':
+            # Re-activated / staying active — clear exit fields.
+            last_working_day = None
+            exit_reason = None
+            exit_notes = None
+        else:
+            last_working_day = (request.form.get('last_working_day') or '').strip() or None
+            exit_reason = (request.form.get('exit_reason') or '').strip() or None
+            exit_notes = (request.form.get('exit_notes') or '').strip() or None
+
         conn.execute('''
             UPDATE employees
             SET name = ?, email = ?, phone = ?, dob = ?, address = ?, department = ?,
                 designation = ?, joining_date = ?, carry_forward = ?, reporting_to = ?,
-                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?
+                emergency_contact_name = ?, emergency_contact_phone = ?, emergency_contact_relation = ?,
+                employment_status = ?, is_active = ?, last_working_day = ?, exit_reason = ?, exit_notes = ?
             WHERE id = ?
         ''', (name, email, phone, dob, address, department, designation, joining_date, carry_forward,
-              reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation, emp_id))
+              reporting_to, emergency_contact_name, emergency_contact_phone, emergency_contact_relation,
+              employment_status, is_active, last_working_day, exit_reason, exit_notes, emp_id))
         conn.commit()
         conn.close()
 
-        flash('Employee updated successfully', 'success')
+        msg = 'Exit recorded — employee marked ' + employment_status if employment_status != 'active' else 'Employee updated successfully'
+        flash(msg, 'success')
         return redirect(url_for('admin_employee_detail', emp_id=emp_id))
 
     # Get all active employees as potential managers (exclude the employee being edited)
