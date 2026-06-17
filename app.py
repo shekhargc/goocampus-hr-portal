@@ -9209,6 +9209,31 @@ def add_b2b_trip():
         trip = conn.execute('SELECT id FROM b2b_trips WHERE employee_id = ? ORDER BY id DESC LIMIT 1', (user['id'],)).fetchone()
         trip_id = trip['id']
 
+        # Auto-link: an OUTSTATION B2B trip takes the person away from the
+        # office (biometric not possible), so raise a matching Official
+        # Travel request (pending manager approval) so those days count as
+        # Present. Local 'city' trips don't affect attendance, so skip.
+        if trip_type == 'outstation':
+            try:
+                dup = conn.execute(
+                    "SELECT id FROM official_travel_requests WHERE employee_id = ? "
+                    "AND from_date = ? AND to_date = ? AND status != 'rejected'",
+                    (user['id'], from_date, to_date)).fetchone()
+                if not dup:
+                    desc = f"Auto-created from B2B off-site trip #{trip_id}"
+                    if notes:
+                        desc += f": {notes[:200]}"
+                    conn.execute(
+                        "INSERT INTO official_travel_requests "
+                        "(employee_id, from_date, to_date, city, description, status) "
+                        "VALUES (?, ?, ?, ?, ?, 'pending')",
+                        (user['id'], from_date, to_date, city, desc))
+                    conn.commit()
+            except Exception as e:
+                logging.error(f"b2b->official_travel auto-link failed: {e}")
+                try: conn.rollback()
+                except Exception: pass
+
         # Process multiple meetings
         meeting_dates = request.form.getlist('meeting_date[]')
         meeting_times = request.form.getlist('meeting_time[]')
