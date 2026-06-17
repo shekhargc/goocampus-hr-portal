@@ -40,7 +40,8 @@ def run_import():
 
     # Find highest existing sequence number
     result = conn.execute(
-        "SELECT registration_number FROM plab_clients WHERE registration_number LIKE 'GCUKIP/%' ORDER BY id DESC LIMIT 1"
+        "SELECT registration_number FROM plab_clients WHERE registration_number LIKE ? ORDER BY id DESC LIMIT 1",
+        ('GCUKIP/%',)
     ).fetchone()
     if result:
         m = re.search(r'/(\d+)$', result['registration_number'])
@@ -193,8 +194,8 @@ def run_import():
                 inst3_amount, inst3_date, inst3_note,
                 inst4_amount, inst4_date, inst4_note,
                 dropped_date, upgraded_to,
-                additional_notes
-            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+                additional_notes, pathway
+            ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,'plab')''', (
                 reg_num or next_reg(),
                 safe_date(row.get('Registration Date (Payment Date)')),
                 safe_str(row.get('Customer ID')),
