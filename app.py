@@ -18435,6 +18435,7 @@ def ops_documents_list():
                       SUM(CASE WHEN d.status = 'verified' THEN 1 ELSE 0 END) as verified_count
                FROM plab_clients c
                LEFT JOIN plab_client_documents d ON d.client_id = c.id
+                    AND COALESCE(d.doc_category, '') <> 'certificate'
                WHERE COALESCE(c.pathway, 'plab') = 'plab'"""
         params = []
         wheres = []
@@ -18594,7 +18595,7 @@ def api_plab_client_docs(client_id):
         if not client:
             conn.close()
             return jsonify({'error': 'Client not found'}), 404
-        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
+        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? AND COALESCE(doc_category, '') <> 'certificate' ORDER BY doc_category, doc_type", (client_id,)).fetchall()
         docs = [dict(r) for r in rows]
         client_dict = dict(client)
         client_dict['name'] = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
@@ -18606,6 +18607,91 @@ def api_plab_client_docs(client_id):
         return jsonify({'error': str(e)}), 500
     conn.close()
     return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs, 'missing': missing, 'total_required': len(all_required)})
+
+
+# ─────────────────────────────────────────────────────────────────────
+#  Clients Certificates — a separate surface over plab_client_documents
+#  filtered to doc_category='certificate'. Reuses the same upload /
+#  serve / download / delete routes (all category-agnostic). Built as a
+#  clone of the Documents section, minus the required-doc checklist
+#  (certificates have no fixed list).
+# ─────────────────────────────────────────────────────────────────────
+@app.route('/operations/certificates')
+@admin_required
+def ops_certificates_list():
+    """Certificates overview — PLAB clients with their certificate counts.
+
+    Same shape as ops_documents_list but counts only rows where
+    doc_category='certificate', and drops the required-docs checklist."""
+    conn = get_db()
+    search = request.args.get('search', '').strip()
+    page = max(1, int(request.args.get('page', 1)))
+    per_page = 50
+    try:
+        q = """SELECT c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
+                      c.account_status, c.current_stage, c.created_at,
+                      COUNT(d.id) FILTER (WHERE d.doc_category = 'certificate') as cert_count
+               FROM plab_clients c
+               LEFT JOIN plab_client_documents d ON d.client_id = c.id
+               WHERE COALESCE(c.pathway, 'plab') = 'plab'"""
+        params = []
+        if search:
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?)"
+            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+        q += " GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix, c.account_status, c.current_stage, c.created_at"
+        q += " ORDER BY c.created_at DESC NULLS LAST, c.id DESC"
+        rows = conn.execute(q, params).fetchall()
+        all_clients = []
+        for r in rows:
+            rd = dict(r)
+            rd['name'] = f"{r['prefix'] or ''} {r['first_name'] or ''} {r['last_name'] or ''}".strip()
+            all_clients.append(rd)
+        total_filtered = len(all_clients)
+        total_documents = sum(c.get('cert_count', 0) for c in all_clients)
+        clients_with_certs = sum(1 for c in all_clients if c.get('cert_count', 0) > 0)
+        total_pages = max(1, (total_filtered + per_page - 1) // per_page)
+        page = min(page, total_pages)
+        start = (page - 1) * per_page
+        clients = all_clients[start:start + per_page]
+    except Exception as e:
+        logging.error(f"ops_certificates_list error: {e}")
+        clients = []
+        total_filtered = total_documents = clients_with_certs = 0
+        total_pages = 1
+        start = 0
+    conn.close()
+    return render_template('ops_certificates_list.html',
+                           clients=clients, search=search,
+                           total_clients=total_filtered,
+                           total_documents=total_documents,
+                           clients_with_certs=clients_with_certs,
+                           page=page, total_pages=total_pages, per_page=per_page,
+                           start_index=start if clients else 0,
+                           active_ops_page='certificates')
+
+
+@app.route('/api/plab-client-certificates/<int:client_id>')
+@admin_required
+def api_plab_client_certificates(client_id):
+    """Return ONLY certificate docs for a client as JSON (drawer UI).
+
+    Mirrors api_plab_client_docs but filters doc_category='certificate'
+    and drops the missing-required-docs logic."""
+    conn = get_db()
+    try:
+        client = conn.execute("SELECT id, registration_number, prefix, first_name, last_name, account_status, current_stage FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+        if not client:
+            conn.close()
+            return jsonify({'error': 'Client not found'}), 404
+        rows = conn.execute("SELECT id, doc_type, doc_category, file_name, file_path, file_size, status, uploaded_by, uploaded_at::text as uploaded_at, notes FROM plab_client_documents WHERE client_id = ? AND doc_category = 'certificate' ORDER BY doc_type, uploaded_at DESC", (client_id,)).fetchall()
+        docs = [dict(r) for r in rows]
+        client_dict = dict(client)
+        client_dict['name'] = f"{client['prefix'] or ''} {client['first_name'] or ''} {client['last_name'] or ''}".strip()
+    except Exception as e:
+        conn.close()
+        return jsonify({'error': str(e)}), 500
+    conn.close()
+    return jsonify({'client_id': client_id, 'client': client_dict, 'count': len(docs), 'docs': docs})
 
 
 def _r2_object_key_or_none(file_path):
@@ -29295,6 +29381,7 @@ ACCESS_SECTION_CATALOG = [
             ('call_notes',        'Call Notes',              'PLAB call notes + follow-up tracker'),
             ('payments',          'Payments',                'PLAB payment records (installments, receipts)'),
             ('documents',         'Documents',               'PLAB document upload + verification'),
+            ('certificates',      'Clients Certificates',    'PLAB client certificates + achievements'),
             ('coaching',          'Coaching & Training',     'PLAB training enrolment + status'),
             ('test_bookings',     'Test Bookings',           'PLAB 1 / PLAB 2 / OET / IELTS bookings'),
             ('english_logins',    'English Logins',          'IELTS / OET portal credentials'),
@@ -32343,6 +32430,8 @@ ACCESS_ROUTE_MAP = {
     'ops_call_notes_delete':        _ap('plab_pathway', 'call_notes', 'edit'),
     'ops_payments_list':            _ap('plab_pathway', 'payments'),
     'ops_documents_list':           _ap('plab_pathway', 'documents'),
+    'ops_certificates_list':        _ap('plab_pathway', 'certificates'),
+    'api_plab_client_certificates': _ap('plab_pathway', 'certificates'),
     'ops_epic_list':                _ap('plab_pathway', 'epic'),
     'ops_gmc_list':                 _ap('plab_pathway', 'gmc'),
     'ops_job_stage_list':           _ap('plab_pathway', 'job_stage'),
