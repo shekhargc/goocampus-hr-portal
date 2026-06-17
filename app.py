@@ -20129,6 +20129,56 @@ def ops_client_search_api():
     return jsonify(results)
 
 
+@app.route('/operations/api/plan-types')
+@admin_required
+def ops_plan_types_api():
+    """Plan types for a pathway, optionally filtered to a product (cascade).
+
+    Drives Pathway -> Product -> Plan Type on the registration forms.
+    ?pathway=plab|australia|consulting|training|portfolio  (required)
+    ?product=<product name>  (optional; when given, only that product's plans)
+    """
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    product = (request.args.get('product') or '').strip()
+    conn = get_db()
+    try:
+        if product:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(product_name,'')=? "
+                "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (pathway, product)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(is_active,true) IS NOT FALSE "
+                "ORDER BY value", (pathway,)).fetchall()
+        vals = [r['value'] for r in rows if r['value']]
+    except Exception as e:
+        logging.error(f"ops_plan_types_api: {e}")
+        vals = []
+    conn.close()
+    return jsonify(vals)
+
+
+@app.route('/operations/api/products')
+@admin_required
+def ops_products_api():
+    """Active Products/Services for a pathway (registration Product dropdown)."""
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            (pathway,)).fetchall()
+        out = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception as e:
+        logging.error(f"ops_products_api: {e}")
+        out = []
+    conn.close()
+    return jsonify(out)
+
+
 @app.route('/operations/call-notes/tracker')
 @admin_required
 def ops_call_notes_tracker():
