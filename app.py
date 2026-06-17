@@ -19439,7 +19439,7 @@ def ops_coaching_list():
                 OR p.registration_number ILIKE ?
                 OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)"""
             params.extend([f'%{search}%'] * 5)
-        sql += ' ORDER BY c.id DESC'
+        sql += ' ORDER BY c.start_date DESC NULLS LAST, c.id DESC'
         records = conn.execute(sql, params).fetchall()
     except Exception as e:
         logging.error(f"ops_coaching_list: {e}")
