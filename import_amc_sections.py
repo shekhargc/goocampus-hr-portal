@@ -146,7 +146,7 @@ CLIENT_MAP = {
 def step_clients():
     import openpyxl
     path = os.path.join(DL, CLIENT_FILE)
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
     headers = [str(h).strip() if h is not None else '' for h in next(it)]
     hi = {h: i for i, h in enumerate(headers)}
@@ -289,7 +289,7 @@ SECTIONS = {
     'coaching_method':('Training Method','s'),'coaching_status':('Training Status','s'),
     'batch_year':('Batch Year','s'),'batch_month':('Batch (Month)','s'),
     'start_date':('Start Date','d'),'end_date':('End Date','d'),
-    'other_vendor':('Training Vendor Name','s'),
+    'other_vendor':('Training Vendor Name','s'),'booked_by':('Booked By','s'),
  }),
  'call_notes': ("Client Call Notes Report (2).xlsx", "ops_call_notes", None, "Candidate Name", None, None, {
     'call_date':('Call Date','d'),'call_note':('Call Notes','s'),'added_by':('Added User','s'),
@@ -321,7 +321,7 @@ def step_sections(idx):
         path = os.path.join(DL, fname)
         if not os.path.exists(path):
             print(f"[{key}] MISSING {fname}"); continue
-        wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
         headers = [str(c.value).strip() if c.value is not None else '' for c in next(ws.iter_rows(min_row=1, max_row=1))]
         hidx = {h: i for i, h in enumerate(headers)}
         cols = ['registration_number'] + list(mapping.keys()) + ['pathway']
@@ -371,7 +371,7 @@ def step_onboarding(idx):
     by_reg_cid = idx[4]
     path = os.path.join(DL, "OnBoarding Status (R) (1).xlsx")
     if not os.path.exists(path): print("[onboarding] MISSING file"); return
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
     headers = [str(h).strip() if h is not None else '' for h in next(it)]
     hi = {h: i for i, h in enumerate(headers)}

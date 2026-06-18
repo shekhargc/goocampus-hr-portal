@@ -152,6 +152,8 @@ def section_training_lookups(pathway):
         'coaching_statuses':  get_lookup_options('coaching_status',      pathway=pathway),
         'training_programs':  get_lookup_options('training_program',     pathway=pathway),
         'batch_months':       get_lookup_options('batch_month',          pathway=pathway),
+        'batch_years':        get_lookup_options('batch_year',           pathway=pathway),
+        'booked_by_options':  get_lookup_options('coaching_booked_by',   pathway=pathway),
         'attendance_options': get_lookup_options('coaching_attendance',  pathway=pathway) or ['Present', 'Absent'],
     }
 

@@ -26125,6 +26125,37 @@ def seed_plan_type_product_links():
             except Exception:
                 conn.rollback()
         conn.commit()
+
+        # Training "Booked By" + complete master dropdown options (Field Manager)
+        try:
+            conn.execute("ALTER TABLE ops_coaching ADD COLUMN booked_by TEXT")
+            conn.commit()
+            logging.info("Migration: added ops_coaching.booked_by")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        _MASTER = {
+            'coaching_booked_by': ['Booked & Paid by GooCampus', 'Booking Included in Package',
+                                   'Booked and Paid by Client', 'Booked by GC / Paid by Client'],
+            'batch_year': [str(y) for y in range(2018, 2028)],
+            'training_program': ['IELTS', 'OET', 'PTE', 'TOEFL', 'AMC 1', 'AMC 2', 'AMC MCQ Mock'],
+            'coaching_course_type': ['Crash Course', 'Full Course'],
+            'coaching_method': ['Online', 'Offline', 'Online & Offline'],
+            'coaching_status': ['On Going', 'Completed', 'Not Completed'],
+        }
+        for cat, vals in _MASTER.items():
+            try:
+                have = set((r[0] or '').strip().lower() for r in conn.execute(
+                    "SELECT value FROM lookup_options WHERE category=? AND COALESCE(pathway,'plab')='australia'",
+                    (cat,)).fetchall())
+                for v in vals:
+                    if v.lower() not in have:
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, pathway, is_active) "
+                            "VALUES (?, ?, ?, 'australia', true)", (cat, v, v))
+                conn.commit()
+            except Exception:
+                conn.rollback()
         logging.info("seed_plan_type_product_links: done")
     except Exception as e:
         logging.error(f"seed_plan_type_product_links: {e}")
