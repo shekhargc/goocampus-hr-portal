@@ -1,0 +1,284 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Edit Client - {{ client.first_name }} {{ client.last_name }}{% endblock %}
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        <a href="{{ url_for('ops_training_client_detail', client_id=client.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Client</a>
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">Edit Client</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            Update Training Pathway client information, payment details, and onboarding status.
+        </p>
+
+        <form method="POST" action="{{ url_for('ops_training_client_edit_save', client_id=client.id) }}">
+
+            <!-- ===== REGISTRATION DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
+                    <input type="text" value="{{ client.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Date</label>
+                    <input type="date" name="registration_date" value="{{ client.registration_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== PERSONAL DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Details</h3>
+            <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Prefix</label>
+                    <input type="text" name="prefix" value="{{ client.prefix or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">First Name *</label>
+                    <input type="text" name="first_name" value="{{ client.first_name or '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Last Name</label>
+                    <input type="text" name="last_name" value="{{ client.last_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mobile</label>
+                    <input type="text" name="mobile" value="{{ client.mobile or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">WhatsApp 1</label>
+                    <input type="text" name="whatsapp1" value="{{ client.whatsapp1 or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">WhatsApp 2</label>
+                    <input type="text" name="whatsapp2" value="{{ client.whatsapp2 or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Email</label>
+                    <input type="email" name="email" value="{{ client.email or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">DOB</label>
+                    <input type="date" name="dob" value="{{ client.dob or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">City</label>
+                    <input type="text" name="city" value="{{ client.city or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">State</label>
+                    <input type="text" name="state" value="{{ client.state or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instagram</label>
+                    <input type="text" name="instagram" value="{{ client.instagram or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Facebook</label>
+                    <input type="text" name="facebook" value="{{ client.facebook or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">LinkedIn</label>
+                    <input type="text" name="linkedin" value="{{ client.linkedin or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== PARENTS DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Parents Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Name</label>
+                    <input type="text" name="father_name" value="{{ client.father_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Phone</label>
+                    <input type="text" name="father_phone" value="{{ client.father_phone or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mother Name</label>
+                    <input type="text" name="mother_name" value="{{ client.mother_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mother Phone</label>
+                    <input type="text" name="mother_phone" value="{{ client.mother_phone or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Parents Email</label>
+                <input type="email" name="parents_email" value="{{ client.parents_email or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+
+            <!-- ===== PLAN & STAGE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan &amp; Stage</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Product / Service</label>
+                    <select name="product_id" id="product_id" data-pathway="training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for prod in products %}
+                        <option value="{{ prod.id }}" data-name="{{ prod.name }}" {% if client.product_id == prod.id %}selected{% endif %}>{{ prod.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Plan Type</label>
+                    <select name="plan_type" id="plan_type" data-current="{{ client.plan_type or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for plan in plan_types %}
+                        <option value="{{ plan }}" {% if client.plan_type == plan %}selected{% endif %}>{{ plan }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <script>
+                (function() {
+                    var prodSel = document.getElementById('product_id');
+                    var planSel = document.getElementById('plan_type');
+                    if (!prodSel || !planSel) return;
+                    var pathway = prodSel.getAttribute('data-pathway') || 'training';
+                    function repopulatePlans(keepValue) {
+                        var opt = prodSel.options[prodSel.selectedIndex];
+                        var prodName = opt ? (opt.getAttribute('data-name') || '') : '';
+                        var url = '/operations/api/plan-types?pathway=' + encodeURIComponent(pathway);
+                        if (prodName) url += '&product=' + encodeURIComponent(prodName);
+                        fetch(url).then(function(r){ return r.json(); }).then(function(plans){
+                            var current = keepValue ? (planSel.getAttribute('data-current') || '') : '';
+                            planSel.innerHTML = '<option value="">—</option>';
+                            var found = false;
+                            plans.forEach(function(p){
+                                var o = document.createElement('option');
+                                o.value = p; o.textContent = p;
+                                if (current && p === current) { o.selected = true; found = true; }
+                                planSel.appendChild(o);
+                            });
+                            if (current && !found) {
+                                var o = document.createElement('option');
+                                o.value = current; o.textContent = current; o.selected = true;
+                                planSel.appendChild(o);
+                            }
+                        }).catch(function(){});
+                    }
+                    prodSel.addEventListener('change', function(){ repopulatePlans(false); });
+                    if (prodSel.value) { repopulatePlans(true); }
+                })();
+                </script>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
+                    <select name="account_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for status in account_statuses %}
+                        <option value="{{ status }}" {% if client.account_status == status %}selected{% endif %}>{{ status }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Current Stage</label>
+                    <select name="current_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for stage in plab_stages %}
+                        <option value="{{ stage }}" {% if client.current_stage == stage %}selected{% endif %}>{{ stage }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Switched Program</label>
+                    <select name="switched_program" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for prog in switched_programs %}
+                        <option value="{{ prog }}" {% if client.switched_program == prog %}selected{% endif %}>{{ prog }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <!-- ===== COUNSELLOR ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor &amp; Lead Source</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
+                    <select name="counsellor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for c in counsellors %}
+                        <option value="{{ c }}" {% if client.counsellor == c %}selected{% endif %}>{{ c }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source</label>
+                    <select name="lead_source" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for source in lead_sources %}
+                        <option value="{{ source }}" {% if client.lead_source == source %}selected{% endif %}>{{ source }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor Email</label>
+                    <input type="email" name="counsellor_email" value="{{ client.counsellor_email or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor Number</label>
+                    <input type="text" name="counsellor_number" value="{{ client.counsellor_number or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== PACKAGE & FINANCIALS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package &amp; Financials</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package Amount</label>
+                    <input type="number" step="0.01" name="package_amount" value="{{ client.package_amount or 0 }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Discount Allowed</label>
+                    <input type="number" step="0.01" name="discount_allowed" value="{{ client.discount_allowed or 0 }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Final Package</label>
+                    <input type="number" step="0.01" name="final_package" value="{{ client.final_package or 0 }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== INSTALLMENTS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Installments</h3>
+            {% for i in [1, 2, 3, 4] %}
+            <div style="display:grid;grid-template-columns:80px 1fr 1fr 2fr;gap:0.8rem;margin-bottom:0.8rem;align-items:end;">
+                <div style="padding-bottom:0.6rem;font-weight:600;color:var(--gray-600);">Inst {{ i }}</div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.75rem;color:var(--gray-500);margin-bottom:0.3rem;">Amount</label>
+                    <input type="number" step="0.01" name="inst{{ i }}_amount" value="{{ client['inst'~i~'_amount'] or 0 }}" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.75rem;color:var(--gray-500);margin-bottom:0.3rem;">Date</label>
+                    <input type="date" name="inst{{ i }}_date" value="{{ client['inst'~i~'_date'] or '' }}" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.75rem;color:var(--gray-500);margin-bottom:0.3rem;">Note</label>
+                    <input type="text" name="inst{{ i }}_note" value="{{ client['inst'~i~'_note'] or '' }}" style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;box-sizing:border-box;" />
+                </div>
+            </div>
+            {% endfor %}
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="display:flex;gap:0.8rem;justify-content:flex-end;margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--gray-200);">
+                <a href="{{ url_for('ops_training_client_detail', client_id=client.id) }}" style="padding:0.7rem 1.4rem;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:8px;font-weight:600;font-size:0.9rem;text-decoration:none;">Cancel</a>
+                <button type="submit" style="padding:0.7rem 1.4rem;background:var(--orange);color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

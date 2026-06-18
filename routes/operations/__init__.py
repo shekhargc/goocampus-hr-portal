@@ -86,6 +86,22 @@ def register_operations_modules(app):
     from . import cs_mentorship
     cs_mentorship.register_routes(app)
 
+    # Phase 4 lightweight pathways — Portfolio + Training.
+    # Each is a clone of Standard Consulting trimmed to 5 sections:
+    # Dashboard, Registration (clients), Payments, Documents, Call Notes.
+    # No medical sections (EPIC / GMC / AMC reg / academic / mentorship / etc.).
+    #   Portfolio  (/operations/portfolio, prefix GCPPLUS, pathway='portfolio')
+    #   Training   (/operations/training,  prefix GCTRN,   pathway='training')
+    from . import portfolio, pf_payments, pf_call_notes
+    portfolio.register_routes(app)
+    pf_payments.register_routes(app)
+    pf_call_notes.register_routes(app)
+
+    from . import training, tr_payments, tr_call_notes
+    training.register_routes(app)
+    tr_payments.register_routes(app)
+    tr_call_notes.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.

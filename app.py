@@ -176,13 +176,15 @@ def inject_manager_status():
         plab_ok = has_section_permission(user, 'plab_pathway', 'dashboard', 'view') if user else False
         aus_ok  = has_section_permission(user, 'australia_pathway', 'dashboard', 'view') if user else False
         cons_ok = has_section_permission(user, 'consulting_pathway', 'dashboard', 'view') if user else False
+        port_ok = has_section_permission(user, 'portfolio_pathway', 'dashboard', 'view') if user else False
+        trn_ok  = has_section_permission(user, 'training_pathway', 'dashboard', 'view') if user else False
         shared_ok = any(has_section_permission(user, 'operations_shared', s, 'view')
                         for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
-        ops_access = plab_ok or aus_ok or cons_ok or shared_ok
+        ops_access = plab_ok or aus_ok or cons_ok or port_ok or trn_ok or shared_ok
 
         # Smart landing URL — unified Operations dashboard when the user
         # has any pathway dashboard; otherwise fall back to Reports.
-        if plab_ok or aus_ok or cons_ok:
+        if plab_ok or aus_ok or cons_ok or port_ok or trn_ok:
             ops_landing = '/operations/dashboard'
         else:
             # operations_shared only -> Reports is the safest default
@@ -15415,6 +15417,10 @@ def ops_main_dashboard():
         visible.append(('australia', 'AMC Pathway', '/operations/australia-pathway', '#0369A1'))
     if can('consulting_pathway'):
         visible.append(('consulting', 'Standard Consulting', '/operations/consulting', '#B45309'))
+    if can('portfolio_pathway'):
+        visible.append(('portfolio', 'Portfolio Pathway', '/operations/portfolio', '#7C3AED'))
+    if can('training_pathway'):
+        visible.append(('training', 'Training Pathway', '/operations/training', '#0D9488'))
 
     conn = get_db()
 
@@ -15723,6 +15729,8 @@ def ops_field_manager():
         {'slug': 'australia',  'label': 'AMC Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
         {'slug': 'uae',        'label': 'UAE Pathway',       'flag': '\U0001f1e6\U0001f1ea'},
         {'slug': 'consulting', 'label': 'Standard Consulting','flag': '\U0001f9ed'},
+        {'slug': 'portfolio',  'label': 'Portfolio Pathway', 'flag': '\U0001f4bc'},
+        {'slug': 'training',   'label': 'Training Pathway',  'flag': '\U0001f393'},
     ]
     selected_pathway = (request.args.get('pathway') or 'plab').strip().lower()
     if selected_pathway not in {t['slug'] for t in PATHWAY_TABS}:
@@ -15981,7 +15989,7 @@ def ops_field_manager_reorder():
 
 # X-4d: 'Standard Consulting' added so consulting vendors get their own
 # pathway scope on /operations/vendors-providers?pathway=consulting.
-VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting']
+VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting', 'Portfolio Pathway', 'Training Pathway']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
@@ -16236,6 +16244,9 @@ def ops_vendors_providers():
         # link filters to consulting-tagged vendors instead of showing
         # everything.
         'consulting': 'Standard Consulting',
+        # Phase 4 lightweight pathways — scope vendors per pathway too.
+        'portfolio':  'Portfolio Pathway',
+        'training':   'Training Pathway',
     }
     country_filter = PATHWAY_TO_COUNTRY.get(pathway)
 
@@ -29731,6 +29742,32 @@ ACCESS_SECTION_CATALOG = [
             ('mentorship',        'Mentorship Sessions','Mentorship session scheduling + tracker'),
         ],
     },
+    # ── Operations: Portfolio (Phase 4 lightweight) ───────────────────
+    {
+        'key': 'portfolio_pathway',
+        'label': 'Operations · Portfolio Pathway',
+        'description': 'Portfolio Pathway operational sub-areas (lightweight). Houses Portfolio Services clients. Grant these to staff supporting portfolio clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',  'Overview stats for portfolio clients'),
+            ('registration',  'Registration',       'Portfolio client registration list + full profile'),
+            ('payments',      'Payments',           'Portfolio payment records'),
+            ('documents',     'Documents',          'Portfolio client document tracker'),
+            ('call_notes',    'Call Notes',         'Portfolio call log + tracker'),
+        ],
+    },
+    # ── Operations: Training (Phase 4 lightweight) ────────────────────
+    {
+        'key': 'training_pathway',
+        'label': 'Operations · Training Pathway',
+        'description': 'Training Pathway operational sub-areas (lightweight). Houses AMC MCQ / training clients. Grant these to staff supporting training clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',  'Overview stats for training clients'),
+            ('registration',  'Registration',       'Training client registration list + full profile'),
+            ('payments',      'Payments',           'Training payment records'),
+            ('documents',     'Documents',          'Training client document tracker'),
+            ('call_notes',    'Call Notes',         'Training call log + tracker'),
+        ],
+    },
     # ── Operations: Shared / cross-pathway ────────────────────────────────
     {
         'key': 'operations_shared',
@@ -32633,6 +32670,46 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_mentorship_add':                _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_edit':               _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_delete':             _ap('consulting_pathway', 'mentorship', 'edit'),
+    # ── Operations: Portfolio Pathway (Phase 4 lightweight) ────────────
+    'ops_portfolio_pathway':                _ap('portfolio_pathway', 'dashboard'),
+    'ops_portfolio_clients_list':           _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_detail':          _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_by_reg':          _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_edit_page':       _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_client_edit_save':       _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_client_delete':          _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_documents_list':         _ap('portfolio_pathway', 'documents'),
+    'ops_portfolio_payments_list':          _ap('portfolio_pathway', 'payments'),
+    'ops_portfolio_payments_detail':        _ap('portfolio_pathway', 'payments'),
+    'ops_portfolio_payments_edit_page':     _ap('portfolio_pathway', 'payments', 'edit'),
+    'ops_portfolio_payments_edit_save':     _ap('portfolio_pathway', 'payments', 'edit'),
+    'ops_portfolio_call_notes_list':        _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_tracker':     _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_not_contacted':_ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_detail':      _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_edit_page':   _ap('portfolio_pathway', 'call_notes', 'edit'),
+    'ops_portfolio_call_notes_edit_save':   _ap('portfolio_pathway', 'call_notes', 'edit'),
+    'ops_portfolio_call_notes_add':         _ap('portfolio_pathway', 'call_notes', 'edit'),
+    # ── Operations: Training Pathway (Phase 4 lightweight) ─────────────
+    'ops_training_pathway':                 _ap('training_pathway', 'dashboard'),
+    'ops_training_clients_list':            _ap('training_pathway', 'registration'),
+    'ops_training_client_detail':           _ap('training_pathway', 'registration'),
+    'ops_training_client_by_reg':           _ap('training_pathway', 'registration'),
+    'ops_training_client_edit_page':        _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_client_edit_save':        _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_client_delete':           _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_documents_list':          _ap('training_pathway', 'documents'),
+    'ops_training_payments_list':           _ap('training_pathway', 'payments'),
+    'ops_training_payments_detail':         _ap('training_pathway', 'payments'),
+    'ops_training_payments_edit_page':      _ap('training_pathway', 'payments', 'edit'),
+    'ops_training_payments_edit_save':      _ap('training_pathway', 'payments', 'edit'),
+    'ops_training_call_notes_list':         _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_tracker':      _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_not_contacted':_ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_detail':       _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_edit_page':    _ap('training_pathway', 'call_notes', 'edit'),
+    'ops_training_call_notes_edit_save':    _ap('training_pathway', 'call_notes', 'edit'),
+    'ops_training_call_notes_add':          _ap('training_pathway', 'call_notes', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
