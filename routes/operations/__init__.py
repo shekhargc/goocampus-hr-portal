@@ -86,6 +86,22 @@ def register_operations_modules(app):
     from . import cs_mentorship
     cs_mentorship.register_routes(app)
 
+    # Standard Consulting — Services sections (manual data entry, no import).
+    # Each clones the AMC (australia) section module scoped to
+    # pathway='consulting'; list (with drawer) + detail + add + edit.
+    #   Training              -> ops_coaching
+    #   Online Subscriptions  -> ops_online_subscriptions
+    #   Webinars & Conferences-> ops_webinars_conferences
+    #   Research & Publication-> ops_research_publication
+    #   Online Courses        -> ops_online_courses (DISTINCT from subscriptions)
+    from . import cs_training, cs_online_subscriptions, cs_webinars
+    from . import cs_research, cs_online_courses
+    cs_training.register_routes(app)
+    cs_online_subscriptions.register_routes(app)
+    cs_webinars.register_routes(app)
+    cs_research.register_routes(app)
+    cs_online_courses.register_routes(app)
+
     # Phase 4 lightweight pathways — Portfolio + Training.
     # Each is a clone of Standard Consulting trimmed to 5 sections:
     # Dashboard, Registration (clients), Payments, Documents, Call Notes.
