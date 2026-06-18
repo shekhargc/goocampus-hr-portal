@@ -491,6 +491,10 @@ def ops_consulting_client_edit_page(client_id):
     if not client:
         flash('Consulting client not found.', 'error')
         return redirect(url_for('ops_consulting_clients_list'))
+    client = dict(client)
+    if not client.get('product_id') and client.get('plan_type'):
+        from app import derive_product_id_from_plan
+        client['product_id'] = derive_product_id_from_plan('consulting', client.get('plan_type'))
     return render_template(
         'ops_consulting_client_edit_form.html',
         user=user,

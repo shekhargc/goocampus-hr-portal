@@ -488,6 +488,10 @@ def ops_australia_client_edit_page(client_id):
     if not client:
         flash('Australia client not found.', 'error')
         return redirect(url_for('ops_australia_clients_list'))
+    client = dict(client)
+    if not client.get('product_id') and client.get('plan_type'):
+        from app import derive_product_id_from_plan
+        client['product_id'] = derive_product_id_from_plan('australia', client.get('plan_type'))
     return render_template(
         'ops_australia_client_edit_form.html',
         user=user,

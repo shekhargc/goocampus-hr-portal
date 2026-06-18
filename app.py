@@ -18512,6 +18512,10 @@ def ops_plab_edit(client_id):
         conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
+    client = dict(client)
+    # Auto-fill Product from the saved Plan Type for legacy rows (no product_id)
+    if not client.get('product_id') and client.get('plan_type'):
+        client['product_id'] = derive_product_id_from_plan('plab', client.get('plan_type'))
     try:
         documents = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, verified_by, verified_at, notes, uploaded_by, uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
     except Exception as e:
@@ -20212,6 +20216,30 @@ def _products_for_pathway(pathway):
         out = []
     conn.close()
     return out
+
+
+def derive_product_id_from_plan(pathway, plan_type):
+    """Reverse-lookup the Product/Service a plan_type belongs to, so EDIT
+    forms auto-fill Product for legacy records that have a plan_type but no
+    saved product_id (avoids the user re-picking and accidentally resetting
+    the plan). Returns products_services.id or None."""
+    if not plan_type:
+        return None
+    conn = get_db()
+    try:
+        r = conn.execute(
+            "SELECT ps.id FROM lookup_options lo "
+            "JOIN products_services ps ON LOWER(TRIM(ps.name)) = LOWER(TRIM(lo.product_name)) "
+            "WHERE lo.category='plan_type' AND COALESCE(lo.pathway,'plab')=? "
+            "AND LOWER(TRIM(lo.value))=LOWER(TRIM(?)) "
+            "AND COALESCE(ps.pathway,'')=? LIMIT 1",
+            ((pathway or 'plab').strip().lower(), plan_type, (pathway or 'plab').strip().lower())).fetchone()
+        return r['id'] if r else None
+    except Exception as e:
+        logging.error(f"derive_product_id_from_plan: {e}")
+        return None
+    finally:
+        conn.close()
 
 
 @app.route('/operations/call-notes/tracker')
