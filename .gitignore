@@ -26,3 +26,4 @@ add_management.py
 import_photos.py
 _backup_db.py
 goocampus_backups/
+dropdowns_extract.json

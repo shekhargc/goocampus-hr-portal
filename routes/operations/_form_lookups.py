@@ -138,6 +138,7 @@ def section_research_lookups(pathway):
         'research_statuses':  get_lookup_options('research_status',  pathway=pathway),
         'author_positions':   get_lookup_options('author_position',  pathway=pathway),
         'research_providers': get_lookup_options('research_provider',pathway=pathway),
+        'research_services':  get_lookup_options('research_service', pathway=pathway),
     }
 
 

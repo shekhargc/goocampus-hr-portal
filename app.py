@@ -7288,6 +7288,16 @@ def ensure_crm_tables():
             # by counsellor (product/pathway-wise). Backfilled by name
             # in resync_client_counsellor_ids_once() below.
             ('plab_clients', 'counsellor_id',       'INTEGER'),
+            # 2026-06-19: capture the exact fields the new Zoho section exports
+            # carry (PLAB + AMC refresh) so no data is dropped on import and the
+            # vendor/deliverable shows on the right section page.
+            ('ops_online_subscriptions', 'subscription_provider', 'TEXT'),
+            ('ops_research_publication', 'service',               'TEXT'),
+            ('ops_webinars_conferences', 'provider',              'TEXT'),
+            ('ops_mentorship',           'fee_currency',          'TEXT'),
+            ('ops_mentorship',           'service_description',   'TEXT'),
+            ('ops_uk_cab_bookings',      'services',              'TEXT'),
+            ('ops_uk_cab_bookings',      'additional_instructions','TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -18357,6 +18367,8 @@ def ops_plab_add():
                 f.get('comm_country', ''),
                 session['user_id']
             ))
+            conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE registration_number=?",
+                         (f.get('upgraded_to', ''), reg_num))
             conn.commit()
 
             # ── Auto-send welcome email on registration ──
@@ -18405,6 +18417,7 @@ def ops_plab_add():
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=[], plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
@@ -18495,6 +18508,9 @@ def ops_plab_edit(client_id):
                 f.get('comm_country', ''),
                 client_id
             ))
+            # Upgraded To (separate write to avoid disturbing the wide tuple above)
+            conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE id=?",
+                         (f.get('upgraded_to', ''), client_id))
             conn.commit()
             flash('Client updated', 'success')
             conn.close()
@@ -18530,6 +18546,7 @@ def ops_plab_edit(client_id):
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
@@ -20198,6 +20215,50 @@ def ops_products_api():
     return jsonify(out)
 
 
+# pathway -> vendors_providers.country label (module-level copy; the one in
+# the vendors page is function-local). Keep in sync with PATHWAY_TO_COUNTRY.
+VENDOR_COUNTRY_BY_PATHWAY = {
+    'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'usmle': 'USMLE Pathway',
+    'germany': 'Germany Pathway', 'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway',
+}
+
+
+@app.route('/operations/api/vendor-services')
+@admin_required
+def ops_vendor_services_api():
+    """Vendor-first cascade: the deliverables/services linked to a vendor.
+
+    Drives the section forms where the user picks a Vendor first and the
+    Deliverable/Service dropdown then narrows to that vendor's services
+    (from vendor_service_map). Params:
+        ?vendor=<name>&pathway=<plab|australia|...>[&category=<vp_category>]
+    """
+    vendor = (request.args.get('vendor') or '').strip()
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    category = (request.args.get('category') or '').strip()
+    if not vendor:
+        return jsonify([])
+    country = VENDOR_COUNTRY_BY_PATHWAY.get(pathway, 'UK Pathway')
+    conn = get_db()
+    try:
+        sql = ("SELECT DISTINCT m.service_name FROM vendor_service_map m "
+               "JOIN vendors_providers v ON v.id = m.vendor_id "
+               "WHERE v.country = ? AND LOWER(TRIM(v.name)) = LOWER(TRIM(?))")
+        params = [country, vendor]
+        if category:
+            sql += " AND v.category = ?"
+            params.append(category)
+        sql += " ORDER BY m.service_name"
+        rows = conn.execute(sql, tuple(params)).fetchall()
+        out = [r['service_name'] for r in rows]
+    except Exception as e:
+        logging.error(f"ops_vendor_services_api: {e}")
+        out = []
+    conn.close()
+    return jsonify(out)
+
+
 def _products_for_pathway(pathway):
     """Active Products/Services for a pathway as a list of dict rows.
 
@@ -21124,7 +21185,19 @@ def ops_gmc_delete(gid):
 #  OPERATIONS – Job Stage (PLAB job placement tracking)
 # ─────────────────────────────────────────────────────────
 
+# Fallback only — the live list now comes from Field Manager
+# (lookup_options category 'job_confirmed_by'), seeded from the Zoho Drop Down
+# sheet. See _job_confirmed_by_options().
 JOB_CONFIRMED_BY_OPTIONS = ['Job by GooCampus', 'Interview by GooCampus', 'By Candidate']
+
+
+def _job_confirmed_by_options():
+    """Editable Field-Manager dropdown with a hardcoded fallback."""
+    try:
+        opts = get_lookup_options('job_confirmed_by', pathway='plab')
+    except Exception:
+        opts = None
+    return opts or JOB_CONFIRMED_BY_OPTIONS
 
 
 @app.route('/operations/job-stage')
@@ -21158,7 +21231,7 @@ def ops_job_stage_list():
     conn.close()
     return render_template('ops_job_stage_list.html', records=records,
                            search=search, confirmed_filter=confirmed_filter,
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21170,7 +21243,7 @@ def ops_job_stage_add_page():
         return ops_job_stage_add_save()
     pre_reg = request.args.get('reg', '') or request.args.get('client', '')
     return render_template('ops_job_stage_form.html', record=None, pre_reg=pre_reg,
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21239,7 +21312,7 @@ def ops_job_stage_edit_page(rid):
         flash('Record not found', 'error')
         return redirect(url_for('ops_job_stage_list'))
     return render_template('ops_job_stage_form.html', record=record, pre_reg='',
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21316,13 +21389,14 @@ def ops_research_add():
         f = request.form
         conn.execute('''INSERT INTO ops_research_publication (
             registration_number, research_status, research_topic, published_copy,
-            research_start_date, research_end_date, research_provider,
+            research_start_date, research_end_date, research_provider, service,
             published_journal_name, author_position, research_batch,
             mobile_number, candidate_email, additional_notes, created_by
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
             f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
-            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_provider'), f.get('service'), f.get('published_journal_name'),
+            f.get('author_position'),
             f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
             f.get('additional_notes'), session.get('user_id', 0)
         ))
@@ -21335,7 +21409,9 @@ def ops_research_add():
     research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=None,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=research_provider_names, pre_reg=pre_reg,
+                           research_providers=research_provider_names,
+                           research_services=get_lookup_options('research_service', 'plab'),
+                           pre_reg=pre_reg,
                            active_ops_page='research')
 
 
@@ -21350,12 +21426,13 @@ def ops_research_edit(rid):
         f = request.form
         conn.execute('''UPDATE ops_research_publication SET
             registration_number=?, research_status=?, research_topic=?, published_copy=?,
-            research_start_date=?, research_end_date=?, research_provider=?,
+            research_start_date=?, research_end_date=?, research_provider=?, service=?,
             published_journal_name=?, author_position=?, research_batch=?,
             mobile_number=?, candidate_email=?, additional_notes=? WHERE id=?''', (
             f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
             f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
-            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_provider'), f.get('service'), f.get('published_journal_name'),
+            f.get('author_position'),
             f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
             f.get('additional_notes'), rid
         ))
@@ -21367,7 +21444,9 @@ def ops_research_edit(rid):
     research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=record,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=research_provider_names, pre_reg='',
+                           research_providers=research_provider_names,
+                           research_services=get_lookup_options('research_service', 'plab'),
+                           pre_reg='',
                            active_ops_page='research')
 
 
