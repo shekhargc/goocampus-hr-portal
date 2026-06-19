@@ -33,7 +33,7 @@ import re
 PATHWAY_REG_PREFIX = {
     'plab': 'GCUKIP',
     'australia': 'GCAUSIP',
-    'uae': 'GCUAEIP',
+    'uae': 'GCUAE',   # data + portal standardised on GCUAE/<FY>/<NNN>
     'consulting': 'GCCSS',
     # Phase 4 lightweight pathways (2026-06-18):
     #   portfolio -> GCPPLUS (GC Portfolio Plus)

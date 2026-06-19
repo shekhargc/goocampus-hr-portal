@@ -126,6 +126,25 @@ def register_operations_modules(app):
     pf_courses.register_routes(app)
     pf_webinars.register_routes(app)
 
+    # UAE Pathway — mirrors Portfolio (Registration / Documents / Payments /
+    # Call Notes + the pathway dashboard, reg prefix GCUAE, pathway='uae')
+    # PLUS three brand-new sections: Self Assessment, Eligibility Letter,
+    # and Data Flow. Six modules, all scoped to pathway='uae'.
+    #   uae               (/operations/uae, clients, documents, dashboard)
+    #   uae_payments      (/operations/uae/payments)
+    #   uae_call_notes    (/operations/uae/call-notes)
+    #   uae_self_assessment (/operations/uae/self-assessment)
+    #   uae_eligibility   (/operations/uae/eligibility-letter)
+    #   uae_data_flow     (/operations/uae/data-flow)
+    from . import uae, uae_payments, uae_call_notes
+    from . import uae_self_assessment, uae_eligibility, uae_data_flow
+    uae.register_routes(app)
+    uae_payments.register_routes(app)
+    uae_call_notes.register_routes(app)
+    uae_self_assessment.register_routes(app)
+    uae_eligibility.register_routes(app)
+    uae_data_flow.register_routes(app)
+
     from . import training, tr_payments, tr_call_notes
     training.register_routes(app)
     tr_payments.register_routes(app)

@@ -66,10 +66,12 @@ AMC_DIR = os.environ.get('AMC_DIR', '/Users/Santosh/Desktop/Zoho Data/AMC PGCP')
 UK_DIR = os.environ.get('UK_DIR', '/Users/Santosh/Desktop/Zoho Data/UK GC')
 PF_DIR = os.environ.get('PF_DIR', '/Users/Santosh/Desktop/Zoho Data/Portfolio Services')
 TR_DIR = os.environ.get('TR_DIR', '/Users/Santosh/Desktop/Zoho Data/Training')
+UAE_DIR = os.environ.get('UAE_DIR', '/Users/Santosh/Desktop/Zoho Data/UAE')
 
 # Country labels for vendors_providers (per task spec).
 COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway',
-           'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway'}
+           'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway',
+           'uae': 'UAE Pathway'}
 
 # Tag-row labels that identify a column's role on a "Drop Downs" sheet.
 VENDOR_TAGS = ('vendor/provider', 'vendor', 'provider')
@@ -481,9 +483,31 @@ TRAINING_SECTIONS = [
  },
 ]
 
-PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR, 'training': TR_DIR}
+# ── UAE (uae) ────────────────────────────────────────────────────────
+UAE_SECTIONS = [
+ {
+  'file': 'UAE - All Clients Payments.xlsx',
+  'section': 'Payments', 'vp_category': None,
+  'cols': {'Payment Method': 'payment_method', 'Instalment': 'instalment'},
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'UAE - Registration List.xlsx',
+  'section': 'Clients (Registration)', 'vp_category': None,
+  'cols': {
+    'Plan Type': 'plan_type', 'Account Status': 'account_status',
+    'Counsellor Name': 'counsellor', 'Current Stage Status': 'current_stage',
+    'Lead Source': 'lead_source',
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+]
+
+PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR,
+                'training': TR_DIR, 'uae': UAE_DIR}
 PATHWAY_SECTIONS = {'australia': AMC_SECTIONS, 'plab': PLAB_SECTIONS,
-                    'portfolio': PORTFOLIO_SECTIONS, 'training': TRAINING_SECTIONS}
+                    'portfolio': PORTFOLIO_SECTIONS, 'training': TRAINING_SECTIONS,
+                    'uae': UAE_SECTIONS}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -587,6 +611,10 @@ CATEGORY_INUSE = {
     # Portfolio-specific dropdowns
     'career_stage': ('plab_clients', 'career_stage'),
     'event_status': ('ops_webinars_conferences', 'event_status'),
+    # UAE new-section dropdowns
+    'completed_by': ('ops_self_assessment', 'completed_by'),
+    'eligibility_status': ('ops_eligibility_letter', 'eligibility_status'),
+    'data_flow_status': ('ops_data_flow', 'data_flow_status'),
 }
 
 # Vendor category -> (ops_table, column) for the vendor "in use?" check.

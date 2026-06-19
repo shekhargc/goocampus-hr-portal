@@ -13420,6 +13420,43 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── UAE pathway new sections (2026-06-19): Self Assessment,
+        #    Eligibility Letter, Data Flow. Shared (pathway column) so other
+        #    pathways could reuse them later.
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_self_assessment (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            completed_by TEXT,
+            date_completed TEXT,
+            report_doc TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_eligibility_letter (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            completed_by TEXT,
+            eligibility_registration_date TEXT,
+            eligibility_status TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_data_flow (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            data_flow_start_date TEXT,
+            data_flow_status TEXT,
+            eligibility_status TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── Payments ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_payments (
             id SERIAL PRIMARY KEY,
@@ -15433,6 +15470,8 @@ def ops_main_dashboard():
         visible.append(('consulting', 'Standard Consulting', '/operations/consulting', '#B45309'))
     if can('portfolio_pathway'):
         visible.append(('portfolio', 'Portfolio Pathway', '/operations/portfolio', '#7C3AED'))
+    if can('uae_pathway'):
+        visible.append(('uae', 'UAE Pathway', '/operations/uae', '#0EA5E9'))
     if can('training_pathway'):
         visible.append(('training', 'Training Pathway', '/operations/training', '#0D9488'))
 
@@ -15502,13 +15541,11 @@ def ops_uk_pathway():
 # (registered via register_operations_modules(app) at app boot).
 
 
-@app.route('/operations/uae-pathway')
-@admin_required
-def ops_uae_pathway():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='UAE Pathway',
-                         pathway_desc='UAE medical pathway operations will be configured here.')
+# UAE Pathway dashboard + sections are now served by
+# routes/operations/uae.py (and uae_payments / uae_call_notes /
+# uae_self_assessment / uae_eligibility / uae_data_flow). The old
+# /operations/uae-pathway placeholder has been removed; the real
+# dashboard endpoint ops_uae_pathway now lives at /operations/uae.
 
 
 # S-0: /operations/consulting is now served by
@@ -16261,6 +16298,7 @@ def ops_vendors_providers():
         # Phase 4 lightweight pathways — scope vendors per pathway too.
         'portfolio':  'Portfolio Pathway',
         'training':   'Training Pathway',
+        'uae':        'UAE Pathway',
     }
     country_filter = PATHWAY_TO_COUNTRY.get(pathway)
 
@@ -20229,6 +20267,7 @@ VENDOR_COUNTRY_BY_PATHWAY = {
     'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'usmle': 'USMLE Pathway',
     'germany': 'Germany Pathway', 'consulting': 'Standard Consulting',
     'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway',
+    'uae': 'UAE Pathway',
 }
 
 
@@ -29979,6 +30018,22 @@ ACCESS_SECTION_CATALOG = [
             ('research',          'Research & Publication','Consulting research project tracking'),
         ],
     },
+    # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
+    {
+        'key': 'uae_pathway',
+        'label': 'Operations · UAE Pathway',
+        'description': 'UAE Pathway operational sub-areas. Houses UAE Services clients (reg prefix GCUAE). Grant these to staff supporting UAE clients.',
+        'sub_sections': [
+            ('dashboard',        'Pathway Dashboard',  'Overview stats for UAE clients'),
+            ('registration',     'Registration',       'UAE client registration list + full profile'),
+            ('documents',        'Documents',          'UAE client document tracker'),
+            ('payments',         'Payments',           'UAE payment records'),
+            ('call_notes',       'Call Notes',         'UAE call log + tracker'),
+            ('self_assessment',  'Self Assessment',    'UAE self assessment tracker (ops_self_assessment)'),
+            ('eligibility_letter','Eligibility Letter','UAE eligibility letter tracker (ops_eligibility_letter)'),
+            ('data_flow',        'Data Flow',          'UAE data flow tracker (ops_data_flow)'),
+        ],
+    },
     # ── Operations: Portfolio (Phase 4 lightweight) ───────────────────
     {
         'key': 'portfolio_pathway',
@@ -32941,6 +32996,45 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_research_edit_save':            _ap('consulting_pathway', 'research', 'edit'),
     'ops_consulting_research_add_page':             _ap('consulting_pathway', 'research', 'edit'),
     'ops_consulting_research_add_save':             _ap('consulting_pathway', 'research', 'edit'),
+    # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
+    'ops_uae_pathway':                      _ap('uae_pathway', 'dashboard'),
+    'ops_uae_clients_list':                 _ap('uae_pathway', 'registration'),
+    'ops_uae_client_detail':                _ap('uae_pathway', 'registration'),
+    'ops_uae_client_by_reg':                _ap('uae_pathway', 'registration'),
+    'ops_uae_client_edit_page':             _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_client_edit_save':             _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_client_delete':                _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_documents_list':               _ap('uae_pathway', 'documents'),
+    'ops_uae_payments_list':                _ap('uae_pathway', 'payments'),
+    'ops_uae_payments_detail':              _ap('uae_pathway', 'payments'),
+    'ops_uae_payments_edit_page':           _ap('uae_pathway', 'payments', 'edit'),
+    'ops_uae_payments_edit_save':           _ap('uae_pathway', 'payments', 'edit'),
+    'ops_uae_call_notes_list':              _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_tracker':           _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_not_contacted':     _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_detail':            _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_edit_page':         _ap('uae_pathway', 'call_notes', 'edit'),
+    'ops_uae_call_notes_edit_save':         _ap('uae_pathway', 'call_notes', 'edit'),
+    'ops_uae_call_notes_add':               _ap('uae_pathway', 'call_notes', 'edit'),
+    # UAE new sections — Self Assessment / Eligibility Letter / Data Flow.
+    'ops_uae_self_assessment_list':         _ap('uae_pathway', 'self_assessment'),
+    'ops_uae_self_assessment_detail':       _ap('uae_pathway', 'self_assessment'),
+    'ops_uae_self_assessment_edit_page':    _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_edit_save':    _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_add_page':     _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_add_save':     _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_eligibility_list':             _ap('uae_pathway', 'eligibility_letter'),
+    'ops_uae_eligibility_detail':           _ap('uae_pathway', 'eligibility_letter'),
+    'ops_uae_eligibility_edit_page':        _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_edit_save':        _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_add_page':         _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_add_save':         _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_data_flow_list':               _ap('uae_pathway', 'data_flow'),
+    'ops_uae_data_flow_detail':             _ap('uae_pathway', 'data_flow'),
+    'ops_uae_data_flow_edit_page':          _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_edit_save':          _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_add_page':           _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_add_save':           _ap('uae_pathway', 'data_flow', 'edit'),
     # ── Operations: Portfolio Pathway (Phase 4 lightweight) ────────────
     'ops_portfolio_pathway':                _ap('portfolio_pathway', 'dashboard'),
     'ops_portfolio_clients_list':           _ap('portfolio_pathway', 'registration'),
