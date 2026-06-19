@@ -22,11 +22,16 @@ from core.users import get_user
 from db import get_db
 # Pathway-scoped dropdown options for the AMC Online Courses edit form.
 from routes.operations._form_lookups import section_online_courses_lookups
+# Cross-DB column-existence check (SQLite PRAGMA / Postgres information_schema).
+from routes.operations.au_test_bookings import _existing_columns
 
 
 # ── Editable columns on ops_online_subscriptions (pathway='consulting') ──
 # id / registration_number / pathway are NOT editable.
+# `subscription_provider` is the vendor the online_subscription (course/sub
+# name) cascades from; only written when the column exists (guarded in saves).
 AU_OC_EDITABLE_COLUMNS = [
+    'subscription_provider',
     'online_subscription',
     'activation_type',
     'issued_date',
@@ -249,10 +254,17 @@ def ops_consulting_online_subscriptions_edit_save(rid):
             flash('Online course subscription not found.', 'error')
             return redirect(url_for('ops_consulting_online_subscriptions_list'))
 
+        # Skip any editable column not present on this DB (e.g.
+        # subscription_provider on an older schema) so the UPDATE never
+        # references a missing column.
+        db_cols = _existing_columns(conn, 'ops_online_subscriptions')
+
         sets = []
         params = []
         for col in AU_OC_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 val = request.form.get(col, '').strip()
                 if col in AU_OC_NUMERIC_COLUMNS:
                     try:
@@ -318,10 +330,13 @@ def ops_consulting_online_subscriptions_add_save():
         if not reg:
             flash('Registration number is required.', 'error')
             return redirect(url_for('ops_consulting_online_subscriptions_add_page'))
+        db_cols = _existing_columns(conn, 'ops_online_subscriptions')
         cols = ['registration_number', 'pathway']
         vals = [reg, 'consulting']
         for col in AU_OC_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 v = (request.form.get(col) or '').strip() or None
                 if col in AU_OC_NUMERIC_COLUMNS:
                     try:

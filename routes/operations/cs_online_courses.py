@@ -31,10 +31,17 @@ from core.auth import admin_required
 from core.users import get_user
 from db import get_db
 from app import get_lookup_options
+# Centralised vendor list for the Online Subscriptions category (vendor-first
+# cascade) + cross-DB column-existence guard.
+from routes.operations._form_lookups import section_online_courses_lookups
+from routes.operations.au_test_bookings import _existing_columns
 
 
 # ── Editable columns on ops_online_courses (pathway='consulting') ───────
 # id / registration_number / pathway are NOT editable through the UI.
+# This section uses ops_online_courses (course_provider / courses_name) — the
+# vendor-first cascade runs on those existing columns; there is no
+# subscription_provider/online_subscription column here.
 CS_OC_EDITABLE_COLUMNS = [
     'courses_name', 'course_type', 'start_date', 'end_date',
     'validity_months', 'course_provider', 'certification_body',
@@ -55,7 +62,7 @@ def _course_lookups():
     scoped to pathway='consulting' so the Consulting Field Manager owns
     the option lists. Falls back to PLAB seed when not yet configured.
     """
-    return {
+    lk = {
         'course_names':         get_lookup_options('course_name',        pathway='consulting'),
         'course_types':         get_lookup_options('course_type',        pathway='consulting'),
         'course_statuses':      get_lookup_options('course_status',      pathway='consulting'),
@@ -63,6 +70,14 @@ def _course_lookups():
         'course_providers':     get_lookup_options('course_provider',    pathway='consulting'),
         'certification_bodies': get_lookup_options('certification_body', pathway='consulting'),
     }
+    # Centralised vendor list + deliverable list for the vendor-first cascade
+    # (Online Subscriptions category). subscription_vendors drives the
+    # Provider <select>; subscription_types is the full deliverable list the
+    # cascade narrows from.
+    sub = section_online_courses_lookups('consulting')
+    lk['subscription_vendors'] = sub.get('subscription_vendors', [])
+    lk['subscription_types'] = sub.get('subscription_types', [])
+    return lk
 
 
 @admin_required
@@ -262,10 +277,17 @@ def ops_consulting_online_courses_edit_save(rid):
             flash('Online course record not found.', 'error')
             return redirect(url_for('ops_consulting_online_courses_list'))
 
+        # Skip any editable column not present on this DB (e.g.
+        # subscription_provider / online_subscription on this schema) so the
+        # UPDATE never references a missing column.
+        db_cols = _existing_columns(conn, 'ops_online_courses')
+
         sets = []
         params = []
         for col in CS_OC_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 val = request.form.get(col, '').strip()
                 if col in CS_OC_NUMERIC_COLUMNS:
                     if not val:
@@ -332,10 +354,13 @@ def ops_consulting_online_courses_add_save():
         if not reg:
             flash('Registration number is required.', 'error')
             return redirect(url_for('ops_consulting_online_courses_add_page'))
+        db_cols = _existing_columns(conn, 'ops_online_courses')
         cols = ['registration_number', 'pathway']
         vals = [reg, 'consulting']
         for col in CS_OC_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 v = (request.form.get(col) or '').strip() or None
                 if col in CS_OC_NUMERIC_COLUMNS:
                     try:

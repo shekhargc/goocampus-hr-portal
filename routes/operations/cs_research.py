@@ -28,6 +28,8 @@ AU_RESEARCH_EDITABLE_COLUMNS = [
     'research_batch',
     'research_end_date',
     'research_provider',
+    # Deliverable that cascades from the chosen Research Provider (vendor).
+    'service',
     'published_journal_name',
     'author_position',
     'upload_published_copy',

@@ -7296,6 +7296,7 @@ def ensure_crm_tables():
             ('ops_webinars_conferences', 'provider',              'TEXT'),
             ('ops_mentorship',           'fee_currency',          'TEXT'),
             ('ops_mentorship',           'service_description',   'TEXT'),
+            ('ops_mentorship',           'service',               'TEXT'),
             ('ops_uk_cab_bookings',      'services',              'TEXT'),
             ('ops_uk_cab_bookings',      'additional_instructions','TEXT'),
         ]:
