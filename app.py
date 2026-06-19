@@ -26290,12 +26290,21 @@ def seed_plan_type_product_links():
 
         # Single-product pathways -> one product each
         single = {'plab': 'UK PGCP', 'australia': 'AUS PGCP',
-                  'training': 'AMC MCQ', 'portfolio': 'Portfolio Services'}
+                  'portfolio': 'Portfolio Services', 'uae': 'UAE PGCP'}
         for pw, prod in single.items():
             try:
                 conn.execute(
                     "UPDATE lookup_options SET product_name = ? "
                     "WHERE category='plan_type' AND COALESCE(pathway,'plab')=?", (prod, pw))
+            except Exception:
+                conn.rollback()
+        # Training -> 2 products by plan-type value (AMC 1 = MCQ, AMC 2 = Clinical)
+        for val, prod in [('AMC 1', 'AMC MCQ'), ('AMC 2', 'AMC Clinical')]:
+            try:
+                conn.execute(
+                    "UPDATE lookup_options SET product_name = ? "
+                    "WHERE category='plan_type' AND COALESCE(pathway,'plab')='training' AND value = ?",
+                    (prod, val))
             except Exception:
                 conn.rollback()
         # Consulting -> product by CSS country prefix in the plan-type value
@@ -26313,7 +26322,8 @@ def seed_plan_type_product_links():
 
         # Seed Training + Portfolio plan types (new pathways)
         new_plans = [
-            ('training', 'AMC MCQ', ['AMC 1', 'AMC 2']),
+            ('training', 'AMC MCQ', ['AMC 1']),
+            ('training', 'AMC Clinical', ['AMC 2']),
             ('portfolio', 'Portfolio Services', ['Portfolio Plus']),
         ]
         for pw, prod, vals in new_plans:
@@ -26331,7 +26341,9 @@ def seed_plan_type_product_links():
         conn.commit()
 
         # Tag the new-pathway products (live doesn't query these pathways yet)
-        for prod, pw in [('AMC MCQ', 'training'), ('Portfolio Services', 'portfolio')]:
+        for prod, pw in [('AMC MCQ', 'training'), ('AMC Clinical', 'training'),
+                         ('Portfolio Services', 'portfolio'), ('UAE PGCP', 'uae'),
+                         ('UAE Consulting', 'consulting')]:
             try:
                 conn.execute("UPDATE products_services SET pathway = ? WHERE name = ?", (pw, prod))
             except Exception:

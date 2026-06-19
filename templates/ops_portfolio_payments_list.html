@@ -162,16 +162,6 @@
     </div>
 </div>
 
-<div class="summary-strip">
-    <div class="summary-card">
-        <div class="lbl">Total Payments</div>
-        <div class="val">{{ total }}</div>
-    </div>
-    <div class="summary-card">
-        <div class="lbl">Total Amount (incl. GST)</div>
-        <div class="val">&#8377; {{ '{:,.0f}'.format(total_amount) }}</div>
-    </div>
-</div>
 
 <form class="filter-bar" method="get" action="{{ url_for('ops_portfolio_payments_list') }}">
     <div class="autocomplete-wrap">
