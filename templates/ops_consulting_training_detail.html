@@ -1,0 +1,124 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Consulting Training - {{ record.english_training or record.course_type or 'Training Record' }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_consulting_training_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to Training
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">
+          {{ record.english_training or record.course_type or 'Training Record' }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ record.registration_number|format_reg }}
+          {% if record.first_name or record.last_name %}
+            &middot; Candidate: {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+          {% endif %}
+        </p>
+        {% if record.start_date or record.end_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          {% if record.start_date %}Start: {{ record.start_date }}{% endif %}
+          {% if record.start_date and record.end_date %} &middot; {% endif %}
+          {% if record.end_date %}End: {{ record.end_date }}{% endif %}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        {% set s = (record.coaching_status or '')|lower %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if 'complet' in s %}
+            background:#DCFCE7;color:#166534;
+          {% elif 'progress' in s or 'ongoing' in s %}
+            background:#DBEAFE;color:#1D4ED8;
+          {% elif 'pending' in s or 'scheduled' in s %}
+            background:#FEF3C7;color:#92400E;
+          {% elif 'cancel' in s or 'drop' in s %}
+            background:#FEE2E2;color:#B91C1C;
+          {% else %}
+            background:#F3F4F6;color:#4B5563;
+          {% endif %}
+        ">
+          {{ record.coaching_status or 'Unknown' }}
+        </div>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_consulting_training_edit_page', rid=record.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Training
+        </a>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Program Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Program Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Program:</span><span style="color:var(--navy);font-weight:600;">{{ record.english_training or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Course Type:</span><span style="color:var(--navy);font-weight:600;">{{ record.course_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Coaching Method:</span><span style="color:var(--navy);font-weight:600;">{{ record.coaching_method or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.coaching_status or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Vendor Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Vendor / Provider</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Vendor:</span><span style="color:var(--navy);font-weight:600;">{{ record.vendor_provider or '—' }}</span></div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Schedule Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Schedule</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Start Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.start_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">End Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.end_date or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Batch Year:</span><span style="color:var(--navy);font-weight:600;">{{ record.batch_year or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Batch Month:</span><span style="color:var(--navy);font-weight:600;">{{ record.batch_month or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Candidate Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Candidate</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Name:</span><span style="color:var(--navy);font-weight:600;">
+            {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+          </span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if record.email %}<a href="mailto:{{ record.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+{% endblock %}

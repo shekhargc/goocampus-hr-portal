@@ -41,7 +41,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instalment</label>
                     <select name="instalment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Instalment</option>
                         {% for inst in instalment_options %}
                         <option value="{{ inst }}" {% if record.instalment == inst %}selected{% endif %}>{{ inst }}</option>
                         {% endfor %}
@@ -52,7 +52,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Method</label>
                     <select name="payment_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Payment Method</option>
                         {% for method in payment_methods %}
                         <option value="{{ method }}" {% if record.payment_method == method %}selected{% endif %}>{{ method }}</option>
                         {% endfor %}

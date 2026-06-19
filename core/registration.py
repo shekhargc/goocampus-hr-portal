@@ -33,8 +33,13 @@ import re
 PATHWAY_REG_PREFIX = {
     'plab': 'GCUKIP',
     'australia': 'GCAUSIP',
-    'uae': 'GCUAEIP',
+    'uae': 'GCUAE',   # data + portal standardised on GCUAE/<FY>/<NNN>
     'consulting': 'GCCSS',
+    # Phase 4 lightweight pathways (2026-06-18):
+    #   portfolio -> GCPPLUS (GC Portfolio Plus)
+    #   training  -> GCTRN   (GC Training)
+    'portfolio': 'GCPPLUS',
+    'training': 'GCTRN',
 }
 
 
@@ -53,6 +58,15 @@ def pathway_from_product_name(product_name):
     n = (product_name or '').upper()
     if not n:
         return 'plab'
+    # Phase 4 lightweight pathways — matched BEFORE the medical pathways so
+    # specific products (e.g. 'AMC MCQ' -> training) don't fall through to
+    # the AMC/Australia keyword below.
+    #   Portfolio pathway  -> 'Portfolio Services' / anything containing PORTFOLIO
+    #   Training pathway   -> 'AMC MCQ' or anything containing TRAINING
+    if 'PORTFOLIO' in n:
+        return 'portfolio'
+    if 'TRAINING' in n or 'AMC MCQ' in n:
+        return 'training'
     # Australia / AMC pathway
     if 'AUSTRALIA' in n or 'AMC' in n or 'AUSIP' in n or n.startswith('AUS '):
         return 'australia'

@@ -123,18 +123,59 @@
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan &amp; Stage</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Product / Service</label>
+                    <select name="product_id" id="product_id" data-pathway="consulting" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Product / Service</option>
+                        {% for prod in products %}
+                        <option value="{{ prod.id }}" data-name="{{ prod.name }}" {% if client.product_id == prod.id %}selected{% endif %}>{{ prod.name }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Plan Type</label>
-                    <select name="plan_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                    <select name="plan_type" id="plan_type" data-current="{{ client.plan_type or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Plan Type</option>
                         {% for plan in plan_types %}
                         <option value="{{ plan }}" {% if client.plan_type == plan %}selected{% endif %}>{{ plan }}</option>
                         {% endfor %}
                     </select>
                 </div>
+                <script>
+                (function() {
+                    var prodSel = document.getElementById('product_id');
+                    var planSel = document.getElementById('plan_type');
+                    if (!prodSel || !planSel) return;
+                    var pathway = prodSel.getAttribute('data-pathway') || 'consulting';
+                    function repopulatePlans(keepValue) {
+                        var opt = prodSel.options[prodSel.selectedIndex];
+                        var prodName = opt ? (opt.getAttribute('data-name') || '') : '';
+                        var url = '/operations/api/plan-types?pathway=' + encodeURIComponent(pathway);
+                        if (prodName) url += '&product=' + encodeURIComponent(prodName);
+                        fetch(url).then(function(r){ return r.json(); }).then(function(plans){
+                            var current = keepValue ? (planSel.getAttribute('data-current') || '') : '';
+                            planSel.innerHTML = '<option value="">Select Plan Type</option>';
+                            var found = false;
+                            plans.forEach(function(p){
+                                var o = document.createElement('option');
+                                o.value = p; o.textContent = p;
+                                if (current && p === current) { o.selected = true; found = true; }
+                                planSel.appendChild(o);
+                            });
+                            if (current && !found) {
+                                var o = document.createElement('option');
+                                o.value = current; o.textContent = current; o.selected = true;
+                                planSel.appendChild(o);
+                            }
+                        }).catch(function(){});
+                    }
+                    prodSel.addEventListener('change', function(){ repopulatePlans(false); });
+                    if (prodSel.value) { repopulatePlans(true); }
+                })();
+                </script>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
                     <select name="account_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Account Status</option>
                         {% for status in account_statuses %}
                         <option value="{{ status }}" {% if client.account_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -145,7 +186,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Current Stage</label>
                     <select name="current_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Current Stage</option>
                         {% for stage in plab_stages %}
                         <option value="{{ stage }}" {% if client.current_stage == stage %}selected{% endif %}>{{ stage }}</option>
                         {% endfor %}
@@ -154,7 +195,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Switched Program</label>
                     <select name="switched_program" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Switched Program</option>
                         {% for prog in switched_programs %}
                         <option value="{{ prog }}" {% if client.switched_program == prog %}selected{% endif %}>{{ prog }}</option>
                         {% endfor %}
@@ -168,7 +209,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
                     <select name="counsellor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Counsellor</option>
                         {% for c in counsellors %}
                         <option value="{{ c }}" {% if client.counsellor == c %}selected{% endif %}>{{ c }}</option>
                         {% endfor %}
@@ -177,7 +218,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source</label>
                     <select name="lead_source" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Lead Source</option>
                         {% for source in lead_sources %}
                         <option value="{{ source }}" {% if client.lead_source == source %}selected{% endif %}>{{ source }}</option>
                         {% endfor %}

@@ -126,6 +126,15 @@
         </div>
     </div>
 
+    <!-- Pathway tabs — one centralised Vendors & Providers page, filtered per pathway -->
+    {% set tab_pathway = request.args.get('pathway','') %}
+    <div style="display:flex;gap:0.5rem;margin-bottom:1.1rem;flex-wrap:wrap;">
+        {% for slug, label in [('','All Pathways'), ('plab','UK Pathway'), ('australia','AMC Pathway'), ('consulting','Standard Consulting'), ('portfolio','Portfolio Pathway')] %}
+        <a href="{{ '/operations/vendors-providers' if not slug else '/operations/vendors-providers?pathway=' + slug }}"
+           style="padding:0.45rem 1.05rem;border-radius:999px;font-size:0.82rem;font-weight:700;text-decoration:none;border:1px solid {% if tab_pathway == slug %}var(--orange){% else %}var(--gray-300){% endif %};background:{% if tab_pathway == slug %}var(--orange){% else %}white{% endif %};color:{% if tab_pathway == slug %}white{% else %}var(--gray-600){% endif %};transition:all 0.15s;">{{ label }}</a>
+        {% endfor %}
+    </div>
+
     <!-- Tabs -->
     <div class="vp-tabs">
         <button class="vp-tab active" id="tabVP" onclick="switchTab('vendors')">

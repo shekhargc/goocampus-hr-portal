@@ -35,7 +35,62 @@ when the AMC / Consulting Field Manager hasn't been seeded yet, so empty
 dropdowns shouldn't happen as long as PLAB has values seeded.
 """
 
-from app import get_lookup_options
+from app import get_lookup_options, get_vendors_by_category
+from db import get_db
+
+
+# Maps the pathway slug used by the AMC/Consulting routes to the
+# vendors_providers.country value the centralised vendor list is stored
+# under. AMC routes pass pathway='australia' → 'AMC Pathway'.
+_VENDOR_COUNTRY = {
+    'australia': 'AMC Pathway',
+    'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway',
+    'plab': 'UK Pathway',
+}
+
+
+def vendor_names_for(category, pathway, fallback_lookup=None):
+    """Return centralised vendor names for a category + pathway.
+
+    Pulls active vendors from vendors_providers (scoped by country, e.g.
+    'AMC Pathway') for the given vp_category and returns just their names —
+    this is the option list for a vendor <select>. Falls back to the
+    pathway-scoped lookup_options list (fallback_lookup) when the
+    centralised vendor list is empty, so existing forms never go blank.
+    """
+    country = _VENDOR_COUNTRY.get((pathway or '').strip().lower(), 'UK Pathway')
+    try:
+        vendors = get_vendors_by_category(category, country)
+        names = [v['name'] for v in vendors] if vendors else []
+    except Exception:
+        names = []
+    if names:
+        return names
+    if fallback_lookup:
+        return get_lookup_options(fallback_lookup, pathway=pathway) or []
+    return []
+
+
+def section_client_products(pathway):
+    """Active Products/Services for a pathway as {'products': [ {id, name}, ... ]}.
+
+    Drives the Product/Service <select> on the AMC / Consulting client edit
+    forms. Plan Type then cascades from the chosen product via the
+    /operations/api/plan-types endpoint (client-side JS in the template).
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            ((pathway or '').strip().lower(),)).fetchall()
+        products = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception:
+        products = []
+    finally:
+        conn.close()
+    return {'products': products}
 
 
 # ── Per-section dropdown maps ──────────────────────────────────────────────
@@ -111,11 +166,20 @@ def section_academic_lookups(pathway):
 
 
 def section_research_lookups(pathway):
-    """Research & Publication edit form (ops_*_research_edit.html)."""
+    """Research & Publication edit form (ops_*_research_edit.html).
+
+    research_providers is sourced from the centralised vendor list
+    (vendors_providers, category 'Research & Publications') so the vendor
+    select matches the PLAB form; falls back to the research_provider
+    lookup_options list when no vendors are seeded. research_services is the
+    full server-rendered deliverable list the cascade narrows from.
+    """
     return {
         'research_statuses':  get_lookup_options('research_status',  pathway=pathway),
         'author_positions':   get_lookup_options('author_position',  pathway=pathway),
-        'research_providers': get_lookup_options('research_provider',pathway=pathway),
+        'research_providers': vendor_names_for('Research & Publications', pathway,
+                                               fallback_lookup='research_provider'),
+        'research_services':  get_lookup_options('research_service', pathway=pathway),
     }
 
 
@@ -130,7 +194,13 @@ def section_training_lookups(pathway):
         'coaching_statuses':  get_lookup_options('coaching_status',      pathway=pathway),
         'training_programs':  get_lookup_options('training_program',     pathway=pathway),
         'batch_months':       get_lookup_options('batch_month',          pathway=pathway),
+        'batch_years':        get_lookup_options('batch_year',           pathway=pathway),
+        'booked_by_options':  get_lookup_options('coaching_booked_by',   pathway=pathway),
         'attendance_options': get_lookup_options('coaching_attendance',  pathway=pathway) or ['Present', 'Absent'],
+        # Centralised vendor list for the Training Programs category — drives
+        # the vendor-first <select>; training_program then cascades from it.
+        'training_vendors':   vendor_names_for('Training Programs', pathway,
+                                               fallback_lookup='training_program'),
     }
 
 
@@ -148,6 +218,11 @@ def section_online_courses_lookups(pathway):
         'subscription_types':     get_lookup_options('subscription_type',      pathway=pathway),
         'activation_types':       get_lookup_options('activation_type',        pathway=pathway),
         'booked_by_options':      get_lookup_options('subscription_booked_by', pathway=pathway),
+        # Centralised vendor list for the Online Subscriptions category —
+        # drives the vendor-first <select>; the subscription/course name then
+        # cascades from it.
+        'subscription_vendors':   vendor_names_for('Online Subscriptions', pathway,
+                                                   fallback_lookup='subscription_type'),
     }
 
 
@@ -157,6 +232,11 @@ def section_webinars_lookups(pathway):
         'event_types':         get_lookup_options('event_type',         pathway=pathway),
         'event_values':        get_lookup_options('event_value',        pathway=pathway),
         'participation_types': get_lookup_options('participation_type', pathway=pathway),
+        'event_statuses':      get_lookup_options('event_status',       pathway=pathway),
+        # Centralised vendor list for the Webinars category — drives the
+        # vendor-first Provider <select>; event_type then cascades from it.
+        'webinar_vendors':     vendor_names_for('Webinars', pathway,
+                                                fallback_lookup='event_type'),
     }
 
 

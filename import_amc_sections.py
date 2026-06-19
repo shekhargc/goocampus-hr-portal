@@ -27,7 +27,18 @@ Run:
 import os, re
 from datetime import datetime, date
 
-DL = os.environ.get('DOWNLOADS', '/Users/Santosh/Downloads')
+DL = os.environ.get('AMC_DIR') or os.environ.get('DOWNLOADS', '/Users/Santosh/Desktop/Zoho Data/AMC PGCP')
+
+
+def _resolve(fname):
+    """New AMC exports carry an 'AMC - ' prefix; fall back to the bare name."""
+    for cand in (f"AMC - {fname}", fname):
+        p = os.path.join(DL, cand)
+        if os.path.exists(p):
+            return p
+    return os.path.join(DL, fname)
+
+
 PATHWAY = 'australia'
 DRY = os.environ.get('DRY_RUN') in ('1', 'true', 'True')
 
@@ -145,8 +156,8 @@ CLIENT_MAP = {
 
 def step_clients():
     import openpyxl
-    path = os.path.join(DL, CLIENT_FILE)
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+    path = _resolve(CLIENT_FILE)
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
     headers = [str(h).strip() if h is not None else '' for h in next(it)]
     hi = {h: i for i, h in enumerate(headers)}
@@ -233,7 +244,7 @@ def resolve_reg(idx, reg_val, name_val, email_val, mobile_val):
 
 # ── SECTIONS config: (file, table, reg_col, name_col, email_col, mobile_col, mapping) ──
 SECTIONS = {
- 'academic': ("All Academic Details (1).xlsx", "ops_academic_details", None, "Enter Name", None, None, {
+ 'academic': ("All Academic Details (1).xlsx", "ops_academic_details", None, "Enter Candidate Name", None, None, {
     'img_fmg':('IMG / FMG','s'),'img_medical_college':('IMG Medical College Name','s'),
     'fmg_medical_college':('FMG Medical College Name','s'),'country':('Country','s'),
     'mbbs_status':('MBBS Status','s'),'mbbs_start_date':('MBBS Start Date','d'),'mbbs_end_date':('MBBS End Date','d'),
@@ -289,13 +300,13 @@ SECTIONS = {
     'coaching_method':('Training Method','s'),'coaching_status':('Training Status','s'),
     'batch_year':('Batch Year','s'),'batch_month':('Batch (Month)','s'),
     'start_date':('Start Date','d'),'end_date':('End Date','d'),
-    'other_vendor':('Training Vendor Name','s'),
+    'other_vendor':('Training Vendor Name','s'),'booked_by':('Booked By','s'),
  }),
  'call_notes': ("Client Call Notes Report (2).xlsx", "ops_call_notes", None, "Candidate Name", None, None, {
     'call_date':('Call Date','d'),'call_note':('Call Notes','s'),'added_by':('Added User','s'),
  }),
  'research': ("Research and Publication Report (1).xlsx", "ops_research_publication", None, "Enter Candidate Name", None, None, {
-    'research_status':('Research Status','s'),'research_start_date':('Research Start Date','d'),
+    'research_status':('Research Status','s'),'research_start_date':('Research Start Date','d'),'service':('Service','s'),
     'research_topic':('Research Topic','s'),'research_batch':('Research Batch','s'),
     'research_end_date':('Research End Date','d'),'research_provider':('Research Provider','s'),
     'published_journal_name':('Published Journal Name','s'),'author_position':('Author Position','s'),
@@ -303,6 +314,7 @@ SECTIONS = {
  }),
  'webinars': ("Webinar and Conferences Report (1).xlsx", "ops_webinars_conferences", None, "Candidate Name", None, None, {
     'event_type':('Event Type','s'),'participation_type':('Participation Type','s'),
+    'provider':('Provider Name','s'),
     'event_value':('Event Value','s'),'start_date':('Start Date','d'),'end_date':('End Date','d'),
     'duration_days':('Durantion (Number of Days)','s'),
     'event_name':('Webinar & Conference Name','s'),'cpd_points':('Points','s'),'notes':('Notes','s'),
@@ -318,10 +330,10 @@ def step_sections(idx):
     for key, cfg in SECTIONS.items():
         if only and key not in only: continue
         fname, table, reg_col, name_col, email_col, mobile_col, mapping = cfg
-        path = os.path.join(DL, fname)
+        path = _resolve(fname)
         if not os.path.exists(path):
             print(f"[{key}] MISSING {fname}"); continue
-        wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+        wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
         headers = [str(c.value).strip() if c.value is not None else '' for c in next(ws.iter_rows(min_row=1, max_row=1))]
         hidx = {h: i for i, h in enumerate(headers)}
         cols = ['registration_number'] + list(mapping.keys()) + ['pathway']
@@ -369,9 +381,9 @@ def step_sections(idx):
 def step_onboarding(idx):
     import openpyxl
     by_reg_cid = idx[4]
-    path = os.path.join(DL, "OnBoarding Status (R) (1).xlsx")
+    path = _resolve("OnBoarding Status (R) (1).xlsx")
     if not os.path.exists(path): print("[onboarding] MISSING file"); return
-    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.active
+    wb = openpyxl.load_workbook(path, read_only=True, data_only=True); ws = wb.worksheets[0]
     it = ws.iter_rows(values_only=True)
     headers = [str(h).strip() if h is not None else '' for h in next(it)]
     hi = {h: i for i, h in enumerate(headers)}

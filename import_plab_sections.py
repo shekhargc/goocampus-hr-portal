@@ -20,7 +20,7 @@ import os, re
 from datetime import datetime, date
 from db import get_db
 
-DL = os.environ.get('DOWNLOADS', '/Users/Santosh/Downloads')
+DL = os.environ.get('UK_DIR') or os.environ.get('DOWNLOADS', '/Users/Santosh/Desktop/Zoho Data/UK GC')
 
 
 def s(v):
@@ -135,7 +135,7 @@ def resolve_reg(idx, reg_val, name_val, email_val, mobile_val):
 # (file, table, reg_col, name_col, email_col, mobile_col, mapping)
 # mapping: table_col -> (excel_header, kind)  kind in {s,d,num}
 SECTIONS = {
- 'academic': ("Academic Details (R).xlsx", "ops_academic_details", None, "Search Name", None, None, {
+ 'academic': ("Academic Details (R).xlsx", "ops_academic_details", None, "Enter Candidate Name", None, None, {
     'img_fmg':('IMG / FMG','s'),'img_medical_college':('IMG Medical College Name','s'),
     'fmg_medical_college':('FMG Medical College Name','s'),'country':('Country','s'),
     'mbbs_status':('MBBS Status','s'),'mbbs_start_date':('MBBS Start Date','d'),'mbbs_end_date':('MBBS End Date','d'),
@@ -181,9 +181,8 @@ SECTIONS = {
     'coaching_method':('Coaching Method','s'),'coaching_status':('Coaching Status','s'),
     'batch_month':('Batch (Month)','s'),'batch_year':('Batch (year)','s'),
     'start_date':('Start Date','d'),'end_date':('End Date','d'),'attendance':('Training Attendance','s'),
-    'ielts_vendor':('IELTS Training Vendor','s'),'oet_vendor':('OET Training Vendor','s'),
-    'other_vendor':('Other Training Vendor','s'),'plab1_partner':('PLAB 1 Training Partner','s'),
-    'plab2_vendor':('PLAB 2 Training Vendor','s'),
+    # New export collapsed the 5 per-exam vendor columns into one "Training Vendor".
+    'vendor_provider':('Training Vendor','s'),
  }),
  'online_courses': ("Online Courses (R).xlsx", "ops_online_courses", None, "Candidate Name", "Candidate Email", "Mobile Number", {
     'courses_name':('Courses Name','s'),'course_type':('Course Type','s'),'start_date':('Start Date','d'),
@@ -193,13 +192,14 @@ SECTIONS = {
     'mobile_number':('Mobile Number','s'),'candidate_email':('Candidate Email','s'),'notes':('Notes','s'),
  }),
  'subscriptions': ("Online Subscriptions.xlsx", "ops_online_subscriptions", None, "Candidate Name", "Candidate Email", "Mobile Number", {
-    'online_subscription':('Online Subscription','s'),'issued_date':('Issued Date','d'),
+    'online_subscription':('Online Subscription','s'),'subscription_provider':('Subscription Providers','s'),
+    'issued_date':('Issued Date','d'),
     'activation_type':('Activation type','s'),'notes':('Notes','s'),'client_email':('Client Email','s'),
     'login_id':('Login Id','s'),'password':('Password','s'),'booked_by':('Booked By','s'),
     'mobile_number':('Mobile Number','s'),'candidate_email':('Candidate Email','s'),
  }),
  'research': ("Research and Publication (R).xlsx", "ops_research_publication", None, "Enter Candidate Name", "Candidate Email", "Mobile Number", {
-    'research_status':('Research Status','s'),'research_topic':('Research Topic','s'),
+    'research_status':('Research Status','s'),'research_topic':('Research Topic','s'),'service':('Service','s'),
     'published_copy':('Published Copy','s'),'research_start_date':('Research Start Date','d'),
     'research_end_date':('Research End Date','d'),'research_provider':('Research Provider','s'),
     'published_journal_name':('Published Journal Name','s'),'author_position':('Author Position','s'),
@@ -210,13 +210,14 @@ SECTIONS = {
     'event_type':('Event Type','s'),'start_date':('Start Date','d'),'end_date':('End Date','d'),
     'duration_days':('Duration (Days)','s'),'event_value':('Event Value','s'),
     'cpd_points':('CPD Points','s'),'event_name':('Webinar and Event Name','s'),
-    'participation_type':('Conference Participation Type','s'),'notes':('Notes','s'),
+    'provider':('Provider','s'),
+    'participation_type':('Participation Type','s'),'notes':('Notes','s'),
     'mobile_number':('Mobile Number','s'),'candidate_email':('Candidate Email','s'),
  }),
  'call_notes': ("Client Call Notes Report (1).xlsx", "ops_call_notes", None, "Candidate Name", None, None, {
     'call_date':('Call Date','d'),'call_note':('Call Note','s'),'added_by':('Added User','s'),
  }),
- 'english_logins': ("All English Login Details.xlsx", "ops_english_logins", "GC UK Registration", "Candidate Name", "Candidate Email", "Mobile Number", {
+ 'english_logins': ("All English Login Details.xlsx", "ops_english_logins", None, "Enter Candidate Name", None, None, {
     'ielts_login_id':('IELTS Login IID','s'),'ielts_password':('IELTS Password','s'),
     'ielts_hint_question':('IELTS Hint Question','s'),'ielts_security_answer':('IELTS Security Answer','s'),
     'oet_login_id':('OET Login ID','s'),'oet_password':('OET Password','s'),
@@ -229,11 +230,12 @@ SECTIONS = {
  'uk_cab': ("All Uk Cab Bookings.xlsx", "ops_uk_cab_bookings", None, "Enter Candidate Name", "Candidate Email", "Contact Number", {
     'candidate_email':('Candidate Email','s'),'contact_number':('Contact Number','s'),
     'whatsapp_number':('Whats App Number','s'),'whatsapp_number_2':('Whats App Number 2','s'),
-    'vendor':('Vendor','s'),'booking_date':('Booking Date','d'),'invoice_number':('Invoice Number','s'),
+    'vendor':('Vendor','s'),'services':('Services','s'),'booking_date':('Booking Date','d'),
+    'invoice_number':('Invoice Number','s'),'additional_instructions':('Additional Instructions','s'),
     'pick_up_date':('Pick Up Date','d'),'pick_up_location':('Pick Up Loaction','s'),
     'drop_location':('Drop Location','s'),'additional_notes':('Additional Notes','s'),
  }),
- 'observerships': ("UK Observership Report.xlsx", "ops_uk_observerships", "GC UK Registration", "Candidate Name", "Candidate Email", "Mobile Number", {
+ 'observerships': ("UK Observership Report.xlsx", "ops_uk_observerships", None, "Enter Candidate Name", None, None, {
     'hospital_name':('Hospital Name','s'),'hospital_location':('Hospital Location','s'),
     'start_date':('Start Date','d'),'end_date':('End Date','d'),'speciality':('Speciality','s'),
     'payment':('Payment','s'),'mobile_number':('Mobile Number','s'),'candidate_email':('Candidate Email','s'),
@@ -252,11 +254,14 @@ SECTIONS = {
  }),
  'mentorship': ("Mentorship Report.xlsx", "ops_mentorship", None, "Candidate Name", "Candidate Email", "Mobile Number", {
     'session_date':('Date','d'),'start_time':('Start Time','s'),'end_time':('End Time','s'),
-    'duration_minutes':('Duration (Minutes)','s'),'amount_paid':('Amount Paid','num'),
+    'duration_minutes':('Duration (Minutes)','s'),
+    # New export: Amount Paid -> Fee Paid (+ currency); Services Type is the
+    # Paid/Not Paid flag; Service Description is free text.
+    'amount_paid':('Fee Paid','num'),'fee_currency':('Fee Currency','s'),
+    'payment_status':('Services Type','s'),'service_description':('Service Description','s'),
     'candidate_attendance':('Candidate Attendance','s'),'additional_notes':('Additional Notes','s'),
     'session_confirmation':('Session Confirmation','s'),'program_provider':('Program Provider','s'),
-    'mentor_attendance':('Mentor Attendance','s'),'mobile_number':('Mobile Number','s'),
-    'candidate_email':('Candidate Email','s'),
+    'mentor_attendance':('Mentor Attendance','s'),
  }),
 }
 
@@ -308,12 +313,20 @@ def run():
         if only and key not in only:
             continue
         fname, table, reg_col, name_col, email_col, mobile_col, mapping = cfg
-        path = os.path.join(DL, fname)
-        if not os.path.exists(path):
+        # New Zoho exports live in UK_DIR with a "PLAB - " prefix (the GMC file
+        # has no space: "PLAB -..."). Resolve whichever variant exists so the
+        # legacy bare filename in SECTIONS still maps to the new file.
+        path = None
+        for cand in (fname, f"PLAB - {fname}", f"PLAB -{fname}"):
+            p = os.path.join(DL, cand)
+            if os.path.exists(p):
+                path = p
+                break
+        if not path:
             print(f"[{key}] MISSING FILE {fname}, skip")
             continue
         wb = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        ws = wb.active
+        ws = wb.worksheets[0]   # data sheet (sheet 0); sheet 1 is "Drop Downs"
         headers = [str(c.value).strip() if c.value is not None else '' for c in next(ws.iter_rows(min_row=1, max_row=1))]
         hidx = {h: i for i, h in enumerate(headers)}
 

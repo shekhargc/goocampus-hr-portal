@@ -1,0 +1,96 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}Eligibility Letter Record - {{ record.registration_number|format_reg }}{% endblock %}
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_uae_eligibility_list') }}" style="color:#0EA5E9;text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">&larr; Back to Eligibility Letter</a>
+  </div>
+
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:28px;font-weight:700;color:var(--navy);">Eligibility Letter Record</h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ record.registration_number|format_reg }}
+          {% if record.first_name or record.last_name %}
+            &middot; {{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}
+          {% endif %}
+        </p>
+      </div>
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_uae_eligibility_edit_page', rid=record.id) }}" style="padding:10px 20px;background:#0EA5E9;color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">Edit Record</a>
+        <a href="/operations/uae/clients/by-reg/{{ record.registration_number }}" style="padding:10px 20px;background:var(--navy);color:white;border:none;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px;">View Client Profile</a>
+      </div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid #0EA5E9;padding-bottom:12px;">Candidate</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Registration No.:</span>
+            <span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Name:</span>
+            <span style="color:var(--navy);font-weight:600;">
+              {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
+            </span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Mobile:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.mobile or '—' }}</span>
+          </div>
+        </div>
+      </div>
+
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid #0EA5E9;padding-bottom:12px;">Eligibility Letter Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Completed By:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.completed_by or '—' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Eligibility Registration Date:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.eligibility_registration_date or '—' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Eligibility Status:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.eligibility_status or '—' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div style="display:flex;flex-direction:column;gap:24px;">
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid #0EA5E9;padding-bottom:12px;">Meta</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Record ID:</span>
+            <span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.id }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Created At:</span>
+            <span style="color:var(--navy);font-weight:600;">{{ record.created_at or '—' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Pathway:</span>
+            <span style="color:var(--navy);font-weight:600;">UAE Pathway</span>
+          </div>
+        </div>
+      </div>
+
+      {% if record.notes %}
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid #0EA5E9;padding-bottom:12px;">Notes</h3>
+        <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;font-size:14px;">{{ record.notes }}</p>
+      </div>
+      {% endif %}
+    </div>
+  </div>
+</div>
+{% endblock %}

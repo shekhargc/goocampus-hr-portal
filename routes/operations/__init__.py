@@ -86,6 +86,70 @@ def register_operations_modules(app):
     from . import cs_mentorship
     cs_mentorship.register_routes(app)
 
+    # Standard Consulting — Services sections (manual data entry, no import).
+    # Each clones the AMC (australia) section module scoped to
+    # pathway='consulting'; list (with drawer) + detail + add + edit.
+    #   Training              -> ops_coaching
+    #   Online Subscriptions  -> ops_online_subscriptions
+    #   Webinars & Conferences-> ops_webinars_conferences
+    #   Research & Publication-> ops_research_publication
+    #   Online Courses        -> ops_online_courses (DISTINCT from subscriptions)
+    from . import cs_training, cs_online_subscriptions, cs_webinars
+    from . import cs_research, cs_online_courses
+    cs_training.register_routes(app)
+    cs_online_subscriptions.register_routes(app)
+    cs_webinars.register_routes(app)
+    cs_research.register_routes(app)
+    cs_online_courses.register_routes(app)
+
+    # Phase 4 lightweight pathways — Portfolio + Training.
+    # Each is a clone of Standard Consulting trimmed to 5 sections:
+    # Dashboard, Registration (clients), Payments, Documents, Call Notes.
+    # No medical sections (EPIC / GMC / AMC reg / academic / mentorship / etc.).
+    #   Portfolio  (/operations/portfolio, prefix GCPPLUS, pathway='portfolio')
+    #   Training   (/operations/training,  prefix GCTRN,   pathway='training')
+    from . import portfolio, pf_payments, pf_call_notes
+    portfolio.register_routes(app)
+    pf_payments.register_routes(app)
+    pf_call_notes.register_routes(app)
+
+    # Portfolio Pathway — Services sections (manual data entry, no import).
+    # Each clones the Standard Consulting section module scoped to
+    # pathway='portfolio'; list (with drawer) + detail + add + edit. They
+    # keep the vendor-first cascade (vendor select on top, deliverable
+    # cascades via /operations/api/vendor-services?pathway=portfolio).
+    #   Research & Publications  -> ops_research_publication
+    #   Courses & Certifications -> ops_online_courses
+    #   Webinars & Conferences   -> ops_webinars_conferences
+    from . import pf_research, pf_courses, pf_webinars
+    pf_research.register_routes(app)
+    pf_courses.register_routes(app)
+    pf_webinars.register_routes(app)
+
+    # UAE Pathway — mirrors Portfolio (Registration / Documents / Payments /
+    # Call Notes + the pathway dashboard, reg prefix GCUAE, pathway='uae')
+    # PLUS three brand-new sections: Self Assessment, Eligibility Letter,
+    # and Data Flow. Six modules, all scoped to pathway='uae'.
+    #   uae               (/operations/uae, clients, documents, dashboard)
+    #   uae_payments      (/operations/uae/payments)
+    #   uae_call_notes    (/operations/uae/call-notes)
+    #   uae_self_assessment (/operations/uae/self-assessment)
+    #   uae_eligibility   (/operations/uae/eligibility-letter)
+    #   uae_data_flow     (/operations/uae/data-flow)
+    from . import uae, uae_payments, uae_call_notes
+    from . import uae_self_assessment, uae_eligibility, uae_data_flow
+    uae.register_routes(app)
+    uae_payments.register_routes(app)
+    uae_call_notes.register_routes(app)
+    uae_self_assessment.register_routes(app)
+    uae_eligibility.register_routes(app)
+    uae_data_flow.register_routes(app)
+
+    from . import training, tr_payments, tr_call_notes
+    training.register_routes(app)
+    tr_payments.register_routes(app)
+    tr_call_notes.register_routes(app)
+
     # Australia Operations sub-sections (Phase 3 + Phase 4 standardization).
     # Each module owns one /operations/australia/<section>/* slice:
     #   list (with drawer), detail page, edit form GET, edit save POST.

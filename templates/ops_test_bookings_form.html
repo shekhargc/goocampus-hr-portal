@@ -39,7 +39,7 @@
             <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
                     <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
@@ -58,7 +58,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam *</label>
                     <select name="exam" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select exam —</option>
+                        <option value="">Select Exam</option>
                         {% for exam_name in exam_names %}
                         <option value="{{ exam_name }}" {% if record and record.exam == exam_name %}selected{% endif %}>{{ exam_name }}</option>
                         {% endfor %}
@@ -67,7 +67,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Booked By</label>
                     <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Exam Booked By</option>
                         {% for b in exam_booked_by %}
                         <option value="{{ b }}" {% if record and record.booked_by == b %}selected{% endif %}>{{ b }}</option>
                         {% endfor %}
@@ -94,7 +94,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Method</label>
                     <select name="exam_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Exam Method</option>
                         {% for m in exam_methods %}
                         <option value="{{ m }}" {% if record and record.exam_type == m %}selected{% endif %}>{{ m }}</option>
                         {% endfor %}
@@ -109,7 +109,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Country</label>
                     <select name="country" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Country</option>
                         {% for c in exam_countries %}
                         <option value="{{ c }}" {% if record and record.country == c %}selected{% endif %}>{{ c }}</option>
                         {% endfor %}
@@ -133,7 +133,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Status *</label>
                     <select name="exam_status" id="exam_status" required onchange="updateResultFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select status —</option>
+                        <option value="">Select Exam Status</option>
                         {% for status in exam_statuses %}
                         <option value="{{ status }}" {% if record and record.exam_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -142,7 +142,7 @@
                 <div id="result_field" style="display:none;">
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Exam Result</label>
                     <select name="exam_result" id="exam_result" onchange="updateRevalFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select result —</option>
+                        <option value="">Select Exam Result</option>
                         {% for result in exam_results %}
                         <option value="{{ result }}" {% if record and record.exam_result == result %}selected{% endif %}>{{ result }}</option>
                         {% endfor %}
@@ -163,7 +163,7 @@
                     <div>
                         <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Applying for Revaluation?</label>
                         <select name="revaluation" id="revaluation_select" onchange="updateRevalDetailFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                            <option value="">— Select —</option>
+                            <option value="">Select Applying for Revaluation?</option>
                             {% for r in revaluation_options %}
                             <option value="{{ r }}" {% if record and record.revaluation == r %}selected{% endif %}>{{ r }}</option>
                             {% endfor %}
@@ -179,7 +179,7 @@
                     <div>
                         <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Revaluation Result</label>
                         <select name="reval_result" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                            <option value="">— Select —</option>
+                            <option value="">Select Revaluation Result</option>
                             {% for rr in reval_results %}
                             <option value="{{ rr }}" {% if record and record.reval_result == rr %}selected{% endif %}>{{ rr }}</option>
                             {% endfor %}

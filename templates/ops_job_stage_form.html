@@ -61,7 +61,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Job Confirmed By</label>
                     <select name="job_confirmed_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
+                        <option value="">Select Job Confirmed By</option>
                         {% for opt in job_confirmed_by_options %}
                         <option value="{{ opt }}" {% if record and record.job_confirmed_by == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}

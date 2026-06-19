@@ -1,0 +1,254 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}{% if record.id %}Edit{% else %}Add{% endif %} Webinar / Conference{% if record.id %} - {{ record.event_name or record.event_type or 'Record' }}{% endif %}{% endblock %}
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        {% if record.id %}
+        <a href="{{ url_for('ops_portfolio_webinars_detail', rid=record.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Webinar / Conference</a>
+        {% else %}
+        <a href="{{ url_for('ops_portfolio_webinars_list') }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to List</a>
+        {% endif %}
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record.id %}Edit{% else %}Add{% endif %} Webinar / Conference</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record.id %}Update{% else %}Create a new{% endif %} Portfolio Pathway webinar / conference details, schedule, and CPD points.
+        </p>
+
+        <form method="POST" action="{% if record.id %}{{ url_for('ops_portfolio_webinars_edit_save', rid=record.id) }}{% else %}{{ url_for('ops_portfolio_webinars_add_save') }}{% endif %}">
+
+            <!-- ===== CONTEXT (read-only) ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">{% if record.id %}Registration Number{% else %}Search Candidate Name <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    {% if record.id %}
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% else %}
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="" />
+                    <div style="position:relative;">
+                        <input type="text" id="client_search" autocomplete="off" placeholder="Type candidate name..." required
+                            style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                        <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if record.id %}
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate</label>
+                    <input type="text" value="{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ===== EVENT ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Event</h3>
+
+            <!-- Vendor-first: pick the Provider, then Event Type narrows to that vendor's deliverables -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Provider (Vendor)</label>
+                    <select name="provider" id="webinar_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Provider</option>
+                        {% for wv in webinar_vendors %}
+                        <option value="{{ wv }}" {% if record.provider == wv %}selected{% endif %}>{{ wv }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Type</label>
+                    <select name="event_type" id="webinar_event_type_select" data-current="{{ record.event_type if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Event Type</option>
+                        {% for t in event_types %}
+                        <option value="{{ t }}" {% if record.event_type == t %}selected{% endif %}>{{ t }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Participation Type</label>
+                    <select name="participation_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Participation Type</option>
+                        {% for p in participation_types %}
+                        <option value="{{ p }}" {% if record.participation_type == p %}selected{% endif %}>{{ p }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Webinar / Conference Name</label>
+                    <input type="text" name="event_name" value="{{ record.event_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Value</label>
+                    <select name="event_value" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Event Value</option>
+                        {% for v in event_values %}
+                        <option value="{{ v }}" {% if record.event_value == v %}selected{% endif %}>{{ v }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Status</label>
+                    <select name="event_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Event Status</option>
+                        {% for st in event_statuses %}
+                        <option value="{{ st }}" {% if record.event_status == st %}selected{% endif %}>{{ st }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">CPD Points</label>
+                    <input type="number" step="0.01" name="cpd_points" value="{{ record.cpd_points or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Duration (days)</label>
+                    <input type="number" step="0.01" name="duration_days" value="{{ record.duration_days or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== SCHEDULE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Schedule</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Start Date</label>
+                    <input type="date" name="start_date" value="{{ record.start_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">End Date</label>
+                    <input type="date" name="end_date" value="{{ record.end_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                </div>
+            </div>
+
+            <!-- ===== NOTES ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <div style="margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" rows="4" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;resize:vertical;">{{ record.notes or '' }}</textarea>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="display:flex;gap:0.8rem;justify-content:flex-end;margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--gray-200);">
+                <a href="{% if record.id %}{{ url_for('ops_portfolio_webinars_detail', rid=record.id) }}{% else %}{{ url_for('ops_portfolio_webinars_list') }}{% endif %}" style="padding:0.7rem 1.4rem;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:8px;font-weight:600;font-size:0.9rem;text-decoration:none;">Cancel</a>
+                <button type="submit" style="padding:0.7rem 1.4rem;background:var(--orange);color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">{% if record.id %}Save Changes{% else %}Add Webinar / Conference{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Vendor-first cascade: choosing a Provider narrows the Event Type list to that
+     vendor's deliverables (vendor_service_map, Portfolio Pathway). Falls back to the full
+     server-rendered Event Type list when no vendor is picked, the vendor has no mapped
+     services, or the fetch fails. Always preserves the record's current value. -->
+<script>
+(function() {
+    const vendorSel = document.getElementById('webinar_vendor');
+    const svcSel = document.getElementById('webinar_event_type_select');
+    if (!vendorSel || !svcSel) return;
+    const ALL = Array.from(svcSel.options).map(o => o.value).filter(Boolean);
+    const current = svcSel.getAttribute('data-current') || '';
+    function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function fill(list) {
+        const keep = svcSel.value || current;
+        let html = '<option value="">Select…</option>';
+        let hasKeep = false;
+        list.forEach(s => { if (s === keep) hasKeep = true;
+            html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });
+        if (keep && !hasKeep) html += '<option value="'+esc(keep)+'" selected>'+esc(keep)+' (current)</option>';
+        svcSel.innerHTML = html;
+    }
+    function load() {
+        const v = vendorSel.value.trim();
+        if (!v) { fill(ALL); return; }
+        fetch('/operations/api/vendor-services?pathway=portfolio&category=' +
+              encodeURIComponent('Webinars') + '&vendor=' + encodeURIComponent(v))
+            .then(r => r.json())
+            .then(list => fill(list && list.length ? list : ALL))
+            .catch(() => fill(ALL));
+    }
+    vendorSel.addEventListener('change', load);
+})();
+</script>
+
+<!-- Client autocomplete (ADD mode only) — pathway-scoped to portfolio so only portfolio clients are suggested. -->
+<script>
+(function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput || !hiddenInput || !dropdown) return;  // edit mode: no autocomplete
+    let debounceTimer = null, highlightIdx = -1, items = [];
+
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+
+    searchInput.addEventListener('keydown', function(e) {
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+
+    searchInput.closest('form').addEventListener('submit', function(e) {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a client from the suggestions.');
+        }
+    });
+
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?pathway=portfolio&q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        selectItem(items[parseInt(this.dataset.idx)]);
+                    });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
+    }
+
+    function selectItem(item) {
+        searchInput.value = item.name;
+        hiddenInput.value = item.reg;
+        searchInput.style.borderColor = '#10B981';
+        hide();
+    }
+
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() {
+        dropdown.querySelectorAll('[data-idx]').forEach((el, i) => {
+            el.style.background = i === highlightIdx ? '#f9fafb' : 'white';
+        });
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+
+{% endblock %}

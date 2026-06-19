@@ -1,0 +1,337 @@
+"""
+routes/operations/uae_data_flow.py — Operations: UAE Data Flow.
+
+Brand-new lightweight section for the UAE pathway. Surfaces rows from
+ops_data_flow WHERE pathway='uae', LEFT JOINed to plab_clients on
+registration_number so the candidate name shows alongside each record.
+
+Fields: Data Flow Start Date (date), Data Flow Status (<select> lookup
+'data_flow_status' → In Process/Approved/Rejected), Eligibility Status
+(<select>, also driven by lookup 'data_flow_status' per spec), Notes
+(textarea). list + add + edit + detail, all scoped to pathway='uae'.
+Client picker uses /operations/api/client-search?pathway=uae.
+"""
+
+import logging
+from flask import render_template, flash, request, redirect, url_for
+
+from core.auth import admin_required
+from core.users import get_user
+from db import get_db
+from app import get_lookup_options
+
+
+# Columns on ops_data_flow the add/edit forms may write to.
+# id / registration_number / pathway / created_* are NOT editable via UI.
+UAE_DATA_FLOW_EDITABLE_COLUMNS = [
+    'data_flow_start_date',
+    'data_flow_status',
+    'eligibility_status',
+    'notes',
+]
+
+
+def _uae_data_flow_lookups():
+    """Dropdown options for the Data Flow form (pathway='uae').
+
+    Both Data Flow Status and Eligibility Status pull from the
+    'data_flow_status' lookup category per the section spec.
+    """
+    opts = get_lookup_options('data_flow_status', pathway='uae')
+    return {
+        'data_flow_status_options':  opts,
+        'eligibility_status_options': opts,
+    }
+
+
+@admin_required
+def ops_uae_data_flow_list():
+    """UAE data flow list — ops_data_flow WHERE pathway='uae'."""
+    user = get_user()
+    conn = get_db()
+
+    search = (request.args.get('q', '') or '').strip()
+    status_filter = (request.args.get('status', '') or '').strip()
+    reg = (request.args.get('client', '') or '').strip()
+
+    records = []
+    statuses = []
+    total = 0
+
+    try:
+        sql = '''SELECT t.id, t.registration_number, t.data_flow_start_date,
+                        t.data_flow_status, t.eligibility_status, t.notes,
+                        p.first_name, p.last_name, p.prefix
+                   FROM ops_data_flow t
+                   LEFT JOIN plab_clients p
+                          ON t.registration_number = p.registration_number
+                         AND COALESCE(p.pathway, 'plab') = 'uae'
+                  WHERE COALESCE(t.pathway, 'plab') = 'uae' '''
+        params = []
+        if reg:
+            sql += " AND t.registration_number = ? "
+            params.append(reg)
+        if status_filter:
+            sql += " AND t.data_flow_status = ? "
+            params.append(status_filter)
+        if search:
+            sql += """ AND (
+                p.first_name LIKE ? OR p.last_name LIKE ? OR
+                t.registration_number LIKE ? OR t.notes LIKE ?
+            ) """
+            params.extend([f'%{search}%'] * 4)
+        sql += " ORDER BY t.data_flow_start_date DESC NULLS LAST, t.id DESC "
+        records = conn.execute(sql, params).fetchall()
+        total = len(records)
+
+        statuses = [
+            r['data_flow_status'] for r in conn.execute(
+                """SELECT DISTINCT data_flow_status FROM ops_data_flow
+                    WHERE COALESCE(pathway, 'plab') = 'uae'
+                      AND data_flow_status IS NOT NULL AND data_flow_status != ''
+                    ORDER BY data_flow_status"""
+            ).fetchall()
+        ]
+    except Exception as e:
+        logging.error(f"ops_uae_data_flow_list: {e}")
+        flash(f'Error loading UAE data flow records: {e}', 'error')
+    finally:
+        conn.close()
+
+    return render_template(
+        'ops_uae_data_flow_list.html',
+        user=user,
+        records=records,
+        total=total,
+        search=search,
+        status_filter=status_filter,
+        client_reg=reg,
+        statuses=statuses,
+        pathway_name='UAE Pathway',
+        active_ops_page='uae-data-flow',
+        active_pathway='uae',
+    )
+
+
+@admin_required
+def ops_uae_data_flow_detail(rid):
+    """Read-only detail view for a single UAE data flow row."""
+    user = get_user()
+    conn = get_db()
+    record = None
+    try:
+        record = conn.execute(
+            """SELECT t.*, p.first_name, p.last_name, p.prefix,
+                      p.mobile, p.email
+                 FROM ops_data_flow t
+            LEFT JOIN plab_clients p
+                   ON t.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'uae'
+                WHERE t.id = ?
+                  AND COALESCE(t.pathway, 'plab') = 'uae' """,
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_uae_data_flow_detail: {e}")
+    finally:
+        conn.close()
+
+    if not record:
+        flash('UAE data flow record not found.', 'error')
+        return redirect(url_for('ops_uae_data_flow_list'))
+
+    return render_template(
+        'ops_uae_data_flow_detail.html',
+        user=user,
+        record=record,
+        pathway_name='UAE Pathway',
+        active_ops_page='uae-data-flow',
+        active_pathway='uae',
+    )
+
+
+@admin_required
+def ops_uae_data_flow_edit_page(rid):
+    """GET — render the edit form for a UAE data flow row."""
+    user = get_user()
+    conn = get_db()
+    record = None
+    try:
+        record = conn.execute(
+            """SELECT t.*, p.first_name, p.last_name, p.prefix
+                 FROM ops_data_flow t
+            LEFT JOIN plab_clients p
+                   ON t.registration_number = p.registration_number
+                  AND COALESCE(p.pathway, 'plab') = 'uae'
+                WHERE t.id = ?
+                  AND COALESCE(t.pathway, 'plab') = 'uae' """,
+            (rid,),
+        ).fetchone()
+    except Exception as e:
+        logging.error(f"ops_uae_data_flow_edit_page: {e}")
+    finally:
+        conn.close()
+
+    if not record:
+        flash('UAE data flow record not found.', 'error')
+        return redirect(url_for('ops_uae_data_flow_list'))
+
+    return render_template(
+        'ops_uae_data_flow_edit.html',
+        user=user,
+        record=record,
+        pathway_name='UAE Pathway',
+        active_ops_page='uae-data-flow',
+        active_pathway='uae',
+        **_uae_data_flow_lookups(),
+    )
+
+
+@admin_required
+def ops_uae_data_flow_edit_save(rid):
+    """POST — save edits to a UAE data flow row (strict allowlist)."""
+    conn = get_db()
+    try:
+        existing = conn.execute(
+            "SELECT id FROM ops_data_flow "
+            "WHERE id = ? AND COALESCE(pathway, 'plab') = 'uae'",
+            (rid,),
+        ).fetchone()
+        if not existing:
+            flash('UAE data flow record not found.', 'error')
+            return redirect(url_for('ops_uae_data_flow_list'))
+
+        sets, params = [], []
+        for col in UAE_DATA_FLOW_EDITABLE_COLUMNS:
+            if col in request.form:
+                val = request.form.get(col, '').strip()
+                sets.append(f"{col} = ?")
+                params.append(val)
+        if sets:
+            params.append(rid)
+            conn.execute(
+                "UPDATE ops_data_flow SET " + ', '.join(sets)
+                + " WHERE id = ? AND COALESCE(pathway, 'plab') = 'uae'",
+                params,
+            )
+            conn.commit()
+            flash('Data flow record saved.', 'success')
+        else:
+            flash('No changes to save.', 'info')
+    except Exception as e:
+        logging.error(f"ops_uae_data_flow_edit_save: {e}")
+        flash(f'Error saving data flow record: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+    finally:
+        conn.close()
+
+    return redirect(url_for('ops_uae_data_flow_detail', rid=rid))
+
+
+@admin_required
+def ops_uae_data_flow_add_page():
+    """GET — render the empty add form (reuses the edit template)."""
+    user = get_user()
+    empty_record = {col: None for col in UAE_DATA_FLOW_EDITABLE_COLUMNS}
+    empty_record['id'] = None
+    empty_record['registration_number'] = ''
+    empty_record['first_name'] = ''
+    empty_record['last_name'] = ''
+    empty_record['prefix'] = ''
+    return render_template(
+        'ops_uae_data_flow_edit.html',
+        user=user,
+        record=empty_record,
+        is_new=True,
+        pathway_name='UAE Pathway',
+        active_ops_page='uae-data-flow',
+        active_pathway='uae',
+        **_uae_data_flow_lookups(),
+    )
+
+
+@admin_required
+def ops_uae_data_flow_add_save():
+    """POST — insert a new UAE data flow row (pathway='uae')."""
+    conn = get_db()
+    try:
+        reg = (request.form.get('registration_number') or '').strip()
+        if not reg:
+            flash('Please select a candidate from the suggestions.', 'error')
+            return redirect(url_for('ops_uae_data_flow_add_page'))
+        client = conn.execute(
+            "SELECT id FROM plab_clients "
+            "WHERE registration_number = ? AND COALESCE(pathway, 'plab') = 'uae'",
+            (reg,),
+        ).fetchone()
+        if not client:
+            flash('Selected candidate is not a UAE Pathway client.', 'error')
+            try: conn.rollback()
+            except Exception: pass
+            return redirect(url_for('ops_uae_data_flow_add_page'))
+
+        cols = ['registration_number', 'pathway']
+        vals = [reg, 'uae']
+        for col in UAE_DATA_FLOW_EDITABLE_COLUMNS:
+            if col in request.form:
+                cols.append(col)
+                vals.append((request.form.get(col) or '').strip() or None)
+        placeholders = ', '.join(['?'] * len(cols))
+        cur = conn.execute(
+            f"INSERT INTO ops_data_flow ({', '.join(cols)}) "
+            f"VALUES ({placeholders}) RETURNING id",
+            vals,
+        )
+        new_id = cur.fetchone()[0]
+        conn.commit()
+        flash('Data flow record added.', 'success')
+        return redirect(url_for('ops_uae_data_flow_detail', rid=new_id))
+    except Exception as e:
+        logging.error(f"ops_uae_data_flow_add_save: {e}")
+        flash(f'Error: {e}', 'error')
+        try: conn.rollback()
+        except Exception: pass
+        return redirect(url_for('ops_uae_data_flow_list'))
+    finally:
+        conn.close()
+
+
+def register_routes(app):
+    """Attach this sub-area's URL rules to the Flask app."""
+    app.add_url_rule(
+        '/operations/uae/data-flow',
+        endpoint='ops_uae_data_flow_list',
+        view_func=ops_uae_data_flow_list,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/uae/data-flow/<int:rid>',
+        endpoint='ops_uae_data_flow_detail',
+        view_func=ops_uae_data_flow_detail,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/uae/data-flow/add',
+        endpoint='ops_uae_data_flow_add_page',
+        view_func=ops_uae_data_flow_add_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/uae/data-flow/add',
+        endpoint='ops_uae_data_flow_add_save',
+        view_func=ops_uae_data_flow_add_save,
+        methods=['POST'],
+    )
+    app.add_url_rule(
+        '/operations/uae/data-flow/<int:rid>/edit',
+        endpoint='ops_uae_data_flow_edit_page',
+        view_func=ops_uae_data_flow_edit_page,
+        methods=['GET'],
+    )
+    app.add_url_rule(
+        '/operations/uae/data-flow/<int:rid>/edit',
+        endpoint='ops_uae_data_flow_edit_save',
+        view_func=ops_uae_data_flow_edit_save,
+        methods=['POST'],
+    )

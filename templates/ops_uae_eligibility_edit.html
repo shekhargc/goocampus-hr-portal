@@ -1,0 +1,153 @@
+{% extends "ops_sidebar_base.html" %}
+{% block title %}{% if record.id %}Edit{% else %}Add{% endif %} Eligibility Letter Record{% endblock %}
+{% block ops_content %}
+<div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
+    <div style="margin-bottom:1rem;">
+        {% if record.id %}
+        <a href="{{ url_for('ops_uae_eligibility_detail', rid=record.id) }}" style="color:#0EA5E9;text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Record</a>
+        {% else %}
+        <a href="{{ url_for('ops_uae_eligibility_list') }}" style="color:#0EA5E9;text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to List</a>
+        {% endif %}
+    </div>
+
+    <div style="background:white;border-radius:0.85rem;border:1px solid var(--gray-200);box-shadow:0 1px 3px rgba(0,0,0,0.05);padding:2rem;">
+        <h1 style="font-size:1.5rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{% if record.id %}Edit{% else %}Add{% endif %} Eligibility Letter Record</h1>
+        <p style="font-size:0.85rem;color:var(--gray-500);margin:0 0 1.8rem 0;">
+            {% if record.id %}Update{% else %}Create a new{% endif %} eligibility letter record for this UAE Pathway candidate.
+        </p>
+
+        <form method="POST" action="{% if record.id %}{{ url_for('ops_uae_eligibility_edit_save', rid=record.id) }}{% else %}{{ url_for('ops_uae_eligibility_add_save') }}{% endif %}">
+
+            <!-- ===== CANDIDATE ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Candidate</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">{% if record.id %}Registration Number{% else %}Search Candidate Name <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    {% if record.id %}
+                    <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    {% else %}
+                    <input type="hidden" name="registration_number" id="reg_number_val" value="" />
+                    <div style="position:relative;">
+                        <input type="text" id="client_search" autocomplete="off" placeholder="Type candidate name..." required
+                            style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+                        <div id="client_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
+                    </div>
+                    {% endif %}
+                </div>
+                {% if record.id %}
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Name</label>
+                    <input type="text" value="{{ (record.prefix or '') ~ ' ' ~ (record.first_name or '') ~ ' ' ~ (record.last_name or '') }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                </div>
+                {% endif %}
+            </div>
+
+            <!-- ===== ELIGIBILITY LETTER DETAILS ===== -->
+            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Eligibility Letter Details</h3>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+            <div>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Completed By</label>
+                <select name="completed_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">Select Completed By</option>
+                    {% for o in completed_by_options %}
+                    <option value="{{ o }}" {% if record.completed_by == o %}selected{% endif %}>{{ o }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Eligibility Registration Date</label>
+                <input type="date" name="eligibility_registration_date" value="{{ record.eligibility_registration_date or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
+            </div>
+            <div>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Eligibility Status</label>
+                <select name="eligibility_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <option value="">Select Eligibility Status</option>
+                    {% for o in eligibility_status_options %}
+                    <option value="{{ o }}" {% if record.eligibility_status == o %}selected{% endif %}>{{ o }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div style="grid-column:1 / -1;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Notes</label>
+                <textarea name="notes" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;min-height:120px;font-family:inherit;resize:vertical;">{{ record.notes or '' }}</textarea>
+            </div>
+            </div>
+
+            <!-- ===== ACTIONS ===== -->
+            <div style="display:flex;gap:0.8rem;justify-content:flex-end;margin-top:2rem;padding-top:1.2rem;border-top:1px solid var(--gray-200);">
+                <a href="{% if record.id %}{{ url_for('ops_uae_eligibility_detail', rid=record.id) }}{% else %}{{ url_for('ops_uae_eligibility_list') }}{% endif %}" style="padding:0.7rem 1.4rem;background:white;color:var(--gray-600);border:1px solid var(--gray-300);border-radius:8px;font-weight:600;font-size:0.9rem;text-decoration:none;">Cancel</a>
+                <button type="submit" style="padding:0.7rem 1.4rem;background:#0EA5E9;color:white;border:none;border-radius:8px;font-weight:600;font-size:0.9rem;cursor:pointer;">{% if record.id %}Save Changes{% else %}Add Eligibility Letter Record{% endif %}</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Client autocomplete (ADD mode only) — pathway-scoped to uae. -->
+<script>
+(function() {
+    const searchInput = document.getElementById('client_search');
+    const hiddenInput = document.getElementById('reg_number_val');
+    const dropdown = document.getElementById('client_suggestions');
+    if (!searchInput || !hiddenInput || !dropdown) return;
+    let debounceTimer = null, highlightIdx = -1, items = [];
+    searchInput.addEventListener('input', function() {
+        clearTimeout(debounceTimer);
+        hiddenInput.value = '';
+        const q = this.value.trim();
+        if (q.length < 2) { hide(); return; }
+        debounceTimer = setTimeout(() => fetchSuggestions(q), 250);
+    });
+    searchInput.addEventListener('keydown', function(e) {
+        if (!dropdown.style.display || dropdown.style.display === 'none') return;
+        if (e.key === 'ArrowDown') { e.preventDefault(); highlightIdx = Math.min(highlightIdx + 1, items.length - 1); updateHighlight(); }
+        else if (e.key === 'ArrowUp') { e.preventDefault(); highlightIdx = Math.max(highlightIdx - 1, 0); updateHighlight(); }
+        else if (e.key === 'Enter' && highlightIdx >= 0) { e.preventDefault(); selectItem(items[highlightIdx]); }
+        else if (e.key === 'Escape') { hide(); }
+    });
+    document.addEventListener('click', function(e) {
+        if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();
+    });
+    searchInput.closest('form').addEventListener('submit', function(e) {
+        if (!hiddenInput.value) {
+            e.preventDefault();
+            searchInput.style.borderColor = '#EF4444';
+            searchInput.focus();
+            alert('Please select a UAE candidate from the suggestions.');
+        }
+    });
+    function fetchSuggestions(q) {
+        fetch('/operations/api/client-search?pathway=uae&q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(data => {
+                items = data; highlightIdx = -1;
+                if (!data.length) { hide(); return; }
+                dropdown.innerHTML = data.map((d, i) =>
+                    '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
+                    '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
+                    '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>'
+                ).join('');
+                dropdown.querySelectorAll('[data-idx]').forEach(el => {
+                    el.addEventListener('mousedown', function(e) {
+                        e.preventDefault();
+                        selectItem(items[parseInt(this.dataset.idx)]);
+                    });
+                });
+                dropdown.style.display = 'block';
+            }).catch(() => hide());
+    }
+    function selectItem(item) {
+        searchInput.value = item.name;
+        hiddenInput.value = item.reg;
+        searchInput.style.borderColor = '#10B981';
+        hide();
+    }
+    function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; highlightIdx = -1; items = []; }
+    function updateHighlight() {
+        dropdown.querySelectorAll('[data-idx]').forEach((el, i) => {
+            el.style.background = i === highlightIdx ? '#f9fafb' : 'white';
+        });
+    }
+    function esc(s) { const d = document.createElement('div'); d.textContent = s; return d.innerHTML; }
+})();
+</script>
+{% endblock %}

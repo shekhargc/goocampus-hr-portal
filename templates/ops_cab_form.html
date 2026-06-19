@@ -35,7 +35,7 @@
             <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
                     <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
@@ -50,10 +50,11 @@
             <!-- ===== BOOKING DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Booking Details</h3>
 
+            <!-- Vendor-first: pick the Vendor, then Services narrows to that vendor's deliverables -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor *</label>
-                    <select name="vendor" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="vendor" id="cab_vendor" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Vendor</option>
                         {% for v in cab_vendors %}
                         <option value="{{ v }}" {% if record and record.vendor == v %}selected{% endif %}>{{ v }}</option>
@@ -61,9 +62,22 @@
                     </select>
                 </div>
                 <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Services / Deliverable</label>
+                    <select name="services" id="cab_service_select" data-current="{{ record.services if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Service</option>
+                        {% for s in cab_services %}
+                        <option value="{{ s }}" {% if record and record.services == s %}selected{% endif %}>{{ s }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Invoice Number</label>
                     <input type="text" name="invoice_number" value="{{ record.invoice_number or '' if record else '' }}" placeholder="e.g., INV-2024-001" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
+                <div></div>
             </div>
 
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
@@ -130,6 +144,36 @@
 </div>
 
 <script>
+// Vendor-first cascade: choosing a Vendor narrows the Services list to that
+// vendor's deliverables (from vendor_service_map). Falls back to the full
+// list when no vendor is picked or the vendor has no mapped services.
+(function() {
+    const vendorSel = document.getElementById('cab_vendor');
+    const svcSel = document.getElementById('cab_service_select');
+    if (!vendorSel || !svcSel) return;
+    const ALL = Array.from(svcSel.options).map(o => o.value).filter(Boolean);
+    const current = svcSel.getAttribute('data-current') || '';
+    function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function fill(list) {
+        const keep = svcSel.value || current;
+        let html = '<option value="">Select Service</option>';
+        let hasKeep = false;
+        list.forEach(s => { if (s === keep) hasKeep = true;
+            html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });
+        if (keep && !hasKeep) html += '<option value="'+esc(keep)+'" selected>'+esc(keep)+' (current)</option>';
+        svcSel.innerHTML = html;
+    }
+    function load() {
+        const v = vendorSel.value.trim();
+        if (!v) { fill(ALL); return; }
+        fetch('/operations/api/vendor-services?pathway=plab&category=' +
+              encodeURIComponent('Cab Bookings') + '&vendor=' + encodeURIComponent(v))
+            .then(r => r.json())
+            .then(list => fill(list && list.length ? list : ALL))
+            .catch(() => fill(ALL));
+    }
+    vendorSel.addEventListener('change', load);
+})();
 (function() {
     const searchInput = document.getElementById('client_search');
     const hiddenInput = document.getElementById('reg_number_val');

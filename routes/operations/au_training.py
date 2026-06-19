@@ -28,7 +28,7 @@ from routes.operations._form_lookups import section_training_lookups
 # Only safe-to-edit fields. id / registration_number / pathway are NOT editable.
 AU_TRAINING_EDITABLE_COLUMNS = [
     'english_training', 'course_type', 'coaching_method',
-    'vendor_provider', 'other_vendor',
+    'vendor_provider', 'booked_by',
     'batch_year', 'batch_month',
     'start_date', 'end_date',
     'coaching_status',

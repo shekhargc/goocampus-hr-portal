@@ -36,7 +36,7 @@ from core.auth import admin_required
 from core.users import get_user
 from db import get_db
 # Pathway-scoped dropdown options for the Consulting Registration edit form.
-from routes.operations._form_lookups import section_client_lookups
+from routes.operations._form_lookups import section_client_lookups, section_client_products
 
 
 @admin_required
@@ -342,7 +342,7 @@ CS_EDITABLE_COLUMNS = [
     'instagram', 'facebook', 'linkedin',
     'father_name', 'father_phone', 'mother_name', 'mother_phone', 'parents_email',
     # Service
-    'plan_type', 'account_status', 'current_stage', 'switched_program',
+    'plan_type', 'product_id', 'account_status', 'current_stage', 'switched_program',
     'counsellor', 'counsellor_email', 'counsellor_number',
     'lead_source', 'registration_date',
     # Financials
@@ -491,6 +491,10 @@ def ops_consulting_client_edit_page(client_id):
     if not client:
         flash('Consulting client not found.', 'error')
         return redirect(url_for('ops_consulting_clients_list'))
+    client = dict(client)
+    if not client.get('product_id') and client.get('plan_type'):
+        from app import derive_product_id_from_plan
+        client['product_id'] = derive_product_id_from_plan('consulting', client.get('plan_type'))
     return render_template(
         'ops_consulting_client_edit_form.html',
         user=user,
@@ -502,6 +506,7 @@ def ops_consulting_client_edit_page(client_id):
         # Switched Program, Counsellor, Lead Source. Sourced from
         # lookup_options where pathway='consulting'.
         **section_client_lookups('consulting'),
+        **section_client_products('consulting'),
     )
 
 
@@ -526,6 +531,9 @@ def ops_consulting_client_edit_save(client_id):
                 if col in CS_NUMERIC_COLUMNS:
                     try: val = float(val) if val else 0
                     except ValueError: val = 0
+                # product_id: empty selection -> NULL (legacy rows stay clean).
+                elif col == 'product_id':
+                    val = val or None
                 sets.append(f"{col} = ?")
                 params.append(val)
         if sets:

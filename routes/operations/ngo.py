@@ -46,7 +46,7 @@ def ops_ngo_list():
 def ops_ngo_add():
     # Lazy import: get_lookup_options is still defined in app.py.
     # Calling it lazily avoids a circular import at module-load time.
-    from app import get_lookup_options
+    from app import get_lookup_options, get_vendors_by_category
 
     conn = get_db()
     if request.method == 'POST':
@@ -63,8 +63,10 @@ def ops_ngo_add():
         return redirect(request.args.get('next') or url_for('ops_ngo_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    ngo_vendor_rows = get_vendors_by_category('NGO Activities', 'UK Pathway')
+    ngo_vendor_names = [v['name'] for v in ngo_vendor_rows] if ngo_vendor_rows else get_lookup_options('ngo_vendor')
     return render_template('ops_ngo_form.html', record=None,
-                           ngo_vendors=get_lookup_options('ngo_vendor'),
+                           ngo_vendors=ngo_vendor_names,
                            activity_types=get_lookup_options('ngo_activity_type'),
                            pre_reg=pre_reg,
                            active_ops_page='ngo')
@@ -72,7 +74,7 @@ def ops_ngo_add():
 
 @admin_required
 def ops_ngo_edit(rid):
-    from app import get_lookup_options  # lazy import to avoid circular
+    from app import get_lookup_options, get_vendors_by_category  # lazy import to avoid circular
 
     conn = get_db()
     record = conn.execute(
@@ -94,8 +96,10 @@ def ops_ngo_edit(rid):
         flash('NGO Activity record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_ngo_list'))
     conn.close()
+    ngo_vendor_rows = get_vendors_by_category('NGO Activities', 'UK Pathway')
+    ngo_vendor_names = [v['name'] for v in ngo_vendor_rows] if ngo_vendor_rows else get_lookup_options('ngo_vendor')
     return render_template('ops_ngo_form.html', record=record,
-                           ngo_vendors=get_lookup_options('ngo_vendor'),
+                           ngo_vendors=ngo_vendor_names,
                            activity_types=get_lookup_options('ngo_activity_type'),
                            pre_reg='',
                            active_ops_page='ngo')

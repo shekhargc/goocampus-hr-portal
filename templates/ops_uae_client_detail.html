@@ -1,0 +1,318 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}UAE Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <!-- Back Link -->
+  <div style="margin-bottom:20px;">
+    <a href="{{ url_for('ops_uae_clients_list') }}" style="color:var(--orange);text-decoration:none;font-weight:500;display:inline-flex;align-items:center;gap:6px;">
+      &larr; Back to UAE Clients
+    </a>
+  </div>
+
+  <!-- ── Header Section ── -->
+  <div style="background:white;border-radius:12px;padding:28px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:16px;">
+      <div style="display:flex;align-items:flex-start;gap:18px;flex-wrap:wrap;">
+        {# X-1: client photo if uploaded #}
+        {% if client.photo_path %}
+        <img src="{{ client.photo_path if '://' in client.photo_path else '/' + client.photo_path.lstrip('/') }}"
+             alt="{{ client.first_name }}"
+             style="width:96px;height:96px;border-radius:50%;object-fit:cover;border:3px solid var(--orange);box-shadow:0 2px 6px rgba(0,0,0,0.08);"
+             onerror="this.style.display='none';">
+        {% else %}
+        {# Z-1: better avatar -- if last_name empty, fall back to
+           first two letters of first_name. #}
+        <div style="width:96px;height:96px;border-radius:50%;background:#FFF7ED;border:3px solid #FED7AA;display:flex;align-items:center;justify-content:center;font-size:32px;font-weight:800;color:#F97316;">
+          {% set fn = (client.first_name or '?')|string %}
+          {% set ln = (client.last_name or '')|string %}
+          {% if ln %}{{ fn[0]|upper }}{{ ln[0]|upper }}{% else %}{{ fn[:2]|upper }}{% endif %}
+        </div>
+        {% endif %}
+      <div>
+        <h1 style="margin:0 0 8px 0;font-size:32px;font-weight:700;color:var(--navy);">
+          {{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}
+        </h1>
+        <p style="margin:0 0 4px 0;font-size:14px;color:var(--gray-500);">
+          Registration #{{ client.registration_number|format_reg }}{% if client.customer_id %} &middot; ID: {{ client.customer_id }}{% endif %}
+        </p>
+        {% if client.registration_date %}
+        <p style="margin:0 0 12px 0;font-size:13px;color:var(--gray-400);">
+          Registered: {{ client.registration_date }}
+        </p>
+        {% else %}
+        <div style="margin-bottom:12px;"></div>
+        {% endif %}
+        <div style="display:inline-block;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;
+          {% if client.account_status == 'In Process' %}
+            background:#ECFDF5;color:#065F46;
+          {% elif client.account_status == 'Switched Program' %}
+            background:#F3F4F6;color:#374151;
+          {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}
+            background:#FEF2F2;color:#991B1B;
+          {% elif client.account_status == 'On Hold' %}
+            background:#FFFBEB;color:#92400E;
+          {% elif client.account_status == 'Completed' %}
+            background:#EFF6FF;color:#1E40AF;
+          {% else %}
+            background:#F3F4F6;color:#374151;
+          {% endif %}
+        ">
+          {{ client.account_status or 'Unknown' }}
+        </div>
+      </div>
+      </div>{# /X-1 photo+text wrapper #}
+      <div style="display:flex;gap:12px;">
+        <a href="{{ url_for('ops_uae_client_edit_page', client_id=client.id) }}"
+           style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
+          Edit Client
+        </a>
+        {# Z-1: Delete button matches PLAB client profile (Edit + Delete pair) #}
+        <form method="POST" action="{{ url_for('ops_uae_client_delete', client_id=client.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this client? This action cannot be undone.');">
+          <button type="submit" style="padding:10px 20px;background:#FEF2F2;color:#991B1B;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">
+            Delete
+          </button>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ── Stat Cards Row ── -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Current Stage</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">{{ client.current_stage or 'Not Set' }}</p>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Package Value</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">&#8377;{{ '{:,.0f}'.format(final_pkg or 0) }}</p>
+      {% if (client.discount_allowed or 0) > 0 %}
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
+        &#8377;{{ '{:,.0f}'.format(client.package_amount or 0) }} - &#8377;{{ '{:,.0f}'.format(client.discount_allowed or 0) }} discount
+      </p>
+      {% endif %}
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Total Paid</p>
+      <p style="margin:0;font-size:20px;font-weight:700;color:#059669;">&#8377;{{ '{:,.0f}'.format(amount_paid or 0) }}</p>
+      <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">GST: &#8377;{{ '{:,.0f}'.format(gst_paid or 0) }}</p>
+    </div>
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Balance Due</p>
+      <p style="margin:0;font-size:20px;font-weight:700;{% if balance > 0 %}color:#DC2626;{% else %}color:#059669;{% endif %}">&#8377;{{ '{:,.0f}'.format(balance or 0) }}</p>
+    </div>
+  </div>
+
+  <!-- ── Payment Progress Bar ── -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <p style="margin:0 0 12px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Payment Progress</p>
+    <div style="background:var(--gray-100);border-radius:999px;height:12px;overflow:hidden;margin-bottom:12px;">
+      <div style="background:var(--orange);height:100%;width:{{ payment_pct|default(0) }}%;border-radius:999px;transition:width 0.3s ease;"></div>
+    </div>
+    <p style="margin:0;font-size:14px;font-weight:600;color:var(--navy);">
+      &#8377;{{ '{:,.0f}'.format(amount_paid or 0) }} paid of &#8377;{{ '{:,.0f}'.format(final_pkg or 0) }} ({{ '{:.1f}'.format(payment_pct or 0) }}%)
+    </p>
+  </div>
+
+  <!-- ── Two-Column Grid Layout ── -->
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
+
+    <!-- LEFT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Personal Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Personal Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 1:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 2:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if client.email %}<a href="mailto:{{ client.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">DOB:</span><span style="color:var(--navy);font-weight:600;">{{ client.dob or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">City:</span><span style="color:var(--navy);font-weight:600;">{{ client.city or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">State:</span><span style="color:var(--navy);font-weight:600;">{{ client.state or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Instagram:</span>
+            {% if client.instagram %}<a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.instagram }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Facebook:</span>
+            {% if client.facebook %}<a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.facebook }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">LinkedIn:</span>
+            {% if client.linkedin %}<a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.linkedin }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Parents Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Parents Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
+            {% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT COLUMN -->
+    <div style="display:flex;flex-direction:column;gap:24px;">
+
+      <!-- Plan & Stage Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Plan &amp; Stage</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Current Stage:</span><span style="color:var(--navy);font-weight:600;">{{ client.current_stage or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Plan Type:</span><span style="color:var(--navy);font-weight:600;">{{ client.plan_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
+              {% if client.account_status == 'In Process' %}background:#ECFDF5;color:#065F46;
+              {% elif client.account_status == 'Switched Program' %}background:#F3F4F6;color:#374151;
+              {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}background:#FEF2F2;color:#991B1B;
+              {% elif client.account_status == 'On Hold' %}background:#FFFBEB;color:#92400E;
+              {% elif client.account_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
+              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ client.account_status or 'Unknown' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Switched Program:</span><span style="color:{% if client.switched_program %}#6D28D9{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.switched_program or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Counsellor & Lead Status Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Counsellor &amp; Lead Status</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Counsellor Email:</span>
+            {% if client.counsellor_email %}<a href="mailto:{{ client.counsellor_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.counsellor_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Lead Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Lead Details</h3>
+        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Lead Source:</span><span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">UK Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.referral_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">UAE Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.uae_referral or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Australia Client Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.australia_referral or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Operations Team Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span></div>
+        </div>
+      </div>
+
+      <!-- Installment Details Card -->
+      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Installment Details</h3>
+        <div style="overflow-x:auto;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Inst.</th>
+                <th style="padding:10px;text-align:right;font-weight:600;color:var(--navy);">Amount</th>
+                <th style="padding:10px;text-align:center;font-weight:600;color:var(--navy);">Date</th>
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in [1, 2, 3, 4] %}
+              <tr style="border-bottom:1px solid var(--gray-200);">
+                <td style="padding:10px;color:var(--gray-600);font-weight:500;">{{ i }}</td>
+                <td style="padding:10px;text-align:right;color:{% if client['inst'~i~'_amount'] %}#059669{% else %}var(--gray-400){% endif %};font-weight:600;">
+                  {% if client['inst'~i~'_amount'] %}&#8377;{{ '{:,.0f}'.format(client['inst'~i~'_amount']|float) }}{% else %}—{% endif %}
+                </td>
+                <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_date'] or '—' }}</td>
+                <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_note'] or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ── Additional Notes (full width) ── -->
+  {% if client.additional_notes %}
+  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
+    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Additional Notes</h3>
+    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes }}</p>
+  </div>
+  {% endif %}
+
+  <!-- ═══════════ LINKED SECTIONS (Payments + Call Notes only) ═══════════ -->
+
+  <!-- Payments -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ sections.payments|length }})</h3>
+      <a href="{{ url_for('ops_uae_payments_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.payments %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Date</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Instalment</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Amount</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">GST</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Method</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.payments %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_date or '—' }}</td>
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.instalment or '—' }}</td>
+          <td style="padding:10px;text-align:right;color:#059669;font-weight:600;">{% if r.total_amount_paid %}&#8377;{{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;text-align:right;color:var(--gray-600);">{% if r.gst_paid %}&#8377;{{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_method or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
+  </div>
+
+  <!-- Call Notes -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
+      <a href="{{ url_for('ops_uae_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+    {% if sections.call_notes %}
+    <div style="max-height:400px;overflow-y:auto;">
+      {% for r in sections.call_notes[:20] %}
+      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
+          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
+        </div>
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
+  </div>
+
+</div>
+{% endblock %}

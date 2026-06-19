@@ -21,6 +21,56 @@ from flask import render_template, flash, request, redirect, url_for, session
 from core.auth import admin_required
 from core.users import get_user
 from db import get_db
+# Centralised vendor list for the Mentorship category (vendor-first cascade)
+# + cross-DB column-existence guard for the new optional columns.
+from routes.operations._form_lookups import vendor_names_for, get_lookup_options
+from routes.operations.au_test_bookings import _existing_columns
+
+
+# New optional columns surfaced on the Mentorship form. These may not exist
+# on the DB yet, so every write is guarded by _existing_columns and skipped
+# silently until the column is added (no migrations here).
+CS_MENTORSHIP_EXTRA_COLUMNS = ['service', 'fee_currency', 'service_description']
+
+
+def _mentorship_extra_save(conn, rid):
+    """Persist the new optional Mentorship columns for row `rid`, guarded.
+
+    `service` (cascades from program_provider), `fee_currency` and
+    `service_description` are written only when the column actually exists
+    on ops_mentorship; otherwise skipped silently.
+    """
+    db_cols = _existing_columns(conn, 'ops_mentorship')
+    sets, params = [], []
+    for col in CS_MENTORSHIP_EXTRA_COLUMNS:
+        if col not in request.form:
+            continue
+        if db_cols and col not in db_cols:
+            continue
+        val = (request.form.get(col) or '').strip() or None
+        sets.append(f"{col} = ?")
+        params.append(val)
+    if sets:
+        params.append(rid)
+        conn.execute(
+            "UPDATE ops_mentorship SET " + ', '.join(sets)
+            + " WHERE id = ? AND COALESCE(pathway,'plab') = 'consulting'",
+            params,
+        )
+
+
+def _mentorship_lookups():
+    """Dropdown options for the Mentorship vendor-first cascade.
+
+    program_providers is the centralised vendor list (Mentorship category,
+    Standard Consulting) with lookup fallback; mentorship_services is the
+    deliverable list the cascade narrows from.
+    """
+    return {
+        'program_providers':  vendor_names_for('Mentorship', 'consulting',
+                                               fallback_lookup='program_provider'),
+        'mentorship_services': get_lookup_options('mentorship_service', pathway='consulting'),
+    }
 
 
 def _get_lookup_options(category):
@@ -90,14 +140,14 @@ def ops_consulting_mentorship_add():
     if request.method == 'POST':
         f = request.form
         try:
-            conn.execute(
+            cur = conn.execute(
                 """INSERT INTO ops_mentorship (
                      registration_number, session_date, start_time, end_time,
                      duration_minutes, amount_paid, payment_status,
                      candidate_attendance, additional_notes, session_confirmation,
                      program_provider, mentor_attendance, mobile_number,
                      candidate_email, pathway, created_by
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) RETURNING id""",
                 (
                     f.get('registration_number'), f.get('session_date'),
                     f.get('start_time'), f.get('end_time'),
@@ -110,6 +160,9 @@ def ops_consulting_mentorship_add():
                     'consulting', session.get('user_id', 0),
                 ),
             )
+            new_id = cur.fetchone()[0]
+            # Guarded write for new optional columns (skipped if not present).
+            _mentorship_extra_save(conn, new_id)
             conn.commit()
             flash('Mentorship session added', 'success')
         except Exception as e:
@@ -129,6 +182,7 @@ def ops_consulting_mentorship_add():
         pre_reg=pre_reg,
         active_ops_page='consulting-mentorship',
         active_pathway='consulting',
+        **_mentorship_lookups(),
     )
 
 
@@ -174,6 +228,8 @@ def ops_consulting_mentorship_edit(rid):
                     f.get('candidate_email'), rid,
                 ),
             )
+            # Guarded write for new optional columns (skipped if not present).
+            _mentorship_extra_save(conn, rid)
             conn.commit()
             flash('Mentorship session updated', 'success')
         except Exception as e:
@@ -192,6 +248,7 @@ def ops_consulting_mentorship_edit(rid):
         pre_reg='',
         active_ops_page='consulting-mentorship',
         active_pathway='consulting',
+        **_mentorship_lookups(),
     )
 
 

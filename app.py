@@ -176,13 +176,15 @@ def inject_manager_status():
         plab_ok = has_section_permission(user, 'plab_pathway', 'dashboard', 'view') if user else False
         aus_ok  = has_section_permission(user, 'australia_pathway', 'dashboard', 'view') if user else False
         cons_ok = has_section_permission(user, 'consulting_pathway', 'dashboard', 'view') if user else False
+        port_ok = has_section_permission(user, 'portfolio_pathway', 'dashboard', 'view') if user else False
+        trn_ok  = has_section_permission(user, 'training_pathway', 'dashboard', 'view') if user else False
         shared_ok = any(has_section_permission(user, 'operations_shared', s, 'view')
                         for s in ('reports', 'field_manager', 'vendors_providers')) if user else False
-        ops_access = plab_ok or aus_ok or cons_ok or shared_ok
+        ops_access = plab_ok or aus_ok or cons_ok or port_ok or trn_ok or shared_ok
 
         # Smart landing URL — unified Operations dashboard when the user
         # has any pathway dashboard; otherwise fall back to Reports.
-        if plab_ok or aus_ok or cons_ok:
+        if plab_ok or aus_ok or cons_ok or port_ok or trn_ok:
             ops_landing = '/operations/dashboard'
         else:
             # operations_shared only -> Reports is the safest default
@@ -7286,6 +7288,20 @@ def ensure_crm_tables():
             # by counsellor (product/pathway-wise). Backfilled by name
             # in resync_client_counsellor_ids_once() below.
             ('plab_clients', 'counsellor_id',       'INTEGER'),
+            # 2026-06-19: capture the exact fields the new Zoho section exports
+            # carry (PLAB + AMC refresh) so no data is dropped on import and the
+            # vendor/deliverable shows on the right section page.
+            ('ops_online_subscriptions', 'subscription_provider', 'TEXT'),
+            ('ops_research_publication', 'service',               'TEXT'),
+            ('ops_webinars_conferences', 'provider',              'TEXT'),
+            ('ops_mentorship',           'fee_currency',          'TEXT'),
+            ('ops_mentorship',           'service_description',   'TEXT'),
+            ('ops_mentorship',           'service',               'TEXT'),
+            ('ops_uk_cab_bookings',      'services',              'TEXT'),
+            ('ops_uk_cab_bookings',      'additional_instructions','TEXT'),
+            # Portfolio pathway: client Career Stage + webinar Event Status.
+            ('plab_clients',             'career_stage',          'TEXT'),
+            ('ops_webinars_conferences', 'event_status',          'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -13404,6 +13420,43 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── UAE pathway new sections (2026-06-19): Self Assessment,
+        #    Eligibility Letter, Data Flow. Shared (pathway column) so other
+        #    pathways could reuse them later.
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_self_assessment (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            completed_by TEXT,
+            date_completed TEXT,
+            report_doc TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_eligibility_letter (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            completed_by TEXT,
+            eligibility_registration_date TEXT,
+            eligibility_status TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute('''CREATE TABLE IF NOT EXISTS ops_data_flow (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT REFERENCES plab_clients(registration_number),
+            data_flow_start_date TEXT,
+            data_flow_status TEXT,
+            eligibility_status TEXT,
+            notes TEXT,
+            pathway TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── Payments ──
         conn.execute('''CREATE TABLE IF NOT EXISTS ops_payments (
             id SERIAL PRIMARY KEY,
@@ -15415,6 +15468,12 @@ def ops_main_dashboard():
         visible.append(('australia', 'AMC Pathway', '/operations/australia-pathway', '#0369A1'))
     if can('consulting_pathway'):
         visible.append(('consulting', 'Standard Consulting', '/operations/consulting', '#B45309'))
+    if can('portfolio_pathway'):
+        visible.append(('portfolio', 'Portfolio Pathway', '/operations/portfolio', '#7C3AED'))
+    if can('uae_pathway'):
+        visible.append(('uae', 'UAE Pathway', '/operations/uae', '#0EA5E9'))
+    if can('training_pathway'):
+        visible.append(('training', 'Training Pathway', '/operations/training', '#0D9488'))
 
     conn = get_db()
 
@@ -15482,13 +15541,11 @@ def ops_uk_pathway():
 # (registered via register_operations_modules(app) at app boot).
 
 
-@app.route('/operations/uae-pathway')
-@admin_required
-def ops_uae_pathway():
-    user = get_user()
-    return render_template('ops_pathway_placeholder.html', user=user,
-                         pathway_name='UAE Pathway',
-                         pathway_desc='UAE medical pathway operations will be configured here.')
+# UAE Pathway dashboard + sections are now served by
+# routes/operations/uae.py (and uae_payments / uae_call_notes /
+# uae_self_assessment / uae_eligibility / uae_data_flow). The old
+# /operations/uae-pathway placeholder has been removed; the real
+# dashboard endpoint ops_uae_pathway now lives at /operations/uae.
 
 
 # S-0: /operations/consulting is now served by
@@ -15723,6 +15780,8 @@ def ops_field_manager():
         {'slug': 'australia',  'label': 'AMC Pathway', 'flag': '\U0001f1e6\U0001f1fa'},
         {'slug': 'uae',        'label': 'UAE Pathway',       'flag': '\U0001f1e6\U0001f1ea'},
         {'slug': 'consulting', 'label': 'Standard Consulting','flag': '\U0001f9ed'},
+        {'slug': 'portfolio',  'label': 'Portfolio Pathway', 'flag': '\U0001f4bc'},
+        {'slug': 'training',   'label': 'Training Pathway',  'flag': '\U0001f393'},
     ]
     selected_pathway = (request.args.get('pathway') or 'plab').strip().lower()
     if selected_pathway not in {t['slug'] for t in PATHWAY_TABS}:
@@ -15981,7 +16040,7 @@ def ops_field_manager_reorder():
 
 # X-4d: 'Standard Consulting' added so consulting vendors get their own
 # pathway scope on /operations/vendors-providers?pathway=consulting.
-VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting']
+VENDOR_COUNTRIES = ['UK Pathway', 'AMC Pathway', 'USMLE Pathway', 'Germany Pathway', 'Standard Consulting', 'Portfolio Pathway', 'Training Pathway']
 VENDOR_CATEGORIES = ['Training Programs', 'Online Courses', 'Research & Publications', 'NGO Activities', 'Certification Bodies', 'Online Subscriptions']
 
 # Hard-coded vendor map used as inline data in coaching form (no AJAX needed)
@@ -16236,6 +16295,10 @@ def ops_vendors_providers():
         # link filters to consulting-tagged vendors instead of showing
         # everything.
         'consulting': 'Standard Consulting',
+        # Phase 4 lightweight pathways — scope vendors per pathway too.
+        'portfolio':  'Portfolio Pathway',
+        'training':   'Training Pathway',
+        'uae':        'UAE Pathway',
     }
     country_filter = PATHWAY_TO_COUNTRY.get(pathway)
 
@@ -18295,7 +18358,7 @@ def ops_plab_add():
                 mobile, whatsapp1, whatsapp2, email, dob, city, state,
                 instagram, facebook, linkedin,
                 father_name, father_phone, mother_name, mother_phone, parents_email,
-                joined_stage, plan_type,
+                joined_stage, plan_type, product_id,
                 account_status, current_stage, switched_program,
                 counsellor, counsellor_email, counsellor_number,
                 lead_source, referral_type, operations_referral,
@@ -18313,7 +18376,7 @@ def ops_plab_add():
                 comm_city_district, comm_state_province, comm_postal_code, comm_country,
                 created_by
             ) VALUES (
-                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
+                ?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?
             )''', (
                 reg_num, f.get('registration_date') or datetime.now().strftime('%Y-%m-%d'),
                 f.get('customer_id') or '',
@@ -18324,6 +18387,7 @@ def ops_plab_add():
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
+                f.get('product_id') or None,
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('counsellor', ''), f.get('counsellor_email', ''), f.get('counsellor_number', ''),
@@ -18345,6 +18409,8 @@ def ops_plab_add():
                 f.get('comm_country', ''),
                 session['user_id']
             ))
+            conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE registration_number=?",
+                         (f.get('upgraded_to', ''), reg_num))
             conn.commit()
 
             # ── Auto-send welcome email on registration ──
@@ -18386,12 +18452,14 @@ def ops_plab_add():
 
     conn.close()
     return render_template('ops_plab_form.html', mode='add', item=None,
-                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           products=_products_for_pathway('plab'),
+                           plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=[], plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
@@ -18415,7 +18483,7 @@ def ops_plab_edit(client_id):
                 mobile=?, whatsapp1=?, whatsapp2=?, email=?, dob=?, city=?, state=?,
                 instagram=?, facebook=?, linkedin=?,
                 father_name=?, father_phone=?, mother_name=?, mother_phone=?, parents_email=?,
-                joined_stage=?, plan_type=?,
+                joined_stage=?, plan_type=?, product_id=?,
                 account_status=?, current_stage=?, switched_program=?,
                 dropped_date=?,
                 counsellor=?, counsellor_email=?, counsellor_number=?,
@@ -18448,6 +18516,7 @@ def ops_plab_edit(client_id):
                 f.get('father_name', ''), f.get('father_phone', ''),
                 f.get('mother_name', ''), f.get('mother_phone', ''), f.get('parents_email', ''),
                 f.get('joined_stage', ''), f.get('plan_type', ''),
+                f.get('product_id') or None,
                 f.get('account_status', 'In Process'), f.get('current_stage', ''),
                 f.get('switched_program', ''),
                 f.get('dropped_date', ''),
@@ -18481,6 +18550,9 @@ def ops_plab_edit(client_id):
                 f.get('comm_country', ''),
                 client_id
             ))
+            # Upgraded To (separate write to avoid disturbing the wide tuple above)
+            conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE id=?",
+                         (f.get('upgraded_to', ''), client_id))
             conn.commit()
             flash('Client updated', 'success')
             conn.close()
@@ -18498,6 +18570,10 @@ def ops_plab_edit(client_id):
         conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('ops_plab_list'))
+    client = dict(client)
+    # Auto-fill Product from the saved Plan Type for legacy rows (no product_id)
+    if not client.get('product_id') and client.get('plan_type'):
+        client['product_id'] = derive_product_id_from_plan('plab', client.get('plan_type'))
     try:
         documents = conn.execute("SELECT id, client_id, doc_type, doc_category, file_name, file_path, file_size, status, verified_by, verified_at, notes, uploaded_by, uploaded_at FROM plab_client_documents WHERE client_id = ? ORDER BY doc_category, doc_type", (client_id,)).fetchall()
     except Exception as e:
@@ -18505,12 +18581,14 @@ def ops_plab_edit(client_id):
         documents = []
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
-                           plan_types=get_lookup_options('plan_type'), joined_stages=get_lookup_options('joined_stage'),
+                           products=_products_for_pathway('plab'),
+                           plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
                            switched_programs=get_lookup_options('switched_program'),
                            lead_sources=get_lookup_options('lead_source'),
                            operations_referrals=get_lookup_options('operations_referral'),
                            counsellors=get_lookup_options('counsellor'),
+                           upgraded_options=get_lookup_options('upgraded_to', 'plab'),
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
                            active_ops_page='plab')
 
@@ -19485,13 +19563,15 @@ def ops_coaching_add():
     vendor_map = _build_vendor_map()
     conn.close()
     pre_reg = request.args.get('client', '')
+    training_vendors = get_vendors_by_category('Training Programs', 'UK Pathway')
+    vendor_provider_names = [v['name'] for v in training_vendors] if training_vendors else get_lookup_options('training_vendor')
     return render_template('ops_coaching_form.html', record=None, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
-                           vendor_map=vendor_map,
+                           vendor_map=vendor_map, vendor_providers=vendor_provider_names,
                            pre_reg=pre_reg, active_ops_page='coaching')
 
 
@@ -19540,13 +19620,15 @@ def ops_coaching_edit(record_id):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     vendor_map = _build_vendor_map()
     conn.close()
+    training_vendors = get_vendors_by_category('Training Programs', 'UK Pathway')
+    vendor_provider_names = [v['name'] for v in training_vendors] if training_vendors else get_lookup_options('training_vendor')
     return render_template('ops_coaching_form.html', record=record, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
-                           vendor_map=vendor_map,
+                           vendor_map=vendor_map, vendor_providers=vendor_provider_names,
                            pre_reg='', active_ops_page='coaching')
 
 
@@ -20127,6 +20209,145 @@ def ops_client_search_api():
         results = []
     conn.close()
     return jsonify(results)
+
+
+@app.route('/operations/api/plan-types')
+@admin_required
+def ops_plan_types_api():
+    """Plan types for a pathway, optionally filtered to a product (cascade).
+
+    Drives Pathway -> Product -> Plan Type on the registration forms.
+    ?pathway=plab|australia|consulting|training|portfolio  (required)
+    ?product=<product name>  (optional; when given, only that product's plans)
+    """
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    product = (request.args.get('product') or '').strip()
+    conn = get_db()
+    try:
+        if product:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(product_name,'')=? "
+                "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (pathway, product)).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(is_active,true) IS NOT FALSE "
+                "ORDER BY value", (pathway,)).fetchall()
+        vals = [r['value'] for r in rows if r['value']]
+    except Exception as e:
+        logging.error(f"ops_plan_types_api: {e}")
+        vals = []
+    conn.close()
+    return jsonify(vals)
+
+
+@app.route('/operations/api/products')
+@admin_required
+def ops_products_api():
+    """Active Products/Services for a pathway (registration Product dropdown)."""
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            (pathway,)).fetchall()
+        out = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception as e:
+        logging.error(f"ops_products_api: {e}")
+        out = []
+    conn.close()
+    return jsonify(out)
+
+
+# pathway -> vendors_providers.country label (module-level copy; the one in
+# the vendors page is function-local). Keep in sync with PATHWAY_TO_COUNTRY.
+VENDOR_COUNTRY_BY_PATHWAY = {
+    'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'usmle': 'USMLE Pathway',
+    'germany': 'Germany Pathway', 'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway',
+    'uae': 'UAE Pathway',
+}
+
+
+@app.route('/operations/api/vendor-services')
+@admin_required
+def ops_vendor_services_api():
+    """Vendor-first cascade: the deliverables/services linked to a vendor.
+
+    Drives the section forms where the user picks a Vendor first and the
+    Deliverable/Service dropdown then narrows to that vendor's services
+    (from vendor_service_map). Params:
+        ?vendor=<name>&pathway=<plab|australia|...>[&category=<vp_category>]
+    """
+    vendor = (request.args.get('vendor') or '').strip()
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    category = (request.args.get('category') or '').strip()
+    if not vendor:
+        return jsonify([])
+    country = VENDOR_COUNTRY_BY_PATHWAY.get(pathway, 'UK Pathway')
+    conn = get_db()
+    try:
+        sql = ("SELECT DISTINCT m.service_name FROM vendor_service_map m "
+               "JOIN vendors_providers v ON v.id = m.vendor_id "
+               "WHERE v.country = ? AND LOWER(TRIM(v.name)) = LOWER(TRIM(?))")
+        params = [country, vendor]
+        if category:
+            sql += " AND v.category = ?"
+            params.append(category)
+        sql += " ORDER BY m.service_name"
+        rows = conn.execute(sql, tuple(params)).fetchall()
+        out = [r['service_name'] for r in rows]
+    except Exception as e:
+        logging.error(f"ops_vendor_services_api: {e}")
+        out = []
+    conn.close()
+    return jsonify(out)
+
+
+def _products_for_pathway(pathway):
+    """Active Products/Services for a pathway as a list of dict rows.
+
+    Used to populate the server-side Product/Service <select> on the
+    registration (client add/edit) forms. Mirrors ops_products_api().
+    """
+    conn = get_db()
+    try:
+        rows = conn.execute(
+            "SELECT id, name FROM products_services "
+            "WHERE COALESCE(pathway,'')=? AND COALESCE(status,'active')='active' ORDER BY name",
+            ((pathway or 'plab').strip().lower(),)).fetchall()
+        out = [{'id': r['id'], 'name': r['name']} for r in rows]
+    except Exception as e:
+        logging.error(f"_products_for_pathway: {e}")
+        out = []
+    conn.close()
+    return out
+
+
+def derive_product_id_from_plan(pathway, plan_type):
+    """Reverse-lookup the Product/Service a plan_type belongs to, so EDIT
+    forms auto-fill Product for legacy records that have a plan_type but no
+    saved product_id (avoids the user re-picking and accidentally resetting
+    the plan). Returns products_services.id or None."""
+    if not plan_type:
+        return None
+    conn = get_db()
+    try:
+        r = conn.execute(
+            "SELECT ps.id FROM lookup_options lo "
+            "JOIN products_services ps ON LOWER(TRIM(ps.name)) = LOWER(TRIM(lo.product_name)) "
+            "WHERE lo.category='plan_type' AND COALESCE(lo.pathway,'plab')=? "
+            "AND LOWER(TRIM(lo.value))=LOWER(TRIM(?)) "
+            "AND COALESCE(ps.pathway,'')=? LIMIT 1",
+            ((pathway or 'plab').strip().lower(), plan_type, (pathway or 'plab').strip().lower())).fetchone()
+        return r['id'] if r else None
+    except Exception as e:
+        logging.error(f"derive_product_id_from_plan: {e}")
+        return None
+    finally:
+        conn.close()
 
 
 @app.route('/operations/call-notes/tracker')
@@ -21011,7 +21232,19 @@ def ops_gmc_delete(gid):
 #  OPERATIONS – Job Stage (PLAB job placement tracking)
 # ─────────────────────────────────────────────────────────
 
+# Fallback only — the live list now comes from Field Manager
+# (lookup_options category 'job_confirmed_by'), seeded from the Zoho Drop Down
+# sheet. See _job_confirmed_by_options().
 JOB_CONFIRMED_BY_OPTIONS = ['Job by GooCampus', 'Interview by GooCampus', 'By Candidate']
+
+
+def _job_confirmed_by_options():
+    """Editable Field-Manager dropdown with a hardcoded fallback."""
+    try:
+        opts = get_lookup_options('job_confirmed_by', pathway='plab')
+    except Exception:
+        opts = None
+    return opts or JOB_CONFIRMED_BY_OPTIONS
 
 
 @app.route('/operations/job-stage')
@@ -21045,7 +21278,7 @@ def ops_job_stage_list():
     conn.close()
     return render_template('ops_job_stage_list.html', records=records,
                            search=search, confirmed_filter=confirmed_filter,
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21057,7 +21290,7 @@ def ops_job_stage_add_page():
         return ops_job_stage_add_save()
     pre_reg = request.args.get('reg', '') or request.args.get('client', '')
     return render_template('ops_job_stage_form.html', record=None, pre_reg=pre_reg,
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21126,7 +21359,7 @@ def ops_job_stage_edit_page(rid):
         flash('Record not found', 'error')
         return redirect(url_for('ops_job_stage_list'))
     return render_template('ops_job_stage_form.html', record=record, pre_reg='',
-                           job_confirmed_by_options=JOB_CONFIRMED_BY_OPTIONS,
+                           job_confirmed_by_options=_job_confirmed_by_options(),
                            active_ops_page='job-stage')
 
 
@@ -21203,13 +21436,14 @@ def ops_research_add():
         f = request.form
         conn.execute('''INSERT INTO ops_research_publication (
             registration_number, research_status, research_topic, published_copy,
-            research_start_date, research_end_date, research_provider,
+            research_start_date, research_end_date, research_provider, service,
             published_journal_name, author_position, research_batch,
             mobile_number, candidate_email, additional_notes, created_by
-        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
+        ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
             f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
-            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_provider'), f.get('service'), f.get('published_journal_name'),
+            f.get('author_position'),
             f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
             f.get('additional_notes'), session.get('user_id', 0)
         ))
@@ -21222,7 +21456,9 @@ def ops_research_add():
     research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=None,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=research_provider_names, pre_reg=pre_reg,
+                           research_providers=research_provider_names,
+                           research_services=get_lookup_options('research_service', 'plab'),
+                           pre_reg=pre_reg,
                            active_ops_page='research')
 
 
@@ -21237,12 +21473,13 @@ def ops_research_edit(rid):
         f = request.form
         conn.execute('''UPDATE ops_research_publication SET
             registration_number=?, research_status=?, research_topic=?, published_copy=?,
-            research_start_date=?, research_end_date=?, research_provider=?,
+            research_start_date=?, research_end_date=?, research_provider=?, service=?,
             published_journal_name=?, author_position=?, research_batch=?,
             mobile_number=?, candidate_email=?, additional_notes=? WHERE id=?''', (
             f.get('registration_number'), f.get('research_status'), f.get('research_topic'),
             f.get('published_copy'), f.get('research_start_date'), f.get('research_end_date'),
-            f.get('research_provider'), f.get('published_journal_name'), f.get('author_position'),
+            f.get('research_provider'), f.get('service'), f.get('published_journal_name'),
+            f.get('author_position'),
             f.get('research_batch'), f.get('mobile_number'), f.get('candidate_email'),
             f.get('additional_notes'), rid
         ))
@@ -21254,7 +21491,9 @@ def ops_research_edit(rid):
     research_provider_names = [v['name'] for v in research_vendors] if research_vendors else get_lookup_options('research_provider')
     return render_template('ops_research_form.html', record=record,
                            research_statuses=get_lookup_options('research_status'), author_positions=get_lookup_options('author_position'),
-                           research_providers=research_provider_names, pre_reg='',
+                           research_providers=research_provider_names,
+                           research_services=get_lookup_options('research_service', 'plab'),
+                           pre_reg='',
                            active_ops_page='research')
 
 
@@ -21398,14 +21637,27 @@ def ops_subscriptions_add():
             f.get('login_id'), f.get('password'), f.get('booked_by'),
             f.get('mobile_number'), f.get('candidate_email'), session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # subscription_provider (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_online_subscriptions WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_online_subscriptions SET subscription_provider=? WHERE id=?",
+                         (f.get('subscription_provider', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Subscription record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    sub_vendors = get_vendors_by_category('Online Subscriptions', 'UK Pathway')
+    subscription_provider_names = [v['name'] for v in sub_vendors] if sub_vendors else get_lookup_options('subscription_provider')
     return render_template('ops_subscriptions_form.html', record=None,
                            subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
-                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg=pre_reg,
+                           booked_by_options=get_lookup_options('subscription_booked_by'),
+                           subscription_providers=subscription_provider_names, pre_reg=pre_reg,
                            active_ops_page='subscriptions')
 
 
@@ -21427,13 +21679,21 @@ def ops_subscriptions_edit(rid):
             f.get('login_id'), f.get('password'), f.get('booked_by'),
             f.get('mobile_number'), f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # subscription_provider (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_online_subscriptions SET subscription_provider=? WHERE id=?",
+                     (f.get('subscription_provider', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Subscription record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
     conn.close()
+    sub_vendors = get_vendors_by_category('Online Subscriptions', 'UK Pathway')
+    subscription_provider_names = [v['name'] for v in sub_vendors] if sub_vendors else get_lookup_options('subscription_provider')
     return render_template('ops_subscriptions_form.html', record=record,
                            subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
-                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg='',
+                           booked_by_options=get_lookup_options('subscription_booked_by'),
+                           subscription_providers=subscription_provider_names, pre_reg='',
                            active_ops_page='subscriptions')
 
 
@@ -21577,14 +21837,27 @@ def ops_webinars_add():
             f.get('notes'), f.get('mobile_number'), f.get('candidate_email'),
             session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # provider (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_webinars_conferences WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_webinars_conferences SET provider=? WHERE id=?",
+                         (f.get('provider', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Webinar/Conference record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_webinars_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    webinar_vendors = get_vendors_by_category('Webinars', 'UK Pathway')
+    webinar_provider_names = [v['name'] for v in webinar_vendors] if webinar_vendors else get_lookup_options('webinar_provider')
     return render_template('ops_webinars_form.html', record=None,
                            event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
-                           participation_types=get_lookup_options('participation_type'), pre_reg=pre_reg,
+                           participation_types=get_lookup_options('participation_type'),
+                           webinar_providers=webinar_provider_names, pre_reg=pre_reg,
                            active_ops_page='webinars')
 
 
@@ -21606,13 +21879,21 @@ def ops_webinars_edit(rid):
             f.get('cpd_points'), f.get('event_name'), f.get('participation_type'),
             f.get('notes'), f.get('mobile_number'), f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # provider (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_webinars_conferences SET provider=? WHERE id=?",
+                     (f.get('provider', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Webinar/Conference record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_webinars_list'))
     conn.close()
+    webinar_vendors = get_vendors_by_category('Webinars', 'UK Pathway')
+    webinar_provider_names = [v['name'] for v in webinar_vendors] if webinar_vendors else get_lookup_options('webinar_provider')
     return render_template('ops_webinars_form.html', record=record,
                            event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
-                           participation_types=get_lookup_options('participation_type'), pre_reg='',
+                           participation_types=get_lookup_options('participation_type'),
+                           webinar_providers=webinar_provider_names, pre_reg='',
                            active_ops_page='webinars')
 
 
@@ -22334,15 +22615,29 @@ def ops_mentorship_add():
             f.get('mentor_attendance'), f.get('mobile_number'),
             f.get('candidate_email'), session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # service / fee_currency / service_description (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_mentorship WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_mentorship SET service=?, fee_currency=?, service_description=? WHERE id=?",
+                         (f.get('service', ''), f.get('fee_currency', ''), f.get('service_description', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Mentorship session added', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=None,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
                            attendance_options=get_lookup_options('mentorship_attendance'),
-                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg=pre_reg,
+                           confirmation_options=get_lookup_options('mentorship_confirmation'),
+                           mentorship_providers=mentorship_provider_names,
+                           mentorship_services=get_lookup_options('mentorship_service', 'plab'), pre_reg=pre_reg,
                            active_ops_page='mentorship')
 
 
@@ -22368,14 +22663,23 @@ def ops_mentorship_edit(rid):
             f.get('mentor_attendance'), f.get('mobile_number'),
             f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # service / fee_currency / service_description (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_mentorship SET service=?, fee_currency=?, service_description=? WHERE id=?",
+                     (f.get('service', ''), f.get('fee_currency', ''), f.get('service_description', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Mentorship session updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
+    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=record,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
                            attendance_options=get_lookup_options('mentorship_attendance'),
-                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg='',
+                           confirmation_options=get_lookup_options('mentorship_confirmation'),
+                           mentorship_providers=mentorship_provider_names,
+                           mentorship_services=get_lookup_options('mentorship_service', 'plab'), pre_reg='',
                            active_ops_page='mentorship')
 
 
@@ -22434,13 +22738,26 @@ def ops_cab_add():
             f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'),
             session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # services (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_uk_cab_bookings WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_uk_cab_bookings SET services=? WHERE id=?",
+                         (f.get('services', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Cab booking added', 'success')
         return redirect(request.args.get('next') or url_for('ops_cab_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    cab_vendor_rows = get_vendors_by_category('Cab Bookings', 'UK Pathway')
+    cab_vendor_names = [v['name'] for v in cab_vendor_rows] if cab_vendor_rows else get_lookup_options('cab_vendor')
     return render_template('ops_cab_form.html', record=None,
-                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg=pre_reg,
+                           cab_vendors=cab_vendor_names,
+                           cab_services=get_lookup_options('cab_service', 'plab'), pre_reg=pre_reg,
                            active_ops_page='cab-bookings')
 
 
@@ -22462,12 +22779,20 @@ def ops_cab_edit(rid):
             f.get('booking_date'), f.get('invoice_number'), f.get('pick_up_date'),
             f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # services (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_uk_cab_bookings SET services=? WHERE id=?",
+                     (f.get('services', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Cab booking updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_cab_list'))
     conn.close()
+    cab_vendor_rows = get_vendors_by_category('Cab Bookings', 'UK Pathway')
+    cab_vendor_names = [v['name'] for v in cab_vendor_rows] if cab_vendor_rows else get_lookup_options('cab_vendor')
     return render_template('ops_cab_form.html', record=record,
-                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg='',
+                           cab_vendors=cab_vendor_names,
+                           cab_services=get_lookup_options('cab_service', 'plab'), pre_reg='',
                            active_ops_page='cab-bookings')
 
 
@@ -25940,6 +26265,118 @@ def ensure_ops_amc_registration_table():
 
 ensure_ops_amc_registration_table()
 
+
+def seed_plan_type_product_links():
+    """Phase 2: link each plan_type option to its Product/Service so the
+    registration form can cascade Pathway -> Product -> Plan Type
+    (per 'Pathway, Project, Plan Type' mapping). Additive + idempotent:
+      - adds lookup_options.product_name (live ignores it until the form code ships)
+      - sets product_name on every plan_type row from its pathway (+ CSS country
+        for consulting, which has multiple products)
+      - seeds Training/Portfolio plan types + tags their products' pathway
+    """
+    try:
+        conn = get_db()
+    except Exception:
+        return
+    try:
+        try:
+            conn.execute("ALTER TABLE lookup_options ADD COLUMN product_name TEXT")
+            conn.commit()
+            logging.info("Migration: added product_name column to lookup_options")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+
+        # Single-product pathways -> one product each
+        single = {'plab': 'UK PGCP', 'australia': 'AUS PGCP',
+                  'training': 'AMC MCQ', 'portfolio': 'Portfolio Services'}
+        for pw, prod in single.items():
+            try:
+                conn.execute(
+                    "UPDATE lookup_options SET product_name = ? "
+                    "WHERE category='plan_type' AND COALESCE(pathway,'plab')=?", (prod, pw))
+            except Exception:
+                conn.rollback()
+        # Consulting -> product by CSS country prefix in the plan-type value
+        cons_map = [('Australia', 'AMC Consulting'), ('UK', 'UK Consulting'),
+                    ('USA', 'USA Consulting'), ('UAE', 'UAE Consulting')]
+        for prefix, prod in cons_map:
+            try:
+                conn.execute(
+                    "UPDATE lookup_options SET product_name = ? "
+                    "WHERE category='plan_type' AND COALESCE(pathway,'plab')='consulting' "
+                    "AND value ILIKE ?", (prod, prefix + '%'))
+            except Exception:
+                conn.rollback()
+        conn.commit()
+
+        # Seed Training + Portfolio plan types (new pathways)
+        new_plans = [
+            ('training', 'AMC MCQ', ['AMC 1', 'AMC 2']),
+            ('portfolio', 'Portfolio Services', ['Portfolio Plus']),
+        ]
+        for pw, prod, vals in new_plans:
+            for v in vals:
+                try:
+                    ex = conn.execute(
+                        "SELECT id FROM lookup_options WHERE category='plan_type' "
+                        "AND COALESCE(pathway,'plab')=? AND value=?", (pw, v)).fetchone()
+                    if not ex:
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, pathway, product_name, is_active) "
+                            "VALUES ('plan_type', ?, ?, ?, ?, true)", (v, v, pw, prod))
+                except Exception:
+                    conn.rollback()
+        conn.commit()
+
+        # Tag the new-pathway products (live doesn't query these pathways yet)
+        for prod, pw in [('AMC MCQ', 'training'), ('Portfolio Services', 'portfolio')]:
+            try:
+                conn.execute("UPDATE products_services SET pathway = ? WHERE name = ?", (pw, prod))
+            except Exception:
+                conn.rollback()
+        conn.commit()
+
+        # Training "Booked By" + complete master dropdown options (Field Manager)
+        try:
+            conn.execute("ALTER TABLE ops_coaching ADD COLUMN booked_by TEXT")
+            conn.commit()
+            logging.info("Migration: added ops_coaching.booked_by")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        _MASTER = {
+            'coaching_booked_by': ['Booked & Paid by GooCampus', 'Booking Included in Package',
+                                   'Booked and Paid by Client', 'Booked by GC / Paid by Client'],
+            'batch_year': [str(y) for y in range(2018, 2028)],
+            'training_program': ['IELTS', 'OET', 'PTE', 'TOEFL', 'AMC 1', 'AMC 2', 'AMC MCQ Mock'],
+            'coaching_course_type': ['Crash Course', 'Full Course'],
+            'coaching_method': ['Online', 'Offline', 'Online & Offline'],
+            'coaching_status': ['On Going', 'Completed', 'Not Completed'],
+        }
+        for cat, vals in _MASTER.items():
+            try:
+                have = set((r[0] or '').strip().lower() for r in conn.execute(
+                    "SELECT value FROM lookup_options WHERE category=? AND COALESCE(pathway,'plab')='australia'",
+                    (cat,)).fetchall())
+                for v in vals:
+                    if v.lower() not in have:
+                        conn.execute(
+                            "INSERT INTO lookup_options (category, label, value, pathway, is_active) "
+                            "VALUES (?, ?, ?, 'australia', true)", (cat, v, v))
+                conn.commit()
+            except Exception:
+                conn.rollback()
+        logging.info("seed_plan_type_product_links: done")
+    except Exception as e:
+        logging.error(f"seed_plan_type_product_links: {e}")
+    finally:
+        try: conn.close()
+        except Exception: pass
+
+
+seed_plan_type_product_links()
 
 def ensure_lookup_category_on_form_configs():
     """Migration: client_form_configs gets a `lookup_category` column.
@@ -29574,6 +30011,56 @@ ACCESS_SECTION_CATALOG = [
             ('gmc_registration',  'GMC Registration',   'UK General Medical Council registration tracker'),
             ('amc_registration',  'AMC Registration',   'Australian Medical Council registration tracker'),
             ('mentorship',        'Mentorship Sessions','Mentorship session scheduling + tracker'),
+            ('training',          'Training',           'Consulting training programs'),
+            ('online_courses',    'Online Courses',     'Consulting online courses (ops_online_courses)'),
+            ('online_subscriptions','Online Subscriptions','Consulting online subscriptions (ops_online_subscriptions)'),
+            ('webinars',          'Webinars & Conferences','Consulting event attendance log'),
+            ('research',          'Research & Publication','Consulting research project tracking'),
+        ],
+    },
+    # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
+    {
+        'key': 'uae_pathway',
+        'label': 'Operations · UAE Pathway',
+        'description': 'UAE Pathway operational sub-areas. Houses UAE Services clients (reg prefix GCUAE). Grant these to staff supporting UAE clients.',
+        'sub_sections': [
+            ('dashboard',        'Pathway Dashboard',  'Overview stats for UAE clients'),
+            ('registration',     'Registration',       'UAE client registration list + full profile'),
+            ('documents',        'Documents',          'UAE client document tracker'),
+            ('payments',         'Payments',           'UAE payment records'),
+            ('call_notes',       'Call Notes',         'UAE call log + tracker'),
+            ('self_assessment',  'Self Assessment',    'UAE self assessment tracker (ops_self_assessment)'),
+            ('eligibility_letter','Eligibility Letter','UAE eligibility letter tracker (ops_eligibility_letter)'),
+            ('data_flow',        'Data Flow',          'UAE data flow tracker (ops_data_flow)'),
+        ],
+    },
+    # ── Operations: Portfolio (Phase 4 lightweight) ───────────────────
+    {
+        'key': 'portfolio_pathway',
+        'label': 'Operations · Portfolio Pathway',
+        'description': 'Portfolio Pathway operational sub-areas (lightweight). Houses Portfolio Services clients. Grant these to staff supporting portfolio clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',  'Overview stats for portfolio clients'),
+            ('registration',  'Registration',       'Portfolio client registration list + full profile'),
+            ('payments',      'Payments',           'Portfolio payment records'),
+            ('documents',     'Documents',          'Portfolio client document tracker'),
+            ('call_notes',    'Call Notes',         'Portfolio call log + tracker'),
+            ('research',      'Research & Publications',   'Portfolio research project tracking (ops_research_publication)'),
+            ('courses',       'Courses & Certifications',  'Portfolio courses & certifications (ops_online_courses)'),
+            ('webinars',      'Webinars & Conferences',    'Portfolio event attendance log (ops_webinars_conferences)'),
+        ],
+    },
+    # ── Operations: Training (Phase 4 lightweight) ────────────────────
+    {
+        'key': 'training_pathway',
+        'label': 'Operations · Training Pathway',
+        'description': 'Training Pathway operational sub-areas (lightweight). Houses AMC MCQ / training clients. Grant these to staff supporting training clients.',
+        'sub_sections': [
+            ('dashboard',     'Pathway Dashboard',  'Overview stats for training clients'),
+            ('registration',  'Registration',       'Training client registration list + full profile'),
+            ('payments',      'Payments',           'Training payment records'),
+            ('documents',     'Documents',          'Training client document tracker'),
+            ('call_notes',    'Call Notes',         'Training call log + tracker'),
         ],
     },
     # ── Operations: Shared / cross-pathway ────────────────────────────────
@@ -32478,6 +32965,135 @@ ACCESS_ROUTE_MAP = {
     'ops_consulting_mentorship_add':                _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_edit':               _ap('consulting_pathway', 'mentorship', 'edit'),
     'ops_consulting_mentorship_delete':             _ap('consulting_pathway', 'mentorship', 'edit'),
+    # ── Consulting Services sections (manual entry) ────────────────────
+    'ops_consulting_training_list':                 _ap('consulting_pathway', 'training'),
+    'ops_consulting_training_detail':               _ap('consulting_pathway', 'training'),
+    'ops_consulting_training_edit_page':            _ap('consulting_pathway', 'training', 'edit'),
+    'ops_consulting_training_edit_save':            _ap('consulting_pathway', 'training', 'edit'),
+    'ops_consulting_training_add_page':             _ap('consulting_pathway', 'training', 'edit'),
+    'ops_consulting_training_add_save':             _ap('consulting_pathway', 'training', 'edit'),
+    'ops_consulting_online_courses_list':           _ap('consulting_pathway', 'online_courses'),
+    'ops_consulting_online_courses_detail':         _ap('consulting_pathway', 'online_courses'),
+    'ops_consulting_online_courses_edit_page':      _ap('consulting_pathway', 'online_courses', 'edit'),
+    'ops_consulting_online_courses_edit_save':      _ap('consulting_pathway', 'online_courses', 'edit'),
+    'ops_consulting_online_courses_add_page':       _ap('consulting_pathway', 'online_courses', 'edit'),
+    'ops_consulting_online_courses_add_save':       _ap('consulting_pathway', 'online_courses', 'edit'),
+    'ops_consulting_online_subscriptions_list':     _ap('consulting_pathway', 'online_subscriptions'),
+    'ops_consulting_online_subscriptions_detail':   _ap('consulting_pathway', 'online_subscriptions'),
+    'ops_consulting_online_subscriptions_edit_page':_ap('consulting_pathway', 'online_subscriptions', 'edit'),
+    'ops_consulting_online_subscriptions_edit_save':_ap('consulting_pathway', 'online_subscriptions', 'edit'),
+    'ops_consulting_online_subscriptions_add_page': _ap('consulting_pathway', 'online_subscriptions', 'edit'),
+    'ops_consulting_online_subscriptions_add_save': _ap('consulting_pathway', 'online_subscriptions', 'edit'),
+    'ops_consulting_webinars_list':                 _ap('consulting_pathway', 'webinars'),
+    'ops_consulting_webinars_detail':               _ap('consulting_pathway', 'webinars'),
+    'ops_consulting_webinars_edit_page':            _ap('consulting_pathway', 'webinars', 'edit'),
+    'ops_consulting_webinars_edit_save':            _ap('consulting_pathway', 'webinars', 'edit'),
+    'ops_consulting_webinars_add_page':             _ap('consulting_pathway', 'webinars', 'edit'),
+    'ops_consulting_webinars_add_save':             _ap('consulting_pathway', 'webinars', 'edit'),
+    'ops_consulting_research_list':                 _ap('consulting_pathway', 'research'),
+    'ops_consulting_research_detail':               _ap('consulting_pathway', 'research'),
+    'ops_consulting_research_edit_page':            _ap('consulting_pathway', 'research', 'edit'),
+    'ops_consulting_research_edit_save':            _ap('consulting_pathway', 'research', 'edit'),
+    'ops_consulting_research_add_page':             _ap('consulting_pathway', 'research', 'edit'),
+    'ops_consulting_research_add_save':             _ap('consulting_pathway', 'research', 'edit'),
+    # ── Operations: UAE Pathway (mirrors Portfolio + 3 new sections) ──
+    'ops_uae_pathway':                      _ap('uae_pathway', 'dashboard'),
+    'ops_uae_clients_list':                 _ap('uae_pathway', 'registration'),
+    'ops_uae_client_detail':                _ap('uae_pathway', 'registration'),
+    'ops_uae_client_by_reg':                _ap('uae_pathway', 'registration'),
+    'ops_uae_client_edit_page':             _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_client_edit_save':             _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_client_delete':                _ap('uae_pathway', 'registration', 'edit'),
+    'ops_uae_documents_list':               _ap('uae_pathway', 'documents'),
+    'ops_uae_payments_list':                _ap('uae_pathway', 'payments'),
+    'ops_uae_payments_detail':              _ap('uae_pathway', 'payments'),
+    'ops_uae_payments_edit_page':           _ap('uae_pathway', 'payments', 'edit'),
+    'ops_uae_payments_edit_save':           _ap('uae_pathway', 'payments', 'edit'),
+    'ops_uae_call_notes_list':              _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_tracker':           _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_not_contacted':     _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_detail':            _ap('uae_pathway', 'call_notes'),
+    'ops_uae_call_notes_edit_page':         _ap('uae_pathway', 'call_notes', 'edit'),
+    'ops_uae_call_notes_edit_save':         _ap('uae_pathway', 'call_notes', 'edit'),
+    'ops_uae_call_notes_add':               _ap('uae_pathway', 'call_notes', 'edit'),
+    # UAE new sections — Self Assessment / Eligibility Letter / Data Flow.
+    'ops_uae_self_assessment_list':         _ap('uae_pathway', 'self_assessment'),
+    'ops_uae_self_assessment_detail':       _ap('uae_pathway', 'self_assessment'),
+    'ops_uae_self_assessment_edit_page':    _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_edit_save':    _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_add_page':     _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_self_assessment_add_save':     _ap('uae_pathway', 'self_assessment', 'edit'),
+    'ops_uae_eligibility_list':             _ap('uae_pathway', 'eligibility_letter'),
+    'ops_uae_eligibility_detail':           _ap('uae_pathway', 'eligibility_letter'),
+    'ops_uae_eligibility_edit_page':        _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_edit_save':        _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_add_page':         _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_eligibility_add_save':         _ap('uae_pathway', 'eligibility_letter', 'edit'),
+    'ops_uae_data_flow_list':               _ap('uae_pathway', 'data_flow'),
+    'ops_uae_data_flow_detail':             _ap('uae_pathway', 'data_flow'),
+    'ops_uae_data_flow_edit_page':          _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_edit_save':          _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_add_page':           _ap('uae_pathway', 'data_flow', 'edit'),
+    'ops_uae_data_flow_add_save':           _ap('uae_pathway', 'data_flow', 'edit'),
+    # ── Operations: Portfolio Pathway (Phase 4 lightweight) ────────────
+    'ops_portfolio_pathway':                _ap('portfolio_pathway', 'dashboard'),
+    'ops_portfolio_clients_list':           _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_detail':          _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_by_reg':          _ap('portfolio_pathway', 'registration'),
+    'ops_portfolio_client_edit_page':       _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_client_edit_save':       _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_client_delete':          _ap('portfolio_pathway', 'registration', 'edit'),
+    'ops_portfolio_documents_list':         _ap('portfolio_pathway', 'documents'),
+    'ops_portfolio_payments_list':          _ap('portfolio_pathway', 'payments'),
+    'ops_portfolio_payments_detail':        _ap('portfolio_pathway', 'payments'),
+    'ops_portfolio_payments_edit_page':     _ap('portfolio_pathway', 'payments', 'edit'),
+    'ops_portfolio_payments_edit_save':     _ap('portfolio_pathway', 'payments', 'edit'),
+    'ops_portfolio_call_notes_list':        _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_tracker':     _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_not_contacted':_ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_detail':      _ap('portfolio_pathway', 'call_notes'),
+    'ops_portfolio_call_notes_edit_page':   _ap('portfolio_pathway', 'call_notes', 'edit'),
+    'ops_portfolio_call_notes_edit_save':   _ap('portfolio_pathway', 'call_notes', 'edit'),
+    'ops_portfolio_call_notes_add':         _ap('portfolio_pathway', 'call_notes', 'edit'),
+    # Portfolio Services sections (mirror the Consulting cs_ wiring).
+    'ops_portfolio_research_list':          _ap('portfolio_pathway', 'research'),
+    'ops_portfolio_research_detail':        _ap('portfolio_pathway', 'research'),
+    'ops_portfolio_research_edit_page':     _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_edit_save':     _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_add_page':      _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_add_save':      _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_courses_list':           _ap('portfolio_pathway', 'courses'),
+    'ops_portfolio_courses_detail':         _ap('portfolio_pathway', 'courses'),
+    'ops_portfolio_courses_edit_page':      _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_edit_save':      _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_add_page':       _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_add_save':       _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_webinars_list':          _ap('portfolio_pathway', 'webinars'),
+    'ops_portfolio_webinars_detail':        _ap('portfolio_pathway', 'webinars'),
+    'ops_portfolio_webinars_edit_page':     _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_edit_save':     _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_add_page':      _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_add_save':      _ap('portfolio_pathway', 'webinars', 'edit'),
+    # ── Operations: Training Pathway (Phase 4 lightweight) ─────────────
+    'ops_training_pathway':                 _ap('training_pathway', 'dashboard'),
+    'ops_training_clients_list':            _ap('training_pathway', 'registration'),
+    'ops_training_client_detail':           _ap('training_pathway', 'registration'),
+    'ops_training_client_by_reg':           _ap('training_pathway', 'registration'),
+    'ops_training_client_edit_page':        _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_client_edit_save':        _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_client_delete':           _ap('training_pathway', 'registration', 'edit'),
+    'ops_training_documents_list':          _ap('training_pathway', 'documents'),
+    'ops_training_payments_list':           _ap('training_pathway', 'payments'),
+    'ops_training_payments_detail':         _ap('training_pathway', 'payments'),
+    'ops_training_payments_edit_page':      _ap('training_pathway', 'payments', 'edit'),
+    'ops_training_payments_edit_save':      _ap('training_pathway', 'payments', 'edit'),
+    'ops_training_call_notes_list':         _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_tracker':      _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_not_contacted':_ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_detail':       _ap('training_pathway', 'call_notes'),
+    'ops_training_call_notes_edit_page':    _ap('training_pathway', 'call_notes', 'edit'),
+    'ops_training_call_notes_edit_save':    _ap('training_pathway', 'call_notes', 'edit'),
+    'ops_training_call_notes_add':          _ap('training_pathway', 'call_notes', 'edit'),
     # ── Operations: AMC Pathway ─────────────────────────────────────
     'ops_australia_pathway':                _ap('australia_pathway', 'dashboard'),
     'ops_australia_clients_list':           _ap('australia_pathway', 'registration'),
