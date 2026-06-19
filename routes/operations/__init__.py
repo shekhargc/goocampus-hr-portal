@@ -113,6 +113,19 @@ def register_operations_modules(app):
     pf_payments.register_routes(app)
     pf_call_notes.register_routes(app)
 
+    # Portfolio Pathway — Services sections (manual data entry, no import).
+    # Each clones the Standard Consulting section module scoped to
+    # pathway='portfolio'; list (with drawer) + detail + add + edit. They
+    # keep the vendor-first cascade (vendor select on top, deliverable
+    # cascades via /operations/api/vendor-services?pathway=portfolio).
+    #   Research & Publications  -> ops_research_publication
+    #   Courses & Certifications -> ops_online_courses
+    #   Webinars & Conferences   -> ops_webinars_conferences
+    from . import pf_research, pf_courses, pf_webinars
+    pf_research.register_routes(app)
+    pf_courses.register_routes(app)
+    pf_webinars.register_routes(app)
+
     from . import training, tr_payments, tr_call_notes
     training.register_routes(app)
     tr_payments.register_routes(app)

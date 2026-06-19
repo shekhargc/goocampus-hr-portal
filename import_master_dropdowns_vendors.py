@@ -64,9 +64,10 @@ if '--live' in sys.argv:
 
 AMC_DIR = os.environ.get('AMC_DIR', '/Users/Santosh/Desktop/Zoho Data/AMC PGCP')
 UK_DIR = os.environ.get('UK_DIR', '/Users/Santosh/Desktop/Zoho Data/UK GC')
+PF_DIR = os.environ.get('PF_DIR', '/Users/Santosh/Desktop/Zoho Data/Portfolio Services')
 
 # Country labels for vendors_providers (per task spec).
-COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway'}
+COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'portfolio': 'Portfolio Pathway'}
 
 # Tag-row labels that identify a column's role on a "Drop Downs" sheet.
 VENDOR_TAGS = ('vendor/provider', 'vendor', 'provider')
@@ -406,8 +407,61 @@ PLAB_SECTIONS = [
  },
 ]
 
-PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR}
-PATHWAY_SECTIONS = {'australia': AMC_SECTIONS, 'plab': PLAB_SECTIONS}
+# ── PORTFOLIO (portfolio) ────────────────────────────────────────────
+PORTFOLIO_SECTIONS = [
+ {
+  'file': 'Portfolio - All Payments Report.xlsx',
+  'section': 'Payments', 'vp_category': None,
+  'cols': {'Payment Method': 'payment_method'},
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Portfolio - Registration list.xlsx',
+  'section': 'Clients (Registration)', 'vp_category': None,
+  'cols': {
+    'Plan Type': 'plan_type', 'Account Status': 'account_status',
+    'Counsellor': 'counsellor', 'Career Stage': 'career_stage',
+    'Speciality Interest 1': 'medical_speciality',
+    'Speciality Interest 2': 'medical_speciality',
+    # CITY / STATE handled by the states/cities tables, not lookups.
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Portfolio - Research and Publication.xlsx',
+  'section': 'Research & Publications', 'vp_category': 'Research & Publications',
+  'cols': {
+    'Research Status': 'research_status', 'Author Position': 'author_position',
+    'Service': 'research_service',
+    'Research Provider': '__VENDOR__',
+  },
+  'vendor_col': 'Research Provider', 'deliverable_col': 'Service',
+ },
+ {
+  'file': 'Protfolio - Courses and Certifications Report.xlsx',
+  'section': 'Courses & Certifications', 'vp_category': 'Online Courses',
+  'cols': {
+    'Course Name': 'course_name',          # VENDOR-BACKED (deliverable) -> vendors/services
+    'Course Type': 'course_type', 'Course Status': 'course_status',
+    'Course Provider': '__VENDOR__',
+  },
+  'vendor_col': 'Course Provider', 'deliverable_col': 'Course Name',
+ },
+ {
+  'file': 'Protfolio - Webinars & Conferences Report.xlsx',
+  'section': 'Webinars', 'vp_category': 'Webinars',
+  'cols': {
+    'Event Type': 'event_type', 'Participation Type': 'participation_type',
+    'Event Value': 'event_value', 'Event Status': 'event_status',
+    'Provider': '__VENDOR__',
+  },
+  'vendor_col': 'Provider', 'deliverable_col': 'Event Type',
+ },
+]
+
+PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR}
+PATHWAY_SECTIONS = {'australia': AMC_SECTIONS, 'plab': PLAB_SECTIONS,
+                    'portfolio': PORTFOLIO_SECTIONS}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -508,6 +562,9 @@ CATEGORY_INUSE = {
     # (city/state handled by the dedicated states/cities tables, not lookups)
     'upgraded_to': ('plab_clients', 'upgraded_to'),
     'job_confirmed_by': ('ops_job_stage', 'job_confirmed_by'),
+    # Portfolio-specific dropdowns
+    'career_stage': ('plab_clients', 'career_stage'),
+    'event_status': ('ops_webinars_conferences', 'event_status'),
 }
 
 # Vendor category -> (ops_table, column) for the vendor "in use?" check.

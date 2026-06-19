@@ -7299,6 +7299,9 @@ def ensure_crm_tables():
             ('ops_mentorship',           'service',               'TEXT'),
             ('ops_uk_cab_bookings',      'services',              'TEXT'),
             ('ops_uk_cab_bookings',      'additional_instructions','TEXT'),
+            # Portfolio pathway: client Career Stage + webinar Event Status.
+            ('plab_clients',             'career_stage',          'TEXT'),
+            ('ops_webinars_conferences', 'event_status',          'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -29987,6 +29990,9 @@ ACCESS_SECTION_CATALOG = [
             ('payments',      'Payments',           'Portfolio payment records'),
             ('documents',     'Documents',          'Portfolio client document tracker'),
             ('call_notes',    'Call Notes',         'Portfolio call log + tracker'),
+            ('research',      'Research & Publications',   'Portfolio research project tracking (ops_research_publication)'),
+            ('courses',       'Courses & Certifications',  'Portfolio courses & certifications (ops_online_courses)'),
+            ('webinars',      'Webinars & Conferences',    'Portfolio event attendance log (ops_webinars_conferences)'),
         ],
     },
     # ── Operations: Training (Phase 4 lightweight) ────────────────────
@@ -32955,6 +32961,25 @@ ACCESS_ROUTE_MAP = {
     'ops_portfolio_call_notes_edit_page':   _ap('portfolio_pathway', 'call_notes', 'edit'),
     'ops_portfolio_call_notes_edit_save':   _ap('portfolio_pathway', 'call_notes', 'edit'),
     'ops_portfolio_call_notes_add':         _ap('portfolio_pathway', 'call_notes', 'edit'),
+    # Portfolio Services sections (mirror the Consulting cs_ wiring).
+    'ops_portfolio_research_list':          _ap('portfolio_pathway', 'research'),
+    'ops_portfolio_research_detail':        _ap('portfolio_pathway', 'research'),
+    'ops_portfolio_research_edit_page':     _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_edit_save':     _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_add_page':      _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_research_add_save':      _ap('portfolio_pathway', 'research', 'edit'),
+    'ops_portfolio_courses_list':           _ap('portfolio_pathway', 'courses'),
+    'ops_portfolio_courses_detail':         _ap('portfolio_pathway', 'courses'),
+    'ops_portfolio_courses_edit_page':      _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_edit_save':      _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_add_page':       _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_courses_add_save':       _ap('portfolio_pathway', 'courses', 'edit'),
+    'ops_portfolio_webinars_list':          _ap('portfolio_pathway', 'webinars'),
+    'ops_portfolio_webinars_detail':        _ap('portfolio_pathway', 'webinars'),
+    'ops_portfolio_webinars_edit_page':     _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_edit_save':     _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_add_page':      _ap('portfolio_pathway', 'webinars', 'edit'),
+    'ops_portfolio_webinars_add_save':      _ap('portfolio_pathway', 'webinars', 'edit'),
     # ── Operations: Training Pathway (Phase 4 lightweight) ─────────────
     'ops_training_pathway':                 _ap('training_pathway', 'dashboard'),
     'ops_training_clients_list':            _ap('training_pathway', 'registration'),

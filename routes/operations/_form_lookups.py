@@ -45,6 +45,7 @@ from db import get_db
 _VENDOR_COUNTRY = {
     'australia': 'AMC Pathway',
     'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway',
     'plab': 'UK Pathway',
 }
 
@@ -231,6 +232,7 @@ def section_webinars_lookups(pathway):
         'event_types':         get_lookup_options('event_type',         pathway=pathway),
         'event_values':        get_lookup_options('event_value',        pathway=pathway),
         'participation_types': get_lookup_options('participation_type', pathway=pathway),
+        'event_statuses':      get_lookup_options('event_status',       pathway=pathway),
         # Centralised vendor list for the Webinars category — drives the
         # vendor-first Provider <select>; event_type then cascades from it.
         'webinar_vendors':     vendor_names_for('Webinars', pathway,
