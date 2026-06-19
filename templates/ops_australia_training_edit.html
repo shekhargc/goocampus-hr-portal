@@ -44,16 +44,33 @@
 
             <!-- ===== PROGRAM ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Program</h3>
+
+            <!-- Vendor-first: pick the Vendor, then the Training Program narrows to that vendor's deliverables -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor / Provider</label>
+                    <select name="vendor_provider" id="training_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">—</option>
+                        {% for tv in training_vendors %}
+                        <option value="{{ tv }}" {% if record.vendor_provider == tv %}selected{% endif %}>{{ tv }}</option>
+                        {% endfor %}
+                        {# Preserve a legacy free-text vendor that isn't in the centralised list #}
+                        {% if record.vendor_provider and record.vendor_provider not in training_vendors %}
+                        <option value="{{ record.vendor_provider }}" selected>{{ record.vendor_provider }} (current)</option>
+                        {% endif %}
+                    </select>
+                </div>
+                <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training / Program</label>
-                    <select name="english_training" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <select name="english_training" id="training_program_select" data-current="{{ record.english_training if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">—</option>
                         {% for tp in training_programs %}
                         <option value="{{ tp }}" {% if record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
                         {% endfor %}
                     </select>
                 </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type</label>
                     <select name="course_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
@@ -86,12 +103,10 @@
             </div>
 
             <!-- ===== VENDOR ===== -->
+            <!-- The primary Vendor / Provider <select> lives at the top of the Program
+                 section (vendor-first cascade). Here we keep the secondary vendor fields. -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Vendor / Provider</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor / Provider</label>
-                    <input type="text" name="vendor_provider" value="{{ record.vendor_provider or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
-                </div>
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Other Vendor</label>
                     <input type="text" name="other_vendor" value="{{ record.other_vendor or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
@@ -148,6 +163,40 @@
         </form>
     </div>
 </div>
+
+<!-- Vendor-first cascade: choosing a Vendor narrows the Training Program list to that
+     vendor's deliverables (vendor_service_map, AMC Pathway). Falls back to the full
+     server-rendered Program list when no vendor is picked, the vendor has no mapped
+     services, or the fetch fails. Always preserves the record's current value. -->
+<script>
+(function() {
+    const vendorSel = document.getElementById('training_vendor');
+    const svcSel = document.getElementById('training_program_select');
+    if (!vendorSel || !svcSel) return;
+    const ALL = Array.from(svcSel.options).map(o => o.value).filter(Boolean);
+    const current = svcSel.getAttribute('data-current') || '';
+    function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function fill(list) {
+        const keep = svcSel.value || current;
+        let html = '<option value="">—</option>';
+        let hasKeep = false;
+        list.forEach(s => { if (s === keep) hasKeep = true;
+            html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });
+        if (keep && !hasKeep) html += '<option value="'+esc(keep)+'" selected>'+esc(keep)+' (current)</option>';
+        svcSel.innerHTML = html;
+    }
+    function load() {
+        const v = vendorSel.value.trim();
+        if (!v) { fill(ALL); return; }
+        fetch('/operations/api/vendor-services?pathway=australia&category=' +
+              encodeURIComponent('Training Programs') + '&vendor=' + encodeURIComponent(v))
+            .then(r => r.json())
+            .then(list => fill(list && list.length ? list : ALL))
+            .catch(() => fill(ALL));
+    }
+    vendorSel.addEventListener('change', load);
+})();
+</script>
 
 <!-- Client autocomplete (ADD mode only) — pathway-scoped to australia so only australia clients are suggested. -->
 <script>

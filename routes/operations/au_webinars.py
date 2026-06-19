@@ -22,12 +22,17 @@ from core.users import get_user
 from db import get_db
 # Pathway-scoped dropdown options for the AMC Webinars & Conferences edit form.
 from routes.operations._form_lookups import section_webinars_lookups
+# Cross-DB column-existence check (SQLite PRAGMA / Postgres information_schema).
+from routes.operations.au_test_bookings import _existing_columns
 
 
 # ── Editable columns on ops_webinars_conferences (pathway='australia') ─
 # Only safe-to-edit fields. id / registration_number / pathway never
 # editable. The UI calls `event_name` "Webinar / Conference Name".
+# `provider` is the vendor the event_type cascades from; it is only written
+# when the column actually exists on this DB (guarded in the save handlers).
 AU_WEBINARS_EDITABLE_COLUMNS = [
+    'provider',
     'event_type', 'participation_type', 'event_value',
     'start_date', 'end_date', 'duration_days',
     'event_name', 'cpd_points', 'notes',
@@ -237,10 +242,16 @@ def ops_australia_webinars_edit_save(rid):
             flash('Australia webinar/conference record not found.', 'error')
             return redirect(url_for('ops_australia_webinars_list'))
 
+        # Skip any editable column not present on this DB (e.g. provider on
+        # an older schema) so the UPDATE never references a missing column.
+        db_cols = _existing_columns(conn, 'ops_webinars_conferences')
+
         sets = []
         params = []
         for col in AU_WEBINARS_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 val = request.form.get(col, '').strip()
                 # Numeric columns get coerced to float; empty -> None.
                 if col in _NUMERIC_COLUMNS:
@@ -311,10 +322,13 @@ def ops_australia_webinars_add_save():
         if not reg:
             flash('Registration number is required.', 'error')
             return redirect(url_for('ops_australia_webinars_add_page'))
+        db_cols = _existing_columns(conn, 'ops_webinars_conferences')
         cols = ['registration_number', 'pathway']
         vals = [reg, 'australia']
         for col in AU_WEBINARS_EDITABLE_COLUMNS:
             if col in request.form:
+                if db_cols and col not in db_cols:
+                    continue
                 v = (request.form.get(col) or '').strip()
                 if col in _NUMERIC_COLUMNS:
                     if not v:
