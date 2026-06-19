@@ -54,6 +54,28 @@
             <!-- ===== TRAINING DETAILS ===== -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Training Details</h3>
 
+            <!-- Vendor-first: pick the Provider, then Training Program narrows to that vendor's deliverables -->
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Provider / Vendor</label>
+                    <select name="vendor_provider" id="training_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Provider</option>
+                        {% for vp in vendor_providers %}
+                        <option value="{{ vp }}" {% if record and record.vendor_provider == vp %}selected{% endif %}>{{ vp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+                <div>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Training Program *</label>
+                    <select name="english_training" id="training_program" data-current="{{ record.english_training if record else '' }}" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                        <option value="">Select Program</option>
+                        {% for tp in training_programs %}
+                        <option value="{{ tp }}" {% if record and record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type *</label>
@@ -85,26 +107,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Training Program *</label>
-                    <select name="english_training" id="training_program" required onchange="updateVendorFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select Program</option>
-                        {% for tp in training_programs %}
-                        <option value="{{ tp }}" {% if record and record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
-                        {% endfor %}
-                    </select>
-                </div>
-            </div>
-
-            <!-- ===== PROVIDER / VENDOR (populated via AJAX based on Training Program) ===== -->
-            <div id="vendor_section" style="margin-bottom:1.1rem;display:none;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Provider / Vendor</label>
-                <select name="vendor_provider" id="vendor_provider" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                    <option value="">Select Provider</option>
-                    {% if record and record.vendor_provider %}
-                    <option value="{{ record.vendor_provider }}" selected>{{ record.vendor_provider }}</option>
-                    {% endif %}
-                </select>
+                <div></div>
             </div>
 
             <!-- ===== SCHEDULE ===== -->
@@ -162,45 +165,36 @@
 </div>
 
 <script>
-// Vendor map embedded from server — no AJAX needed
-var VENDOR_MAP = {{ vendor_map | tojson }};
-
-function updateVendorFields() {
-    const program = document.getElementById('training_program').value;
-    const section = document.getElementById('vendor_section');
-    const vendorSelect = document.getElementById('vendor_provider');
-
-    if (!program) {
-        section.style.display = 'none';
-        return;
+// Vendor-first cascade: choosing a Provider narrows the Training Program list to
+// that vendor's deliverables (from vendor_service_map). Falls back to the full
+// list when no vendor is picked or the vendor has no mapped services.
+(function() {
+    const vendorSel = document.getElementById('training_vendor');
+    const svcSel = document.getElementById('training_program');
+    if (!vendorSel || !svcSel) return;
+    const ALL = Array.from(svcSel.options).map(o => o.value).filter(Boolean);
+    const current = svcSel.getAttribute('data-current') || '';
+    function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
+    function fill(list) {
+        const keep = svcSel.value || current;
+        let html = '<option value="">Select Program</option>';
+        let hasKeep = false;
+        list.forEach(s => { if (s === keep) hasKeep = true;
+            html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });
+        if (keep && !hasKeep) html += '<option value="'+esc(keep)+'" selected>'+esc(keep)+' (current)</option>';
+        svcSel.innerHTML = html;
     }
-
-    section.style.display = 'block';
-
-    // Save current selection
-    const currentVal = vendorSelect.value;
-
-    // Get vendors from inline map
-    const vendors = VENDOR_MAP[program] || [];
-    vendorSelect.innerHTML = '<option value="">Select Provider</option>';
-    vendors.forEach(function(name) {
-        const opt = document.createElement('option');
-        opt.value = name;
-        opt.textContent = name;
-        if (name === currentVal) opt.selected = true;
-        vendorSelect.appendChild(opt);
-    });
-    // If current value not in list but exists, keep it as an option
-    if (currentVal && !vendorSelect.value) {
-        const opt = document.createElement('option');
-        opt.value = currentVal;
-        opt.textContent = currentVal;
-        opt.selected = true;
-        vendorSelect.appendChild(opt);
+    function load() {
+        const v = vendorSel.value.trim();
+        if (!v) { fill(ALL); return; }
+        fetch('/operations/api/vendor-services?pathway=plab&category=' +
+              encodeURIComponent('Training Programs') + '&vendor=' + encodeURIComponent(v))
+            .then(r => r.json())
+            .then(list => fill(list && list.length ? list : ALL))
+            .catch(() => fill(ALL));
     }
-}
-// Run on page load for edit mode
-document.addEventListener('DOMContentLoaded', updateVendorFields);
+    vendorSel.addEventListener('change', load);
+})();
 
 (function() {
     const searchInput = document.getElementById('client_search');

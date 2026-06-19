@@ -19522,13 +19522,15 @@ def ops_coaching_add():
     vendor_map = _build_vendor_map()
     conn.close()
     pre_reg = request.args.get('client', '')
+    training_vendors = get_vendors_by_category('Training Programs', 'UK Pathway')
+    vendor_provider_names = [v['name'] for v in training_vendors] if training_vendors else get_lookup_options('training_vendor')
     return render_template('ops_coaching_form.html', record=None, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
-                           vendor_map=vendor_map,
+                           vendor_map=vendor_map, vendor_providers=vendor_provider_names,
                            pre_reg=pre_reg, active_ops_page='coaching')
 
 
@@ -19577,13 +19579,15 @@ def ops_coaching_edit(record_id):
     clients = conn.execute("SELECT registration_number, prefix, first_name, last_name FROM plab_clients ORDER BY first_name").fetchall()
     vendor_map = _build_vendor_map()
     conn.close()
+    training_vendors = get_vendors_by_category('Training Programs', 'UK Pathway')
+    vendor_provider_names = [v['name'] for v in training_vendors] if training_vendors else get_lookup_options('training_vendor')
     return render_template('ops_coaching_form.html', record=record, clients=clients,
                            course_types=get_lookup_options('coaching_course_type'), coaching_statuses=get_lookup_options('coaching_status'),
                            coaching_methods=get_lookup_options('coaching_method'),
                            training_programs=get_lookup_options('training_program'),
                            attendance_options=get_lookup_options('coaching_attendance'),
                            batch_months=get_lookup_options('batch_month'),
-                           vendor_map=vendor_map,
+                           vendor_map=vendor_map, vendor_providers=vendor_provider_names,
                            pre_reg='', active_ops_page='coaching')
 
 
@@ -21591,14 +21595,27 @@ def ops_subscriptions_add():
             f.get('login_id'), f.get('password'), f.get('booked_by'),
             f.get('mobile_number'), f.get('candidate_email'), session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # subscription_provider (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_online_subscriptions WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_online_subscriptions SET subscription_provider=? WHERE id=?",
+                         (f.get('subscription_provider', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Subscription record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    sub_vendors = get_vendors_by_category('Online Subscriptions', 'UK Pathway')
+    subscription_provider_names = [v['name'] for v in sub_vendors] if sub_vendors else get_lookup_options('subscription_provider')
     return render_template('ops_subscriptions_form.html', record=None,
                            subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
-                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg=pre_reg,
+                           booked_by_options=get_lookup_options('subscription_booked_by'),
+                           subscription_providers=subscription_provider_names, pre_reg=pre_reg,
                            active_ops_page='subscriptions')
 
 
@@ -21620,13 +21637,21 @@ def ops_subscriptions_edit(rid):
             f.get('login_id'), f.get('password'), f.get('booked_by'),
             f.get('mobile_number'), f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # subscription_provider (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_online_subscriptions SET subscription_provider=? WHERE id=?",
+                     (f.get('subscription_provider', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Subscription record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_subscriptions_list'))
     conn.close()
+    sub_vendors = get_vendors_by_category('Online Subscriptions', 'UK Pathway')
+    subscription_provider_names = [v['name'] for v in sub_vendors] if sub_vendors else get_lookup_options('subscription_provider')
     return render_template('ops_subscriptions_form.html', record=record,
                            subscription_types=get_lookup_options('subscription_type'), activation_types=get_lookup_options('activation_type'),
-                           booked_by_options=get_lookup_options('subscription_booked_by'), pre_reg='',
+                           booked_by_options=get_lookup_options('subscription_booked_by'),
+                           subscription_providers=subscription_provider_names, pre_reg='',
                            active_ops_page='subscriptions')
 
 
@@ -21770,14 +21795,27 @@ def ops_webinars_add():
             f.get('notes'), f.get('mobile_number'), f.get('candidate_email'),
             session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # provider (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_webinars_conferences WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_webinars_conferences SET provider=? WHERE id=?",
+                         (f.get('provider', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Webinar/Conference record added', 'success')
         return redirect(request.args.get('next') or url_for('ops_webinars_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    webinar_vendors = get_vendors_by_category('Webinars', 'UK Pathway')
+    webinar_provider_names = [v['name'] for v in webinar_vendors] if webinar_vendors else get_lookup_options('webinar_provider')
     return render_template('ops_webinars_form.html', record=None,
                            event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
-                           participation_types=get_lookup_options('participation_type'), pre_reg=pre_reg,
+                           participation_types=get_lookup_options('participation_type'),
+                           webinar_providers=webinar_provider_names, pre_reg=pre_reg,
                            active_ops_page='webinars')
 
 
@@ -21799,13 +21837,21 @@ def ops_webinars_edit(rid):
             f.get('cpd_points'), f.get('event_name'), f.get('participation_type'),
             f.get('notes'), f.get('mobile_number'), f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # provider (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_webinars_conferences SET provider=? WHERE id=?",
+                     (f.get('provider', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Webinar/Conference record updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_webinars_list'))
     conn.close()
+    webinar_vendors = get_vendors_by_category('Webinars', 'UK Pathway')
+    webinar_provider_names = [v['name'] for v in webinar_vendors] if webinar_vendors else get_lookup_options('webinar_provider')
     return render_template('ops_webinars_form.html', record=record,
                            event_types=get_lookup_options('event_type'), event_values=get_lookup_options('event_value'),
-                           participation_types=get_lookup_options('participation_type'), pre_reg='',
+                           participation_types=get_lookup_options('participation_type'),
+                           webinar_providers=webinar_provider_names, pre_reg='',
                            active_ops_page='webinars')
 
 
@@ -22527,15 +22573,29 @@ def ops_mentorship_add():
             f.get('mentor_attendance'), f.get('mobile_number'),
             f.get('candidate_email'), session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # service / fee_currency / service_description (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_mentorship WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_mentorship SET service=?, fee_currency=?, service_description=? WHERE id=?",
+                         (f.get('service', ''), f.get('fee_currency', ''), f.get('service_description', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Mentorship session added', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=None,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
                            attendance_options=get_lookup_options('mentorship_attendance'),
-                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg=pre_reg,
+                           confirmation_options=get_lookup_options('mentorship_confirmation'),
+                           mentorship_providers=mentorship_provider_names,
+                           mentorship_services=get_lookup_options('mentorship_service', 'plab'), pre_reg=pre_reg,
                            active_ops_page='mentorship')
 
 
@@ -22561,14 +22621,23 @@ def ops_mentorship_edit(rid):
             f.get('mentor_attendance'), f.get('mobile_number'),
             f.get('candidate_email'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # service / fee_currency / service_description (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_mentorship SET service=?, fee_currency=?, service_description=? WHERE id=?",
+                     (f.get('service', ''), f.get('fee_currency', ''), f.get('service_description', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Mentorship session updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_mentorship_list'))
     conn.close()
+    mentorship_vendors = get_vendors_by_category('Mentorship', 'UK Pathway')
+    mentorship_provider_names = [v['name'] for v in mentorship_vendors] if mentorship_vendors else get_lookup_options('mentorship_provider')
     return render_template('ops_mentorship_form.html', record=record,
                            payment_statuses=get_lookup_options('mentorship_payment_status'),
                            attendance_options=get_lookup_options('mentorship_attendance'),
-                           confirmation_options=get_lookup_options('mentorship_confirmation'), pre_reg='',
+                           confirmation_options=get_lookup_options('mentorship_confirmation'),
+                           mentorship_providers=mentorship_provider_names,
+                           mentorship_services=get_lookup_options('mentorship_service', 'plab'), pre_reg='',
                            active_ops_page='mentorship')
 
 
@@ -22627,13 +22696,26 @@ def ops_cab_add():
             f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'),
             session.get('user_id', 0)
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # services (separate write to avoid disturbing the wide tuple above)
+        new_row = conn.execute(
+            "SELECT id FROM ops_uk_cab_bookings WHERE registration_number=? ORDER BY id DESC LIMIT 1",
+            (f.get('registration_number'),)
+        ).fetchone()
+        if new_row:
+            conn.execute("UPDATE ops_uk_cab_bookings SET services=? WHERE id=?",
+                         (f.get('services', ''), new_row['id']))
+            conn.commit()
+        conn.close()
         flash('Cab booking added', 'success')
         return redirect(request.args.get('next') or url_for('ops_cab_list'))
     conn.close()
     pre_reg = request.args.get('client', '')
+    cab_vendor_rows = get_vendors_by_category('Cab Bookings', 'UK Pathway')
+    cab_vendor_names = [v['name'] for v in cab_vendor_rows] if cab_vendor_rows else get_lookup_options('cab_vendor')
     return render_template('ops_cab_form.html', record=None,
-                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg=pre_reg,
+                           cab_vendors=cab_vendor_names,
+                           cab_services=get_lookup_options('cab_service', 'plab'), pre_reg=pre_reg,
                            active_ops_page='cab-bookings')
 
 
@@ -22655,12 +22737,20 @@ def ops_cab_edit(rid):
             f.get('booking_date'), f.get('invoice_number'), f.get('pick_up_date'),
             f.get('pick_up_location'), f.get('drop_location'), f.get('additional_notes'), rid
         ))
-        conn.commit(); conn.close()
+        conn.commit()
+        # services (separate write to avoid disturbing the wide tuple above)
+        conn.execute("UPDATE ops_uk_cab_bookings SET services=? WHERE id=?",
+                     (f.get('services', ''), rid))
+        conn.commit()
+        conn.close()
         flash('Cab booking updated', 'success')
         return redirect(request.args.get('next') or url_for('ops_cab_list'))
     conn.close()
+    cab_vendor_rows = get_vendors_by_category('Cab Bookings', 'UK Pathway')
+    cab_vendor_names = [v['name'] for v in cab_vendor_rows] if cab_vendor_rows else get_lookup_options('cab_vendor')
     return render_template('ops_cab_form.html', record=record,
-                           cab_vendors=get_lookup_options('cab_vendor'), pre_reg='',
+                           cab_vendors=cab_vendor_names,
+                           cab_services=get_lookup_options('cab_service', 'plab'), pre_reg='',
                            active_ops_page='cab-bookings')
 
 
