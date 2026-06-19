@@ -65,9 +65,11 @@ if '--live' in sys.argv:
 AMC_DIR = os.environ.get('AMC_DIR', '/Users/Santosh/Desktop/Zoho Data/AMC PGCP')
 UK_DIR = os.environ.get('UK_DIR', '/Users/Santosh/Desktop/Zoho Data/UK GC')
 PF_DIR = os.environ.get('PF_DIR', '/Users/Santosh/Desktop/Zoho Data/Portfolio Services')
+TR_DIR = os.environ.get('TR_DIR', '/Users/Santosh/Desktop/Zoho Data/Training')
 
 # Country labels for vendors_providers (per task spec).
-COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'portfolio': 'Portfolio Pathway'}
+COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway',
+           'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway'}
 
 # Tag-row labels that identify a column's role on a "Drop Downs" sheet.
 VENDOR_TAGS = ('vendor/provider', 'vendor', 'provider')
@@ -459,9 +461,29 @@ PORTFOLIO_SECTIONS = [
  },
 ]
 
-PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR}
+# ── TRAINING (training) ──────────────────────────────────────────────
+TRAINING_SECTIONS = [
+ {
+  'file': 'Training- All Payments Report.xlsx',
+  'section': 'Payments', 'vp_category': None,
+  'cols': {'Payment Method': 'payment_method', 'Installment': 'instalment'},
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Training - Pathway Registration List.xlsx',
+  'section': 'Clients (Registration)', 'vp_category': None,
+  'cols': {
+    'Plan Type': 'plan_type', 'Counsellor Name': 'counsellor',
+    'Lead Source': 'lead_source',
+    # dropdown lists live on the 2nd sheet "Sheet1" (handled by the fallback).
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+]
+
+PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR, 'training': TR_DIR}
 PATHWAY_SECTIONS = {'australia': AMC_SECTIONS, 'plab': PLAB_SECTIONS,
-                    'portfolio': PORTFOLIO_SECTIONS}
+                    'portfolio': PORTFOLIO_SECTIONS, 'training': TRAINING_SECTIONS}
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -602,6 +624,15 @@ def read_dropdown_sheet(path):
     data_ws = wb[sn[0]]
     data_hdr = set(_norm(c.value) for c in next(data_ws.iter_rows(min_row=1, max_row=1)) if c.value)
     dd = next((s for s in sn if 'drop' in s.lower()), None)
+    # Some exports (e.g. Training registration) put the dropdown lists on a
+    # 2nd sheet named "Sheet1" instead of "Drop Downs". Fall back to the 2nd
+    # sheet when there's no drop-named one — but only if its first row looks
+    # like the data header (so we never mistake an unrelated sheet for one).
+    if dd is None and len(sn) > 1:
+        cand = sn[1]
+        cand_hdr = set(_norm(c.value) for c in next(wb[cand].iter_rows(min_row=1, max_row=1)) if c.value)
+        if len(cand_hdr & data_hdr) >= max(2, len(data_hdr) // 2):
+            dd = cand
     if dd is None:
         wb.close()
         return None, [], {}, {}
