@@ -37,7 +37,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC Registration Status</label>
                     <select name="epic_registration" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select EPIC Registration Status</option>
                         {% for status in epic_reg_statuses %}
                         <option value="{{ status }}" {% if record and record.epic_registration == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -49,7 +49,7 @@
             <!-- ADD MODE — autocomplete to pick a client -->
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Name *</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                     <div style="position:relative;">
                         <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                         <input type="text" id="client_search" autocomplete="off" placeholder="Type candidate name..."
@@ -62,7 +62,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC Registration Status</label>
                     <select name="epic_registration" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select EPIC Registration Status</option>
                         {% for status in epic_reg_statuses %}
                         <option value="{{ status }}">{{ status }}</option>
                         {% endfor %}
@@ -75,7 +75,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">EPIC Status</label>
                     <select name="epic_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select EPIC Status</option>
                         {% for status in epic_statuses %}
                         <option value="{{ status }}" {% if record and record.epic_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -93,7 +93,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Status</label>
                     <select name="notary_camp" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select Status</option>
                         {% for status in notary_camp_statuses %}
                         <option value="{{ status }}" {% if record and record.notary_camp == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -116,7 +116,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Documents Stage</label>
                     <select name="documents_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select Documents Stage</option>
                         {% for opt in doc_stage_options %}
                         <option value="{{ opt }}" {% if record and record.documents_stage == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}
@@ -125,7 +125,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Document Status</label>
                     <select name="document_stage_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;background:white;box-sizing:border-box;">
-                        <option value="">—</option>
+                        <option value="">Select Document Status</option>
                         {% for opt in doc_stage_status_options %}
                         <option value="{{ opt }}" {% if record and record.document_stage_status == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}

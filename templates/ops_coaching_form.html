@@ -39,7 +39,7 @@
             <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
                     <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
@@ -80,7 +80,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type *</label>
                     <select name="course_type" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select course type —</option>
+                        <option value="">Select Course Type</option>
                         {% for course_type in course_types %}
                         <option value="{{ course_type }}" {% if record and record.course_type == course_type %}selected{% endif %}>{{ course_type }}</option>
                         {% endfor %}
@@ -89,7 +89,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Method *</label>
                     <select name="coaching_method" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select method —</option>
+                        <option value="">Select Coaching Method</option>
                         {% for method in coaching_methods %}
                         <option value="{{ method }}" {% if record and record.coaching_method == method %}selected{% endif %}>{{ method }}</option>
                         {% endfor %}
@@ -101,7 +101,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Status *</label>
                     <select name="coaching_status" required style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select status —</option>
+                        <option value="">Select Coaching Status</option>
                         {% for status in coaching_statuses %}
                         <option value="{{ status }}" {% if record and record.coaching_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -144,7 +144,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Attendance</label>
                     <select name="attendance" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
+                        <option value="">Select Attendance</option>
                         {% for a in attendance_options %}
                         <option value="{{ a }}" {% if record and record.attendance == a %}selected{% endif %}>{{ a }}</option>
                         {% endfor %}

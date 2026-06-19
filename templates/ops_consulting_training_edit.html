@@ -22,7 +22,7 @@
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number{% if not record.id %} <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">{% if record.id %}Registration Number{% else %}Search Candidate Name <span style="color:#dc2626;">*</span>{% endif %}</label>
                     {% if record.id %}
                     <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
                     {% else %}
@@ -50,7 +50,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Vendor / Provider</label>
                     <select name="vendor_provider" id="training_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Vendor / Provider</option>
                         {% for tv in training_vendors %}
                         <option value="{{ tv }}" {% if record.vendor_provider == tv %}selected{% endif %}>{{ tv }}</option>
                         {% endfor %}
@@ -63,7 +63,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">English Training / Program</label>
                     <select name="english_training" id="training_program_select" data-current="{{ record.english_training if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select English Training / Program</option>
                         {% for tp in training_programs %}
                         <option value="{{ tp }}" {% if record.english_training == tp %}selected{% endif %}>{{ tp }}</option>
                         {% endfor %}
@@ -74,7 +74,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Course Type</label>
                     <select name="course_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Course Type</option>
                         {% for course_type in course_types %}
                         <option value="{{ course_type }}" {% if record.course_type == course_type %}selected{% endif %}>{{ course_type }}</option>
                         {% endfor %}
@@ -85,7 +85,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Method</label>
                     <select name="coaching_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Coaching Method</option>
                         {% for method in coaching_methods %}
                         <option value="{{ method }}" {% if record.coaching_method == method %}selected{% endif %}>{{ method }}</option>
                         {% endfor %}
@@ -94,7 +94,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Coaching Status</label>
                     <select name="coaching_status" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Coaching Status</option>
                         {% for status in coaching_statuses %}
                         <option value="{{ status }}" {% if record.coaching_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -110,7 +110,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Booked By</label>
                     <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Booked By</option>
                         {% for b in booked_by_options %}
                         <option value="{{ b }}" {% if record.booked_by == b %}selected{% endif %}>{{ b }}</option>
                         {% endfor %}
@@ -124,7 +124,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Year</label>
                     <select name="batch_year" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Batch Year</option>
                         {% for y in batch_years %}
                         <option value="{{ y }}" {% if record.batch_year|string == y|string %}selected{% endif %}>{{ y }}</option>
                         {% endfor %}
@@ -133,7 +133,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Batch Month</label>
                     <select name="batch_month" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Batch Month</option>
                         {% for m in batch_months %}
                         <option value="{{ m }}" {% if record.batch_month == m %}selected{% endif %}>{{ m }}</option>
                         {% endfor %}
@@ -174,7 +174,7 @@
     function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
     function fill(list) {
         const keep = svcSel.value || current;
-        let html = '<option value="">—</option>';
+        let html = '<option value="">Select…</option>';
         let hasKeep = false;
         list.forEach(s => { if (s === keep) hasKeep = true;
             html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });

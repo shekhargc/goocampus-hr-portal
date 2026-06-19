@@ -22,7 +22,7 @@
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number{% if not record.id %} <span style="color:#dc2626;">*</span>{% endif %}</label>
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">{% if record.id %}Registration Number{% else %}Search Candidate Name <span style="color:#dc2626;">*</span>{% endif %}</label>
                     {% if record.id %}
                     <input type="text" value="{{ record.registration_number or '' }}" readonly style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
                     {% else %}
@@ -50,7 +50,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Provider (Vendor)</label>
                     <select name="provider" id="webinar_vendor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Provider</option>
                         {% for wv in webinar_vendors %}
                         <option value="{{ wv }}" {% if record.provider == wv %}selected{% endif %}>{{ wv }}</option>
                         {% endfor %}
@@ -59,7 +59,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Type</label>
                     <select name="event_type" id="webinar_event_type_select" data-current="{{ record.event_type if record else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Event Type</option>
                         {% for t in event_types %}
                         <option value="{{ t }}" {% if record.event_type == t %}selected{% endif %}>{{ t }}</option>
                         {% endfor %}
@@ -70,7 +70,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Participation Type</label>
                     <select name="participation_type" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Participation Type</option>
                         {% for p in participation_types %}
                         <option value="{{ p }}" {% if record.participation_type == p %}selected{% endif %}>{{ p }}</option>
                         {% endfor %}
@@ -85,7 +85,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Event Value</label>
                     <select name="event_value" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Event Value</option>
                         {% for v in event_values %}
                         <option value="{{ v }}" {% if record.event_value == v %}selected{% endif %}>{{ v }}</option>
                         {% endfor %}
@@ -146,7 +146,7 @@
     function esc(s){ const d=document.createElement('div'); d.textContent=s; return d.innerHTML; }
     function fill(list) {
         const keep = svcSel.value || current;
-        let html = '<option value="">—</option>';
+        let html = '<option value="">Select…</option>';
         let hasKeep = false;
         list.forEach(s => { if (s === keep) hasKeep = true;
             html += '<option value="'+esc(s)+'"'+(s===keep?' selected':'')+'>'+esc(s)+'</option>'; });

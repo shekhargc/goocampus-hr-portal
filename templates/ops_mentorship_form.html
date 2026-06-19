@@ -35,7 +35,7 @@
             <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
                     <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
@@ -123,7 +123,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Candidate Attendance</label>
                     <select name="candidate_attendance" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
+                        <option value="">Select Candidate Attendance</option>
                         {% for a in attendance_options %}
                         <option value="{{ a }}" {% if record and record.candidate_attendance == a %}selected{% endif %}>{{ a }}</option>
                         {% endfor %}
@@ -132,7 +132,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Mentor Attendance</label>
                     <select name="mentor_attendance" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
+                        <option value="">Select Mentor Attendance</option>
                         {% for a in attendance_options %}
                         <option value="{{ a }}" {% if record and record.mentor_attendance == a %}selected{% endif %}>{{ a }}</option>
                         {% endfor %}
@@ -141,7 +141,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Session Confirmation</label>
                     <select name="session_confirmation" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select</option>
+                        <option value="">Select Session Confirmation</option>
                         {% for c in confirmation_options %}
                         <option value="{{ c }}" {% if record and record.session_confirmation == c %}selected{% endif %}>{{ c }}</option>
                         {% endfor %}

@@ -56,7 +56,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Prefix</label>
                     <select name="prefix" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">—</option>
+                        <option value="">Select Prefix</option>
                         {% for opt in ['Dr.', 'Mr.', 'Ms.', 'Mrs.'] %}
                         <option value="{{ opt }}" {% if item and item.prefix == opt %}selected{% endif %}>{{ opt }}</option>
                         {% endfor %}
@@ -165,7 +165,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Joined Stage</label>
                     <select name="joined_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Joined Stage</option>
                         {% for stage in joined_stages %}
                         <option value="{{ stage }}" {% if item and item.joined_stage == stage %}selected{% endif %}>{{ stage }}</option>
                         {% endfor %}
@@ -174,7 +174,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Product / Service</label>
                     <select name="product_id" id="product_id" data-pathway="plab" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Product / Service</option>
                         {% for prod in products %}
                         <option value="{{ prod.id }}" data-name="{{ prod.name }}" {% if item and item.product_id == prod.id %}selected{% endif %}>{{ prod.name }}</option>
                         {% endfor %}
@@ -183,7 +183,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Plan Type</label>
                     <select name="plan_type" id="plan_type" data-current="{{ item.plan_type if item else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Plan Type</option>
                         {% for plan in plan_types %}
                         <option value="{{ plan }}" {% if item and item.plan_type == plan %}selected{% endif %}>{{ plan }}</option>
                         {% endfor %}
@@ -192,7 +192,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Upgraded To</label>
                     <select name="upgraded_to" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Upgraded To</option>
                         {% for u in upgraded_options %}
                         <option value="{{ u }}" {% if item and item.upgraded_to == u %}selected{% endif %}>{{ u }}</option>
                         {% endfor %}
@@ -243,7 +243,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
                     <select name="account_status" id="account_status" onchange="toggleSwitchedProgram()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Account Status</option>
                         {% for status in account_statuses %}
                         <option value="{{ status }}" {% if item and item.account_status == status %}selected{% endif %}>{{ status }}</option>
                         {% endfor %}
@@ -252,7 +252,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Current Stage</label>
                     <select name="current_stage" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Current Stage</option>
                         {% for stage in plab_stages %}
                         <option value="{{ stage }}" {% if item and item.current_stage == stage %}selected{% endif %}>{{ stage }}</option>
                         {% endfor %}
@@ -268,7 +268,7 @@
                 <div id="switched_program_wrapper" style="{% if not item or item.account_status != 'Switched Program' %}display:none;{% endif %}">
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Switched Program</label>
                     <select name="switched_program" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Switched Program</option>
                         {% for prog in switched_programs %}
                         <option value="{{ prog }}" {% if item and item.switched_program == prog %}selected{% endif %}>{{ prog }}</option>
                         {% endfor %}
@@ -283,7 +283,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
                     <select name="counsellor" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Counsellor</option>
                         {% for c in counsellors %}
                         <option value="{{ c }}" {% if item and item.counsellor == c %}selected{% endif %}>{{ c }}</option>
                         {% endfor %}
@@ -305,7 +305,7 @@
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source <span style="color:#e53e3e;">*</span></label>
                 <select name="lead_source" id="lead_source" onchange="toggleReferralFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                    <option value="">— Select —</option>
+                    <option value="">Select Lead Source</option>
                     {% for source in lead_sources %}
                     <option value="{{ source }}" {% if item and item.lead_source == source %}selected{% endif %}>{{ source }}</option>
                     {% endfor %}
@@ -331,7 +331,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Operations Team Referral <span style="color:#e53e3e;">*</span></label>
                     <select name="operations_referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Operations Team Referral</option>
                         {% for ref in operations_referrals %}
                         <option value="{{ ref }}" {% if item and item.operations_referral == ref %}selected{% endif %}>{{ ref }}</option>
                         {% endfor %}

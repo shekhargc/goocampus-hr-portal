@@ -39,7 +39,7 @@
             <!-- ADD MODE — autocomplete search to pick a client -->
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client</h3>
             <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Select Client *</label>
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Search Candidate Name *</label>
                 <div style="position:relative;">
                     <input type="hidden" name="registration_number" id="reg_number_val" value="{{ pre_reg or '' }}" />
                     <input type="text" id="client_search" autocomplete="off" placeholder="Type client name..."
@@ -62,7 +62,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instalment</label>
                     <select name="instalment" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Instalment</option>
                         {% for inst in instalment_options %}
                         <option value="{{ inst }}" {% if record and record.instalment == inst %}selected{% endif %}>{{ inst }}</option>
                         {% endfor %}
@@ -89,7 +89,7 @@
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Payment Method</label>
                     <select name="payment_method" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">— Select —</option>
+                        <option value="">Select Payment Method</option>
                         {% for method in payment_methods %}
                         <option value="{{ method }}" {% if record and record.payment_method == method %}selected{% endif %}>{{ method }}</option>
                         {% endfor %}
