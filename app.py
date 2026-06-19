@@ -3676,30 +3676,91 @@ def apply_late_leave():
                     active_section='hr')
 
 
+def _notify_leave_cancellation(conn, user, records, reason):
+    """Email the reporting manager that a leave was cancelled; CC the team member."""
+    try:
+        from email_utils import send_email
+        mgr_email = mgr_name = None
+        if user.get('reporting_to'):
+            mgr = conn.execute('SELECT name, email FROM employees WHERE id = ?',
+                               (user['reporting_to'],)).fetchone()
+            if mgr:
+                mgr_name, mgr_email = mgr['name'], mgr['email']
+        if not mgr_email:
+            return False
+        dates = sorted(str(r['leave_date']) for r in records)
+        date_range = dates[0] if len(dates) == 1 else f"{dates[0]} to {dates[-1]} ({len(dates)} days)"
+        l_type = records[0]['leave_type']
+        emp_name = user.get('name') or 'A team member'
+        emp_email = user.get('email')
+        subject = f"Leave Cancellation — {emp_name} ({date_range})"
+        body = f"""<div style="font-family:Arial,sans-serif;font-size:14px;color:#333;line-height:1.6;">
+            <p>Hi {mgr_name},</p>
+            <p><strong>{emp_name}</strong> has cancelled the following leave:</p>
+            <ul>
+              <li><strong>Type:</strong> {l_type}</li>
+              <li><strong>Date(s):</strong> {date_range}</li>
+              <li><strong>Reason for cancellation:</strong> {reason or '—'}</li>
+            </ul>
+            <p style="color:#6b7280;">This was cancelled before the leave date; no approval action is required.</p>
+            <p>— GooCampus HR Portal</p></div>"""
+        cc = [emp_email] if emp_email else None
+        return send_email([mgr_email], subject, body, cc_list=cc)
+    except Exception as e:
+        logging.error(f"_notify_leave_cancellation: {e}")
+        return False
+
+
 @app.route('/cancel-leave/<int:leave_id>', methods=['POST'])
 @login_required
 def cancel_leave(leave_id):
+    """Cancel a leave any time before the leave date (pending OR approved).
+    Marks the day(s) cancelled (freeing the balance) and emails the reporting
+    manager with a copy to the team member."""
     user = get_user()
     conn = get_db()
 
     leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
-
     if not leave or leave['employee_id'] != user['id']:
         flash('Leave not found or unauthorized', 'error')
         conn.close()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('my_leave_applications'))
 
-    if leave['status'] != 'pending':
-        flash('Only pending leaves can be cancelled', 'error')
+    reason = (request.form.get('retrieve_reason') or request.form.get('cancel_reason') or '').strip()
+    group_id = request.args.get('group_id') or leave['leave_group_id']
+    today_str = datetime.now().strftime('%Y-%m-%d')
+
+    if group_id:
+        rows = conn.execute(
+            "SELECT * FROM leave_records WHERE leave_group_id = ? AND employee_id = ?",
+            (group_id, user['id'])).fetchall()
+    else:
+        rows = [leave]
+    # Only cancel days that are still active (pending/approved) and not yet passed.
+    cancellable = [r for r in rows
+                   if r['status'] in ('pending', 'approved') and str(r['leave_date']) >= today_str]
+    if not cancellable:
+        flash('This leave can no longer be cancelled — it has already been actioned or the date has passed.', 'error')
         conn.close()
-        return redirect(url_for('dashboard'))
+        return redirect(url_for('my_leave_applications'))
 
-    conn.execute('DELETE FROM leave_records WHERE id = ?', (leave_id,))
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ids = [r['id'] for r in cancellable]
+    ph = ','.join(['?'] * len(ids))
+    conn.execute(
+        f"UPDATE leave_records SET status='cancelled', modification_reason=?, approved_at=? WHERE id IN ({ph})",
+        [reason, now_str] + ids)
     conn.commit()
+
+    notified = _notify_leave_cancellation(conn, user, cancellable, reason)
     conn.close()
 
-    flash('Leave request cancelled', 'success')
-    return redirect(url_for('dashboard'))
+    n = len(cancellable)
+    msg = f'Leave cancelled ({n} day{"s" if n > 1 else ""}).'
+    if notified:
+        msg += ' Your reporting manager has been notified (you are cc’d).'
+    flash(msg, 'success')
+    return redirect(url_for('my_leave_applications'))
 
 
 @app.route('/retrieve-leave/<int:leave_id>', methods=['POST'])
@@ -3759,10 +3820,20 @@ def modify_leave(leave_id):
         conn.close()
         return redirect(url_for('my_leave_report'))
 
-    if leave['status'] in ('retrieved', 'modified'):
-        flash('This leave has already been retrieved or modified', 'error')
+    if leave['status'] in ('retrieved', 'modified', 'cancelled'):
+        flash('This leave has already been retrieved, modified or cancelled', 'error')
         conn.close()
         return redirect(url_for('my_leave_report'))
+
+    # Can't modify a leave whose date has already passed (approved leaves can
+    # still be modified up to the leave date — modifying re-submits for approval).
+    try:
+        if str(leave['leave_date']) < datetime.now().strftime('%Y-%m-%d'):
+            flash('This leave date has passed and can no longer be modified.', 'error')
+            conn.close()
+            return redirect(url_for('my_leave_report'))
+    except Exception:
+        pass
 
     if request.method == 'POST':
         new_leave_type = request.form.get('leave_type', '').strip()

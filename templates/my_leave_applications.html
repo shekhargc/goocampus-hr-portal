@@ -229,35 +229,35 @@
                     <span class="badge" style="background: #F3F4F6; color: #6B7280; border: 1px solid #D1D5DB;">Retrieved</span>
                     {% elif leave.status == 'modified' %}
                     <span class="badge" style="background: #DBEAFE; color: #1E40AF; border: 1px solid #93C5FD;">Modified</span>
+                    {% elif leave.status == 'cancelled' %}
+                    <span class="badge" style="background: #FEF2F2; color: #DC2626; border: 1px solid #FECACA;">Cancelled</span>
                     {% endif %}
                 </td>
                 <td style="font-size: 0.82rem; color: var(--gray-500); white-space: nowrap;">
                     {{ leave.created_at|format_date }}
                 </td>
                 <td style="white-space: nowrap;">
-                    {% if leave.status not in ('retrieved', 'modified') %}
+                    {% if leave.status not in ('retrieved', 'modified', 'cancelled') and leave.leave_date >= today %}
                     <div class="action-btns">
-                        {% if leave.group_count == 1 and leave.leave_date >= today %}
-                        <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0;">Edit</a>
-                        {% endif %}
-                        <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm btn-retrieve">Retrieve</button>
                         {% if leave.group_count == 1 %}
+                        <a href="/edit-leave/{{ leave.id }}" class="btn-sm" style="background: #F0FDF4; color: #16A34A; border: 1px solid #BBF7D0;">Edit</a>
                         <a href="/modify-leave/{{ leave.id }}" class="btn-sm btn-modify">Modify</a>
                         {% endif %}
+                        <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;">Cancel</button>
                     </div>
                     {% else %}
                     <span style="color: var(--gray-400); font-size: 0.78rem;">—</span>
                     {% endif %}
                 </td>
             </tr>
-            {% if leave.status not in ('retrieved', 'modified') %}
+            {% if leave.status not in ('retrieved', 'modified', 'cancelled') and leave.leave_date >= today %}
             <tr id="ret-{{ leave.id }}" style="display: none; background: #F9FAFB;">
                 <td colspan="7">
                     <form method="POST" action="/cancel-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.3rem 0;">
-                        <input type="text" name="retrieve_reason" placeholder="Reason for retrieving this leave..." required
+                        <input type="text" name="cancel_reason" placeholder="Reason for cancelling this leave..." required
                                style="flex: 1; padding: 0.4rem 0.7rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
-                        <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}</button>
-                        <button type="button" onclick="document.getElementById('ret-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Cancel</button>
+                        <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm Cancellation{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}</button>
+                        <button type="button" onclick="document.getElementById('ret-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Close</button>
                     </form>
                 </td>
             </tr>
