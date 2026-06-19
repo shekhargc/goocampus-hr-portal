@@ -30,6 +30,12 @@ def _resolve(fname):
     return os.path.join(DL, fname)
 
 
+def _gctrn(reg):
+    """The Zoho exports carry GCAMCTR/... reg numbers; the portal standard for
+    the Training pathway is GCTRN/... — normalise on import."""
+    return reg.replace('GCAMCTR', 'GCTRN') if reg else reg
+
+
 CLIENT_FILE = "Training - Pathway Registration List.xlsx"
 CLIENT_MAP = {
     'customer_id': ('Customer ID', 's'),
@@ -63,7 +69,7 @@ def step_clients():
     existing = set((r[0] or '').strip() for r in cur.fetchall())
     ins = upd = skip = 0
     for r in rows:
-        reg = extract_reg(g(r, 'Registration Number')) or s(g(r, 'Registration Number'))
+        reg = _gctrn(extract_reg(g(r, 'Registration Number')) or s(g(r, 'Registration Number')))
         if not reg:
             skip += 1; continue
         prefix, first, last = split_name(g(r, 'Candidate Name'))
@@ -158,7 +164,7 @@ def step_sections():
         for r in it:
             if not any(v not in (None, '') for v in r):
                 continue
-            reg_val = s(g(r, reg_col)) if reg_col else None
+            reg_val = _gctrn(s(g(r, reg_col))) if reg_col else None
             name_val = s(g(r, name_col)) if name_col else None
             if not (reg_val or name_val):
                 continue
