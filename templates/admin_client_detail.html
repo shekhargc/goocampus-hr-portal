@@ -537,6 +537,24 @@
             <p style="color: var(--gray-500); font-size: 0.88rem; margin-bottom: 1.5rem;">
                 Fill in the sales details for this client registration.
             </p>
+            {# config-driven sales field — the /admin/client-form-config page (role=sales) controls these #}
+            {% macro sales_field(f, value) %}
+                <div class="form-group">
+                    <label for="{{ f.field_name }}">{{ f.field_label }}{% if f.is_required %} *{% endif %}</label>
+                    {% if f.field_type == 'select' %}
+                        {% set opts = lookup_options.get(f.field_options[3:], []) if (f.field_options or '').startswith('db:') else (f.field_options or '').split(',') %}
+                        <select name="{{ f.field_name }}" id="{{ f.field_name }}" {% if f.is_required %}required{% endif %}>
+                            <option value="">-- Select --</option>
+                            {% for o in opts %}{% if o and o.strip() %}<option value="{{ o.strip() }}" {% if value == o.strip() %}selected{% endif %}>{{ o.strip() }}</option>{% endif %}{% endfor %}
+                        </select>
+                    {% elif f.field_type == 'textarea' %}
+                        <textarea name="{{ f.field_name }}" id="{{ f.field_name }}" rows="3" placeholder="{{ f.placeholder or '' }}">{{ value or '' }}</textarea>
+                    {% else %}
+                        <input type="{{ f.field_type or 'text' }}" name="{{ f.field_name }}" id="{{ f.field_name }}" value="{{ value or '' }}" placeholder="{{ f.placeholder or '' }}" {% if f.is_required %}required{% endif %}>
+                    {% endif %}
+                    {% if f.hint_text %}<small style="color:var(--gray-500);display:block;margin-top:4px;">{{ f.hint_text }}</small>{% endif %}
+                </div>
+            {% endmacro %}
             <form method="POST" action="/admin/client/{{ reg.id }}/sales-complete" id="salesForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -548,33 +566,14 @@
                             {% endfor %}
                         </select>
                     </div>
-                    <div class="form-group">
-                        <label for="plan_type">Plan Type *</label>
-                        <select name="plan_type" id="plan_type" required>
-                            <option value="">-- Select Plan --</option>
-                            <option value="Basic" {% if reg.plan_type == 'Basic' %}selected{% endif %}>Basic</option>
-                            <option value="Standard" {% if reg.plan_type == 'Standard' %}selected{% endif %}>Standard</option>
-                            <option value="Premium" {% if reg.plan_type == 'Premium' %}selected{% endif %}>Premium</option>
-                        </select>
-                    </div>
                 </div>
 
-                <div class="form-row">
-                    <div class="form-group">
-                        <label for="package_amount">Package Amount (INR) *</label>
-                        <input type="number" name="package_amount" id="package_amount" min="0" step="1" value="{{ reg.package_amount or '' }}" required>
-                    </div>
-                    <div class="form-group">
-                        <label for="discount_allowed">Discount Allowed (INR)</label>
-                        <input type="number" name="discount_allowed" id="discount_allowed" min="0" step="1" value="{{ reg.discount_allowed or 0 }}">
-                    </div>
-                    <div class="form-group">
-                        <label for="final_package">Final Package (INR)</label>
-                        <input type="number" name="final_package" id="final_package" min="0" step="1" value="{{ reg.final_package or '' }}" readonly style="background: var(--gray-50); font-weight: 700; color: var(--navy);">
-                    </div>
+                <div class="form-row" style="flex-wrap:wrap;">
+                    {% for f in sales_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
+                    {% if not sales_config %}<p style="color:var(--gray-500);font-size:0.85rem;">No sales fields configured for this product. Add them under Settings → Client Form Config (role: Sales).</p>{% endif %}
                 </div>
 
-                <!-- Installments -->
+                <!-- Installments (structural) -->
                 <h3 style="font-size: 1rem; font-weight: 600; color: var(--navy); margin: 1.5rem 0 1rem;">Payment Installments</h3>
 
                 {% for i in range(1, 5) %}
@@ -593,18 +592,6 @@
                     </div>
                 </div>
                 {% endfor %}
-
-                <div class="form-row" style="margin-top: 1rem;">
-                    <div class="form-group">
-                        <label for="lead_source">Lead Source</label>
-                        <input type="text" name="lead_source" id="lead_source" value="{{ reg.lead_source or '' }}" placeholder="e.g., Website, Referral, Event">
-                    </div>
-                </div>
-
-                <div class="form-group">
-                    <label for="additional_notes">Additional Notes</label>
-                    <textarea name="additional_notes" id="additional_notes" rows="3" placeholder="Any additional notes about this sale...">{{ reg.additional_notes or '' }}</textarea>
-                </div>
 
                 <div style="display: flex; gap: 1rem; margin-top: 1.5rem;">
                     <button type="submit" class="button">

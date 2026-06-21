@@ -2435,11 +2435,23 @@ def admin_client_detail(reg_id):
         ).fetchall()
     except Exception:
         welcome_kit = []
+    # Sales-section fields are config-driven (client_form_configs role='sales'),
+    # so the /admin/client-form-config settings page controls what sales fills.
+    sales_config = conn.execute('''
+        SELECT * FROM client_form_configs
+        WHERE product_id = ? AND role = 'sales' AND is_visible = 1
+          AND field_name NOT LIKE 'inst%'
+        ORDER BY step_number, display_order
+    ''', (reg['product_id'],)).fetchall()
+    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = 1 ORDER BY category, sort_order, value").fetchall()
+    lookup_options = {}
+    for row in lookup_rows:
+        lookup_options.setdefault(row['category'], []).append(row['value'])
     conn.close()
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
-        counsellors=counsellors, welcome_kit=welcome_kit,
-        user=user, active_section='clients')
+        counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
+        lookup_options=lookup_options, user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──
@@ -2449,32 +2461,43 @@ def admin_client_detail(reg_id):
 def admin_client_sales_complete(reg_id):
     user = get_user()
     conn = get_db()
-    reg = conn.execute("SELECT id, form_status FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+    reg = conn.execute("SELECT id, form_status, product_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
     if not reg:
         conn.close()
         flash('Client not found', 'error')
         return redirect(url_for('admin_clients_list'))
 
-    conn.execute('''UPDATE client_registrations SET
-        counsellor_id = ?, counsellor_name = (SELECT name FROM employees WHERE id = ?),
-        plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
-        inst1_amount = ?, inst1_date = ?, inst1_note = ?,
-        inst2_amount = ?, inst2_date = ?, inst2_note = ?,
-        inst3_amount = ?, inst3_date = ?, inst3_note = ?,
-        inst4_amount = ?, inst4_date = ?, inst4_note = ?,
-        lead_source = ?, additional_notes = ?,
-        sales_completed = 1, sales_completed_at = CURRENT_TIMESTAMP, sales_completed_by = ?,
-        updated_at = CURRENT_TIMESTAMP
-        WHERE id = ?''',
-        (request.form.get('counsellor_id'), request.form.get('counsellor_id'),
-         request.form.get('plan_type',''), float(request.form.get('package_amount',0) or 0),
-         float(request.form.get('discount_allowed',0) or 0), float(request.form.get('final_package',0) or 0),
-         float(request.form.get('inst1_amount',0) or 0), request.form.get('inst1_date',''), request.form.get('inst1_note',''),
-         float(request.form.get('inst2_amount',0) or 0), request.form.get('inst2_date',''), request.form.get('inst2_note',''),
-         float(request.form.get('inst3_amount',0) or 0), request.form.get('inst3_date',''), request.form.get('inst3_note',''),
-         float(request.form.get('inst4_amount',0) or 0), request.form.get('inst4_date',''), request.form.get('inst4_note',''),
-         request.form.get('lead_source',''), request.form.get('additional_notes',''),
-         user['id'], reg_id))
+    # Config-driven sales fields (non-installment): the settings page decides
+    # which the sales team fills. Whitelist to real columns; coerce numbers.
+    _CR_SALES_COLS = {'joined_stage', 'plan_type', 'lead_source', 'package_amount',
+                      'discount_allowed', 'final_package', 'additional_notes'}
+    sales_cfg = conn.execute(
+        "SELECT field_name, field_type FROM client_form_configs WHERE product_id = ? "
+        "AND role = 'sales' AND is_visible = 1 AND field_name NOT LIKE 'inst%'",
+        (reg['product_id'],)).fetchall()
+    dyn = {}
+    for f in sales_cfg:
+        fn = f['field_name']
+        if fn not in _CR_SALES_COLS:
+            continue
+        v = request.form.get(fn, '')
+        if f['field_type'] == 'number':
+            v = float(v or 0)
+        dyn[fn] = v
+
+    set_parts = ["counsellor_id = ?", "counsellor_name = (SELECT name FROM employees WHERE id = ?)"]
+    vals = [request.form.get('counsellor_id'), request.form.get('counsellor_id')]
+    for i in (1, 2, 3, 4):
+        set_parts += [f"inst{i}_amount = ?", f"inst{i}_date = ?", f"inst{i}_note = ?"]
+        vals += [float(request.form.get(f'inst{i}_amount', 0) or 0),
+                 request.form.get(f'inst{i}_date', ''), request.form.get(f'inst{i}_note', '')]
+    for k, v in dyn.items():
+        set_parts.append(f"{k} = ?")
+        vals.append(v)
+    set_parts += ["sales_completed = 1", "sales_completed_at = CURRENT_TIMESTAMP",
+                  "sales_completed_by = ?", "updated_at = CURRENT_TIMESTAMP"]
+    vals.append(user['id'])
+    conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
     conn.commit()
     conn.close()
 
@@ -7370,6 +7393,8 @@ def ensure_crm_tables():
             ('plab_clients',             'referral_client_name',   'TEXT'),
             # 2026-06-21: which team owns the referral — 'sales' | 'operations'
             ('plab_clients',             'referral_channel',       'TEXT'),
+            # Sales section of the invitation flow (config-driven): joined stage.
+            ('client_registrations',     'joined_stage',           'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
