@@ -312,12 +312,14 @@
                 </select>
             </div>
 
-            <!-- ===== INTERNAL REFERRAL (shown only when Lead Source = Referral) ===== -->
+            <!-- ===== INTERNAL REFERRAL (shown when Lead Source = Sales/Operations Referral) ===== -->
             <!-- One entry: search a client across ALL pathways; the pathway is
-                 derived from the chosen client and the referral is linked to them. -->
+                 derived from the chosen client; the channel (sales/operations)
+                 comes from the Lead Source. -->
             <div id="referral_block" style="display:none;margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referring Client <span style="color:var(--gray-400);font-weight:400;">— search any pathway</span></label>
                 <input type="hidden" name="referral_source_pathway" id="referral_pathway" value="{{ item.referral_source_pathway or '' if item else '' }}">
+                <input type="hidden" name="referral_channel" id="referral_channel" value="{{ item.referral_channel or '' if item else '' }}">
                 <input type="hidden" name="referral_client_reg"  id="referral_client_reg"  value="{{ item.referral_client_reg or '' if item else '' }}">
                 <input type="hidden" name="referral_client_name" id="referral_client_name" value="{{ item.referral_client_name or '' if item else '' }}">
                 <div style="position:relative;">
@@ -325,16 +327,6 @@
                     <div id="referral_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
                 </div>
                 <div id="referral_meta" style="font-size:0.78rem;color:var(--orange);margin-top:0.35rem;font-weight:600;"></div>
-            </div>
-
-            <div style="margin-bottom:1.1rem;">
-                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Operations Team Referral</label>
-                <select name="operations_referral" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                    <option value="">Select Operations Team Referral</option>
-                    {% for ref in operations_referrals %}
-                    <option value="{{ ref }}" {% if item and item.operations_referral == ref %}selected{% endif %}>{{ ref }}</option>
-                    {% endfor %}
-                </select>
             </div>
 
             <!-- ===== PACKAGE & INSTALLMENT ===== -->
@@ -809,8 +801,11 @@ function toggleSwitchedProgram() {
 function toggleReferralFields() {
     const ls = document.getElementById('lead_source');
     const refBlock = document.getElementById('referral_block');
-    if (refBlock) refBlock.style.display =
-        (ls && String(ls.value).trim().toLowerCase() === 'referral') ? 'block' : 'none';
+    const chan = document.getElementById('referral_channel');
+    const v = ls ? String(ls.value).trim().toLowerCase() : '';
+    const isRef = (v === 'sales referral' || v === 'operations referral');
+    if (refBlock) refBlock.style.display = isRef ? 'block' : 'none';
+    if (chan) chan.value = (v === 'sales referral') ? 'sales' : (v === 'operations referral') ? 'operations' : '';
 }
 
 // Run on page load to set initial state

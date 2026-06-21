@@ -230,6 +230,7 @@
             <div id="referral_block" style="display:none;margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referring Client <span style="color:var(--gray-400);font-weight:400;">&mdash; search any pathway</span></label>
                 <input type="hidden" name="referral_source_pathway" id="referral_pathway" value="{{ client.referral_source_pathway or '' }}">
+                <input type="hidden" name="referral_channel" id="referral_channel" value="{{ client.referral_channel or '' }}">
                 <input type="hidden" name="referral_client_reg"  id="referral_client_reg"  value="{{ client.referral_client_reg or '' }}">
                 <input type="hidden" name="referral_client_name" id="referral_client_name" value="{{ client.referral_client_name or '' }}">
                 <div style="position:relative;">
@@ -299,8 +300,12 @@
 function toggleReferralBlock() {
     var ls = document.getElementById('lead_source');
     var refBlock = document.getElementById('referral_block');
+    var chan = document.getElementById('referral_channel');
     if (!ls || !refBlock) return;
-    refBlock.style.display = (String(ls.value).trim().toLowerCase() === 'referral') ? 'block' : 'none';
+    var v = String(ls.value).trim().toLowerCase();
+    var isRef = (v === 'sales referral' || v === 'operations referral');
+    refBlock.style.display = isRef ? 'block' : 'none';
+    if (chan) chan.value = (v === 'sales referral') ? 'sales' : (v === 'operations referral') ? 'operations' : '';
 }
 document.addEventListener('DOMContentLoaded', function() {
     toggleReferralBlock();

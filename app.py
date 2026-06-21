@@ -7379,6 +7379,8 @@ def ensure_crm_tables():
             ('plab_clients',             'referral_source_pathway','TEXT'),
             ('plab_clients',             'referral_client_reg',    'TEXT'),
             ('plab_clients',             'referral_client_name',   'TEXT'),
+            # 2026-06-21: which team owns the referral — 'sales' | 'operations'
+            ('plab_clients',             'referral_channel',       'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -18502,8 +18504,8 @@ def ops_plab_add():
             conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE registration_number=?",
                          (f.get('upgraded_to', ''), reg_num))
             # Centralised cross-pathway referral (separate write to avoid disturbing the wide tuple above)
-            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=? WHERE registration_number=?",
-                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), reg_num))
+            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=?, referral_channel=? WHERE registration_number=?",
+                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), f.get('referral_channel', ''), reg_num))
             conn.commit()
 
             # ── Auto-send welcome email on registration ──
@@ -18647,8 +18649,8 @@ def ops_plab_edit(client_id):
             conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE id=?",
                          (f.get('upgraded_to', ''), client_id))
             # Centralised cross-pathway referral (separate write to avoid disturbing the wide tuple above)
-            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=? WHERE id=?",
-                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), client_id))
+            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=?, referral_channel=? WHERE id=?",
+                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), f.get('referral_channel', ''), client_id))
             conn.commit()
             flash('Client updated', 'success')
             conn.close()
@@ -20339,10 +20341,14 @@ def ops_referrals_report():
     pathway_filter = (request.args.get('pathway') or '').strip().lower()
     if pathway_filter not in REFERRAL_PATHWAY_LABELS:
         pathway_filter = ''
+    channel_filter = (request.args.get('channel') or '').strip().lower()
+    if channel_filter not in ('sales', 'operations'):
+        channel_filter = ''
 
     conn = get_db()
     leaders = []
     by_pathway = []
+    by_channel = {'sales': 0, 'operations': 0}
     try:
         sql = (
             "SELECT referral_client_name, referral_source_pathway, COUNT(*) AS n "
@@ -20353,6 +20359,9 @@ def ops_referrals_report():
         if pathway_filter:
             sql += " AND COALESCE(referral_source_pathway, '') = ? "
             params.append(pathway_filter)
+        if channel_filter:
+            sql += " AND LOWER(COALESCE(referral_channel, '')) = ? "
+            params.append(channel_filter)
         sql += " GROUP BY referral_client_name, referral_source_pathway ORDER BY n DESC, referral_client_name "
         rows = conn.execute(sql, params).fetchall()
 
@@ -20388,6 +20397,14 @@ def ops_referrals_report():
             by_pathway.append({'pathway': pw,
                                'label': REFERRAL_PATHWAY_LABELS.get(pw.lower(), pw or '—'),
                                'count': br['n']})
+        # Sales vs Operations split (full, independent of filters).
+        chrows = conn.execute(
+            "SELECT LOWER(COALESCE(referral_channel,'')) AS ch, COUNT(*) AS n FROM plab_clients "
+            "WHERE referral_client_reg IS NOT NULL AND referral_client_reg <> '' "
+            "GROUP BY LOWER(COALESCE(referral_channel,''))").fetchall()
+        for cr in chrows:
+            if cr['ch'] in ('sales', 'operations'):
+                by_channel[cr['ch']] = cr['n']
     except Exception as e:
         logging.error(f"ops_referrals_report: {e}")
         leaders = []
@@ -20400,10 +20417,12 @@ def ops_referrals_report():
     return render_template('ops_referrals_report.html',
                            leaders=leaders,
                            by_pathway=by_pathway,
+                           by_channel=by_channel,
                            total_referrals=total_referrals,
                            unique_referrers=unique_referrers,
                            grand_total=grand_total,
                            pathway_filter=pathway_filter,
+                           channel_filter=channel_filter,
                            pathway_labels=REFERRAL_PATHWAY_LABELS,
                            active_ops_page='referrals',
                            active_pathway=None)

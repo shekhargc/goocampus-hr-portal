@@ -347,7 +347,7 @@ PF_EDITABLE_COLUMNS = [
     'inst3_amount', 'inst3_date', 'inst3_note',
     'inst4_amount', 'inst4_date', 'inst4_note',
     # Centralised cross-pathway referral (data layer pre-created; columns exist)
-    'referral_source_pathway', 'referral_client_reg', 'referral_client_name',
+    'referral_source_pathway', 'referral_channel', 'referral_client_reg', 'referral_client_name',
 ]
 # Numeric fields get coerced to float on save.
 PF_NUMERIC_COLUMNS = {
