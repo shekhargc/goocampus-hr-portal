@@ -1221,6 +1221,22 @@ def client_dashboard():
         plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES)
 
 
+# Columns the dynamic client form may write to, per step. The public form is
+# rendered + saved from client_form_configs (role='client', is_visible=1); we
+# whitelist to real columns so an admin toggling fields can't write arbitrary keys.
+_CR_FORM_COLS = {'prefix', 'first_name', 'last_name', 'dob', 'mobile', 'whatsapp',
+                 'whatsapp2', 'email', 'address', 'city', 'state', 'country',
+                 'father_name', 'father_phone', 'mother_name', 'mother_phone',
+                 'parents_email', 'instagram', 'facebook', 'linkedin'}
+_CA_FORM_COLS = {'img_fmg', 'img_medical_college', 'fmg_medical_college', 'country',
+                 'mbbs_status', 'mbbs_start_date', 'mbbs_end_date', 'speciality_interest_1',
+                 'speciality_interest_2', 'internship_status', 'internship_hospital',
+                 'internship_location', 'internship_hospital_2', 'internship_location_2',
+                 'internship_start_date', 'internship_end_date', 'internship_gap',
+                 'gap_in_months', 'gap_reason', 'working_status', 'working_hospital_name',
+                 'additional_info'}
+
+
 @app.route('/client/form/<int:reg_id>', methods=['GET', 'POST'])
 @client_required
 def client_form(reg_id):
@@ -1260,59 +1276,32 @@ def client_form(reg_id):
         action = request.form.get('action', 'save')  # save or submit
 
         if step == 1:
-            # Personal info
-            conn.execute('''UPDATE client_registrations SET
-                prefix = ?, first_name = ?, last_name = ?, dob = ?, mobile = ?, whatsapp = ?, whatsapp2 = ?,
-                email = ?, address = ?, city = ?, state = ?, country = ?,
-                father_name = ?, father_phone = ?, mother_name = ?, mother_phone = ?, parents_email = ?,
-                instagram = ?, facebook = ?, linkedin = ?,
-                current_step = GREATEST(current_step, 2), updated_at = CURRENT_TIMESTAMP
-                WHERE id = ?''',
-                (request.form.get('prefix','Dr.'), request.form.get('first_name',''), request.form.get('last_name',''),
-                 request.form.get('dob',''), request.form.get('mobile',''), request.form.get('whatsapp',''),
-                 request.form.get('whatsapp2',''),
-                 request.form.get('email',''), request.form.get('address',''), request.form.get('city',''),
-                 request.form.get('state',''), request.form.get('country','India'),
-                 request.form.get('father_name',''), request.form.get('father_phone',''),
-                 request.form.get('mother_name',''), request.form.get('mother_phone',''), request.form.get('parents_email',''),
-                 request.form.get('instagram',''), request.form.get('facebook',''), request.form.get('linkedin',''),
-                 reg_id))
+            # Personal info — config-driven (only the visible client fields).
+            s1 = [f for f in form_config if (f['step_number'] or 1) == 1 and f['field_name'] in _CR_FORM_COLS]
+            data = {f['field_name']: request.form.get(f['field_name'], '') for f in s1}
+            if data:
+                sets = ', '.join(f"{k} = ?" for k in data)
+                conn.execute(
+                    f"UPDATE client_registrations SET {sets}, current_step = GREATEST(current_step, 2), "
+                    f"updated_at = CURRENT_TIMESTAMP WHERE id = ?", list(data.values()) + [reg_id])
+            else:
+                conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 2), "
+                             "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         elif step == 2:
-            # Academic details (mirrors ops_academic_details)
-            acad_fields = {
-                'img_fmg': request.form.get('img_fmg',''),
-                'img_medical_college': request.form.get('img_medical_college',''),
-                'fmg_medical_college': request.form.get('fmg_medical_college',''),
-                'country': request.form.get('country',''),
-                'mbbs_status': request.form.get('mbbs_status',''),
-                'mbbs_start_date': request.form.get('mbbs_start_date',''),
-                'mbbs_end_date': request.form.get('mbbs_end_date',''),
-                'speciality_interest_1': request.form.get('speciality_interest_1',''),
-                'speciality_interest_2': request.form.get('speciality_interest_2',''),
-                'internship_status': request.form.get('internship_status',''),
-                'internship_hospital': request.form.get('internship_hospital',''),
-                'internship_location': request.form.get('internship_location',''),
-                'internship_hospital_2': request.form.get('internship_hospital_2',''),
-                'internship_location_2': request.form.get('internship_location_2',''),
-                'internship_start_date': request.form.get('internship_start_date',''),
-                'internship_end_date': request.form.get('internship_end_date',''),
-                'internship_gap': request.form.get('internship_gap',''),
-                'gap_in_months': request.form.get('gap_in_months',''),
-                'gap_reason': request.form.get('gap_reason',''),
-                'working_status': request.form.get('working_status',''),
-                'working_hospital_name': request.form.get('working_hospital_name',''),
-                'additional_info': request.form.get('additional_info',''),
-            }
+            # Academic details — config-driven.
+            s2 = [f for f in form_config if (f['step_number'] or 2) == 2 and f['field_name'] in _CA_FORM_COLS]
+            acad_fields = {f['field_name']: request.form.get(f['field_name'], '') for f in s2}
             if academics:
-                set_clause = ', '.join(f"{k} = ?" for k in acad_fields)
-                conn.execute(f"UPDATE client_academics SET {set_clause} WHERE registration_id = ?",
-                    list(acad_fields.values()) + [reg_id])
-            else:
+                if acad_fields:
+                    set_clause = ', '.join(f"{k} = ?" for k in acad_fields)
+                    conn.execute(f"UPDATE client_academics SET {set_clause} WHERE registration_id = ?",
+                                 list(acad_fields.values()) + [reg_id])
+            elif acad_fields:
                 cols = ', '.join(acad_fields.keys())
                 placeholders = ', '.join(['?'] * (len(acad_fields) + 1))
                 conn.execute(f"INSERT INTO client_academics (registration_id, {cols}) VALUES ({placeholders})",
-                    [reg_id] + list(acad_fields.values()))
+                             [reg_id] + list(acad_fields.values()))
             conn.execute("UPDATE client_registrations SET current_step = GREATEST(current_step, 3), updated_at = CURRENT_TIMESTAMP WHERE id = ?", (reg_id,))
 
         elif step == 3:
@@ -33742,6 +33731,14 @@ def seed_client_form_configs():
             {'name': 'UAE Consulting',  'search': 'uae consulting',  'use_like': False},
             {'name': 'USA Consulting',  'search': 'usa consulting',  'use_like': False},
             {'name': 'UK Consulting',   'search': 'uk consulting',   'use_like': False},
+            # All pathway products get the same default form (per-product guard
+            # skips any that already have a config), so every pathway's
+            # invitation form has fields instead of rendering blank.
+            {'name': 'AUS PGCP',          'search': 'aus pgcp',          'use_like': False},
+            {'name': 'UAE PGCP',          'search': 'uae pgcp',          'use_like': False},
+            {'name': 'Portfolio Services','search': 'portfolio services','use_like': False},
+            {'name': 'AMC MCQ',           'search': 'amc mcq',           'use_like': False},
+            {'name': 'AMC Clinical',      'search': 'amc clinical',      'use_like': False},
         ]
 
         # (step_number, step_name, field_name, field_label, field_type, field_options, role, is_required, display_order, placeholder, hint_text)
