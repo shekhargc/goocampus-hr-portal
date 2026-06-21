@@ -2443,6 +2443,14 @@ def admin_client_detail(reg_id):
           AND field_name NOT LIKE 'inst%'
         ORDER BY step_number, display_order
     ''', (reg['product_id'],)).fetchall()
+    # Ops-section fields are config-driven too (role='ops'); ops has its own
+    # ops_notes on the verify form, so exclude the shared additional_notes.
+    ops_config = conn.execute('''
+        SELECT * FROM client_form_configs
+        WHERE product_id = ? AND role = 'ops' AND is_visible = 1
+          AND field_name <> 'additional_notes'
+        ORDER BY step_number, display_order
+    ''', (reg['product_id'],)).fetchall()
     lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = 1 ORDER BY category, sort_order, value").fetchall()
     lookup_options = {}
     for row in lookup_rows:
@@ -2451,7 +2459,7 @@ def admin_client_detail(reg_id):
     return render_template('admin_client_detail.html', reg=reg, academics=academics,
         documents=documents, doc_requests=doc_requests, notifications=notifications,
         counsellors=counsellors, welcome_kit=welcome_kit, sales_config=sales_config,
-        lookup_options=lookup_options, user=user, active_section='clients')
+        ops_config=ops_config, lookup_options=lookup_options, user=user, active_section='clients')
 
 
 # ── ADMIN: Sales completes their section ──
@@ -2550,10 +2558,21 @@ def admin_client_ops_verify(reg_id):
     conn = get_db()
 
     if action == 'confirm':
-        conn.execute('''UPDATE client_registrations SET
-            ops_status = 'verified', ops_verified_by = ?, ops_verified_at = CURRENT_TIMESTAMP,
-            ops_notes = ?, onboarding_status = 'confirmed', updated_at = CURRENT_TIMESTAMP
-            WHERE id = ?''', (user['id'], request.form.get('ops_notes',''), reg_id))
+        # Config-driven ops fields (role='ops'), whitelisted to real columns.
+        _CR_OPS_COLS = {'account_status', 'current_stage', 'dropped_date',
+                        'switched_program', 'upgraded_to'}
+        prod = conn.execute("SELECT product_id FROM client_registrations WHERE id = ?", (reg_id,)).fetchone()
+        ops_cfg = conn.execute(
+            "SELECT field_name FROM client_form_configs WHERE product_id = ? "
+            "AND role = 'ops' AND is_visible = 1", (prod['product_id'] if prod else None,)).fetchall()
+        set_parts = ["ops_status = 'verified'", "ops_verified_by = ?", "ops_verified_at = CURRENT_TIMESTAMP",
+                     "ops_notes = ?", "onboarding_status = 'confirmed'", "updated_at = CURRENT_TIMESTAMP"]
+        vals = [user['id'], request.form.get('ops_notes', '')]
+        for f in ops_cfg:
+            if f['field_name'] in _CR_OPS_COLS:
+                set_parts.append(f"{f['field_name']} = ?")
+                vals.append(request.form.get(f['field_name'], ''))
+        conn.execute(f"UPDATE client_registrations SET {', '.join(set_parts)} WHERE id = ?", vals + [reg_id])
         # 2026-06-02 (Phase E): auto-populate the welcome-kit checklist
         # from the product's template. Skips silently if a checklist
         # already exists or the product has no template defined.
@@ -7395,6 +7414,12 @@ def ensure_crm_tables():
             ('plab_clients',             'referral_channel',       'TEXT'),
             # Sales section of the invitation flow (config-driven): joined stage.
             ('client_registrations',     'joined_stage',           'TEXT'),
+            # Ops section of the invitation flow (config-driven): program status.
+            ('client_registrations',     'account_status',         'TEXT'),
+            ('client_registrations',     'current_stage',          'TEXT'),
+            ('client_registrations',     'dropped_date',           'TEXT'),
+            ('client_registrations',     'switched_program',       'TEXT'),
+            ('client_registrations',     'upgraded_to',            'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")

@@ -3,6 +3,26 @@
 {% block title %}Client Detail{% endblock %}
 
 {% block section_content %}
+{# config-driven field renderer — shared by the Sales and Operations sections.
+   Defined at block top so it's available regardless of which branch renders.
+   The /admin/client-form-config settings page (role sales/ops) controls fields. #}
+{% macro sales_field(f, value) %}
+                <div class="form-group">
+                    <label for="{{ f.field_name }}">{{ f.field_label }}{% if f.is_required %} *{% endif %}</label>
+                    {% if f.field_type == 'select' %}
+                        {% set opts = lookup_options.get(f.field_options[3:], []) if (f.field_options or '').startswith('db:') else (f.field_options or '').split(',') %}
+                        <select name="{{ f.field_name }}" id="{{ f.field_name }}" {% if f.is_required %}required{% endif %}>
+                            <option value="">-- Select --</option>
+                            {% for o in opts %}{% if o and o.strip() %}<option value="{{ o.strip() }}" {% if value == o.strip() %}selected{% endif %}>{{ o.strip() }}</option>{% endif %}{% endfor %}
+                        </select>
+                    {% elif f.field_type == 'textarea' %}
+                        <textarea name="{{ f.field_name }}" id="{{ f.field_name }}" rows="3" placeholder="{{ f.placeholder or '' }}">{{ value or '' }}</textarea>
+                    {% else %}
+                        <input type="{{ f.field_type or 'text' }}" name="{{ f.field_name }}" id="{{ f.field_name }}" value="{{ value or '' }}" placeholder="{{ f.placeholder or '' }}" {% if f.is_required %}required{% endif %}>
+                    {% endif %}
+                    {% if f.hint_text %}<small style="color:var(--gray-500);display:block;margin-top:4px;">{{ f.hint_text }}</small>{% endif %}
+                </div>
+{% endmacro %}
 <style>
     /* ===== PROGRESS TRACKER ===== */
     .progress-tracker {
@@ -537,24 +557,6 @@
             <p style="color: var(--gray-500); font-size: 0.88rem; margin-bottom: 1.5rem;">
                 Fill in the sales details for this client registration.
             </p>
-            {# config-driven sales field — the /admin/client-form-config page (role=sales) controls these #}
-            {% macro sales_field(f, value) %}
-                <div class="form-group">
-                    <label for="{{ f.field_name }}">{{ f.field_label }}{% if f.is_required %} *{% endif %}</label>
-                    {% if f.field_type == 'select' %}
-                        {% set opts = lookup_options.get(f.field_options[3:], []) if (f.field_options or '').startswith('db:') else (f.field_options or '').split(',') %}
-                        <select name="{{ f.field_name }}" id="{{ f.field_name }}" {% if f.is_required %}required{% endif %}>
-                            <option value="">-- Select --</option>
-                            {% for o in opts %}{% if o and o.strip() %}<option value="{{ o.strip() }}" {% if value == o.strip() %}selected{% endif %}>{{ o.strip() }}</option>{% endif %}{% endfor %}
-                        </select>
-                    {% elif f.field_type == 'textarea' %}
-                        <textarea name="{{ f.field_name }}" id="{{ f.field_name }}" rows="3" placeholder="{{ f.placeholder or '' }}">{{ value or '' }}</textarea>
-                    {% else %}
-                        <input type="{{ f.field_type or 'text' }}" name="{{ f.field_name }}" id="{{ f.field_name }}" value="{{ value or '' }}" placeholder="{{ f.placeholder or '' }}" {% if f.is_required %}required{% endif %}>
-                    {% endif %}
-                    {% if f.hint_text %}<small style="color:var(--gray-500);display:block;margin-top:4px;">{{ f.hint_text }}</small>{% endif %}
-                </div>
-            {% endmacro %}
             <form method="POST" action="/admin/client/{{ reg.id }}/sales-complete" id="salesForm">
                 <div class="form-row">
                     <div class="form-group">
@@ -713,6 +715,10 @@
                 <h3 style="font-size: 1rem; font-weight: 600; color: #166534; margin-bottom: 1rem;">Confirm Onboarding</h3>
                 <form method="POST" action="/admin/client/{{ reg.id }}/ops-verify">
                     <input type="hidden" name="action" value="confirm">
+                    {# config-driven ops fields — /admin/client-form-config (role=ops) controls these #}
+                    <div class="form-row" style="flex-wrap:wrap;">
+                        {% for f in ops_config %}{{ sales_field(f, reg[f.field_name]) }}{% endfor %}
+                    </div>
                     <div class="form-group">
                         <label for="ops_notes" style="color: #166534;">Operations Notes</label>
                         <textarea name="ops_notes" id="ops_notes" rows="3" placeholder="Add any verification notes..."></textarea>
