@@ -44,6 +44,20 @@
   </div>
   {% endif %}
 
+  <!-- ── Channel split (Sales vs Operations) — click to filter ── -->
+  <div style="display:flex;gap:12px;margin-bottom:24px;flex-wrap:wrap;">
+    <a href="{% if channel_filter == 'sales' %}{{ url_for('ops_referrals_report', pathway=pathway_filter or none) }}{% else %}{{ url_for('ops_referrals_report', pathway=pathway_filter or none, channel='sales') }}{% endif %}"
+       style="text-decoration:none;flex:1;min-width:160px;background:white;border:2px solid {% if channel_filter == 'sales' %}var(--orange){% else %}var(--gray-200){% endif %};border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:0.85rem;font-weight:700;color:var(--gray-700);">Sales Referrals</span>
+      <span style="font-size:1.4rem;font-weight:800;color:var(--orange);">{{ by_channel.sales }}</span>
+    </a>
+    <a href="{% if channel_filter == 'operations' %}{{ url_for('ops_referrals_report', pathway=pathway_filter or none) }}{% else %}{{ url_for('ops_referrals_report', pathway=pathway_filter or none, channel='operations') }}{% endif %}"
+       style="text-decoration:none;flex:1;min-width:160px;background:white;border:2px solid {% if channel_filter == 'operations' %}var(--orange){% else %}var(--gray-200){% endif %};border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:0.85rem;font-weight:700;color:var(--gray-700);">Operations Referrals</span>
+      <span style="font-size:1.4rem;font-weight:800;color:var(--navy);">{{ by_channel.operations }}</span>
+    </a>
+  </div>
+
   <!-- ── Pathway filter ── -->
   <div style="background:white;border-radius:12px;padding:16px 20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);">Referrer pathway:</span>
