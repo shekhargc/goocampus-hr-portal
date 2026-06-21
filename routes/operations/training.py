@@ -346,6 +346,8 @@ CS_EDITABLE_COLUMNS = [
     'inst2_amount', 'inst2_date', 'inst2_note',
     'inst3_amount', 'inst3_date', 'inst3_note',
     'inst4_amount', 'inst4_date', 'inst4_note',
+    # Centralised cross-pathway referral (data layer pre-created; columns exist)
+    'referral_source_pathway', 'referral_client_reg', 'referral_client_name',
 ]
 # Numeric fields get coerced to float on save.
 CS_NUMERIC_COLUMNS = {

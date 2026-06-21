@@ -17953,7 +17953,7 @@ def ops_reports():
     the list shared and just route the sidebar correctly.
     """
     pathway = (request.args.get('pathway') or 'plab').strip().lower()
-    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+    if pathway not in {'plab', 'australia', 'uae', 'consulting', 'portfolio', 'training'}:
         pathway = 'plab'
 
     conn = get_db()
@@ -18379,8 +18379,21 @@ def ops_plab_dashboard(client_id):
     except Exception as e:
         logging.error(f"Documents query error for client {client_id}: {e}")
         documents = []
+    # Centralised referral reporting: who did THIS client refer?
+    try:
+        referred_clients = conn.execute(
+            "SELECT registration_number, "
+            "       TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name, "
+            "       COALESCE(pathway, 'plab') AS pathway "
+            "  FROM plab_clients WHERE referral_client_reg = ? ORDER BY name",
+            (reg,)).fetchall()
+    except Exception as e:
+        logging.error(f"Referral query error for client {client_id}: {e}")
+        referred_clients = []
+    referred_count = len(referred_clients)
     conn.close()
     return render_template('ops_plab_dashboard.html', client=client,
+                           referred_clients=referred_clients, referred_count=referred_count,
                            amount_paid=amount_paid, gst_paid=gst_paid,
                            total_paid=total_paid, balance=balance, payment_pct=payment_pct,
                            final_pkg=final_pkg, discount=discount,
@@ -18488,6 +18501,9 @@ def ops_plab_add():
             ))
             conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE registration_number=?",
                          (f.get('upgraded_to', ''), reg_num))
+            # Centralised cross-pathway referral (separate write to avoid disturbing the wide tuple above)
+            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=? WHERE registration_number=?",
+                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), reg_num))
             conn.commit()
 
             # ── Auto-send welcome email on registration ──
@@ -18630,6 +18646,9 @@ def ops_plab_edit(client_id):
             # Upgraded To (separate write to avoid disturbing the wide tuple above)
             conn.execute("UPDATE plab_clients SET upgraded_to=? WHERE id=?",
                          (f.get('upgraded_to', ''), client_id))
+            # Centralised cross-pathway referral (separate write to avoid disturbing the wide tuple above)
+            conn.execute("UPDATE plab_clients SET referral_source_pathway=?, referral_client_reg=?, referral_client_name=? WHERE id=?",
+                         (f.get('referral_source_pathway', ''), f.get('referral_client_reg', ''), f.get('referral_client_name', ''), client_id))
             conn.commit()
             flash('Client updated', 'success')
             conn.close()
@@ -20261,7 +20280,7 @@ def ops_client_search_api():
     """
     q = request.args.get('q', '').strip()
     pathway = (request.args.get('pathway') or 'plab').strip().lower()
-    if pathway not in {'plab', 'australia', 'uae', 'consulting'}:
+    if pathway not in {'plab', 'australia', 'uae', 'consulting', 'portfolio', 'training'}:
         pathway = 'plab'
     if len(q) < 2:
         return jsonify([])
@@ -20286,6 +20305,81 @@ def ops_client_search_api():
         results = []
     conn.close()
     return jsonify(results)
+
+
+# Human-friendly pathway labels for the centralised referrals report.
+REFERRAL_PATHWAY_LABELS = {
+    'plab': 'UK Pathway',
+    'australia': 'AMC Pathway',
+    'portfolio': 'Portfolio Pathway',
+    'consulting': 'Standard Consulting',
+    'training': 'Training Pathway',
+    'uae': 'UAE Pathway',
+}
+
+
+@app.route('/operations/referrals')
+@admin_required
+def ops_referrals_report():
+    """Cross-pathway referral leaderboard.
+
+    Lists referrers ranked by how many clients they referred, with an
+    optional ?pathway= filter (the referrer's own pathway). For each
+    referrer we also list the referred clients (name + their pathway + reg).
+    """
+    pathway_filter = (request.args.get('pathway') or '').strip().lower()
+    if pathway_filter not in REFERRAL_PATHWAY_LABELS:
+        pathway_filter = ''
+
+    conn = get_db()
+    leaders = []
+    try:
+        sql = (
+            "SELECT referral_client_name, referral_source_pathway, COUNT(*) AS n "
+            "  FROM plab_clients "
+            " WHERE referral_client_reg IS NOT NULL AND referral_client_reg <> '' "
+        )
+        params = []
+        if pathway_filter:
+            sql += " AND COALESCE(referral_source_pathway, '') = ? "
+            params.append(pathway_filter)
+        sql += " GROUP BY referral_client_name, referral_source_pathway ORDER BY n DESC, referral_client_name "
+        rows = conn.execute(sql, params).fetchall()
+
+        for r in rows:
+            referrer_name = r['referral_client_name']
+            src_pw = r['referral_source_pathway']
+            # The referred clients under this referrer (matched by name + source pathway).
+            try:
+                referred = conn.execute(
+                    "SELECT registration_number, "
+                    "       TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name, "
+                    "       COALESCE(pathway, 'plab') AS pathway "
+                    "  FROM plab_clients "
+                    " WHERE referral_client_name = ? AND COALESCE(referral_source_pathway,'') = COALESCE(?, '') "
+                    " ORDER BY name",
+                    (referrer_name, src_pw)).fetchall()
+            except Exception:
+                referred = []
+            leaders.append({
+                'name': referrer_name,
+                'source_pathway': src_pw,
+                'source_pathway_label': REFERRAL_PATHWAY_LABELS.get((src_pw or '').lower(), src_pw or '—'),
+                'count': r['n'],
+                'referred': referred,
+            })
+    except Exception as e:
+        logging.error(f"ops_referrals_report: {e}")
+        leaders = []
+    finally:
+        conn.close()
+
+    return render_template('ops_referrals_report.html',
+                           leaders=leaders,
+                           pathway_filter=pathway_filter,
+                           pathway_labels=REFERRAL_PATHWAY_LABELS,
+                           active_ops_page='referrals',
+                           active_pathway=None)
 
 
 @app.route('/operations/api/plan-types')
@@ -33250,6 +33344,9 @@ ACCESS_ROUTE_MAP = {
     'ops_australia_webinars_edit_save':     _ap('australia_pathway', 'webinars', 'edit'),
     'ops_australia_webinars_add_page':      _ap('australia_pathway', 'webinars', 'edit'),
     'ops_australia_webinars_add_save':      _ap('australia_pathway', 'webinars', 'edit'),
+
+    # ── Operations: Cross-pathway referrals report (admin-gated) ──────────
+    'ops_referrals_report':         _ap('plab_pathway', 'registration'),
 
     # ── Operations: PLAB Pathway ──────────────────────────────────────────
     'ops_plab_list':                _ap('plab_pathway', 'registration'),

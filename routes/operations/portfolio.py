@@ -346,6 +346,8 @@ PF_EDITABLE_COLUMNS = [
     'inst2_amount', 'inst2_date', 'inst2_note',
     'inst3_amount', 'inst3_date', 'inst3_note',
     'inst4_amount', 'inst4_date', 'inst4_note',
+    # Centralised cross-pathway referral (data layer pre-created; columns exist)
+    'referral_source_pathway', 'referral_client_reg', 'referral_client_name',
 ]
 # Numeric fields get coerced to float on save.
 PF_NUMERIC_COLUMNS = {
@@ -425,6 +427,17 @@ def ops_portfolio_client_detail(client_id):
         'research':         [],
         'webinars':         [],
     }
+    # Centralised referral reporting: who did THIS client refer?
+    try:
+        referred_clients = conn.execute(
+            "SELECT registration_number, "
+            "       TRIM(COALESCE(prefix,'') || ' ' || COALESCE(first_name,'') || ' ' || COALESCE(last_name,'')) AS name, "
+            "       COALESCE(pathway, 'plab') AS pathway "
+            "  FROM plab_clients WHERE referral_client_reg = ? ORDER BY name",
+            (reg,)).fetchall()
+    except Exception:
+        referred_clients = []
+    referred_count = len(referred_clients)
     conn.close()
 
     return render_template(
@@ -432,6 +445,8 @@ def ops_portfolio_client_detail(client_id):
         user=user,
         client=client,
         sections=sections,
+        referred_clients=referred_clients,
+        referred_count=referred_count,
         amount_paid=amount_paid,
         gst_paid=gst_paid,
         total_paid=total_paid,

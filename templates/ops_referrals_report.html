@@ -1,0 +1,73 @@
+{% extends "ops_sidebar_base.html" %}
+
+{% block title %}Referrals Report - Operations{% endblock %}
+
+{% block ops_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <!-- ── Header ── -->
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:24px;">
+    <div>
+      <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Referrals Report</h1>
+      <p style="margin:6px 0 0 0;font-size:0.85rem;color:var(--gray-500);">Cross-pathway leaderboard of clients who referred new clients.</p>
+    </div>
+  </div>
+
+  <!-- ── Pathway filter ── -->
+  <div style="background:white;border-radius:12px;padding:16px 20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
+    <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);">Referrer pathway:</span>
+    <a href="{{ url_for('ops_referrals_report') }}"
+       style="padding:6px 14px;border-radius:999px;font-size:0.82rem;font-weight:600;text-decoration:none;{% if not pathway_filter %}background:var(--orange);color:white;{% else %}background:var(--gray-100);color:var(--gray-600);{% endif %}">All</a>
+    {% for pw, label in pathway_labels.items() %}
+    <a href="{{ url_for('ops_referrals_report', pathway=pw) }}"
+       style="padding:6px 14px;border-radius:999px;font-size:0.82rem;font-weight:600;text-decoration:none;{% if pathway_filter == pw %}background:var(--orange);color:white;{% else %}background:var(--gray-100);color:var(--gray-600);{% endif %}">{{ label }}</a>
+    {% endfor %}
+  </div>
+
+  {% if leaders %}
+  <!-- ── Leaderboard ── -->
+  <div style="display:flex;flex-direction:column;gap:16px;">
+    {% for L in leaders %}
+    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:12px;">
+        <div>
+          <span style="font-size:1.05rem;font-weight:700;color:var(--navy);">{{ L.name or '—' }}</span>
+          <span style="margin-left:10px;font-size:0.78rem;color:var(--gray-500);text-transform:capitalize;background:var(--gray-100);padding:3px 10px;border-radius:999px;">{{ L.source_pathway_label }}</span>
+        </div>
+        <span style="font-size:0.85rem;font-weight:700;color:white;background:var(--orange);padding:5px 14px;border-radius:999px;">
+          {{ L.count }} referral{{ '' if L.count == 1 else 's' }}
+        </span>
+      </div>
+      {% if L.referred %}
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="text-align:left;color:var(--gray-500);font-size:0.72rem;text-transform:uppercase;letter-spacing:0.5px;">
+            <th style="padding:6px 8px;border-bottom:1px solid var(--gray-100);">Referred Client</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--gray-100);">Pathway</th>
+            <th style="padding:6px 8px;border-bottom:1px solid var(--gray-100);">Reg #</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for c in L.referred %}
+          <tr>
+            <td style="padding:8px;border-bottom:1px solid var(--gray-50);color:var(--navy);font-weight:600;">{{ c.name or '—' }}</td>
+            <td style="padding:8px;border-bottom:1px solid var(--gray-50);color:var(--gray-600);text-transform:capitalize;">{{ c.pathway }}</td>
+            <td style="padding:8px;border-bottom:1px solid var(--gray-50);color:var(--gray-500);">{{ c.registration_number|format_reg if c.registration_number else '—' }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="margin:0;font-size:0.82rem;color:var(--gray-500);">No linked referred clients found.</p>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}
+  <div style="background:white;border-radius:12px;padding:40px;text-align:center;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <p style="margin:0;font-size:0.9rem;color:var(--gray-500);">No referrals recorded{% if pathway_filter %} for this pathway{% endif %} yet.</p>
+  </div>
+  {% endif %}
+
+</div>
+{% endblock %}

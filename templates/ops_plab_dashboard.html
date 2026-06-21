@@ -144,6 +144,28 @@
     </p>
   </div>
 
+  <!-- Referrals Card -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <p style="margin:0 0 12px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">
+      Referrals
+    </p>
+    <p style="margin:0 0 8px 0;font-size:20px;font-weight:700;color:var(--navy);">
+      Referred {{ referred_count|default(0) }} client{{ '' if referred_count == 1 else 's' }}
+    </p>
+    {% if referred_clients %}
+    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+      {% for r in referred_clients %}
+      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--gray-100);">
+        <span style="color:var(--navy);font-weight:600;">{{ r.name or '—' }}</span>
+        <span style="color:var(--gray-500);text-transform:capitalize;">{{ r.pathway }}</span>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}
+    <p style="margin:0;font-size:13px;color:var(--gray-500);">No referrals yet.</p>
+    {% endif %}
+  </div>
+
   <!-- Two-Column Grid Layout -->
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
     <!-- LEFT COLUMN -->
