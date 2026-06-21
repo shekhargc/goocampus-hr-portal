@@ -226,27 +226,17 @@
                 </div>
             </div>
 
-            <!-- ===== CROSS-PATHWAY REFERRAL (shown only when Lead Source = Referral) ===== -->
-            <div id="referral_block" style="display:none;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referred from (Pathway)</label>
-                    <select name="referral_source_pathway" id="referral_pathway" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
-                        <option value="">Select pathway</option>
-                        <option value="plab" {% if client.referral_source_pathway == 'plab' %}selected{% endif %}>UK Pathway</option>
-                        <option value="australia" {% if client.referral_source_pathway == 'australia' %}selected{% endif %}>AMC Pathway</option>
-                        <option value="portfolio" {% if client.referral_source_pathway == 'portfolio' %}selected{% endif %}>Portfolio Pathway</option>
-                        <option value="consulting" {% if client.referral_source_pathway == 'consulting' %}selected{% endif %}>Standard Consulting</option>
-                        <option value="training" {% if client.referral_source_pathway == 'training' %}selected{% endif %}>Training Pathway</option>
-                        <option value="uae" {% if client.referral_source_pathway == 'uae' %}selected{% endif %}>UAE Pathway</option>
-                    </select>
-                </div>
+            <!-- ===== INTERNAL REFERRAL (shown only when Lead Source = Referral) ===== -->
+            <div id="referral_block" style="display:none;margin-bottom:1.1rem;">
+                <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referring Client <span style="color:var(--gray-400);font-weight:400;">&mdash; search any pathway</span></label>
+                <input type="hidden" name="referral_source_pathway" id="referral_pathway" value="{{ client.referral_source_pathway or '' }}">
+                <input type="hidden" name="referral_client_reg"  id="referral_client_reg"  value="{{ client.referral_client_reg or '' }}">
+                <input type="hidden" name="referral_client_name" id="referral_client_name" value="{{ client.referral_client_name or '' }}">
                 <div style="position:relative;">
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Referring Candidate</label>
-                    <input type="hidden" name="referral_client_reg"  id="referral_client_reg"  value="{{ client.referral_client_reg or '' }}">
-                    <input type="hidden" name="referral_client_name" id="referral_client_name" value="{{ client.referral_client_name or '' }}">
-                    <input type="text" id="referral_client_search" autocomplete="off" placeholder="Type candidate name..." value="{{ client.referral_client_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
+                    <input type="text" id="referral_client_search" autocomplete="off" placeholder="Type a client name from any pathway..." value="{{ client.referral_client_name or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;">
                     <div id="referral_suggestions" style="display:none;position:absolute;top:100%;left:0;right:0;background:white;border:1px solid var(--gray-200);border-top:none;border-radius:0 0 6px 6px;box-shadow:0 4px 12px rgba(0,0,0,0.1);z-index:100;max-height:240px;overflow-y:auto;"></div>
                 </div>
+                <div id="referral_meta" style="font-size:0.78rem;color:var(--orange);margin-top:0.35rem;font-weight:600;"></div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
@@ -310,30 +300,38 @@ function toggleReferralBlock() {
     var ls = document.getElementById('lead_source');
     var refBlock = document.getElementById('referral_block');
     if (!ls || !refBlock) return;
-    refBlock.style.display = (String(ls.value).trim().toLowerCase() === 'referral') ? 'grid' : 'none';
+    refBlock.style.display = (String(ls.value).trim().toLowerCase() === 'referral') ? 'block' : 'none';
 }
 document.addEventListener('DOMContentLoaded', function() {
     toggleReferralBlock();
+    var PW_LABELS = {plab:'UK Pathway',australia:'AMC Pathway',portfolio:'Portfolio Pathway',consulting:'Standard Consulting',training:'Training Pathway',uae:'UAE Pathway'};
     var searchInput = document.getElementById('referral_client_search');
-    var pathwaySel  = document.getElementById('referral_pathway');
-    var hidReg      = document.getElementById('referral_client_reg');
-    var hidName     = document.getElementById('referral_client_name');
-    var dropdown    = document.getElementById('referral_suggestions');
-    if (!searchInput || !pathwaySel || !dropdown) return;
+    var hidReg   = document.getElementById('referral_client_reg');
+    var hidName  = document.getElementById('referral_client_name');
+    var hidPath  = document.getElementById('referral_pathway');
+    var dropdown = document.getElementById('referral_suggestions');
+    var meta     = document.getElementById('referral_meta');
+    if (!searchInput || !dropdown) return;
     var debounceTimer = null, items = [];
 
     function hide() { dropdown.style.display = 'none'; dropdown.innerHTML = ''; items = []; }
     function esc(s) { var d = document.createElement('div'); d.textContent = s == null ? '' : s; return d.innerHTML; }
+    function setMeta() {
+        if (!meta) return;
+        meta.textContent = (hidName && hidName.value && hidPath && hidPath.value)
+            ? 'Referred by ' + hidName.value + ' \u2014 ' + (PW_LABELS[hidPath.value] || hidPath.value) : '';
+    }
+    setMeta();
     function selectItem(it) {
         searchInput.value = it.name || '';
-        if (hidReg) hidReg.value = it.reg || '';
+        if (hidReg)  hidReg.value  = it.reg || '';
         if (hidName) hidName.value = it.name || '';
+        if (hidPath) hidPath.value = it.pathway || '';
+        setMeta();
         hide();
     }
     function fetchSuggestions(q) {
-        var pw = pathwaySel.value;
-        if (!pw) { hide(); return; }
-        fetch('/operations/api/client-search?pathway=' + encodeURIComponent(pw) + '&q=' + encodeURIComponent(q))
+        fetch('/operations/api/client-search?pathway=all&q=' + encodeURIComponent(q))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 items = data || [];
@@ -341,31 +339,21 @@ document.addEventListener('DOMContentLoaded', function() {
                 dropdown.innerHTML = items.map(function(d, i) {
                     return '<div style="padding:0.6rem 0.8rem;cursor:pointer;font-size:0.85rem;border-bottom:1px solid #f3f4f6;display:flex;justify-content:space-between;align-items:center;" data-idx="' + i + '" onmouseover="this.style.background=\'#f9fafb\'" onmouseout="this.style.background=\'white\'">' +
                         '<span style="color:#374151;font-weight:500;">' + esc(d.name) + '</span>' +
-                        '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.display_reg || d.reg) + '</span></div>';
+                        '<span style="color:#9ca3af;font-size:0.75rem;">' + esc(d.pathway_label || '') + ' \u00b7 ' + esc(d.display_reg || d.reg) + '</span></div>';
                 }).join('');
                 dropdown.querySelectorAll('[data-idx]').forEach(function(el) {
-                    el.addEventListener('mousedown', function(e) {
-                        e.preventDefault();
-                        selectItem(items[parseInt(this.dataset.idx)]);
-                    });
+                    el.addEventListener('mousedown', function(e) { e.preventDefault(); selectItem(items[parseInt(this.dataset.idx)]); });
                 });
                 dropdown.style.display = 'block';
             }).catch(function() { hide(); });
     }
     searchInput.addEventListener('input', function() {
         clearTimeout(debounceTimer);
-        if (hidReg) hidReg.value = '';
-        if (hidName) hidName.value = '';
+        if (hidReg) hidReg.value = ''; if (hidName) hidName.value = ''; if (hidPath) hidPath.value = '';
+        setMeta();
         var q = this.value.trim();
-        if (!pathwaySel.value) { hide(); return; }
         if (q.length < 2) { hide(); return; }
         debounceTimer = setTimeout(function() { fetchSuggestions(q); }, 250);
-    });
-    pathwaySel.addEventListener('change', function() {
-        searchInput.value = '';
-        if (hidReg) hidReg.value = '';
-        if (hidName) hidName.value = '';
-        hide();
     });
     document.addEventListener('click', function(e) {
         if (!searchInput.contains(e.target) && !dropdown.contains(e.target)) hide();

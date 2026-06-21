@@ -20280,26 +20280,35 @@ def ops_client_search_api():
     """
     q = request.args.get('q', '').strip()
     pathway = (request.args.get('pathway') or 'plab').strip().lower()
-    if pathway not in {'plab', 'australia', 'uae', 'consulting', 'portfolio', 'training'}:
+    # pathway='all' (referral picker) searches across EVERY pathway and returns
+    # each client's pathway so the referral can be linked + the pathway derived.
+    all_pw = pathway in ('all', 'any')
+    if not all_pw and pathway not in {'plab', 'australia', 'uae', 'consulting', 'portfolio', 'training'}:
         pathway = 'plab'
     if len(q) < 2:
         return jsonify([])
     conn = get_db()
     try:
-        rows = conn.execute('''
-            SELECT id, registration_number, prefix, first_name, last_name
+        where = ("(first_name ILIKE ? OR last_name ILIKE ? "
+                 "OR (first_name || ' ' || last_name) ILIKE ? OR registration_number ILIKE ?)")
+        params = [f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%']
+        if not all_pw:
+            where = "COALESCE(pathway, 'plab') = ? AND " + where
+            params = [pathway] + params
+        rows = conn.execute(f'''
+            SELECT id, registration_number, prefix, first_name, last_name, COALESCE(pathway,'plab') AS pw
             FROM plab_clients
-            WHERE COALESCE(pathway, 'plab') = ?
-              AND (first_name ILIKE ? OR last_name ILIKE ?
-                OR (first_name || ' ' || last_name) ILIKE ?
-                OR registration_number ILIKE ?)
+            WHERE {where}
             ORDER BY first_name, last_name
-            LIMIT 15
-        ''', (pathway, f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%')).fetchall()
+            LIMIT 20
+        ''', tuple(params)).fetchall()
         results = []
         for r in rows:
             name = f"{r['prefix']} {r['first_name']} {r['last_name']}" if r['prefix'] else f"{r['first_name']} {r['last_name']}"
-            results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number'], 'display_reg': format_reg_filter(r['registration_number'])})
+            pw = r['pw']
+            results.append({'id': r['id'], 'name': name.strip(), 'reg': r['registration_number'],
+                            'display_reg': format_reg_filter(r['registration_number']),
+                            'pathway': pw, 'pathway_label': REFERRAL_PATHWAY_LABELS.get(pw, pw)})
     except Exception as e:
         logging.error(f"ops_client_search_api: {e}")
         results = []
@@ -20333,6 +20342,7 @@ def ops_referrals_report():
 
     conn = get_db()
     leaders = []
+    by_pathway = []
     try:
         sql = (
             "SELECT referral_client_name, referral_source_pathway, COUNT(*) AS n "
@@ -20368,14 +20378,31 @@ def ops_referrals_report():
                 'count': r['n'],
                 'referred': referred,
             })
+        # Per-pathway totals (full, independent of the filter) for the stat cards.
+        bprows = conn.execute(
+            "SELECT COALESCE(referral_source_pathway,'') AS pw, COUNT(*) AS n FROM plab_clients "
+            "WHERE referral_client_reg IS NOT NULL AND referral_client_reg <> '' "
+            "GROUP BY referral_source_pathway ORDER BY n DESC").fetchall()
+        for br in bprows:
+            pw = (br['pw'] or '')
+            by_pathway.append({'pathway': pw,
+                               'label': REFERRAL_PATHWAY_LABELS.get(pw.lower(), pw or '—'),
+                               'count': br['n']})
     except Exception as e:
         logging.error(f"ops_referrals_report: {e}")
         leaders = []
     finally:
         conn.close()
 
+    total_referrals = sum(l['count'] for l in leaders)     # respects the pathway filter
+    unique_referrers = len(leaders)
+    grand_total = sum(b['count'] for b in by_pathway)       # all referrals (unfiltered)
     return render_template('ops_referrals_report.html',
                            leaders=leaders,
+                           by_pathway=by_pathway,
+                           total_referrals=total_referrals,
+                           unique_referrers=unique_referrers,
+                           grand_total=grand_total,
                            pathway_filter=pathway_filter,
                            pathway_labels=REFERRAL_PATHWAY_LABELS,
                            active_ops_page='referrals',

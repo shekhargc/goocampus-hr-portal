@@ -13,6 +13,37 @@
     </div>
   </div>
 
+  <!-- ── Stat cards ── -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:16px;">
+    <div style="background:white;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">{% if pathway_filter %}{{ pathway_labels.get(pathway_filter, pathway_filter) }} Referrals{% else %}Total Referrals{% endif %}</div>
+      <div style="font-size:1.9rem;font-weight:800;color:var(--orange);margin-top:4px;">{{ total_referrals }}</div>
+    </div>
+    <div style="background:white;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">Unique Referrers</div>
+      <div style="font-size:1.9rem;font-weight:800;color:var(--navy);margin-top:4px;">{{ unique_referrers }}</div>
+    </div>
+    {% if not pathway_filter %}
+    <div style="background:white;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.4px;">Top Referrer</div>
+      <div style="font-size:1.05rem;font-weight:800;color:var(--navy);margin-top:6px;">{% if leaders %}{{ leaders[0].name }} <span style="color:var(--orange);">({{ leaders[0].count }})</span>{% else %}—{% endif %}</div>
+    </div>
+    {% endif %}
+  </div>
+
+  <!-- ── Referrals by pathway (click to filter) ── -->
+  {% if by_pathway %}
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:24px;">
+    {% for b in by_pathway %}
+    <a href="{% if b.pathway %}{{ url_for('ops_referrals_report', pathway=b.pathway) }}{% else %}{{ url_for('ops_referrals_report') }}{% endif %}"
+       style="text-decoration:none;background:white;border:1px solid {% if pathway_filter == b.pathway %}var(--orange){% else %}var(--gray-200){% endif %};border-radius:10px;padding:12px 14px;display:flex;justify-content:space-between;align-items:center;">
+      <span style="font-size:0.82rem;font-weight:600;color:var(--gray-700);">{{ b.label }}</span>
+      <span style="font-size:1.15rem;font-weight:800;color:var(--orange);">{{ b.count }}</span>
+    </a>
+    {% endfor %}
+  </div>
+  {% endif %}
+
   <!-- ── Pathway filter ── -->
   <div style="background:white;border-radius:12px;padding:16px 20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);display:flex;align-items:center;gap:10px;flex-wrap:wrap;">
     <span style="font-size:0.8rem;font-weight:600;color:var(--gray-600);">Referrer pathway:</span>
