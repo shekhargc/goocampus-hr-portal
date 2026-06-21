@@ -67,11 +67,12 @@ UK_DIR = os.environ.get('UK_DIR', '/Users/Santosh/Desktop/Zoho Data/UK GC')
 PF_DIR = os.environ.get('PF_DIR', '/Users/Santosh/Desktop/Zoho Data/Portfolio Services')
 TR_DIR = os.environ.get('TR_DIR', '/Users/Santosh/Desktop/Zoho Data/Training')
 UAE_DIR = os.environ.get('UAE_DIR', '/Users/Santosh/Desktop/Zoho Data/UAE')
+CS_DIR = os.environ.get('CS_DIR', '/Users/Santosh/Desktop/Zoho Data/Standard Consulting')
 
 # Country labels for vendors_providers (per task spec).
 COUNTRY = {'plab': 'UK Pathway', 'australia': 'AMC Pathway',
            'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway',
-           'uae': 'UAE Pathway'}
+           'uae': 'UAE Pathway', 'consulting': 'Standard Consulting'}
 
 # Tag-row labels that identify a column's role on a "Drop Downs" sheet.
 VENDOR_TAGS = ('vendor/provider', 'vendor', 'provider')
@@ -503,11 +504,59 @@ UAE_SECTIONS = [
  },
 ]
 
+# ── STANDARD CONSULTING (consulting) ─────────────────────────────────
+CONSULTING_SECTIONS = [
+ {
+  'file': 'Standard Consutling - All Clients Payments.xlsx',
+  'section': 'Payments', 'vp_category': None,
+  'cols': {'Payment Method': 'payment_method', 'Instalment': 'instalment'},
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Standard Consulting -  Registration list.xlsx',
+  'section': 'Clients (Registration)', 'vp_category': None,
+  'cols': {
+    'Plan Type': 'plan_type', 'Account Status': 'account_status',
+    'Counsellor Name': 'counsellor', 'Stage (Current Status)': 'current_stage',
+    'Joined Stage': 'joined_stage', 'Lead Source': 'lead_source',
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Standard Consulting - Academic Details Report.xlsx',
+  'section': 'Academic Details', 'vp_category': None,
+  'cols': {
+    'IMG / FMG': 'img_fmg', 'MBBS Status': 'mbbs_status',
+    'Internship Status': 'internship_status', 'Internship Gap': 'internship_gap',
+    'Working Status': 'working_status',
+    'Speciality Interest 1': 'medical_speciality',
+    'Speciality Interest 2': 'medical_speciality',
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Standard Consulting - All Amc Registrations.xlsx',
+  'section': 'AMC Registrations', 'vp_category': None,
+  'cols': {'AMC Setup Status': 'amc_setup_status'},
+  'vendor_col': None, 'deliverable_col': None,
+ },
+ {
+  'file': 'Standard Consulting - All Epic Verifications.xlsx',
+  'section': 'EPIC Verifications', 'vp_category': None,
+  'cols': {
+    'Epic Registration Status': 'epic_reg_status', 'EPIC Status': 'epic_status',
+    'Notary Cam Status': 'notary_camp_status', 'Document Stage': 'doc_stage',
+    'Document Stage Status': 'doc_stage_status',
+  },
+  'vendor_col': None, 'deliverable_col': None,
+ },
+]
+
 PATHWAY_DIRS = {'australia': AMC_DIR, 'plab': UK_DIR, 'portfolio': PF_DIR,
-                'training': TR_DIR, 'uae': UAE_DIR}
+                'training': TR_DIR, 'uae': UAE_DIR, 'consulting': CS_DIR}
 PATHWAY_SECTIONS = {'australia': AMC_SECTIONS, 'plab': PLAB_SECTIONS,
                     'portfolio': PORTFOLIO_SECTIONS, 'training': TRAINING_SECTIONS,
-                    'uae': UAE_SECTIONS}
+                    'uae': UAE_SECTIONS, 'consulting': CONSULTING_SECTIONS}
 
 
 # ════════════════════════════════════════════════════════════════════

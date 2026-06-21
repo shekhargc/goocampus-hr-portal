@@ -7373,6 +7373,12 @@ def ensure_crm_tables():
             # Portfolio pathway: client Career Stage + webinar Event Status.
             ('plab_clients',             'career_stage',          'TEXT'),
             ('ops_webinars_conferences', 'event_status',          'TEXT'),
+            # Centralised referral tracking (2026-06-21): when a client is
+            # referred by an existing client, link to that referrer so referrals
+            # are countable across pathways.
+            ('plab_clients',             'referral_source_pathway','TEXT'),
+            ('plab_clients',             'referral_client_reg',    'TEXT'),
+            ('plab_clients',             'referral_client_name',   'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
