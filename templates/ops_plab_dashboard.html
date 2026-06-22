@@ -3,6 +3,33 @@
 {% block title %}PLAB Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 
 {% block ops_content %}
+{% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
+{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
+<div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+    <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
+    <div style="display:flex;gap:10px;align-items:center;">
+      {% if add_endpoint %}<button type="button" onclick="openAddDrawer('{{ url_for(add_endpoint) }}?embed=1&reg={{ client_reg|urlencode }}&cname={{ client_display|urlencode }}','Add {{ title }}')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
+      <a href="{{ view_url }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+  </div>
+  {% if records %}
+  <div style="max-height:420px;overflow-y:auto;">
+    {% for r in records[:15] %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);display:flex;flex-wrap:wrap;gap:6px 16px;">
+      {% set ns = namespace(c=0) %}
+      {% for col, val in r.items() %}
+        {% if col not in ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] and val not in [none, ''] and ns.c < 6 %}
+        <span style="font-size:12.5px;color:var(--gray-700);"><b style="color:var(--navy);">{{ col.replace('_',' ').title() }}:</b> {{ val }}</span>
+        {% set ns.c = ns.c + 1 %}
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No records yet.</p>{% endif %}
+</div>
+{% endmacro %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Back Link -->
   <div style="margin-bottom:20px;">
@@ -623,316 +650,74 @@
 
   <!-- ═══════════ LINKED SECTIONS ═══════════ -->
 
-  <!-- Test Bookings Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Test Bookings ({{ test_bookings|length }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/test-bookings/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
-        {% if test_bookings|length > 0 %}
-        <a href="/operations/test-bookings?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
-      </div>
-    </div>
-    {% if test_bookings %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Exam</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Exam Date</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Result</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Score</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Center</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for t in test_bookings %}
-          <tr style="border-bottom:1px solid var(--gray-200);">
-            <td style="padding:8px;font-weight:600;color:var(--navy);">{{ t.exam or '—' }}</td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ t.exam_date or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
-                {% if t.exam_status == 'Booked' %}background:#EFF6FF;color:#1E40AF;
-                {% elif t.exam_status == 'Attended' %}background:#ECFDF5;color:#065F46;
-                {% elif 'Cancel' in (t.exam_status or '') or t.exam_status == 'Missed' %}background:#FEF2F2;color:#991B1B;
-                {% else %}background:#F3F4F6;color:#374151;{% endif %}
-              ">{{ t.exam_status or '—' }}</span>
-            </td>
-            <td style="padding:8px;text-align:center;">
-              {% if t.exam_result %}
-              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
-                {% if t.exam_result == 'Passed' %}background:#ECFDF5;color:#065F46;
-                {% else %}background:#FEF2F2;color:#991B1B;{% endif %}
-              ">{{ t.exam_result }}</span>
-              {% else %}—{% endif %}
-            </td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ t.score or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-600);font-size:12px;">{{ t.test_center or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <a href="/operations/test-bookings/{{ t.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No test bookings yet</p>
-    {% endif %}
-  </div>
+  {{ section_block('Test Bookings', sections.test_bookings, url_for('ops_test_bookings_list'), 'ops_test_bookings_add', client.registration_number, client_display) }}
+  {{ section_block('Coaching & Training', sections.coaching, url_for('ops_coaching_list'), 'ops_coaching_add', client.registration_number, client_display) }}
+  {{ section_block('English Logins', sections.english_logins, url_for('ops_english_logins_list'), 'ops_english_logins_add', client.registration_number, client_display) }}
+  {{ section_block('EPIC Registration', sections.epic_registration, url_for('ops_epic_list'), 'ops_epic_add', client.registration_number, client_display) }}
+  {{ section_block('GMC Registration', sections.gmc_registration, url_for('ops_gmc_list'), 'ops_gmc_add', client.registration_number, client_display) }}
+  {{ section_block('Job Stage', sections.job_stage, url_for('ops_job_stage_list'), 'ops_job_stage_add_page', client.registration_number, client_display) }}
+  {{ section_block('Academic Details', sections.academic_details, url_for('ops_academic_list'), 'ops_academic_add', client.registration_number, client_display) }}
+  {{ section_block('Research & Publications', sections.research_publication, url_for('ops_research_list'), 'ops_research_add', client.registration_number, client_display) }}
+  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_subscriptions_list'), 'ops_subscriptions_add', client.registration_number, client_display) }}
+  {{ section_block('Webinars & Conferences', sections.webinars_conferences, url_for('ops_webinars_list'), 'ops_webinars_add', client.registration_number, client_display) }}
+  {{ section_block('NGO Activities', sections.ngo_activities, url_for('ops_ngo_list'), 'ops_ngo_add', client.registration_number, client_display) }}
+  {{ section_block('Mentorship', sections.mentorship, url_for('ops_mentorship_list'), 'ops_mentorship_add', client.registration_number, client_display) }}
+  {{ section_block('UK Visa & Travel', sections.uk_visa_travel, url_for('ops_visa_list'), 'ops_visa_add', client.registration_number, client_display) }}
+  {{ section_block('UK Cab Bookings', sections.uk_cab_bookings, url_for('ops_cab_list'), 'ops_cab_add', client.registration_number, client_display) }}
+  {{ section_block('UK Observerships', sections.uk_observerships, url_for('ops_observerships_list'), 'ops_observerships_add', client.registration_number, client_display) }}
 
-  <!-- Payments Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ payments|length }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/payments/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
-        {% if payments|length > 0 %}
-        <a href="/operations/payments?reg={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
+  <!-- Call Notes -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button type="button" onclick="openAddDrawer('{{ url_for('ops_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ client_display|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
+        <a href="{{ url_for('ops_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
       </div>
     </div>
-    {% if payments %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Date</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Instalment</th>
-            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">Amount (₹)</th>
-            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">GST (₹)</th>
-            <th style="padding:8px;text-align:right;font-weight:600;color:var(--navy);">Total (₹)</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Method</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for p in payments %}
-          <tr style="border-bottom:1px solid var(--gray-200);">
-            <td style="padding:8px;color:var(--gray-700);">{{ p.payment_date or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ p.instalment or '—' }}</td>
-            <td style="padding:8px;text-align:right;color:var(--gray-700);">₹{{ "{:,.2f}".format(p.amount_paid or 0) }}</td>
-            <td style="padding:8px;text-align:right;color:var(--gray-700);">₹{{ "{:,.2f}".format(p.gst_paid or 0) }}</td>
-            <td style="padding:8px;text-align:right;color:var(--gray-700);font-weight:600;">₹{{ "{:,.2f}".format(p.total_amount_paid or 0) }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ p.payment_method or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <a href="/operations/payments/{{ p.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No payments yet</p>
-    {% endif %}
-  </div>
-
-  <!-- Coaching / Training Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Coaching & Training ({{ coaching|length }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/coaching/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
-        {% if coaching|length > 0 %}
-        <a href="/operations/coaching?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
-      </div>
-    </div>
-    {% if coaching %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Course Type</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Method</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Batch</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Start</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">End</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for c in coaching %}
-          <tr style="border-bottom:1px solid var(--gray-200);">
-            <td style="padding:8px;font-weight:600;color:var(--navy);">{{ c.course_type or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <span style="padding:3px 8px;border-radius:999px;font-size:11px;font-weight:600;
-                {% if c.coaching_status == 'On Going' %}background:#ECFDF5;color:#065F46;
-                {% elif c.coaching_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
-                {% else %}background:#F3F4F6;color:#374151;{% endif %}
-              ">{{ c.coaching_status or '—' }}</span>
-            </td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.coaching_method or '—' }}</td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.batch_month or '' }} {{ c.batch_year or '' }}</td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.start_date or '—' }}</td>
-            <td style="padding:8px;text-align:center;color:var(--gray-600);">{{ c.end_date or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <a href="/operations/coaching/{{ c.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No coaching records yet</p>
-    {% endif %}
-  </div>
-
-  <!-- English Login Details Section -->
-  {% if english_logins %}
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">English Login Details</h3>
-      <a href="/operations/english-logins/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
-    </div>
-    {% for el in english_logins %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;font-size:13px;{% if not loop.last %}margin-bottom:16px;padding-bottom:16px;border-bottom:1px solid var(--gray-200);{% endif %}">
-      <div>
-        <p style="margin:0 0 4px;font-weight:600;color:var(--navy);font-size:12px;">IELTS Login</p>
-        <p style="margin:0;color:var(--gray-600);">{{ el.ielts_login_id or '—' }}</p>
-      </div>
-      <div>
-        <p style="margin:0 0 4px;font-weight:600;color:var(--navy);font-size:12px;">OET Login</p>
-        <p style="margin:0;color:var(--gray-600);">{{ el.oet_login_id or '—' }}</p>
-      </div>
-      <div style="grid-column:span 2;text-align:right;">
-        <a href="/operations/english-logins/{{ el.id }}/edit?next=/operations/plab/{{ client.id }}/dashboard" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-      </div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <!-- Call Notes Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ call_notes_count }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/call-notes/add?client={{ client.registration_number }}&next=/operations/plab/{{ client.id }}/dashboard" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add</a>
-        {% if call_notes_count > 0 %}
-        <a href="/operations/call-notes?client={{ client.registration_number }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
-      </div>
-    </div>
-    {% if call_notes %}
-    <div style="display:flex;flex-direction:column;gap:12px;">
-      {% for n in call_notes %}
-      <div style="background:var(--gray-50);border-radius:8px;padding:14px;border-left:3px solid var(--orange);">
-        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-          <span style="font-size:12px;font-weight:600;color:var(--navy);">{{ n.call_date or 'No date' }}</span>
-          <span style="font-size:11px;color:var(--gray-500);">{{ n.added_by or '' }}</span>
+    {% if sections.call_notes %}
+    <div style="max-height:400px;overflow-y:auto;">
+      {% for r in sections.call_notes[:20] %}
+      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
+          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
         </div>
-        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.5;white-space:pre-wrap;overflow:hidden;max-height:60px;" id="note-{{ n.id }}">{{ n.call_note or '—' }}</p>
-        {% if n.call_note and n.call_note|length > 200 %}
-        <a href="#" onclick="var el=document.getElementById('note-{{ n.id }}');el.style.maxHeight=el.style.maxHeight==='none'?'60px':'none';this.textContent=el.style.maxHeight==='none'?'Show less':'Show more';return false;" style="color:var(--orange);font-size:12px;text-decoration:none;font-weight:600;">Show more</a>
-        {% endif %}
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
       </div>
       {% endfor %}
-      {% if call_notes_count > 20 %}
-      <p style="margin:0;text-align:center;font-size:12px;color:var(--gray-500);">Showing 20 of {{ call_notes_count }} notes. <a href="/operations/call-notes?client={{ client.registration_number }}" style="color:var(--orange);text-decoration:none;font-weight:600;">View all →</a></p>
-      {% endif %}
     </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No call notes yet</p>
-    {% endif %}
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
   </div>
 
-  <!-- EPIC Registration Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">EPIC Registration ({{ epic_records|length }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/epic/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add EPIC</a>
-        {% if epic_records|length > 0 %}
-        <a href="/operations/epic?q={{ client.first_name }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
-      </div>
+  <!-- Payments -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ sections.payments|length }})</h3>
+      <a href="{{ url_for('ops_payments_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
     </div>
-    {% if epic_records %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">EPIC Reg</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">EPIC Status</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Notary Camp</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Documents</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Doc Status</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in epic_records %}
-          <tr style="border-bottom:1px solid var(--gray-200);">
-            <td style="padding:8px;color:var(--gray-700);">{{ r.epic_registration or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.epic_status or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.notary_camp or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date|format_date }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.documents_stage or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.document_stage_status or '—' }}</td>
-            <td style="padding:8px;text-align:center;">
-              <a href="/operations/epic/{{ r.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No EPIC registration records yet</p>
-    {% endif %}
-  </div>
-
-  <!-- GMC Registration Section -->
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;border-bottom:2px solid var(--orange);padding-bottom:12px;">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">GMC Registration ({{ gmc_records|length }})</h3>
-      <div style="display:flex;gap:8px;">
-        <a href="/operations/gmc/add?reg={{ client.registration_number }}&next=/operations/plab/{{ client.id }}" style="padding:5px 12px;background:var(--orange);color:white;border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">+ Add GMC</a>
-        {% if gmc_records|length > 0 %}
-        <a href="/operations/gmc?q={{ client.first_name }}" style="padding:5px 12px;background:var(--gray-100);color:var(--navy);border-radius:6px;font-size:12px;font-weight:600;text-decoration:none;">View All</a>
-        {% endif %}
-      </div>
-    </div>
-    {% if gmc_records %}
-    <div style="overflow-x:auto;">
-      <table style="width:100%;border-collapse:collapse;font-size:13px;">
-        <thead>
-          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">GMC Ref#</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">GMC Setup</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">License</th>
-            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">License Received</th>
-            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          {% for r in gmc_records %}
-          <tr style="border-bottom:1px solid var(--gray-200);">
-            <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_reference_number or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.gmc_setup or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.registration_date|format_date }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.license or '—' }}</td>
-            <td style="padding:8px;color:var(--gray-700);">{{ r.license_received_date|format_date }}</td>
-            <td style="padding:8px;text-align:center;">
-              <a href="/operations/gmc/{{ r.id }}/edit?next=/operations/plab/{{ client.id }}" style="color:var(--orange);text-decoration:none;font-size:12px;font-weight:600;">Edit</a>
-            </td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-    {% else %}
-    <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No GMC registration records yet</p>
-    {% endif %}
+    {% if sections.payments %}
+    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Date</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Instalment</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Amount</th>
+        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">GST</th>
+        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Method</th>
+      </tr></thead>
+      <tbody>
+        {% for r in sections.payments %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_date or '—' }}</td>
+          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.instalment or '—' }}</td>
+          <td style="padding:10px;text-align:right;color:#059669;font-weight:600;">{% if r.total_amount_paid %}&#8377;{{ '{:,.0f}'.format(r.total_amount_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;text-align:right;color:var(--gray-600);">{% if r.gst_paid %}&#8377;{{ '{:,.0f}'.format(r.gst_paid|float) }}{% else %}—{% endif %}</td>
+          <td style="padding:10px;color:var(--gray-600);">{{ r.payment_method or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table></div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
   </div>
 
   <!-- Footer Info -->
@@ -1053,4 +838,5 @@ document.addEventListener('keydown', function(e) {
   </div>
 </div>
 
+{% include '_section_add_drawer.html' %}
 {% endblock %}

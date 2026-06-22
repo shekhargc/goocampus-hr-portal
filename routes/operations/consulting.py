@@ -421,24 +421,23 @@ def ops_consulting_client_detail(client_id):
             )
             if order:
                 sql += f" ORDER BY {order} "
-            return conn.execute(sql, (reg,)).fetchall()
+            return [dict(x) for x in conn.execute(sql, (reg,)).fetchall()]
         except Exception:
             return []
 
     sections = {
-        'academic':   fetch('ops_academic_details', 'created_at DESC'),
-        'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
-        'epic':       fetch('ops_epic_registration', 'created_at DESC'),
-        'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
-        # Consulting-specific sections that AMC pathway doesn't have:
-        'amc_registration': fetch('ops_amc_registration', 'created_at DESC'),
-        'mentorship':       fetch('ops_mentorship', 'created_at DESC'),
-        # AMC-only sections stubbed to empty so the template loops still work.
-        'test_bookings':    [],
-        'training':         [],
-        'online_courses':   [],
-        'research':         [],
-        'webinars':         [],
+        'academic':             fetch('ops_academic_details', 'id DESC'),
+        'epic':                 fetch('ops_epic_registration', 'id DESC'),
+        'gmc':                  fetch('ops_gmc_registration', 'id DESC'),
+        'amc_registration':     fetch('ops_amc_registration', 'id DESC'),
+        'mentorship':           fetch('ops_mentorship', 'id DESC'),
+        'training':             fetch('ops_coaching', 'id DESC'),
+        'online_courses':       fetch('ops_online_courses', 'id DESC'),
+        'online_subscriptions': fetch('ops_online_subscriptions', 'id DESC'),
+        'research':             fetch('ops_research_publication', 'id DESC'),
+        'webinars':             fetch('ops_webinars_conferences', 'id DESC'),
+        'call_notes':           fetch('ops_call_notes', 'id DESC'),
+        'payments':             fetch('ops_payments', 'id DESC'),
     }
     # Centralised referral reporting: who did THIS client refer?
     try:

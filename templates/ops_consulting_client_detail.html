@@ -3,6 +3,33 @@
 {% block title %}Consulting Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 
 {% block ops_content %}
+{% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
+{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
+<div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+    <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
+    <div style="display:flex;gap:10px;align-items:center;">
+      {% if add_endpoint %}<button type="button" onclick="openAddDrawer('{{ url_for(add_endpoint) }}?embed=1&reg={{ client_reg|urlencode }}&cname={{ client_display|urlencode }}','Add {{ title }}')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
+      <a href="{{ view_url }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+  </div>
+  {% if records %}
+  <div style="max-height:420px;overflow-y:auto;">
+    {% for r in records[:15] %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);display:flex;flex-wrap:wrap;gap:6px 16px;">
+      {% set ns = namespace(c=0) %}
+      {% for col, val in r.items() %}
+        {% if col not in ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] and val not in [none, ''] and ns.c < 6 %}
+        <span style="font-size:12.5px;color:var(--gray-700);"><b style="color:var(--navy);">{{ col.replace('_',' ').title() }}:</b> {{ val }}</span>
+        {% set ns.c = ns.c + 1 %}
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No records yet.</p>{% endif %}
+</div>
+{% endmacro %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Back Link -->
   <div style="margin-bottom:20px;">
@@ -277,41 +304,44 @@
   </div>
   {% endif %}
 
-  <!-- ═══════════ LINKED SECTIONS (same card layout as PLAB) ═══════════ -->
+  <!-- ═══════════ LINKED SECTIONS ═══════════ -->
 
-  <!-- Test Bookings -->
+  {{ section_block('Academic Details', sections.academic, url_for('ops_consulting_academic_list'), 'ops_consulting_academic_add_page', client.registration_number, client_display) }}
+  {{ section_block('EPIC Registration', sections.epic, url_for('ops_consulting_epic_list'), 'ops_consulting_epic_add_page', client.registration_number, client_display) }}
+  {{ section_block('GMC Registration', sections.gmc, url_for('ops_consulting_gmc_list'), 'ops_consulting_gmc_add', client.registration_number, client_display) }}
+  {{ section_block('AMC Registration', sections.amc_registration, url_for('ops_consulting_amc_list'), 'ops_consulting_amc_add', client.registration_number, client_display) }}
+  {{ section_block('Mentorship', sections.mentorship, url_for('ops_consulting_mentorship_list'), 'ops_consulting_mentorship_add', client.registration_number, client_display) }}
+  {{ section_block('Training', sections.training, url_for('ops_consulting_training_list'), 'ops_consulting_training_add_page', client.registration_number, client_display) }}
+  {{ section_block('Online Courses', sections.online_courses, url_for('ops_consulting_online_courses_list'), 'ops_consulting_online_courses_add_page', client.registration_number, client_display) }}
+  {{ section_block('Online Subscriptions', sections.online_subscriptions, url_for('ops_consulting_online_subscriptions_list'), 'ops_consulting_online_subscriptions_add_page', client.registration_number, client_display) }}
+  {{ section_block('Research & Publications', sections.research, url_for('ops_consulting_research_list'), 'ops_consulting_research_add_page', client.registration_number, client_display) }}
+  {{ section_block('Webinars & Conferences', sections.webinars, url_for('ops_consulting_webinars_list'), 'ops_consulting_webinars_add_page', client.registration_number, client_display) }}
+
+  <!-- Call Notes -->
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Test Bookings ({{ sections.test_bookings|length }})</h3>
-      <a href="{{ url_for('ops_consulting_pathway') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button type="button" onclick="openAddDrawer('{{ url_for('ops_consulting_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ client_display|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
+        <a href="{{ url_for('ops_consulting_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+      </div>
     </div>
-    {% if sections.test_bookings %}
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Exam</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Booking Date</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Exam Date</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Status</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Result</th>
-        <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Score</th>
-      </tr></thead>
-      <tbody>
-        {% for r in sections.test_bookings %}
-        <tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.exam or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.booking_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_status or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.exam_result or '—' }}</td>
-          <td style="padding:10px;text-align:right;color:var(--gray-600);">{{ r.score or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table></div>
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No test bookings yet.</p>{% endif %}
+    {% if sections.call_notes %}
+    <div style="max-height:400px;overflow-y:auto;">
+      {% for r in sections.call_notes[:20] %}
+      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
+          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
+        </div>
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
   </div>
 
-  <!-- Payments -->
+  <!-- Payments (NO add button) -->
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Payments ({{ sections.payments|length }})</h3>
@@ -341,172 +371,6 @@
     {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
   </div>
 
-  <!-- Training -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Training ({{ sections.training|length }})</h3>
-      <a href="{{ url_for('ops_consulting_pathway') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% if sections.training %}
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Program</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Method</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Vendor</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Start</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">End</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Status</th>
-      </tr></thead>
-      <tbody>
-        {% for r in sections.training %}
-        <tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.english_training or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.coaching_method or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.vendor_provider or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.start_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.end_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.coaching_status or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table></div>
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No training records.</p>{% endif %}
-  </div>
-
-  <!-- Academic Details -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Academic Details ({{ sections.academic|length }})</h3>
-      <a href="{{ url_for('ops_consulting_academic_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% if sections.academic %}
-    {% for r in sections.academic %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">IMG / FMG:</span><span style="color:var(--navy);font-weight:600;">{{ r.img_fmg or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Medical College:</span><span style="color:var(--navy);font-weight:600;">{{ r.img_medical_college or r.fmg_medical_college or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">MBBS Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.mbbs_status or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Internship:</span><span style="color:var(--navy);font-weight:600;">{{ r.internship_status or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Working:</span><span style="color:var(--navy);font-weight:600;">{{ r.working_status or '—' }}</span></div>
-    </div>
-    {% endfor %}
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No academic details captured.</p>{% endif %}
-  </div>
-
-  <!-- EPIC Registration -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">EPIC Registration ({{ sections.epic|length }})</h3>
-      <a href="{{ url_for('ops_consulting_epic_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% if sections.epic %}
-    {% for r in sections.epic %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">EPIC Reg:</span><span style="color:var(--navy);font-weight:600;">{{ r.epic_registration_status or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">EPIC Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.epic_status or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Notary Cam:</span><span style="color:var(--navy);font-weight:600;">{{ r.notary_cam or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Doc Stage:</span><span style="color:var(--navy);font-weight:600;">{{ r.documents_stage or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Reg Date:</span><span style="color:var(--navy);font-weight:600;">{{ r.registration_date or '—' }}</span></div>
-    </div>
-    {% endfor %}
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No EPIC record.</p>{% endif %}
-  </div>
-
-  <!-- Online Courses & Subscriptions -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Online Courses &amp; Subscriptions ({{ sections.online_courses|length }})</h3>
-      <a href="{{ url_for('ops_consulting_pathway') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% if sections.online_courses %}
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Subscription</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Activation</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Issued</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Booked By</th>
-      </tr></thead>
-      <tbody>
-        {% for r in sections.online_courses %}
-        <tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.online_subscription or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.activation_type or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.issued_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.booked_by or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table></div>
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No online courses.</p>{% endif %}
-  </div>
-
-  <!-- Call Notes -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
-      <a href="{{ url_for('ops_consulting_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% if sections.call_notes %}
-    <div style="max-height:400px;overflow-y:auto;">
-      {% for r in sections.call_notes[:20] %}
-      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
-          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
-        </div>
-        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
-  </div>
-
-  <!-- Research & Publication -->
-  {% if sections.research %}
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Research &amp; Publication ({{ sections.research|length }})</h3>
-      <a href="{{ url_for('ops_consulting_pathway') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    {% for r in sections.research %}
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:14px;{% if not loop.first %}margin-top:12px;padding-top:12px;border-top:1px solid var(--gray-100);{% endif %}">
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Status:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_status or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Provider:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_provider or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Topic:</span><span style="color:var(--navy);font-weight:600;">{{ r.research_topic or '—' }}</span></div>
-      <div style="display:flex;justify-content:space-between;"><span style="color:var(--gray-600);">Journal:</span><span style="color:var(--navy);font-weight:600;">{{ r.published_journal_name or '—' }}</span></div>
-    </div>
-    {% endfor %}
-  </div>
-  {% endif %}
-
-  <!-- Webinars & Conferences -->
-  {% if sections.webinars %}
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Webinars &amp; Conferences ({{ sections.webinars|length }})</h3>
-      <a href="{{ url_for('ops_consulting_pathway') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-    </div>
-    <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
-      <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Type</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Event</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Participation</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Start</th>
-        <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">End</th>
-      </tr></thead>
-      <tbody>
-        {% for r in sections.webinars %}
-        <tr style="border-bottom:1px solid var(--gray-100);">
-          <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.event_type or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.webinar_conference_name or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.participation_type or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.start_date or '—' }}</td>
-          <td style="padding:10px;color:var(--gray-600);">{{ r.end_date or '—' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table></div>
-  </div>
-  {% endif %}
-
 </div>
+{% include '_section_add_drawer.html' %}
 {% endblock %}

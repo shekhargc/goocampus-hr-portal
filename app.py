@@ -18479,6 +18479,41 @@ def ops_plab_dashboard(client_id):
     payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
+
+    # ── Unified section blocks (mirrors UAE/Consulting/Australia profile pattern) ──
+    # PLAB rows are scoped to this client's registration_number with the default
+    # 'plab' pathway. Every section is returned as a list of plain dicts so the
+    # section_block() macro's `.items()` loop works in the template.
+    def _plab_section(table, order=None):
+        try:
+            sql = ("SELECT * FROM {} WHERE registration_number = ? "
+                   "AND COALESCE(pathway, 'plab') = 'plab'".format(table))
+            if order:
+                sql += " ORDER BY {}".format(order)
+            return [dict(x) for x in conn.execute(sql, (reg,)).fetchall()]
+        except Exception as e:
+            logging.error("PLAB section fetch error (%s): %s", table, e)
+            return []
+
+    sections = {
+        'test_bookings':       _plab_section('ops_test_bookings', 'exam_date DESC NULLS LAST'),
+        'coaching':            _plab_section('ops_coaching', 'created_at DESC'),
+        'english_logins':      _plab_section('ops_english_logins', 'created_at DESC'),
+        'epic_registration':   _plab_section('ops_epic_registration', 'created_at DESC'),
+        'gmc_registration':    _plab_section('ops_gmc_registration', 'created_at DESC'),
+        'job_stage':           _plab_section('ops_job_stage', 'id DESC'),
+        'academic_details':    _plab_section('ops_academic_details', 'id DESC'),
+        'research_publication': _plab_section('ops_research_publication', 'id DESC'),
+        'online_subscriptions': _plab_section('ops_online_subscriptions', 'id DESC'),
+        'webinars_conferences': _plab_section('ops_webinars_conferences', 'id DESC'),
+        'ngo_activities':      _plab_section('ops_ngo_activities', 'id DESC'),
+        'mentorship':          _plab_section('ops_mentorship', 'id DESC'),
+        'uk_visa_travel':      _plab_section('ops_uk_visa_travel', 'id DESC'),
+        'uk_cab_bookings':     _plab_section('ops_uk_cab_bookings', 'id DESC'),
+        'uk_observerships':    _plab_section('ops_uk_observerships', 'id DESC'),
+        'call_notes':          _plab_section('ops_call_notes', 'call_date DESC NULLS LAST'),
+        'payments':            _plab_section('ops_payments', 'payment_date DESC NULLS LAST'),
+    }
     try:
         documents = conn.execute("SELECT d.id, d.client_id, d.doc_type, d.doc_category, d.file_name, d.file_path, d.file_size, d.status, d.verified_by, d.verified_at, d.notes, d.uploaded_by, d.uploaded_at, e.name as verifier_name FROM plab_client_documents d LEFT JOIN employees e ON e.id = d.verified_by WHERE d.client_id = ? ORDER BY d.doc_category, d.uploaded_at DESC", (client_id,)).fetchall()
     except Exception as e:
@@ -18508,6 +18543,7 @@ def ops_plab_dashboard(client_id):
                            call_notes_count=call_notes_count, payments=payments,
                            epic_records=epic_records, gmc_records=gmc_records,
                            documents=documents, plab_doc_types=PLAB_DOC_TYPES,
+                           sections=sections,
                            active_ops_page='plab')
 
 
