@@ -545,11 +545,6 @@
             <h3>Payments</h3>
             <div class="sec-total">{{ stats.payments_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">&#8377;{{ '{:,.0f}'.format(stats.payments_sum) }}</span><span class="lbl">Total collected</span></div>
-            </div>
-        </div>
         <div class="sec-card-foot">
             <a href="{{ url_for('ops_consulting_payments_list') }}">View all</a>
         </div>
