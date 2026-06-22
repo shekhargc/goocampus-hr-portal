@@ -21528,11 +21528,22 @@ OPS_SECTION_LABELS = {
     'ops_uk_visa_travel': 'Visa & Travel', 'ops_webinars_conferences': 'Webinars & Conferences',
 }
 _BULK_SYS_COLS = {'id', 'registration_number', 'pathway', 'created_at', 'created_by', 'updated_at'}
+# Columns that are inherently free text — never coerce into a dropdown even if
+# they happen to have few distinct values (e.g. notes that are full sentences).
+_BULK_FREETEXT_HINTS = ('note', 'remark', 'comment', 'description', 'reason', 'address',
+                        'detail', 'feedback', 'message', 'instruction', 'score', 'link',
+                        'url', 'email', 'name')
 BULK_PATHWAYS = ['plab', 'australia', 'consulting', 'portfolio', 'training', 'uae']
 
 
-def _bulk_columns(conn, table):
-    """Editable columns for an ops_* table (whitelisted), with input types."""
+def _bulk_columns(conn, table, pathway=None):
+    """Editable columns for an ops_* table (whitelisted), with input types.
+
+    Text columns that have a constrained value set render as dropdowns so the
+    bulk team picks an existing value instead of free-typing (avoids mismatch).
+    Options come from a matching lookup_options category plus the distinct values
+    already in that column for this pathway. Free-text columns (many distinct
+    values, e.g. notes/names) stay as text inputs."""
     if table not in OPS_PATHWAY_TABLES:
         return []
     try:
@@ -21544,14 +21555,50 @@ def _bulk_columns(conn, table):
             cols = [(r['name'], (r['type'] or '')) for r in rows]
         except Exception:
             cols = []
+    try:
+        lookup_cats = {r['c'] for r in conn.execute("SELECT DISTINCT category AS c FROM lookup_options WHERE is_active = 1", []).fetchall()}
+    except Exception:
+        lookup_cats = set()
     out = []
     for name, dt in cols:
         if name in _BULK_SYS_COLS:
             continue
         dl = dt.lower()
         numeric = ('int' in dl or 'numeric' in dl or 'double' in dl or 'real' in dl or 'decimal' in dl)
-        itype = 'number' if numeric else ('date' if 'date' in name.lower() else 'text')
-        out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': itype, 'numeric': numeric})
+        if numeric:
+            out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'number', 'numeric': True, 'options': []})
+            continue
+        if 'date' in name.lower():
+            out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'date', 'numeric': False, 'options': []})
+            continue
+        # Inherently free-text columns stay as text (never a sentence dropdown).
+        if any(h in name.lower() for h in _BULK_FREETEXT_HINTS):
+            out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'text', 'numeric': False, 'options': []})
+            continue
+        # Text column — decide dropdown vs free text.
+        options = []
+        if name in lookup_cats:
+            try:
+                options = list(get_lookup_options(name, pathway=pathway) if pathway else get_lookup_options(name))
+            except Exception:
+                try:
+                    options = list(get_lookup_options(name))
+                except Exception:
+                    options = []
+        try:
+            if pathway:
+                existing = [r[0] for r in conn.execute(
+                    f"SELECT DISTINCT {name} FROM {table} WHERE COALESCE(pathway,'plab') = ? AND {name} IS NOT NULL AND {name} <> '' ORDER BY {name} LIMIT 60", (pathway,)).fetchall()]
+            else:
+                existing = [r[0] for r in conn.execute(
+                    f"SELECT DISTINCT {name} FROM {table} WHERE {name} IS NOT NULL AND {name} <> '' ORDER BY {name} LIMIT 60", []).fetchall()]
+        except Exception:
+            existing = []
+        if options or (1 <= len(existing) <= 40):
+            merged = list(dict.fromkeys((options or []) + existing))
+            out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'select', 'numeric': False, 'options': merged})
+        else:
+            out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': 'text', 'numeric': False, 'options': []})
     return out
 
 
@@ -21567,7 +21614,7 @@ def ops_bulk():
     conn = get_db()
     columns, records = [], []
     if table:
-        columns = _bulk_columns(conn, table)
+        columns = _bulk_columns(conn, table, pathway)
         # existing records for the bulk-edit panel (this pathway + section)
         try:
             records = conn.execute(f"""
@@ -21595,7 +21642,7 @@ def ops_bulk_add():
         return redirect(url_for('ops_bulk'))
     regs = [r for r in request.form.getlist('registration_number') if r.strip()]
     conn = get_db()
-    cols = _bulk_columns(conn, table)
+    cols = _bulk_columns(conn, table, pathway)
     # only the fields the user actually filled
     fills = {}
     for c in cols:
@@ -21633,7 +21680,7 @@ def ops_bulk_edit():
     ids = [i for i in request.form.getlist('record_ids') if i.strip().isdigit()]
     edit_cols = request.form.getlist('edit_cols')
     conn = get_db()
-    cols = {c['name']: c for c in _bulk_columns(conn, table)}
+    cols = {c['name']: c for c in _bulk_columns(conn, table, pathway)}
     sets, vals = [], []
     for col in edit_cols:
         if col not in cols:

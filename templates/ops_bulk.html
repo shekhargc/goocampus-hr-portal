@@ -53,7 +53,14 @@
         {% for c in columns %}
         <div>
           <label style="font-size:0.74rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:4px;">{{ c.label }}</label>
+          {% if c.type == 'select' %}
+          <select name="f_{{ c.name }}" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;background:#fff;">
+            <option value="">-- Select --</option>
+            {% for o in c.options %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+          </select>
+          {% else %}
           <input type="{{ c.type }}" name="f_{{ c.name }}" {% if c.type=='number' %}step="0.01"{% endif %} style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;">
+          {% endif %}
         </div>
         {% endfor %}
       </div>
@@ -78,7 +85,14 @@
             <input type="checkbox" name="edit_cols" value="{{ c.name }}" style="flex:none;">
             <div style="flex:1;">
               <label style="font-size:0.72rem;font-weight:700;color:var(--gray-500);display:block;">{{ c.label }}</label>
+              {% if c.type == 'select' %}
+              <select name="v_{{ c.name }}" style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;background:#fff;">
+                <option value="">-- Select --</option>
+                {% for o in c.options %}<option value="{{ o }}">{{ o }}</option>{% endfor %}
+              </select>
+              {% else %}
               <input type="{{ c.type }}" name="v_{{ c.name }}" {% if c.type=='number' %}step="0.01"{% endif %} style="width:100%;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;">
+              {% endif %}
             </div>
           </div>
           {% endfor %}
