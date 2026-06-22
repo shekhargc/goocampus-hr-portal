@@ -34893,6 +34893,7 @@ def access_master():
 
         selected_subject = None
         permissions_map = {}
+        section_members = {}   # by-section: {main_section: {subject_id: {view,edit,add}}}
         if mode == 'by-person':
             sel_id = request.args.get('subject_id', type=int) or request.args.get('emp_id', type=int)
             if sel_id:
@@ -34926,6 +34927,22 @@ def access_master():
                             'edit': bool(r['can_edit']),
                             'add':  bool(r['can_add']),
                         }
+        elif mode == 'by-section':
+            # Load every existing grant for this subject_type so the by-section
+            # page can show WHICH members already have each section (the missing
+            # piece that made dept/section grants look like they didn't save).
+            for r in conn.execute(
+                "SELECT subject_id, main_section, can_view, can_edit, can_add "
+                "FROM user_section_permissions "
+                "WHERE subject_type = ? AND subject_id IS NOT NULL "
+                "  AND (can_view = 1 OR can_edit = 1 OR can_add = 1)",
+                (subject_type,),
+            ).fetchall():
+                m = section_members.setdefault(r['main_section'], {})
+                cur = m.setdefault(str(r['subject_id']), {'view': False, 'edit': False, 'add': False})
+                if r['can_view']: cur['view'] = True
+                if r['can_edit']: cur['edit'] = True
+                if r['can_add']: cur['add'] = True
     finally:
         try: conn.close()
         except Exception: pass
@@ -34943,6 +34960,7 @@ def access_master():
         selected_employee=selected_subject, # template still references this name
         selected_subject=selected_subject,
         permissions_map=permissions_map,
+        section_members=section_members,
         catalog=filtered_catalog,
         catalog_by_main=catalog_by_main,
         active_section='company',

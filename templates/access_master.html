@@ -223,6 +223,7 @@
 
     <div class="am-card" id="bs-step-3" style="display:none;">
         <h2><span class="am-step-num">3</span>Pick {{ 'partners' if subject_type == 'partner' else 'team members' }}</h2>
+        <p style="font-size:0.78rem;color:var(--gray-500);margin:0 0 0.6rem;">A green <b>Has</b> badge marks {{ 'partners' if subject_type == 'partner' else 'members' }} who already have this section (V/E/A = current View/Edit/Add) and they're pre-ticked. Clicking <b>Grant Access</b> re-applies the toggles above to everyone ticked.</p>
         <input type="text" id="bs-emp-search" placeholder="Search by name {% if subject_type != 'partner' %}or department{% endif %}..."
                oninput="bsFilterEmployees()"
                style="width:100%;padding:0.5rem 0.75rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;margin-bottom:0.75rem;">
@@ -261,6 +262,34 @@
 
     <script>
         const BS_CATALOG = {{ catalog_by_main|tojson }};
+        const BS_SECTION_MEMBERS = {{ section_members|tojson }};
+
+        function bsMarkExistingMembers(mainKey) {
+            // Reflect who already has access to this section: tick them + badge.
+            const granted = BS_SECTION_MEMBERS[mainKey] || {};
+            document.querySelectorAll('.bs-emp-cb').forEach(cb => {
+                const id = cb.getAttribute('data-emp-id');
+                const label = cb.closest('.bs-emp-item');
+                const old = label.querySelector('.bs-has-access');
+                if (old) old.remove();
+                const g = granted[id];
+                if (g) {
+                    cb.checked = true;
+                    const parts = [];
+                    if (g.view) parts.push('V');
+                    if (g.edit) parts.push('E');
+                    if (g.add) parts.push('A');
+                    const b = document.createElement('span');
+                    b.className = 'bs-has-access';
+                    b.style.cssText = 'margin-left:auto;font-size:0.6rem;font-weight:700;background:#ECFDF5;color:#065F46;padding:2px 7px;border-radius:999px;white-space:nowrap;';
+                    b.textContent = 'Has ' + (parts.join('/') || 'access');
+                    label.appendChild(b);
+                } else {
+                    cb.checked = false;
+                }
+            });
+            if (typeof bsOnEmployeeChange === 'function') bsOnEmployeeChange();
+        }
 
         function bsOnMainChange() {
             const mainKey = document.getElementById('bs-main-section').value;
@@ -285,6 +314,7 @@
                 </label>
             `).join('');
             bsRecountSubs();
+            bsMarkExistingMembers(mainKey);
             step2.style.display = '';
             step3.style.display = '';
             actions.style.display = '';
