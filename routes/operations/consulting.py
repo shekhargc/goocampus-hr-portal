@@ -432,6 +432,7 @@ def ops_consulting_client_detail(client_id):
         'amc_registration':     fetch('ops_amc_registration', 'id DESC'),
         'mentorship':           fetch('ops_mentorship', 'id DESC'),
         'training':             fetch('ops_coaching', 'id DESC'),
+        'test_bookings':        fetch('ops_test_bookings', 'id DESC'),
         'online_courses':       fetch('ops_online_courses', 'id DESC'),
         'online_subscriptions': fetch('ops_online_subscriptions', 'id DESC'),
         'research':             fetch('ops_research_publication', 'id DESC'),

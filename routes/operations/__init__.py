@@ -102,6 +102,12 @@ def register_operations_modules(app):
     cs_research.register_routes(app)
     cs_online_courses.register_routes(app)
 
+    # Standard Consulting — Test Bookings. Clone of au_test_bookings scoped
+    # to pathway='consulting' (shared ops_test_bookings table). List (with
+    # drawer) + detail + add + edit.
+    from . import cs_test_bookings
+    cs_test_bookings.register_routes(app)
+
     # Phase 4 lightweight pathways — Portfolio + Training.
     # Each is a clone of Standard Consulting trimmed to 5 sections:
     # Dashboard, Registration (clients), Payments, Documents, Call Notes.
