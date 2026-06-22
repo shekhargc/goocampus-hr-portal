@@ -284,10 +284,11 @@ def ops_australia_clients_list():
             params.append(counsellor_filter)
         if search:
             sql += """ AND (
-                first_name LIKE ? OR last_name LIKE ? OR
-                registration_number LIKE ? OR mobile LIKE ? OR email LIKE ?
+                first_name ILIKE ? OR last_name ILIKE ? OR
+                registration_number ILIKE ? OR mobile ILIKE ? OR email ILIKE ? OR
+                (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Latest registrations on top (user request 2026-06-01) — mirrors PLAB.
         sql += " ORDER BY registration_date DESC NULLS LAST, id DESC "
         records = conn.execute(sql, params).fetchall()
@@ -630,8 +631,8 @@ def ops_australia_documents_list():
                 WHERE COALESCE(c.pathway, 'plab') = 'australia' """
         params = []
         if search:
-            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?) "
-            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ? OR (COALESCE(c.prefix,'')||' '||c.first_name||' '||COALESCE(c.last_name,'')) ILIKE ?) "
+            params += [f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%']
         q += """ GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
                           c.account_status, c.current_stage, c.created_at
                  ORDER BY c.created_at DESC NULLS LAST, c.id DESC"""

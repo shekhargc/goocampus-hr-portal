@@ -96,11 +96,12 @@ def ops_australia_online_courses_list():
             params.append(booked_by_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                s.registration_number LIKE ? OR s.online_subscription LIKE ? OR
-                s.client_email LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                s.registration_number ILIKE ? OR s.online_subscription ILIKE ? OR
+                s.client_email ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: most recently issued at the top, then by id desc.
         sql += " ORDER BY s.issued_date DESC NULLS LAST, s.id DESC "
         records = conn.execute(sql, params).fetchall()

@@ -76,10 +76,11 @@ def ops_uae_data_flow_list():
             params.append(status_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                t.registration_number LIKE ? OR t.notes LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                t.registration_number ILIKE ? OR t.notes ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 4)
+            params.extend([f'%{search}%'] * 5)
         sql += " ORDER BY t.data_flow_start_date DESC NULLS LAST, t.id DESC "
         records = conn.execute(sql, params).fetchall()
         total = len(records)

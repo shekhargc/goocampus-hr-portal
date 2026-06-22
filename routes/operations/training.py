@@ -248,9 +248,10 @@ def ops_training_clients_list():
             where.append(
                 "(first_name ILIKE ? OR last_name ILIKE ? "
                 " OR registration_number ILIKE ? OR mobile ILIKE ? "
-                " OR email ILIKE ?)"
+                " OR email ILIKE ? "
+                " OR (COALESCE(prefix,'')||' '||first_name||' '||COALESCE(last_name,'')) ILIKE ?)"
             )
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         if status_filter:
             where.append("account_status = ?")
             params.append(status_filter)
@@ -576,8 +577,8 @@ def ops_training_documents_list():
                 WHERE COALESCE(c.pathway, 'plab') = 'training' """
         params = []
         if search:
-            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ?) "
-            params += [f'%{search}%', f'%{search}%', f'%{search}%']
+            q += " AND (c.first_name ILIKE ? OR c.last_name ILIKE ? OR c.registration_number ILIKE ? OR (COALESCE(c.prefix,'')||' '||c.first_name||' '||COALESCE(c.last_name,'')) ILIKE ?) "
+            params += [f'%{search}%', f'%{search}%', f'%{search}%', f'%{search}%']
         q += """ GROUP BY c.id, c.registration_number, c.first_name, c.last_name, c.prefix,
                           c.account_status, c.current_stage, c.created_at
                  ORDER BY c.created_at DESC NULLS LAST, c.id DESC"""
