@@ -414,19 +414,21 @@ def ops_portfolio_client_detail(client_id):
             )
             if order:
                 sql += f" ORDER BY {order} "
-            return conn.execute(sql, (reg,)).fetchall()
+            return [dict(x) for x in conn.execute(sql, (reg,)).fetchall()]
         except Exception:
             return []
 
     sections = {
         'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
         'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        # All Portfolio service sections, so the profile shows every record type.
+        'research':   fetch('ops_research_publication', 'id DESC'),
+        'courses':    fetch('ops_online_courses', 'id DESC'),
+        'webinars':   fetch('ops_webinars_conferences', 'id DESC'),
         # Stubbed to empty so any residual template loops still work.
         'test_bookings':    [],
         'training':         [],
         'online_courses':   [],
-        'research':         [],
-        'webinars':         [],
     }
     # Centralised referral reporting: who did THIS client refer?
     try:

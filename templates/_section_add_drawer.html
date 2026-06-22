@@ -1,0 +1,47 @@
+{# Reusable "Add Record" slide-over drawer for client-profile pages.
+   Loads a section's real add form (all dropdowns/fields) in an iframe via
+   ?embed=1&reg=&cname=, with the client pre-filled. On successful save the add
+   route redirects away from its /add URL — we detect that and close + refresh. #}
+<div id="addDrawer" style="display:none;position:fixed;inset:0;z-index:1000;">
+  <div onclick="closeAddDrawer()" style="position:absolute;inset:0;background:rgba(15,23,42,0.45);"></div>
+  <div style="position:absolute;top:0;right:0;height:100%;width:min(680px,94vw);background:#fff;box-shadow:-8px 0 30px rgba(0,0,0,0.2);display:flex;flex-direction:column;animation:drawerIn .22s ease;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid #e5e7eb;flex:none;">
+      <span id="addDrawerTitle" style="font-weight:700;color:#1F3A5F;font-size:1.02rem;">Add Record</span>
+      <button onclick="closeAddDrawer()" style="background:none;border:none;font-size:1.3rem;color:#94a3b8;cursor:pointer;line-height:1;">&times;</button>
+    </div>
+    <iframe id="addDrawerFrame" src="about:blank" style="flex:1;width:100%;border:0;"></iframe>
+  </div>
+</div>
+<style>@keyframes drawerIn{from{transform:translateX(100%)}to{transform:translateX(0)}}</style>
+<script>
+  function openAddDrawer(url, title){
+    var f = document.getElementById('addDrawerFrame');
+    document.getElementById('addDrawerTitle').textContent = title || 'Add Record';
+    f.dataset.loads = '0';
+    f.src = url;
+    document.getElementById('addDrawer').style.display = 'block';
+    document.body.style.overflow = 'hidden';
+  }
+  function closeAddDrawer(){
+    document.getElementById('addDrawer').style.display = 'none';
+    document.body.style.overflow = '';
+    document.getElementById('addDrawerFrame').src = 'about:blank';
+  }
+  (function(){
+    var f = document.getElementById('addDrawerFrame');
+    f.addEventListener('load', function(){
+      var n = parseInt(f.dataset.loads || '0', 10) + 1;
+      f.dataset.loads = String(n);
+      if (n <= 1) return;               // first load = the form itself
+      var path = '';
+      try { path = f.contentWindow.location.pathname; } catch(e){ return; }
+      // After submit the add route redirects: a validation error returns to an
+      // /add page (stay open); success lands on a detail/list page (saved).
+      if (path.indexOf('/add') === -1){
+        closeAddDrawer();
+        window.location.reload();
+      }
+    });
+    document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeAddDrawer(); });
+  })();
+</script>

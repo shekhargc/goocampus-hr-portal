@@ -3,6 +3,35 @@
 {% block title %}Portfolio Client Dashboard - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 
 {% block ops_content %}
+{% set client_display = (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip()) %}
+{# Generic section card: header (count + Add Record drawer button + View all) and
+   a compact list of each record's filled fields. Works for any section table. #}
+{% macro section_block(title, records, view_url, add_endpoint, client_reg, client_display) %}
+<div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+  <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+    <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ title }} ({{ records|length }})</h3>
+    <div style="display:flex;gap:10px;align-items:center;">
+      {% if add_endpoint %}<button type="button" onclick="openAddDrawer('{{ url_for(add_endpoint) }}?embed=1&reg={{ client_reg|urlencode }}&cname={{ client_display|urlencode }}','Add {{ title }}')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>{% endif %}
+      <a href="{{ view_url }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+    </div>
+  </div>
+  {% if records %}
+  <div style="max-height:420px;overflow-y:auto;">
+    {% for r in records[:15] %}
+    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);display:flex;flex-wrap:wrap;gap:6px 16px;">
+      {% set ns = namespace(c=0) %}
+      {% for col, val in r.items() %}
+        {% if col not in ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] and val not in [none, ''] and ns.c < 6 %}
+        <span style="font-size:12.5px;color:var(--gray-700);"><b style="color:var(--navy);">{{ col.replace('_',' ').title() }}:</b> {{ val }}</span>
+        {% set ns.c = ns.c + 1 %}
+        {% endif %}
+      {% endfor %}
+    </div>
+    {% endfor %}
+  </div>
+  {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No records yet.</p>{% endif %}
+</div>
+{% endmacro %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <!-- Back Link -->
   <div style="margin-bottom:20px;">
@@ -313,7 +342,10 @@
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
       <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
-      <a href="{{ url_for('ops_portfolio_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button type="button" onclick="openAddDrawer('{{ url_for('ops_portfolio_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ client_display|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
+        <a href="{{ url_for('ops_portfolio_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+      </div>
     </div>
     {% if sections.call_notes %}
     <div style="max-height:400px;overflow-y:auto;">
@@ -330,5 +362,11 @@
     {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
   </div>
 
+  <!-- Portfolio service sections -->
+  {{ section_block('Research & Publications', sections.research, url_for('ops_portfolio_research_list'), 'ops_portfolio_research_add_page', client.registration_number, client_display) }}
+  {{ section_block('Courses & Certifications', sections.courses, url_for('ops_portfolio_courses_list'), 'ops_portfolio_courses_add_page', client.registration_number, client_display) }}
+  {{ section_block('Webinars & Conferences', sections.webinars, url_for('ops_portfolio_webinars_list'), 'ops_portfolio_webinars_add_page', client.registration_number, client_display) }}
+
 </div>
+{% include '_section_add_drawer.html' %}
 {% endblock %}
