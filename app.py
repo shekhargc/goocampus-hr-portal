@@ -21510,6 +21510,155 @@ def admin_refunds_add():
 
 
 # ─────────────────────────────────────────────────────────
+#  OPERATIONS – Bulk Add / Bulk Edit (generic, all sections)
+# ─────────────────────────────────────────────────────────
+# One tool to (a) add the SAME record to many clients at once, and (b) edit
+# chosen fields on many existing records. Generic: works for every ops_* section
+# via the table schema. Tables + columns are whitelisted; values parameterised.
+
+OPS_SECTION_LABELS = {
+    'ops_academic_details': 'Academic Details', 'ops_call_notes': 'Call Notes',
+    'ops_coaching': 'Coaching', 'ops_english_logins': 'English Logins',
+    'ops_epic_registration': 'EPIC Registration', 'ops_gmc_registration': 'GMC Registration',
+    'ops_amc_registration': 'AMC Registration', 'ops_mentorship': 'Mentorship',
+    'ops_ngo_activities': 'NGO Activities', 'ops_online_courses': 'Online Courses',
+    'ops_online_subscriptions': 'Online Subscriptions', 'ops_payments': 'Payments',
+    'ops_research_publication': 'Research & Publications', 'ops_test_bookings': 'Test Bookings',
+    'ops_uk_cab_bookings': 'Cab Bookings', 'ops_uk_observerships': 'Observerships',
+    'ops_uk_visa_travel': 'Visa & Travel', 'ops_webinars_conferences': 'Webinars & Conferences',
+}
+_BULK_SYS_COLS = {'id', 'registration_number', 'pathway', 'created_at', 'created_by', 'updated_at'}
+BULK_PATHWAYS = ['plab', 'australia', 'consulting', 'portfolio', 'training', 'uae']
+
+
+def _bulk_columns(conn, table):
+    """Editable columns for an ops_* table (whitelisted), with input types."""
+    if table not in OPS_PATHWAY_TABLES:
+        return []
+    try:
+        rows = conn.execute("SELECT column_name AS n, data_type AS t FROM information_schema.columns WHERE table_name = ? ORDER BY ordinal_position", (table,)).fetchall()
+        cols = [(r['n'], (r['t'] or '')) for r in rows]
+    except Exception:
+        try:
+            rows = conn.execute(f"PRAGMA table_info({table})").fetchall()
+            cols = [(r['name'], (r['type'] or '')) for r in rows]
+        except Exception:
+            cols = []
+    out = []
+    for name, dt in cols:
+        if name in _BULK_SYS_COLS:
+            continue
+        dl = dt.lower()
+        numeric = ('int' in dl or 'numeric' in dl or 'double' in dl or 'real' in dl or 'decimal' in dl)
+        itype = 'number' if numeric else ('date' if 'date' in name.lower() else 'text')
+        out.append({'name': name, 'label': name.replace('_', ' ').title(), 'type': itype, 'numeric': numeric})
+    return out
+
+
+@app.route('/operations/bulk')
+@admin_required
+def ops_bulk():
+    pathway = (request.args.get('pathway') or 'plab').strip().lower()
+    if pathway not in BULK_PATHWAYS:
+        pathway = 'plab'
+    table = (request.args.get('table') or '').strip()
+    if table and table not in OPS_PATHWAY_TABLES:
+        table = ''
+    conn = get_db()
+    columns, records = [], []
+    if table:
+        columns = _bulk_columns(conn, table)
+        # existing records for the bulk-edit panel (this pathway + section)
+        try:
+            records = conn.execute(f"""
+                SELECT t.*, p.prefix, p.first_name, p.last_name
+                  FROM {table} t
+             LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
+                 WHERE COALESCE(t.pathway, 'plab') = ?
+              ORDER BY t.id DESC LIMIT 300""", (pathway,)).fetchall()
+        except Exception:
+            records = []
+    sections = [(t, OPS_SECTION_LABELS.get(t, t)) for t in OPS_PATHWAY_TABLES]
+    conn.close()
+    return render_template('ops_bulk.html', pathway=pathway, table=table, columns=columns,
+        records=records, sections=sections, pathways=BULK_PATHWAYS,
+        section_label=OPS_SECTION_LABELS.get(table, table), active_ops_page='bulk')
+
+
+@app.route('/operations/bulk/add', methods=['POST'])
+@admin_required
+def ops_bulk_add():
+    table = (request.form.get('table') or '').strip()
+    pathway = (request.form.get('pathway') or 'plab').strip().lower()
+    if table not in OPS_PATHWAY_TABLES or pathway not in BULK_PATHWAYS:
+        flash('Invalid section', 'error')
+        return redirect(url_for('ops_bulk'))
+    regs = [r for r in request.form.getlist('registration_number') if r.strip()]
+    conn = get_db()
+    cols = _bulk_columns(conn, table)
+    # only the fields the user actually filled
+    fills = {}
+    for c in cols:
+        v = request.form.get(f"f_{c['name']}", '')
+        if v != '':
+            fills[c['name']] = (float(v or 0) if c['numeric'] else v)
+    if not regs:
+        conn.close()
+        flash('Select at least one client', 'error')
+        return redirect(url_for('ops_bulk', pathway=pathway, table=table))
+    insert_cols = ['registration_number', 'pathway'] + list(fills.keys()) + ['created_by']
+    placeholders = ', '.join(['?'] * len(insert_cols))
+    made = 0
+    for reg in regs:
+        vals = [reg, pathway] + list(fills.values()) + [session.get('user_id')]
+        try:
+            conn.execute(f"INSERT INTO {table} ({', '.join(insert_cols)}) VALUES ({placeholders})", vals)
+            made += 1
+        except Exception as e:
+            logging.error(f"ops_bulk_add {table} {reg}: {e}")
+    conn.commit()
+    conn.close()
+    flash(f'Added {made} record(s) across {len(regs)} client(s).', 'success')
+    return redirect(url_for('ops_bulk', pathway=pathway, table=table))
+
+
+@app.route('/operations/bulk/edit', methods=['POST'])
+@admin_required
+def ops_bulk_edit():
+    table = (request.form.get('table') or '').strip()
+    pathway = (request.form.get('pathway') or 'plab').strip().lower()
+    if table not in OPS_PATHWAY_TABLES or pathway not in BULK_PATHWAYS:
+        flash('Invalid section', 'error')
+        return redirect(url_for('ops_bulk'))
+    ids = [i for i in request.form.getlist('record_ids') if i.strip().isdigit()]
+    edit_cols = request.form.getlist('edit_cols')
+    conn = get_db()
+    cols = {c['name']: c for c in _bulk_columns(conn, table)}
+    sets, vals = [], []
+    for col in edit_cols:
+        if col not in cols:
+            continue
+        v = request.form.get(f"v_{col}", '')
+        sets.append(f"{col} = ?")
+        vals.append(float(v or 0) if cols[col]['numeric'] else v)
+    if not ids or not sets:
+        conn.close()
+        flash('Select records and at least one field to change.', 'error')
+        return redirect(url_for('ops_bulk', pathway=pathway, table=table))
+    placeholders = ', '.join(['?'] * len(ids))
+    try:
+        conn.execute(f"UPDATE {table} SET {', '.join(sets)} WHERE id IN ({placeholders}) AND COALESCE(pathway,'plab') = ?",
+                     vals + [int(i) for i in ids] + [pathway])
+        conn.commit()
+        flash(f'Updated {len(ids)} record(s).', 'success')
+    except Exception as e:
+        logging.error(f"ops_bulk_edit {table}: {e}")
+        flash('Error applying bulk edit', 'error')
+    conn.close()
+    return redirect(url_for('ops_bulk', pathway=pathway, table=table))
+
+
+# ─────────────────────────────────────────────────────────
 #  OPERATIONS – EPIC Registration
 # ─────────────────────────────────────────────────────────
 
