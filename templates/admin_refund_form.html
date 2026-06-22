@@ -1,0 +1,93 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Record Refund{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:620px;margin:0 auto;">
+
+    <div style="margin-bottom:18px;">
+      <a href="{{ url_for('admin_refunds') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Refunds</a>
+      <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:700;color:var(--navy);">Record Refund</h1>
+    </div>
+
+    <form method="POST" style="background:#fff;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;flex-direction:column;gap:16px;">
+
+      <div style="position:relative;">
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Client *</label>
+        <input type="text" id="clientSearch" autocomplete="off" required placeholder="Search name or registration #"
+               value="{{ pre_name }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        <input type="hidden" name="registration_number" id="regNum" value="{{ pre_reg }}">
+        <div id="clientResults" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:240px;overflow:auto;display:none;"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Refund Amount (₹) *</label>
+          <input type="number" name="amount" step="0.01" min="0" required style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;font-weight:700;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Refund Date *</label>
+          <input type="date" name="refund_date" required style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Refund Method *</label>
+        <select name="refund_method" required style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+          <option value="">-- Select --</option>
+          {% for m in refund_methods %}<option value="{{ m }}">{{ m }}</option>{% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Reason</label>
+        <input type="text" name="reason" placeholder="e.g., Backed out before program start" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Notes</label>
+        <textarea name="notes" rows="2" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;"></textarea>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:6px;">
+        <button type="submit" class="button" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Record Refund</button>
+        <a href="{{ url_for('admin_refunds') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const search = document.getElementById('clientSearch');
+  const results = document.getElementById('clientResults');
+  const regNum = document.getElementById('regNum');
+  let timer = null;
+  search.addEventListener('input', function(){
+    regNum.value = '';
+    const q = search.value.trim();
+    if (q.length < 2){ results.style.display='none'; return; }
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      fetch('/operations/api/client-search?pathway=all&q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(list => {
+          if (!list.length){ results.style.display='none'; return; }
+          results.innerHTML = list.map(c =>
+            '<div class="cr-item" data-reg="'+c.reg+'" data-label="'+ (c.name + ' — ' + (c.display_reg||c.reg)).replace(/"/g,'&quot;') +'" '+
+            'style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f1f1;">'+
+            '<div style="font-weight:600;color:#1e293b;">'+c.name+'</div>'+
+            '<div style="font-size:0.74rem;color:#94a3b8;">'+(c.display_reg||c.reg)+' · '+(c.pathway_label||c.pathway||'')+'</div></div>'
+          ).join('');
+          results.style.display='block';
+          results.querySelectorAll('.cr-item').forEach(el => el.addEventListener('click', function(){
+            regNum.value = this.getAttribute('data-reg');
+            search.value = this.getAttribute('data-label');
+            results.style.display='none';
+          }));
+        });
+    }, 220);
+  });
+  document.addEventListener('click', e => { if (!results.contains(e.target) && e.target !== search) results.style.display='none'; });
+})();
+</script>
+{% endblock %}
