@@ -314,6 +314,7 @@
   .ops-embed .ops-layout { display: block; }
 </style>
 <div class="ops-layout{% if _embed %} ops-embed{% endif %}">
+    {% if not _embed %}
     <!-- Sidebar -->
     <aside class="ops-sidebar" id="opsSidebar">
         <div class="ops-sidebar-header">
@@ -1053,6 +1054,7 @@
             {% endif %}
         </nav>
     </aside>
+    {% endif %}
 
     <!-- Main Content -->
     <main class="ops-main">
