@@ -21614,8 +21614,13 @@ def admin_internal_transfer_new():
                 return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
             to_pathway = prod['pathway'] or 'plab'
             from datetime import date as _date
-            from core.registration import next_registration_number
-            new_reg = next_registration_number(conn, prod['name'])
+            # Generate the reg # from the destination product's PATHWAY column, not
+            # its name — product names like "AMC Consulting"/"UAE Consulting" would
+            # mis-map by keyword (AMC->australia, UAE->uae); they're consulting (GCCSS).
+            from core.registration import PATHWAY_REG_PREFIX, indian_financial_year, _next_sequence
+            _prefix = PATHWAY_REG_PREFIX.get(to_pathway, 'GCUKIP')
+            _fy = indian_financial_year()
+            new_reg = f"{_prefix}/{_fy}/{_next_sequence(conn, _prefix, _fy):03d}"
             src_prod = conn.execute("SELECT name FROM products_services WHERE id = ?", (src['product_id'],)).fetchone()
             from_product = src_prod['name'] if src_prod else (src['pathway'] or 'plab')
             # 1) create the NEW destination client (copy personal data)
