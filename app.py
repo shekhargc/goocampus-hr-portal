@@ -21574,11 +21574,15 @@ def admin_internal_transfer_client_info():
     if not cl:
         conn.close()
         return jsonify({'found': False})
-    paid = conn.execute("SELECT COALESCE(SUM(total_amount_paid),0) AS s FROM ops_payments WHERE registration_number = ?", (reg,)).fetchone()
+    paid = conn.execute("""SELECT COALESCE(SUM(amount_paid),0) AS base, COALESCE(SUM(gst_paid),0) AS gst,
+        COALESCE(SUM(total_amount_paid),0) AS tot FROM ops_payments WHERE registration_number = ?""", (reg,)).fetchone()
     conn.close()
+    # The split is on the "amount paid" (base, ex-GST) — that's what the pathway
+    # record shows. GST + GST-inclusive total are returned for context.
     return jsonify({'found': True, 'name': f"{cl['prefix'] or ''} {cl['first_name'] or ''} {cl['last_name'] or ''}".strip(),
                     'pathway': cl['pathway'] or 'plab', 'product': cl['product_name'] or '',
-                    'total_paid': float(paid['s'] or 0)})
+                    'amount_paid': float(paid['base'] or 0), 'gst_paid': float(paid['gst'] or 0),
+                    'total_with_gst': float(paid['tot'] or 0)})
 
 
 @app.route('/admin/internal-transfers/new', methods=['GET', 'POST'])
@@ -21624,8 +21628,12 @@ def admin_internal_transfer_new():
             # 2) mark the SOURCE switched
             conn.execute("UPDATE plab_clients SET account_status = 'Switched Program', switched_program = ?, updated_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
                          (prod['name'], from_reg))
-            # 3) transfer amount -> a payment on the new record (GST-inclusive)
-            base, gst, tot = _compute_payment_amounts(amount_transferred, HUB_TRANSFER_METHOD)
+            # 3) transfer amount -> a payment on the new record. The split is on
+            # the base ("amount paid"), so the transferred figure is the base and
+            # 18% GST is added on top (matches "₹X + gst" on the new pathway fee).
+            base = amount_transferred
+            gst = round(amount_transferred * 0.18, 2)
+            tot = round(base + gst, 2)
             pcur = conn.execute("""INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid,
                 total_amount_paid, payment_method, source_product, pathway, notes, created_by)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",

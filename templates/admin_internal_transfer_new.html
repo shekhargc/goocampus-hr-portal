@@ -39,11 +39,11 @@
         <div style="font-size:0.78rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;margin-bottom:12px;">Money split</div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
           <div>
-            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Total Paid (₹) *</label>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Amount Paid (₹, before GST) *</label>
             <input type="number" name="total_paid" id="totalPaid" step="0.01" min="0" required oninput="recalc()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;font-weight:700;">
           </div>
           <div>
-            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Transfer to new pathway (₹, GST-incl) *</label>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Transfer to new pathway (₹, before GST) *</label>
             <input type="number" name="amount_transferred" id="amtTransfer" step="0.01" min="0" required oninput="recalc()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;">
           </div>
         </div>
@@ -108,7 +108,7 @@
       btn.disabled=false; btn.style.opacity=1;
     } else {
       bl.style.background='#FEF2F2'; bl.style.color='#991B1B';
-      bl.textContent='⚠ Off by ₹'+Math.abs(diff).toLocaleString('en-IN')+' — Transfer+Utilized+Refund (₹'+sum.toLocaleString('en-IN')+') must equal Total Paid (₹'+total.toLocaleString('en-IN')+')';
+      bl.textContent='⚠ Off by ₹'+Math.abs(diff).toLocaleString('en-IN')+' — Transfer+Utilized+Refund (₹'+sum.toLocaleString('en-IN')+') must equal Amount Paid (₹'+total.toLocaleString('en-IN')+')';
       btn.disabled=true; btn.style.opacity=0.5;
     }
   };
@@ -128,8 +128,8 @@
     fetch('{{ url_for("admin_internal_transfer_client_info") }}?reg='+encodeURIComponent(reg)).then(r=>r.json()).then(function(d){
       if(!d.found){ info.style.display='none'; return; }
       info.style.display='block';
-      info.innerHTML='<b>'+d.name+'</b> · '+(d.pathway||'').toUpperCase()+' · '+(d.product||'—')+'<br><span style="color:#059669;font-weight:700;">Total paid so far: ₹'+(d.total_paid).toLocaleString('en-IN')+'</span>';
-      var tp=document.getElementById('totalPaid'); if(!tp.value || parseFloat(tp.value)===0){ tp.value=d.total_paid; recalc(); }
+      info.innerHTML='<b>'+d.name+'</b> · '+(d.pathway||'').toUpperCase()+' · '+(d.product||'—')+'<br><span style="color:#059669;font-weight:700;">Amount paid (before GST): ₹'+(d.amount_paid).toLocaleString('en-IN')+'</span> &nbsp;+&nbsp; ₹'+(d.gst_paid).toLocaleString('en-IN')+' GST &nbsp;=&nbsp; ₹'+(d.total_with_gst).toLocaleString('en-IN')+' paid in total';
+      var tp=document.getElementById('totalPaid'); if(!tp.value || parseFloat(tp.value)===0){ tp.value=d.amount_paid; recalc(); }
     });
   }
   s.addEventListener('input', function(){
