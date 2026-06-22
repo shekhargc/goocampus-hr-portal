@@ -30,11 +30,16 @@
   (function(){
     var f = document.getElementById('addDrawerFrame');
     f.addEventListener('load', function(){
+      // Only react while the drawer is actually open. closeAddDrawer() sets the
+      // iframe back to about:blank (display already none), so that load is ignored
+      // here — otherwise closing the drawer would falsely look like a save.
+      if (document.getElementById('addDrawer').style.display !== 'block') return;
       var n = parseInt(f.dataset.loads || '0', 10) + 1;
       f.dataset.loads = String(n);
       if (n <= 1) return;               // first load = the form itself
       var path = '';
       try { path = f.contentWindow.location.pathname; } catch(e){ return; }
+      if (!path || path === 'blank' || path === '/blank') return;  // about:blank
       // After submit the add route redirects: a validation error returns to an
       // /add page (stay open); success lands on a detail/list page (saved).
       if (path.indexOf('/add') === -1){

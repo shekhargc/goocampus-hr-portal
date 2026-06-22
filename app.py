@@ -7430,6 +7430,21 @@ def ensure_crm_tables():
             except Exception:
                 try: conn.rollback()
                 except Exception: pass
+        # Index registration_number on every ops_* section table — client
+        # profiles + section lists all filter by it, so without these each load
+        # was a full table scan (ops_call_notes is ~13.5k rows). Idempotent.
+        for _itbl in ['ops_payments', 'ops_call_notes', 'ops_self_assessment', 'ops_eligibility_letter',
+                      'ops_data_flow', 'ops_research_publication', 'ops_online_courses', 'ops_webinars_conferences',
+                      'ops_academic_details', 'ops_epic_registration', 'ops_gmc_registration', 'ops_amc_registration',
+                      'ops_mentorship', 'ops_test_bookings', 'ops_coaching', 'ops_english_logins',
+                      'ops_online_subscriptions', 'ops_ngo_activities', 'ops_uk_cab_bookings', 'ops_uk_observerships',
+                      'ops_uk_visa_travel', 'internal_transfers', 'refunds']:
+            try:
+                conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{_itbl}_reg ON {_itbl}(registration_number)")
+                conn.commit()
+            except Exception:
+                try: conn.rollback()
+                except Exception: pass
         # Meeting edit audit trail (2026-06-16): records old/new value for
         # each changed field so the unified CRM has a change history.
         try:
