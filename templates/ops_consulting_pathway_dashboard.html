@@ -253,6 +253,21 @@
         border-bottom: 1px solid var(--gray-100);
     }
     .upcoming-empty { padding: 1.5rem; text-align: center; color: var(--gray-500); font-size: 0.85rem; }
+    .uxtab-bar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .uxtabs { display: flex; gap: 0.4rem; flex: 1 1 auto; flex-wrap: wrap; }
+    .uxtab-btn {
+        background: var(--gray-100); border: 1px solid var(--gray-200);
+        color: var(--gray-500); font-size: 0.78rem; font-weight: 600;
+        padding: 0.4rem 0.75rem; border-radius: 0.5rem; cursor: pointer;
+    }
+    .uxtab-btn:hover { color: var(--navy); }
+    .uxtab-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+    .ux-order-btn {
+        flex: 0 0 auto; background: white; border: 1px solid var(--gray-200);
+        color: var(--navy); font-size: 1rem; line-height: 1; font-weight: 700;
+        width: 2rem; height: 2rem; border-radius: 0.5rem; cursor: pointer;
+    }
+    .ux-order-btn:hover { background: var(--gray-100); }
 </style>
 {% endblock %}
 
@@ -356,6 +371,51 @@
         {% endfor %}
         {% if not stage_counts %}<span style="color: var(--gray-500); font-style: italic;">No active clients yet.</span>{% endif %}
     </div>
+</div>
+
+<!-- ── Upcoming Exams (tabbed) ── -->
+{% set ue7  = stats.upcoming_exams | selectattr('days_until', 'le', 7)  | list %}
+{% set ue30 = stats.upcoming_exams | selectattr('days_until', 'le', 30) | list %}
+{% set ue30p = stats.upcoming_exams | selectattr('days_until', 'gt', 30) | list %}
+<div class="upcoming-section">
+    <div class="uxtab-bar">
+        <h3 style="margin:0;flex:0 0 auto;">Upcoming Exams</h3>
+        <div class="uxtabs">
+            <button type="button" class="uxtab-btn active" id="uxtab-7"  onclick="showUxTab('7', this)">Next 7 Days ({{ ue7 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30" onclick="showUxTab('30', this)">Next 30 Days ({{ ue30 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30p" onclick="showUxTab('30p', this)">30 Days + ({{ ue30p | length }})</button>
+        </div>
+        <button type="button" class="ux-order-btn" title="Toggle date order" onclick="toggleExamOrder()">&#x2195;</button>
+    </div>
+
+    {% for tab in [('7', ue7), ('30', ue30), ('30p', ue30p)] %}
+    <div class="uxpanel" id="uxpanel-{{ tab[0] }}" style="{% if tab[0] != '7' %}display:none;{% endif %}">
+        {% if tab[1] %}
+        <table class="upcoming-table">
+            <thead>
+                <tr>
+                    <th>Candidate</th>
+                    <th>Exam</th>
+                    <th>Exam Date</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in tab[1] %}
+                <tr>
+                    <td>{{ e.prefix or '' }} {{ e.first_name or '' }} {{ e.last_name or '' }}</td>
+                    <td>{{ e.exam or '—' }}</td>
+                    <td>{{ e.exam_date or '—' }}</td>
+                    <td>in {{ e.days_until }} day{{ '' if e.days_until == 1 else 's' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="upcoming-empty">No exams in this window.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
 </div>
 
 <!-- ── Section cards (comprehensive grid: every consulting section) ──
@@ -578,33 +638,25 @@
 
 </div>
 
-<!-- ── Upcoming Exams ── -->
-<div class="upcoming-section">
-    <h3>Upcoming Exams (next 5)</h3>
-    {% if stats.upcoming_exams %}
-    <table class="upcoming-table">
-        <thead>
-            <tr>
-                <th>Candidate</th>
-                <th>Exam</th>
-                <th>Exam Date</th>
-                <th>Country</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in stats.upcoming_exams %}
-            <tr>
-                <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
-                <td>{{ r.exam or '—' }}</td>
-                <td>{{ r.exam_date or '—' }}</td>
-                <td>{{ r.country or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="upcoming-empty">No upcoming exams booked.</div>
-    {% endif %}
-</div>
+<script>
+function showUxTab(id, btn) {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (p) p.style.display = (t === id) ? '' : 'none';
+    });
+    document.querySelectorAll('.uxtab-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+}
+function toggleExamOrder() {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (!p || p.style.display === 'none') return;
+        var tb = p.querySelector('tbody');
+        if (!tb) return;
+        var rows = Array.prototype.slice.call(tb.children);
+        rows.reverse().forEach(function(r) { tb.appendChild(r); });
+    });
+}
+</script>
 
 {% endblock %}

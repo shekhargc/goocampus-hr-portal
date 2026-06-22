@@ -178,6 +178,44 @@ def ops_consulting_pathway():
                   'oc_total', 'webinars_total'):
             stats[k] = 0
         stats['upcoming_exams']     = []
+        # ── Upcoming exams list (all booked, soonest first) ──
+        try:
+            from datetime import date, datetime
+            today = date.today().isoformat()
+            rows = conn.execute(
+                """SELECT t.*, p.prefix, p.first_name, p.last_name
+                      FROM ops_test_bookings t
+                 LEFT JOIN plab_clients p ON p.registration_number = t.registration_number
+                                          AND COALESCE(p.pathway, 'plab') = 'consulting'
+                     WHERE COALESCE(t.pathway, 'plab') = 'consulting'
+                       AND t.exam_date >= ?
+                       AND t.exam_status = 'Booked'
+                  ORDER BY t.exam_date ASC LIMIT 200""",
+                (today,),
+            ).fetchall()
+            today_d = date.today()
+            ue = []
+            for r in rows:
+                d = dict(r)
+                ed = (d.get('exam_date') or '').strip() if isinstance(d.get('exam_date'), str) else d.get('exam_date')
+                days_until = None
+                try:
+                    if ed:
+                        # exam_date is stored as an ISO 'YYYY-MM-DD' string
+                        exam_d = datetime.strptime(str(ed)[:10], '%Y-%m-%d').date()
+                        days_until = (exam_d - today_d).days
+                        if days_until < 0:
+                            days_until = 0
+                except Exception:
+                    days_until = None
+                if days_until is None:
+                    # un-parseable date -> skip so the windows stay clean
+                    continue
+                d['days_until'] = days_until
+                ue.append(d)
+            stats['upcoming_exams'] = ue
+        except Exception:
+            stats['upcoming_exams'] = []
         stats['section_counts']     = {
             'academic': stats['academic_total'],
             'payments': stats['payments_total'],
