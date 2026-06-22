@@ -6,7 +6,7 @@
   <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
     <div>
       <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Internal Transfers</h1>
-      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Clients who moved from one product into another, recorded as a transfer (not new revenue).</p>
+      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Clients moved from one product into another. Raised by a team member, then admin-approved before records are created.</p>
     </div>
     <div style="display:flex;gap:10px;align-items:center;">
       <a href="{{ url_for('admin_payments_hub') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none;">Payments Hub</a>
@@ -14,17 +14,84 @@
     </div>
   </div>
 
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px;">
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div style="margin-bottom:14px;padding:11px 14px;border-radius:8px;font-size:0.86rem;font-weight:600;background:{{ '#ECFDF5' if cat=='success' else '#FEF2F2' }};color:{{ '#065F46' if cat=='success' else '#991B1B' }};">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:22px;">
     <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
-      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Transfers</div>
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Pending Approval</div>
+      <div style="font-size:1.8rem;font-weight:800;color:var(--orange);margin-top:4px;">{{ pending|length }}</div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Approved Transfers</div>
       <div style="font-size:1.8rem;font-weight:800;color:var(--navy);margin-top:4px;">{{ summary.n }}</div>
     </div>
     <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
       <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Total Transferred</div>
-      <div style="font-size:1.8rem;font-weight:800;color:var(--orange);margin-top:4px;">₹{{ '{:,.0f}'.format(summary.amt or 0) }}</div>
+      <div style="font-size:1.8rem;font-weight:800;color:var(--navy);margin-top:4px;">₹{{ '{:,.0f}'.format(summary.amt or 0) }}</div>
     </div>
   </div>
 
+  <!-- PENDING APPROVAL -->
+  {% if pending %}
+  <h2 style="font-size:0.95rem;font-weight:700;color:var(--navy);margin:0 0 12px;">Awaiting approval</h2>
+  <div style="display:flex;flex-direction:column;gap:14px;margin-bottom:28px;">
+    {% for r in pending %}
+    <div style="background:#fff;border:1px solid #FED7AA;border-radius:12px;padding:18px;box-shadow:0 1px 3px rgba(0,0,0,0.06);">
+      <div style="display:flex;justify-content:space-between;flex-wrap:wrap;gap:12px;">
+        <div>
+          <div style="font-weight:700;color:var(--navy);font-size:1rem;">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
+          <div style="font-size:0.78rem;color:var(--gray-500);margin-top:2px;">
+            <span style="font-weight:600;">{{ r.from_reg }}</span> ({{ (r.from_pathway or 'plab')|upper }})
+            <span style="color:var(--orange);font-weight:700;margin:0 6px;">→</span>
+            <span style="font-weight:600;">{{ r.to_product }}</span> ({{ (r.to_pathway or '')|upper }})
+          </div>
+        </div>
+        <div style="text-align:right;font-size:0.74rem;color:var(--gray-500);">
+          <div>Raised by <b style="color:var(--gray-700);">{{ r.raised_by_name or '—' }}</b></div>
+          <div>{{ r.transfer_date or '' }}</div>
+        </div>
+      </div>
+
+      <!-- split -->
+      <div style="display:flex;flex-wrap:wrap;gap:10px;margin-top:14px;">
+        <div style="background:var(--gray-50);border-radius:8px;padding:8px 12px;font-size:0.8rem;"><span style="color:var(--gray-500);">Amount paid</span> <b>₹{{ '{:,.0f}'.format(r.total_paid or 0) }}</b></div>
+        <div style="background:#FFF7ED;border-radius:8px;padding:8px 12px;font-size:0.8rem;"><span style="color:#9A3412;">Transfer</span> <b>₹{{ '{:,.0f}'.format(r.amount_transferred or 0) }}</b></div>
+        <div style="background:var(--gray-50);border-radius:8px;padding:8px 12px;font-size:0.8rem;"><span style="color:var(--gray-500);">Utilized</span> <b>₹{{ '{:,.0f}'.format(r.amount_utilized or 0) }}</b></div>
+        <div style="background:#FEF2F2;border-radius:8px;padding:8px 12px;font-size:0.8rem;"><span style="color:#991B1B;">Refund</span> <b>₹{{ '{:,.0f}'.format(r.amount_refunded or 0) }}</b>{% if r.refund_method %} <span style="color:var(--gray-400);">· {{ r.refund_method }}</span>{% endif %}</div>
+      </div>
+
+      {% set its = items_by_t.get(r.id) %}
+      {% if its %}
+      <div style="margin-top:8px;font-size:0.76rem;color:var(--gray-500);">Utilized: {% for it in its %}{{ it.name }} ₹{{ '{:,.0f}'.format(it.amount or 0) }}{% if not loop.last %} · {% endif %}{% endfor %}</div>
+      {% endif %}
+
+      {% if r.reason %}<div style="margin-top:10px;font-size:0.82rem;color:var(--gray-700);"><span style="color:var(--gray-500);font-weight:600;">Reason:</span> {{ r.reason }}</div>{% endif %}
+      {% if r.notes %}<div style="margin-top:4px;font-size:0.8rem;color:var(--gray-500);">{{ r.notes }}</div>{% endif %}
+
+      {% if is_admin %}
+      <div style="display:flex;gap:10px;align-items:flex-start;margin-top:14px;padding-top:14px;border-top:1px solid var(--gray-100);flex-wrap:wrap;">
+        <form method="POST" action="{{ url_for('admin_internal_transfer_approve', tid=r.id) }}" onsubmit="return confirm('Approve this transfer? This creates the new {{ r.to_pathway|upper }} record, posts the ₹{{ '{:,.0f}'.format(r.amount_transferred or 0) }} payment{% if (r.amount_refunded or 0) > 0 %} and logs the ₹{{ '{:,.0f}'.format(r.amount_refunded or 0) }} refund{% endif %}.');">
+          <button type="submit" style="background:#059669;color:#fff;border:none;border-radius:7px;padding:9px 18px;font-weight:700;font-size:0.84rem;cursor:pointer;">✓ Approve</button>
+        </form>
+        <form method="POST" action="{{ url_for('admin_internal_transfer_reject', tid=r.id) }}" style="display:flex;gap:8px;align-items:center;" onsubmit="return confirm('Reject this transfer? No records will be created.');">
+          <input type="text" name="rejection_reason" placeholder="Reason (optional)" style="padding:8px 10px;border:1px solid var(--gray-200);border-radius:7px;font-size:0.82rem;width:200px;">
+          <button type="submit" style="background:#fff;color:#991B1B;border:1px solid #FECACA;border-radius:7px;padding:8px 16px;font-weight:700;font-size:0.84rem;cursor:pointer;">Reject</button>
+        </form>
+      </div>
+      {% else %}
+      <div style="margin-top:12px;font-size:0.78rem;font-weight:700;color:#9A3412;">⏳ Awaiting admin approval</div>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  <!-- HISTORY -->
+  <h2 style="font-size:0.95rem;font-weight:700;color:var(--navy);margin:0 0 12px;">History</h2>
   <div style="background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow:auto;">
     <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
       <thead>
@@ -33,25 +100,36 @@
           <th style="padding:11px 12px;">Client</th>
           <th style="padding:11px 12px;">Transfer</th>
           <th style="padding:11px 12px;text-align:right;">Amount</th>
+          <th style="padding:11px 12px;">Status</th>
         </tr>
       </thead>
       <tbody>
-        {% for r in rows %}
+        {% for r in history %}
         <tr style="border-top:1px solid var(--gray-100);">
           <td style="padding:10px 12px;color:var(--gray-600);white-space:nowrap;">{{ r.transfer_date or '—' }}</td>
           <td style="padding:10px 12px;">
             <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
-            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number }}</div>
+            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number or r.from_reg or '' }}</div>
           </td>
           <td style="padding:10px 12px;">
-            <span style="font-weight:600;color:var(--gray-700);">{{ r.from_product or '—' }}</span>
+            <span style="font-weight:600;color:var(--gray-700);">{{ r.from_product or r.from_reg or '—' }}</span>
             <span style="color:var(--orange);font-weight:700;margin:0 6px;">→</span>
             <span style="font-size:0.72rem;font-weight:700;background:#FFF7ED;color:#9A3412;padding:2px 9px;border-radius:999px;">{{ (r.to_pathway or 'plab')|upper }}</span>
           </td>
           <td style="padding:10px 12px;text-align:right;font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(r.amount or 0) }}</td>
+          <td style="padding:10px 12px;">
+            {% set st = r.status or 'approved' %}
+            {% if st == 'rejected' %}
+              <span style="font-size:0.72rem;font-weight:700;background:#FEF2F2;color:#991B1B;padding:2px 9px;border-radius:999px;">Rejected</span>
+              {% if r.rejection_reason %}<div style="font-size:0.72rem;color:var(--gray-400);margin-top:3px;">{{ r.rejection_reason }}</div>{% endif %}
+            {% else %}
+              <span style="font-size:0.72rem;font-weight:700;background:#ECFDF5;color:#065F46;padding:2px 9px;border-radius:999px;">Approved</span>
+              {% if r.approved_by_name %}<div style="font-size:0.72rem;color:var(--gray-400);margin-top:3px;">by {{ r.approved_by_name }}</div>{% endif %}
+            {% endif %}
+          </td>
         </tr>
         {% else %}
-        <tr><td colspan="4" style="padding:40px;text-align:center;color:var(--gray-400);">No internal transfers recorded yet.</td></tr>
+        <tr><td colspan="5" style="padding:40px;text-align:center;color:var(--gray-400);">No internal transfers recorded yet.</td></tr>
         {% endfor %}
       </tbody>
     </table>

@@ -7434,6 +7434,16 @@ def ensure_crm_tables():
             ('internal_transfers',       'amount_refunded',        'NUMERIC(14,2)'),
             ('internal_transfers',       'to_payment_id',          'INTEGER'),
             ('internal_transfers',       'refund_id',              'INTEGER'),
+            # Approval workflow (2026-06-22): a transfer is now RAISED by a sales/ops
+            # member, then admin-approved before the records are created. status
+            # DEFAULT 'approved' backfills existing rows so history shows as done.
+            ('internal_transfers',       'status',                 "TEXT DEFAULT 'approved'"),
+            ('internal_transfers',       'reason',                 'TEXT'),
+            ('internal_transfers',       'to_product_id',          'INTEGER'),
+            ('internal_transfers',       'refund_method',          'TEXT'),
+            ('internal_transfers',       'approved_by',            'INTEGER'),
+            ('internal_transfers',       'approved_at',            'TIMESTAMP'),
+            ('internal_transfers',       'rejection_reason',       'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -21541,13 +21551,23 @@ def admin_payments_edit(record_id):
 def admin_internal_transfers():
     """Ledger of internal transfers (clients moved between products)."""
     conn = get_db()
-    rows = conn.execute("""SELECT it.*, p.prefix, p.first_name, p.last_name
-          FROM internal_transfers it
-     LEFT JOIN plab_clients p ON it.registration_number = p.registration_number
-      ORDER BY it.transfer_date DESC, it.id DESC""", []).fetchall()
-    summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM internal_transfers", []).fetchone()
+    cols = """it.*, sc.prefix, sc.first_name, sc.last_name,
+              e.name AS raised_by_name, ap.name AS approved_by_name
+         FROM internal_transfers it
+    LEFT JOIN plab_clients sc ON sc.registration_number = it.from_reg
+    LEFT JOIN employees e ON e.id = it.created_by
+    LEFT JOIN employees ap ON ap.id = it.approved_by"""
+    pending = conn.execute(f"SELECT {cols} WHERE it.status = 'pending' ORDER BY it.id DESC", []).fetchall()
+    history = conn.execute(f"SELECT {cols} WHERE COALESCE(it.status,'approved') <> 'pending' ORDER BY it.transfer_date DESC, it.id DESC", []).fetchall()
+    # Utilized line items for the pending cards.
+    items_by_t = {}
+    for it in pending:
+        items_by_t[it['id']] = conn.execute("SELECT name, amount FROM internal_transfer_items WHERE transfer_id = ? ORDER BY id", (it['id'],)).fetchall()
+    summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM internal_transfers WHERE COALESCE(status,'approved')='approved'", []).fetchone()
     conn.close()
-    return render_template('admin_internal_transfers.html', rows=rows, summary=summary, active_section='clients')
+    return render_template('admin_internal_transfers.html', pending=pending, history=history,
+                           items_by_t=items_by_t, summary=summary, is_admin=bool(session.get('is_admin')),
+                           active_section='clients')
 
 
 # Personal/contact/address fields copied onto the NEW pathway record on transfer.
@@ -21599,6 +21619,7 @@ def admin_internal_transfer_new():
         amount_transferred = round(float(request.form.get('amount_transferred', 0) or 0), 2)
         amount_refunded = round(float(request.form.get('amount_refunded', 0) or 0), 2)
         refund_method = request.form.get('refund_method', '')
+        reason = (request.form.get('reason') or '').strip()
         notes = request.form.get('notes', '')
         names = request.form.getlist('item_name')
         amts = request.form.getlist('item_amount')
@@ -21610,81 +21631,178 @@ def admin_internal_transfer_new():
             if not src or not prod:
                 flash('Pick a valid source client and destination product.', 'error')
                 return redirect(url_for('admin_internal_transfer_new'))
+            if not reason:
+                flash('Please add a reason for the internal transfer.', 'error')
+                return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
             # Balance check (allow ₹1 rounding slack)
             if abs((amount_transferred + amount_utilized + amount_refunded) - total_paid) > 1:
-                flash(f'Transfer + Utilized + Refund (₹{amount_transferred+amount_utilized+amount_refunded:,.0f}) must equal Total Paid (₹{total_paid:,.0f}).', 'error')
+                flash(f'Transfer + Utilized + Refund (₹{amount_transferred+amount_utilized+amount_refunded:,.0f}) must equal Amount Paid (₹{total_paid:,.0f}).', 'error')
                 return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
             to_pathway = prod['pathway'] or 'plab'
-            from datetime import date as _date
-            # Generate the reg # from the destination product's PATHWAY column, not
-            # its name — product names like "AMC Consulting"/"UAE Consulting" would
-            # mis-map by keyword (AMC->australia, UAE->uae); they're consulting (GCCSS).
-            from core.registration import PATHWAY_REG_PREFIX, indian_financial_year, _next_sequence
-            _prefix = PATHWAY_REG_PREFIX.get(to_pathway, 'GCUKIP')
-            _fy = indian_financial_year()
-            new_reg = f"{_prefix}/{_fy}/{_next_sequence(conn, _prefix, _fy):03d}"
-            src_prod = conn.execute("SELECT name FROM products_services WHERE id = ?", (src['product_id'],)).fetchone()
-            from_product = src_prod['name'] if src_prod else (src['pathway'] or 'plab')
-            # 1) create the NEW destination client (copy personal data)
-            data = {c: src[c] for c in _TRANSFER_COPY_COLS if c in src.keys()}
-            # Created in 'Pending Verification' so sales re-enter their fields
-            # (plan type, joined stage, package etc. are deliberately NOT copied —
-            # they're pathway-specific) and ops then verify (→ In Process).
-            data.update({'registration_number': new_reg, 'registration_date': transfer_date or _date.today().isoformat(),
-                         'pathway': to_pathway, 'product_id': to_product_id, 'account_status': 'Pending Verification',
-                         'created_by': session.get('user_id')})
-            cols = list(data.keys())
-            conn.execute(f"INSERT INTO plab_clients ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})", list(data.values()))
-            # 2) mark the SOURCE switched
-            conn.execute("UPDATE plab_clients SET account_status = 'Switched Program', switched_program = ?, updated_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
-                         (prod['name'], from_reg))
-            # 3) transfer amount -> a payment on the new record. The split is on
-            # the base ("amount paid"), so the transferred figure is the base and
-            # 18% GST is added on top (matches "₹X + gst" on the new pathway fee).
-            base = amount_transferred
-            gst = round(amount_transferred * 0.18, 2)
-            tot = round(base + gst, 2)
-            pcur = conn.execute("""INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid,
-                total_amount_paid, payment_method, source_product, pathway, notes, created_by)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
-                (new_reg, transfer_date, base, gst, tot, HUB_TRANSFER_METHOD, from_product, to_pathway,
-                 f'Internal transfer from {from_reg}', session.get('user_id')))
-            to_payment_id = pcur.fetchone()['id']
-            # 4) refund the balance on the SOURCE
-            refund_id = None
-            if amount_refunded > 0:
-                rcur = conn.execute("""INSERT INTO refunds (registration_number, amount, refund_date, refund_method, reason, pathway, created_by)
-                    VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""",
-                    (from_reg, amount_refunded, transfer_date, refund_method,
-                     f'Internal-transfer balance (switched to {prod["name"]})', src['pathway'] or 'plab', session.get('user_id')))
-                refund_id = rcur.fetchone()['id']
-            # 5) the transfer ledger row
+            # Create a PENDING request only. The destination record, payment and
+            # refund are NOT created until an admin approves it (see the approve
+            # route, which runs _execute_internal_transfer).
             tcur = conn.execute("""INSERT INTO internal_transfers
-                (from_reg, to_reg, from_pathway, to_pathway, from_product, to_product, total_paid,
-                 amount_transferred, amount_utilized, amount_refunded, transfer_date, to_payment_id, refund_id,
-                 notes, created_by, registration_number, amount)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
-                (from_reg, new_reg, src['pathway'] or 'plab', to_pathway, from_product, prod['name'], total_paid,
-                 amount_transferred, amount_utilized, amount_refunded, transfer_date, to_payment_id, refund_id,
-                 notes, session.get('user_id'), new_reg, amount_transferred))
+                (from_reg, from_pathway, to_pathway, to_product_id, to_product, total_paid,
+                 amount_transferred, amount_utilized, amount_refunded, refund_method, transfer_date,
+                 reason, notes, created_by, status, amount)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending', ?) RETURNING id""",
+                (from_reg, src['pathway'] or 'plab', to_pathway, to_product_id, prod['name'], total_paid,
+                 amount_transferred, amount_utilized, amount_refunded, refund_method, transfer_date,
+                 reason, notes, session.get('user_id'), amount_transferred))
             transfer_id = tcur.fetchone()['id']
             for nm, am in items:
                 conn.execute("INSERT INTO internal_transfer_items (transfer_id, name, amount) VALUES (?, ?, ?)", (transfer_id, nm, am))
+            # Notify every admin that a transfer is waiting for their approval.
+            cname = f"{src['prefix'] or ''} {src['first_name'] or ''} {src['last_name'] or ''}".strip()
+            for a in conn.execute("SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1", []).fetchall():
+                create_notification(conn, a['id'], 'Internal transfer awaiting approval',
+                    f'{cname} ({from_reg}) → {prod["name"]}: ₹{amount_transferred:,.0f} transfer, ₹{amount_refunded:,.0f} refund. Needs your approval.',
+                    'info', url_for('admin_internal_transfers'))
             conn.commit()
             conn.close()
-            flash(f'Transfer complete: {from_reg} → {new_reg} ({prod["name"]}). New record created, ₹{amount_transferred:,.0f} transferred, ₹{amount_refunded:,.0f} refunded.', 'success')
+            flash("Transfer request submitted for admin approval. You'll be notified once it's reviewed.", 'success')
             return redirect(url_for('admin_internal_transfers'))
         except Exception as e:
             logging.error(f"admin_internal_transfer_new: {e}")
             try: conn.rollback()
             except Exception: pass
-            flash(f'Transfer failed: {e}', 'error')
+            flash(f'Could not submit transfer: {e}', 'error')
             return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
     products = conn.execute("SELECT id, name, COALESCE(pathway,'') AS pathway FROM products_services WHERE COALESCE(status,'active')='active' ORDER BY pathway, name").fetchall()
     from datetime import date as _date
     conn.close()
     return render_template('admin_internal_transfer_new.html', products=products,
         pre_reg=(request.args.get('reg') or ''), today=_date.today().isoformat(), active_section='clients')
+
+
+def _execute_internal_transfer(conn, t):
+    """Create the destination record + transfer payment + refund for an APPROVED
+    transfer request `t` (an internal_transfers row). Returns the new reg number.
+    The caller commits. Runs only at approval time so the reg # is generated then."""
+    from datetime import date as _date
+    from core.registration import PATHWAY_REG_PREFIX, indian_financial_year, _next_sequence
+    from_reg = t['from_reg']
+    src = conn.execute("SELECT * FROM plab_clients WHERE registration_number = ? LIMIT 1", (from_reg,)).fetchone()
+    prod = conn.execute("SELECT * FROM products_services WHERE id = ?", (t['to_product_id'],)).fetchone()
+    to_pathway = prod['pathway'] or 'plab'
+    transfer_date = t['transfer_date'] or _date.today().isoformat()
+    # Reg # from the destination product's PATHWAY column (not its name — "AMC
+    # Consulting"/"UAE Consulting" would mis-map by keyword; they're GCCSS).
+    _prefix = PATHWAY_REG_PREFIX.get(to_pathway, 'GCUKIP')
+    _fy = indian_financial_year()
+    new_reg = f"{_prefix}/{_fy}/{_next_sequence(conn, _prefix, _fy):03d}"
+    src_prod = conn.execute("SELECT name FROM products_services WHERE id = ?", (src['product_id'],)).fetchone()
+    from_product = src_prod['name'] if src_prod else (src['pathway'] or 'plab')
+    # 1) new destination client (personal data copied; pathway-specific sales
+    # fields left blank; 'Pending Verification' so sales re-enter + ops verify).
+    data = {c: src[c] for c in _TRANSFER_COPY_COLS if c in src.keys()}
+    data.update({'registration_number': new_reg, 'registration_date': transfer_date,
+                 'pathway': to_pathway, 'product_id': t['to_product_id'], 'account_status': 'Pending Verification',
+                 'created_by': t['created_by']})
+    cols = list(data.keys())
+    conn.execute(f"INSERT INTO plab_clients ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})", list(data.values()))
+    # 2) mark source switched
+    conn.execute("UPDATE plab_clients SET account_status = 'Switched Program', switched_program = ?, updated_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
+                 (prod['name'], from_reg))
+    # 3) transfer amount -> a payment on the new record (base + 18% GST on top)
+    base = float(t['amount_transferred'] or 0)
+    gst = round(base * 0.18, 2)
+    pcur = conn.execute("""INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid,
+        total_amount_paid, payment_method, source_product, pathway, notes, created_by)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+        (new_reg, transfer_date, base, gst, round(base + gst, 2), HUB_TRANSFER_METHOD, from_product, to_pathway,
+         f'Internal transfer from {from_reg}', t['created_by']))
+    to_payment_id = pcur.fetchone()['id']
+    # 4) refund the balance on the SOURCE
+    refund_id = None
+    amt_ref = float(t['amount_refunded'] or 0)
+    if amt_ref > 0:
+        rcur = conn.execute("""INSERT INTO refunds (registration_number, amount, refund_date, refund_method, reason, pathway, created_by)
+            VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+            (from_reg, amt_ref, transfer_date, t['refund_method'],
+             f'Internal-transfer balance (switched to {prod["name"]})', src['pathway'] or 'plab', t['created_by']))
+        refund_id = rcur.fetchone()['id']
+    # 5) stamp the created artifacts back onto the transfer row
+    conn.execute("""UPDATE internal_transfers SET to_reg = ?, registration_number = ?, to_pathway = ?,
+        from_product = ?, to_product = ?, to_payment_id = ?, refund_id = ? WHERE id = ?""",
+        (new_reg, new_reg, to_pathway, from_product, prod['name'], to_payment_id, refund_id, t['id']))
+    return new_reg
+
+
+def _is_real_admin():
+    """True only for is_admin=1 employees (stricter than @admin_required, which
+    also lets Access-Master-granted staff in). Used to gate transfer approvals."""
+    conn = get_db()
+    u = conn.execute("SELECT is_admin FROM employees WHERE id = ?", (session.get('user_id'),)).fetchone()
+    conn.close()
+    return bool(u and u['is_admin'] == 1)
+
+
+@app.route('/admin/internal-transfers/<int:tid>/approve', methods=['POST'])
+@admin_required
+def admin_internal_transfer_approve(tid):
+    if not _is_real_admin():
+        flash('Only an admin can approve internal transfers.', 'error')
+        return redirect(url_for('admin_internal_transfers'))
+    conn = get_db()
+    try:
+        t = conn.execute("SELECT * FROM internal_transfers WHERE id = ?", (tid,)).fetchone()
+        if not t or t['status'] != 'pending':
+            conn.close()
+            flash('That transfer is not pending approval.', 'error')
+            return redirect(url_for('admin_internal_transfers'))
+        new_reg = _execute_internal_transfer(conn, t)
+        conn.execute("UPDATE internal_transfers SET status = 'approved', approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (session.get('user_id'), tid))
+        if t['created_by']:
+            create_notification(conn, t['created_by'], 'Internal transfer approved',
+                f'Your transfer ({t["from_reg"]} → {new_reg}) was approved and processed. New record created (Pending Verification).',
+                'success', url_for('admin_internal_transfers'))
+        conn.commit()
+        conn.close()
+        flash(f'Transfer approved: {t["from_reg"]} → {new_reg}. New record created (Pending Verification); requester notified.', 'success')
+    except Exception as e:
+        logging.error(f"admin_internal_transfer_approve: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        flash(f'Approval failed: {e}', 'error')
+    return redirect(url_for('admin_internal_transfers'))
+
+
+@app.route('/admin/internal-transfers/<int:tid>/reject', methods=['POST'])
+@admin_required
+def admin_internal_transfer_reject(tid):
+    if not _is_real_admin():
+        flash('Only an admin can reject internal transfers.', 'error')
+        return redirect(url_for('admin_internal_transfers'))
+    rej_reason = (request.form.get('rejection_reason') or '').strip()
+    conn = get_db()
+    try:
+        t = conn.execute("SELECT * FROM internal_transfers WHERE id = ?", (tid,)).fetchone()
+        if not t or t['status'] != 'pending':
+            conn.close()
+            flash('That transfer is not pending approval.', 'error')
+            return redirect(url_for('admin_internal_transfers'))
+        conn.execute("UPDATE internal_transfers SET status = 'rejected', rejection_reason = ?, approved_by = ?, approved_at = CURRENT_TIMESTAMP WHERE id = ?",
+                     (rej_reason, session.get('user_id'), tid))
+        if t['created_by']:
+            create_notification(conn, t['created_by'], 'Internal transfer rejected',
+                f'Your transfer for {t["from_reg"]} was rejected.' + (f' Reason: {rej_reason}' if rej_reason else ''),
+                'warning', url_for('admin_internal_transfers'))
+        conn.commit()
+        conn.close()
+        flash('Transfer rejected; requester notified. No records were created.', 'success')
+    except Exception as e:
+        logging.error(f"admin_internal_transfer_reject: {e}")
+        try: conn.rollback()
+        except Exception: pass
+        try: conn.close()
+        except Exception: pass
+        flash(f'Reject failed: {e}', 'error')
+    return redirect(url_for('admin_internal_transfers'))
 
 
 REFUND_METHODS = ['Bank Transfer', 'UPI / Online', 'Cheque', 'Cash']

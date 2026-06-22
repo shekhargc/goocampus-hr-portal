@@ -73,12 +73,21 @@
       </div>
 
       <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Reason for transfer *</label>
+        <textarea name="reason" rows="2" required placeholder="Why is this client being moved? (visible to the approving admin)" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;"></textarea>
+      </div>
+
+      <div>
         <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Notes</label>
         <textarea name="notes" rows="2" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;"></textarea>
       </div>
 
+      <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:10px 12px;font-size:0.8rem;color:#9A3412;">
+        ⏳ This raises a <b>request for admin approval</b>. The new record, payment and refund are created only after an admin approves.
+      </div>
+
       <div style="display:flex;gap:12px;">
-        <button type="submit" id="submitBtn" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Complete Transfer</button>
+        <button type="submit" id="submitBtn" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Submit for Approval</button>
         <a href="{{ url_for('admin_internal_transfers') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
       </div>
     </form>
