@@ -88,6 +88,16 @@
         ">
           {{ client.account_status or 'Unknown' }}
         </div>
+        {% if (referred_count or 0) >= 1 %}
+        <span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;">&#9733; Referred {{ referred_count }} client{{ '' if referred_count == 1 else 's' }}</span>
+        {% endif %}
+        {# Compact info row: Counsellor · Joined Stage · Phone · Email #}
+        <div style="display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:14px;">
+          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Counsellor:</span> <span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></span>
+          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Joined Stage:</span> <span style="color:var(--navy);font-weight:600;">{{ client.joined_stage or client.current_stage or '—' }}</span></span>
+          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Phone:</span> <span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></span>
+          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Email:</span> <span style="color:var(--navy);font-weight:600;">{{ client.email or '—' }}</span></span>
+        </div>
       </div>
       </div>{# /X-1 photo+text wrapper #}
       <div style="display:flex;gap:12px;">
@@ -142,169 +152,7 @@
     </p>
   </div>
 
-  <!-- ── Referrals Card ── -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <p style="margin:0 0 12px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Referrals</p>
-    <p style="margin:0 0 8px 0;font-size:20px;font-weight:700;color:var(--navy);">Referred {{ referred_count|default(0) }} client{{ '' if referred_count == 1 else 's' }}</p>
-    {% if referred_clients %}
-    <div style="display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-      {% for r in referred_clients %}
-      <div style="display:flex;justify-content:space-between;align-items:center;font-size:13px;padding:6px 0;border-bottom:1px solid var(--gray-100);">
-        <span style="color:var(--navy);font-weight:600;">{{ r.name or '—' }}</span>
-        <span style="color:var(--gray-500);text-transform:capitalize;">{{ r.pathway }}</span>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}
-    <p style="margin:0;font-size:13px;color:var(--gray-500);">No referrals yet.</p>
-    {% endif %}
-  </div>
-
-  <!-- ── Two-Column Grid Layout ── -->
-  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;">
-
-    <!-- LEFT COLUMN -->
-    <div style="display:flex;flex-direction:column;gap:24px;">
-
-      <!-- Personal Details Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Personal Details</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 1:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 2:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
-            {% if client.email %}<a href="mailto:{{ client.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.email }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">DOB:</span><span style="color:var(--navy);font-weight:600;">{{ client.dob or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">City:</span><span style="color:var(--navy);font-weight:600;">{{ client.city or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">State:</span><span style="color:var(--navy);font-weight:600;">{{ client.state or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Instagram:</span>
-            {% if client.instagram %}<a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.instagram }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Facebook:</span>
-            {% if client.facebook %}<a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.facebook }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">LinkedIn:</span>
-            {% if client.linkedin %}<a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.linkedin }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-        </div>
-      </div>
-
-      <!-- Parents Details Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Parents Details</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
-            {% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-        </div>
-      </div>
-
-    </div>
-
-    <!-- RIGHT COLUMN -->
-    <div style="display:flex;flex-direction:column;gap:24px;">
-
-      <!-- Plan & Stage Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Plan &amp; Stage</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Current Stage:</span><span style="color:var(--navy);font-weight:600;">{{ client.current_stage or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Plan Type:</span><span style="color:var(--navy);font-weight:600;">{{ client.plan_type or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
-            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
-              {% if client.account_status == 'In Process' %}background:#ECFDF5;color:#065F46;
-              {% elif client.account_status == 'Switched Program' %}background:#F3F4F6;color:#374151;
-              {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}background:#FEF2F2;color:#991B1B;
-              {% elif client.account_status == 'On Hold' %}background:#FFFBEB;color:#92400E;
-              {% elif client.account_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
-              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ client.account_status or 'Unknown' }}</span>
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Switched Program:</span><span style="color:{% if client.switched_program %}#6D28D9{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.switched_program or '—' }}</span></div>
-        </div>
-      </div>
-
-      <!-- Counsellor & Lead Status Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Counsellor &amp; Lead Status</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;">
-            <span style="color:var(--gray-600);font-weight:500;">Counsellor Email:</span>
-            {% if client.counsellor_email %}<a href="mailto:{{ client.counsellor_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.counsellor_email }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span></div>
-        </div>
-      </div>
-
-      <!-- Lead Details Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Lead Details</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Lead Source:</span><span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Referred By:</span><span style="color:var(--navy);font-weight:600;">{% if client.referral_client_name %}{{ client.referral_client_name }}{% if client.referral_source_pathway %} <span style="color:var(--gray-400);font-weight:400;">({{ {'plab':'UK','australia':'AMC','portfolio':'Portfolio','consulting':'Consulting','training':'Training','uae':'UAE'}.get(client.referral_source_pathway, client.referral_source_pathway) }})</span>{% endif %}{% if client.referral_channel %} <span style="color:var(--gray-400);font-weight:400;">· {{ client.referral_channel|capitalize }}</span>{% endif %}{% else %}—{% endif %}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Operations Team Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span></div>
-        </div>
-      </div>
-
-      <!-- Installment Details Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Installment Details</h3>
-        <div style="overflow-x:auto;">
-          <table style="width:100%;border-collapse:collapse;font-size:13px;">
-            <thead>
-              <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
-                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Inst.</th>
-                <th style="padding:10px;text-align:right;font-weight:600;color:var(--navy);">Amount</th>
-                <th style="padding:10px;text-align:center;font-weight:600;color:var(--navy);">Date</th>
-                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {% for i in [1, 2, 3, 4] %}
-              <tr style="border-bottom:1px solid var(--gray-200);">
-                <td style="padding:10px;color:var(--gray-600);font-weight:500;">{{ i }}</td>
-                <td style="padding:10px;text-align:right;color:{% if client['inst'~i~'_amount'] %}#059669{% else %}var(--gray-400){% endif %};font-weight:600;">
-                  {% if client['inst'~i~'_amount'] %}&#8377;{{ '{:,.0f}'.format(client['inst'~i~'_amount']|float) }}{% else %}—{% endif %}
-                </td>
-                <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_date'] or '—' }}</td>
-                <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_note'] or '—' }}</td>
-              </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-    </div>
-  </div>
-
-  <!-- ── Additional Notes (full width) ── -->
-  {% if client.additional_notes %}
-  <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);margin-bottom:24px;">
-    <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Additional Notes</h3>
-    <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes }}</p>
-  </div>
-  {% endif %}
-
-  <!-- ═══════════ LINKED SECTIONS ═══════════ -->
+  <!-- ═══════════ LINKED SECTIONS (service) — moved up for Operations ═══════════ -->
 
   <!-- UAE manual sections -->
   {{ section_block('Self Assessment', sections.self_assessment, url_for('ops_uae_self_assessment_list'), 'ops_uae_self_assessment_add_page', client.registration_number, client_display) }}
@@ -365,6 +213,168 @@
     {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
   </div>
 
+  <!-- ═══════════ DETAIL TABS (personal / admin) ═══════════ -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <!-- Tab buttons -->
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:20px;border-bottom:2px solid var(--gray-100);padding-bottom:4px;">
+      <button type="button" id="dtbtn-personal" class="dtab-btn dtab-active" onclick="showDtab('dt-personal', this)" style="background:none;border:none;border-bottom:3px solid var(--orange);color:var(--navy);font-weight:700;font-size:14px;padding:8px 14px;cursor:pointer;">Personal</button>
+      <button type="button" id="dtbtn-parents" class="dtab-btn" onclick="showDtab('dt-parents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Parents</button>
+      <button type="button" id="dtbtn-plan" class="dtab-btn" onclick="showDtab('dt-plan', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Plan &amp; Stage</button>
+      <button type="button" id="dtbtn-counsellor" class="dtab-btn" onclick="showDtab('dt-counsellor', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Counsellor &amp; Lead</button>
+    </div>
+
+    <!-- Panel: Personal -->
+    <div id="dt-personal" class="dtab-panel">
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile:</span><span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 1:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp1 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">WhatsApp 2:</span><span style="color:var(--navy);font-weight:600;">{{ client.whatsapp2 or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Email:</span>
+            {% if client.email %}<a href="mailto:{{ client.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">DOB:</span><span style="color:var(--navy);font-weight:600;">{{ client.dob or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">City:</span><span style="color:var(--navy);font-weight:600;">{{ client.city or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">State:</span><span style="color:var(--navy);font-weight:600;">{{ client.state or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Instagram:</span>
+            {% if client.instagram %}<a href="https://instagram.com/{{ client.instagram }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.instagram }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Facebook:</span>
+            {% if client.facebook %}<a href="https://facebook.com/{{ client.facebook }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.facebook }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">LinkedIn:</span>
+            {% if client.linkedin %}<a href="https://linkedin.com/in/{{ client.linkedin }}" target="_blank" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.linkedin }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+
+    </div><!-- /dt-personal -->
+
+    <!-- Panel: Parents -->
+    <div id="dt-parents" class="dtab-panel" style="display:none;">
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Father Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.father_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Name:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_name or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mother Phone:</span><span style="color:var(--navy);font-weight:600;">{{ client.mother_phone or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Parents Email:</span>
+            {% if client.parents_email %}<a href="mailto:{{ client.parents_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.parents_email }}</a>
+            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+          </div>
+        </div>
+
+    </div><!-- /dt-parents -->
+
+    <!-- Panel: Plan & Stage (incl. Installments + Additional Notes) -->
+    <div id="dt-plan" class="dtab-panel" style="display:none;">
+
+      <!-- Plan & Stage -->
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Plan &amp; Stage</h4>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;margin-bottom:24px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Current Stage:</span><span style="color:var(--navy);font-weight:600;">{{ client.current_stage or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Plan Type:</span><span style="color:var(--navy);font-weight:600;">{{ client.plan_type or '—' }}</span></div>
+          <div style="display:flex;justify-content:space-between;align-items:center;">
+            <span style="color:var(--gray-600);font-weight:500;">Account Status:</span>
+            <span style="display:inline-block;padding:4px 10px;border-radius:999px;font-size:11px;font-weight:600;
+              {% if client.account_status == 'In Process' %}background:#ECFDF5;color:#065F46;
+              {% elif client.account_status == 'Switched Program' %}background:#F3F4F6;color:#374151;
+              {% elif client.account_status in ['Dropped and Refunded', 'Dropped Out'] %}background:#FEF2F2;color:#991B1B;
+              {% elif client.account_status == 'On Hold' %}background:#FFFBEB;color:#92400E;
+              {% elif client.account_status == 'Completed' %}background:#EFF6FF;color:#1E40AF;
+              {% else %}background:#F3F4F6;color:#374151;{% endif %}">{{ client.account_status or 'Unknown' }}</span>
+          </div>
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Switched Program:</span><span style="color:{% if client.switched_program %}#6D28D9{% else %}var(--gray-400){% endif %};font-weight:600;">{{ client.switched_program or '—' }}</span></div>
+      </div>
+
+      <!-- Installment Details (within Plan & Stage tab) -->
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Installment Details</h4>
+      <div style="overflow-x:auto;margin-bottom:24px;">
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead>
+              <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Inst.</th>
+                <th style="padding:10px;text-align:right;font-weight:600;color:var(--navy);">Amount</th>
+                <th style="padding:10px;text-align:center;font-weight:600;color:var(--navy);">Date</th>
+                <th style="padding:10px;text-align:left;font-weight:600;color:var(--navy);">Note</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for i in [1, 2, 3, 4] %}
+              <tr style="border-bottom:1px solid var(--gray-200);">
+                <td style="padding:10px;color:var(--gray-600);font-weight:500;">{{ i }}</td>
+                <td style="padding:10px;text-align:right;color:{% if client['inst'~i~'_amount'] %}#059669{% else %}var(--gray-400){% endif %};font-weight:600;">
+                  {% if client['inst'~i~'_amount'] %}&#8377;{{ '{:,.0f}'.format(client['inst'~i~'_amount']|float) }}{% else %}—{% endif %}
+                </td>
+                <td style="padding:10px;text-align:center;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_date'] or '—' }}</td>
+                <td style="padding:10px;color:var(--gray-600);font-size:12px;">{{ client['inst'~i~'_note'] or '—' }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+      </div>
+
+      {% if client.additional_notes %}
+      <!-- Additional Notes (within Plan & Stage tab) -->
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Additional Notes</h4>
+      <p style="margin:0;color:var(--gray-700);line-height:1.6;white-space:pre-wrap;">{{ client.additional_notes }}</p>
+      {% endif %}
+
+    </div><!-- /dt-plan -->
+
+    <!-- Panel: Counsellor & Lead -->
+    <div id="dt-counsellor" class="dtab-panel" style="display:none;">
+
+      <!-- Counsellor & Lead Status -->
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Counsellor &amp; Lead Status</h4>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;margin-bottom:24px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <span style="color:var(--gray-600);font-weight:500;">Counsellor Email:</span>
+          {% if client.counsellor_email %}<a href="mailto:{{ client.counsellor_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ client.counsellor_email }}</a>
+          {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Counsellor Number:</span><span style="color:var(--navy);font-weight:600;">{{ client.counsellor_number or '—' }}</span></div>
+      </div>
+
+      <!-- Lead Details -->
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Lead Details</h4>
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Lead Source:</span><span style="color:var(--navy);font-weight:600;">{{ client.lead_source or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Referred By:</span><span style="color:var(--navy);font-weight:600;">{% if client.referral_client_name %}{{ client.referral_client_name }}{% if client.referral_source_pathway %} <span style="color:var(--gray-400);font-weight:400;">({{ {'plab':'UK','australia':'AMC','portfolio':'Portfolio','consulting':'Consulting','training':'Training','uae':'UAE'}.get(client.referral_source_pathway, client.referral_source_pathway) }})</span>{% endif %}{% if client.referral_channel %} <span style="color:var(--gray-400);font-weight:400;">· {{ client.referral_channel|capitalize }}</span>{% endif %}{% else %}—{% endif %}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Operations Team Referral:</span><span style="color:var(--navy);font-weight:600;">{{ client.operations_referral or '—' }}</span></div>
+      </div>
+
+    </div><!-- /dt-counsellor -->
+
+  </div><!-- /detail tabs container -->
+
 </div>
+
+<script>
+function showDtab(id, btn) {
+  var panels = document.querySelectorAll('.dtab-panel');
+  for (var i = 0; i < panels.length; i++) { panels[i].style.display = 'none'; }
+  var target = document.getElementById(id);
+  if (target) { target.style.display = 'block'; }
+  var btns = document.querySelectorAll('.dtab-btn');
+  for (var j = 0; j < btns.length; j++) {
+    btns[j].style.borderBottom = '3px solid transparent';
+    btns[j].style.color = 'var(--gray-500)';
+    btns[j].style.fontWeight = '600';
+  }
+  if (btn) {
+    btn.style.borderBottom = '3px solid var(--orange)';
+    btn.style.color = 'var(--navy)';
+    btn.style.fontWeight = '700';
+  }
+}
+</script>
 {% include '_section_add_drawer.html' %}
 {% endblock %}
