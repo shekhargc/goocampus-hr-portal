@@ -8,7 +8,10 @@
       <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Internal Transfers</h1>
       <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Clients who moved from one product into another, recorded as a transfer (not new revenue).</p>
     </div>
-    <a href="{{ url_for('admin_payments_hub') }}" style="font-size:0.85rem;color:var(--orange);text-decoration:none;font-weight:600;">← Payments Hub</a>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <a href="{{ url_for('admin_payments_hub') }}" style="font-size:0.85rem;color:var(--gray-500);text-decoration:none;">Payments Hub</a>
+      <a href="{{ url_for('admin_internal_transfer_new') }}" class="button" style="background:var(--orange);color:#fff;padding:10px 18px;border-radius:8px;text-decoration:none;font-weight:600;font-size:0.9rem;">+ New Transfer</a>
+    </div>
   </div>
 
   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px;">

@@ -7423,6 +7423,17 @@ def ensure_crm_tables():
             # Centralised admin payments hub: source product for internal
             # transfers ("Switched from other program").
             ('ops_payments',             'source_product',         'TEXT'),
+            # Internal-transfer richer model (source<->dest + money split).
+            ('internal_transfers',       'from_reg',               'TEXT'),
+            ('internal_transfers',       'to_reg',                 'TEXT'),
+            ('internal_transfers',       'from_pathway',           'TEXT'),
+            ('internal_transfers',       'to_product',             'TEXT'),
+            ('internal_transfers',       'total_paid',             'NUMERIC(14,2)'),
+            ('internal_transfers',       'amount_transferred',     'NUMERIC(14,2)'),
+            ('internal_transfers',       'amount_utilized',        'NUMERIC(14,2)'),
+            ('internal_transfers',       'amount_refunded',        'NUMERIC(14,2)'),
+            ('internal_transfers',       'to_payment_id',          'INTEGER'),
+            ('internal_transfers',       'refund_id',              'INTEGER'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -14563,6 +14574,15 @@ def ensure_ops_tables():
             created_by INTEGER,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
+        # Utilized line-items (services rendered) consumed in the source pathway
+        # during an internal transfer.
+        conn.execute('''CREATE TABLE IF NOT EXISTS internal_transfer_items (
+            id SERIAL PRIMARY KEY,
+            transfer_id INTEGER,
+            name TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
 
         # ── Refunds (for clients backed out / "Dropped and Refunded") ──
         conn.execute('''CREATE TABLE IF NOT EXISTS refunds (
@@ -21527,6 +21547,126 @@ def admin_internal_transfers():
     summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM internal_transfers", []).fetchone()
     conn.close()
     return render_template('admin_internal_transfers.html', rows=rows, summary=summary, active_section='clients')
+
+
+# Personal/contact/address fields copied onto the NEW pathway record on transfer.
+# Deliberately excludes reg #, status, stage, all financials, welcome-kit + the
+# switched_program marker (those are fresh on the new record).
+_TRANSFER_COPY_COLS = ['customer_id', 'prefix', 'first_name', 'last_name', 'mobile',
+    'whatsapp1', 'whatsapp2', 'email', 'dob', 'city', 'state', 'instagram', 'facebook',
+    'linkedin', 'photo_path', 'father_name', 'father_phone', 'mother_name', 'mother_phone',
+    'parents_email', 'counsellor', 'counsellor_email', 'counsellor_number', 'counsellor_id',
+    'lead_source', 'perm_address_line1', 'perm_address_line2', 'perm_city_district',
+    'perm_state_province', 'perm_postal_code', 'perm_country', 'comm_address_same',
+    'comm_address_line1', 'comm_address_line2', 'comm_city_district', 'comm_state_province',
+    'comm_postal_code', 'comm_country']
+
+
+@app.route('/admin/internal-transfers/client-info')
+@admin_required
+def admin_internal_transfer_client_info():
+    """AJAX: a source client's pathway/product + total paid, for the transfer form."""
+    reg = (request.args.get('reg') or '').strip()
+    conn = get_db()
+    cl = conn.execute("""SELECT pc.*, ps.name AS product_name FROM plab_clients pc
+        LEFT JOIN products_services ps ON ps.id = pc.product_id
+        WHERE pc.registration_number = ? LIMIT 1""", (reg,)).fetchone()
+    if not cl:
+        conn.close()
+        return jsonify({'found': False})
+    paid = conn.execute("SELECT COALESCE(SUM(total_amount_paid),0) AS s FROM ops_payments WHERE registration_number = ?", (reg,)).fetchone()
+    conn.close()
+    return jsonify({'found': True, 'name': f"{cl['prefix'] or ''} {cl['first_name'] or ''} {cl['last_name'] or ''}".strip(),
+                    'pathway': cl['pathway'] or 'plab', 'product': cl['product_name'] or '',
+                    'total_paid': float(paid['s'] or 0)})
+
+
+@app.route('/admin/internal-transfers/new', methods=['GET', 'POST'])
+@admin_required
+def admin_internal_transfer_new():
+    conn = get_db()
+    if request.method == 'POST':
+        from_reg = (request.form.get('from_reg') or '').strip()
+        to_product_id = request.form.get('to_product_id')
+        transfer_date = request.form.get('transfer_date')
+        total_paid = round(float(request.form.get('total_paid', 0) or 0), 2)
+        amount_transferred = round(float(request.form.get('amount_transferred', 0) or 0), 2)
+        amount_refunded = round(float(request.form.get('amount_refunded', 0) or 0), 2)
+        refund_method = request.form.get('refund_method', '')
+        notes = request.form.get('notes', '')
+        names = request.form.getlist('item_name')
+        amts = request.form.getlist('item_amount')
+        items = [(n.strip(), round(float(a or 0), 2)) for n, a in zip(names, amts) if n.strip()]
+        amount_utilized = round(sum(a for _, a in items), 2)
+        try:
+            src = conn.execute("SELECT * FROM plab_clients WHERE registration_number = ? LIMIT 1", (from_reg,)).fetchone()
+            prod = conn.execute("SELECT * FROM products_services WHERE id = ?", (to_product_id,)).fetchone()
+            if not src or not prod:
+                flash('Pick a valid source client and destination product.', 'error')
+                return redirect(url_for('admin_internal_transfer_new'))
+            # Balance check (allow ₹1 rounding slack)
+            if abs((amount_transferred + amount_utilized + amount_refunded) - total_paid) > 1:
+                flash(f'Transfer + Utilized + Refund (₹{amount_transferred+amount_utilized+amount_refunded:,.0f}) must equal Total Paid (₹{total_paid:,.0f}).', 'error')
+                return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
+            to_pathway = prod['pathway'] or 'plab'
+            from datetime import date as _date
+            from core.registration import next_registration_number
+            new_reg = next_registration_number(conn, prod['name'])
+            src_prod = conn.execute("SELECT name FROM products_services WHERE id = ?", (src['product_id'],)).fetchone()
+            from_product = src_prod['name'] if src_prod else (src['pathway'] or 'plab')
+            # 1) create the NEW destination client (copy personal data)
+            data = {c: src[c] for c in _TRANSFER_COPY_COLS if c in src.keys()}
+            data.update({'registration_number': new_reg, 'registration_date': transfer_date or _date.today().isoformat(),
+                         'pathway': to_pathway, 'product_id': to_product_id, 'account_status': 'In Process',
+                         'created_by': session.get('user_id')})
+            cols = list(data.keys())
+            conn.execute(f"INSERT INTO plab_clients ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})", list(data.values()))
+            # 2) mark the SOURCE switched
+            conn.execute("UPDATE plab_clients SET account_status = 'Switched Program', switched_program = ?, updated_at = CURRENT_TIMESTAMP WHERE registration_number = ?",
+                         (prod['name'], from_reg))
+            # 3) transfer amount -> a payment on the new record (GST-inclusive)
+            base, gst, tot = _compute_payment_amounts(amount_transferred, HUB_TRANSFER_METHOD)
+            pcur = conn.execute("""INSERT INTO ops_payments (registration_number, payment_date, amount_paid, gst_paid,
+                total_amount_paid, payment_method, source_product, pathway, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+                (new_reg, transfer_date, base, gst, tot, HUB_TRANSFER_METHOD, from_product, to_pathway,
+                 f'Internal transfer from {from_reg}', session.get('user_id')))
+            to_payment_id = pcur.fetchone()['id']
+            # 4) refund the balance on the SOURCE
+            refund_id = None
+            if amount_refunded > 0:
+                rcur = conn.execute("""INSERT INTO refunds (registration_number, amount, refund_date, refund_method, reason, pathway, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+                    (from_reg, amount_refunded, transfer_date, refund_method,
+                     f'Internal-transfer balance (switched to {prod["name"]})', src['pathway'] or 'plab', session.get('user_id')))
+                refund_id = rcur.fetchone()['id']
+            # 5) the transfer ledger row
+            tcur = conn.execute("""INSERT INTO internal_transfers
+                (from_reg, to_reg, from_pathway, to_pathway, from_product, to_product, total_paid,
+                 amount_transferred, amount_utilized, amount_refunded, transfer_date, to_payment_id, refund_id,
+                 notes, created_by, registration_number, amount)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id""",
+                (from_reg, new_reg, src['pathway'] or 'plab', to_pathway, from_product, prod['name'], total_paid,
+                 amount_transferred, amount_utilized, amount_refunded, transfer_date, to_payment_id, refund_id,
+                 notes, session.get('user_id'), new_reg, amount_transferred))
+            transfer_id = tcur.fetchone()['id']
+            for nm, am in items:
+                conn.execute("INSERT INTO internal_transfer_items (transfer_id, name, amount) VALUES (?, ?, ?)", (transfer_id, nm, am))
+            conn.commit()
+            conn.close()
+            flash(f'Transfer complete: {from_reg} → {new_reg} ({prod["name"]}). New record created, ₹{amount_transferred:,.0f} transferred, ₹{amount_refunded:,.0f} refunded.', 'success')
+            return redirect(url_for('admin_internal_transfers'))
+        except Exception as e:
+            logging.error(f"admin_internal_transfer_new: {e}")
+            try: conn.rollback()
+            except Exception: pass
+            flash(f'Transfer failed: {e}', 'error')
+            return redirect(url_for('admin_internal_transfer_new', reg=from_reg))
+    products = conn.execute("SELECT id, name, COALESCE(pathway,'') AS pathway FROM products_services WHERE COALESCE(status,'active')='active' ORDER BY pathway, name").fetchall()
+    from datetime import date as _date
+    conn.close()
+    return render_template('admin_internal_transfer_new.html', products=products,
+        pre_reg=(request.args.get('reg') or ''), today=_date.today().isoformat(), active_section='clients')
 
 
 REFUND_METHODS = ['Bank Transfer', 'UPI / Online', 'Cheque', 'Cash']

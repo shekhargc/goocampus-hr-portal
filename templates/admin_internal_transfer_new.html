@@ -1,0 +1,154 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}New Internal Transfer{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:760px;margin:0 auto;">
+    <div style="margin-bottom:18px;">
+      <a href="{{ url_for('admin_internal_transfers') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Internal Transfers</a>
+      <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:700;color:var(--navy);">New Internal Transfer</h1>
+      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Move a client to another pathway: keeps the source record (marked Switched Program), creates a new record with a new registration number, and splits the money into Transfer / Utilized / Refund.</p>
+    </div>
+
+    <form method="POST" id="xferForm" style="background:#fff;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;flex-direction:column;gap:18px;">
+
+      <!-- Source client -->
+      <div style="position:relative;">
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Source Client *</label>
+        <input type="text" id="clientSearch" autocomplete="off" required placeholder="Search the client to transfer (any pathway)" value="{{ pre_reg }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        <input type="hidden" name="from_reg" id="fromReg" value="{{ pre_reg }}">
+        <div id="clientResults" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:240px;overflow:auto;display:none;"></div>
+        <div id="srcInfo" style="display:none;margin-top:10px;background:var(--gray-50);border-radius:8px;padding:10px 12px;font-size:0.84rem;color:var(--gray-700);"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Transfer To (Product) *</label>
+          <select name="to_product_id" required style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+            <option value="">-- Select destination product --</option>
+            {% for p in products %}<option value="{{ p.id }}">{{ p.name }}{% if p.pathway %} ({{ p.pathway|upper }}){% endif %}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Transfer Date *</label>
+          <input type="date" name="transfer_date" required value="{{ today }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        </div>
+      </div>
+
+      <!-- Money split -->
+      <div style="background:var(--gray-50);border-radius:10px;padding:16px;">
+        <div style="font-size:0.78rem;font-weight:700;color:var(--gray-600);text-transform:uppercase;margin-bottom:12px;">Money split</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px;">
+          <div>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Total Paid (₹) *</label>
+            <input type="number" name="total_paid" id="totalPaid" step="0.01" min="0" required oninput="recalc()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;font-weight:700;">
+          </div>
+          <div>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Transfer to new pathway (₹, GST-incl) *</label>
+            <input type="number" name="amount_transferred" id="amtTransfer" step="0.01" min="0" required oninput="recalc()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;">
+          </div>
+        </div>
+
+        <!-- Utilized line items -->
+        <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:6px;">Utilized in source pathway (services rendered)</label>
+        <div id="items"></div>
+        <button type="button" onclick="addItem()" style="margin-top:6px;background:#fff;border:1px solid var(--gray-200);border-radius:6px;padding:6px 12px;font-size:0.8rem;font-weight:600;cursor:pointer;color:var(--navy);">+ Add utilized item</button>
+
+        <!-- Refund -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:16px;">
+          <div>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Refund to client (₹)</label>
+            <input type="number" name="amount_refunded" id="amtRefund" step="0.01" min="0" oninput="markRefundEdited()" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;color:#dc2626;font-weight:700;">
+          </div>
+          <div>
+            <label style="font-size:0.74rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Refund Method</label>
+            <select name="refund_method" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;">
+              <option value="">-- if refunding --</option>
+              <option>Bank Transfer</option><option>UPI / Online</option><option>Cheque</option><option>Cash</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Balance check -->
+        <div id="balanceLine" style="margin-top:14px;font-size:0.85rem;font-weight:700;padding:9px 12px;border-radius:7px;"></div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Notes</label>
+        <textarea name="notes" rows="2" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;"></textarea>
+      </div>
+
+      <div style="display:flex;gap:12px;">
+        <button type="submit" id="submitBtn" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Complete Transfer</button>
+        <a href="{{ url_for('admin_internal_transfers') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  var refundEdited = false;
+  window.markRefundEdited = function(){ refundEdited = true; recalc(); };
+  function itemsTotal(){
+    var t=0; document.querySelectorAll('.item-amt').forEach(function(i){ t += parseFloat(i.value)||0; }); return t;
+  }
+  window.recalc = function(){
+    var total = parseFloat(document.getElementById('totalPaid').value)||0;
+    var transfer = parseFloat(document.getElementById('amtTransfer').value)||0;
+    var util = itemsTotal();
+    var refundEl = document.getElementById('amtRefund');
+    if(!refundEdited){ var r = total - transfer - util; refundEl.value = r > 0 ? r.toFixed(2) : '0'; }
+    var refund = parseFloat(refundEl.value)||0;
+    var sum = transfer + util + refund;
+    var diff = Math.round((sum - total)*100)/100;
+    var bl = document.getElementById('balanceLine'), btn=document.getElementById('submitBtn');
+    if(Math.abs(diff) <= 1){
+      bl.style.background='#ECFDF5'; bl.style.color='#065F46';
+      bl.textContent='✓ Balances: Transfer ₹'+transfer.toLocaleString('en-IN')+' + Utilized ₹'+util.toLocaleString('en-IN')+' + Refund ₹'+refund.toLocaleString('en-IN')+' = ₹'+sum.toLocaleString('en-IN');
+      btn.disabled=false; btn.style.opacity=1;
+    } else {
+      bl.style.background='#FEF2F2'; bl.style.color='#991B1B';
+      bl.textContent='⚠ Off by ₹'+Math.abs(diff).toLocaleString('en-IN')+' — Transfer+Utilized+Refund (₹'+sum.toLocaleString('en-IN')+') must equal Total Paid (₹'+total.toLocaleString('en-IN')+')';
+      btn.disabled=true; btn.style.opacity=0.5;
+    }
+  };
+  window.addItem = function(name, amount){
+    var d=document.createElement('div');
+    d.style.cssText='display:flex;gap:8px;margin-bottom:6px;';
+    d.innerHTML='<input type="text" name="item_name" placeholder="Service (e.g. MCQ Training)" value="'+(name||'')+'" style="flex:2;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;">'+
+      '<input type="number" name="item_amount" class="item-amt" step="0.01" min="0" placeholder="Amount" value="'+(amount||'')+'" oninput="recalc()" style="flex:1;padding:8px 10px;border:1px solid var(--gray-200);border-radius:6px;">'+
+      '<button type="button" onclick="this.parentNode.remove();recalc();" style="background:#FEF2F2;color:#991B1B;border:none;border-radius:6px;padding:0 12px;cursor:pointer;font-weight:700;">×</button>';
+    document.getElementById('items').appendChild(d);
+  };
+
+  // client search
+  var s=document.getElementById('clientSearch'), box=document.getElementById('clientResults'),
+      fr=document.getElementById('fromReg'), info=document.getElementById('srcInfo'), t=null;
+  function loadInfo(reg){
+    fetch('{{ url_for("admin_internal_transfer_client_info") }}?reg='+encodeURIComponent(reg)).then(r=>r.json()).then(function(d){
+      if(!d.found){ info.style.display='none'; return; }
+      info.style.display='block';
+      info.innerHTML='<b>'+d.name+'</b> · '+(d.pathway||'').toUpperCase()+' · '+(d.product||'—')+'<br><span style="color:#059669;font-weight:700;">Total paid so far: ₹'+(d.total_paid).toLocaleString('en-IN')+'</span>';
+      var tp=document.getElementById('totalPaid'); if(!tp.value || parseFloat(tp.value)===0){ tp.value=d.total_paid; recalc(); }
+    });
+  }
+  s.addEventListener('input', function(){
+    fr.value=''; info.style.display='none';
+    var q=s.value.trim(); if(q.length<2){box.style.display='none';return;}
+    clearTimeout(t); t=setTimeout(function(){
+      fetch('/operations/api/client-search?pathway=all&q='+encodeURIComponent(q)).then(r=>r.json()).then(function(list){
+        if(!list.length){box.style.display='none';return;}
+        box.innerHTML=list.map(c=>'<div class="cr-item" data-reg="'+c.reg+'" data-label="'+(c.name+' — '+(c.display_reg||c.reg)).replace(/"/g,'&quot;')+'" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f1f1;"><div style="font-weight:600;color:#1e293b;">'+c.name+'</div><div style="font-size:0.74rem;color:#94a3b8;">'+(c.display_reg||c.reg)+' · '+(c.pathway_label||c.pathway||'')+'</div></div>').join('');
+        box.style.display='block';
+        box.querySelectorAll('.cr-item').forEach(function(el){el.addEventListener('click',function(){
+          fr.value=this.getAttribute('data-reg'); s.value=this.getAttribute('data-label'); box.style.display='none'; loadInfo(fr.value);
+        });});
+      });
+    },220);
+  });
+  document.addEventListener('click', e=>{ if(!box.contains(e.target)&&e.target!==s) box.style.display='none'; });
+  if(fr.value) loadInfo(fr.value);
+  recalc();
+})();
+</script>
+{% endblock %}
