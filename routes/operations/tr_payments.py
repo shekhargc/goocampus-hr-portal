@@ -84,10 +84,11 @@ def ops_training_payments_list():
             params.append(method_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                t.registration_number LIKE ? OR t.notes LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                t.registration_number ILIKE ? OR t.notes ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 4)
+            params.extend([f'%{search}%'] * 5)
         # Recent-first (user request 2026-06-01) — mirrors clients_list pattern.
         sql += " ORDER BY t.payment_date DESC NULLS LAST, t.id DESC "
         records = conn.execute(sql, params).fetchall()

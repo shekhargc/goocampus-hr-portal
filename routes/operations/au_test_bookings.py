@@ -117,10 +117,11 @@ def ops_australia_test_bookings_list():
             params.append(status_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                t.test_center LIKE ? OR t.registration_number LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                t.test_center ILIKE ? OR t.registration_number ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 4)
+            params.extend([f'%{search}%'] * 5)
         # Recent-first: most-recent exam_date first (NULLs last), then id DESC.
         sql += " ORDER BY t.exam_date DESC NULLS LAST, t.id DESC "
         records = conn.execute(sql, params).fetchall()

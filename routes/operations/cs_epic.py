@@ -90,11 +90,12 @@ def ops_consulting_epic_list():
             params.append(docs_stage_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                e.registration_number LIKE ? OR e.login_id LIKE ? OR
-                e.epic_id_number LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                e.registration_number ILIKE ? OR e.login_id ILIKE ? OR
+                e.epic_id_number ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: most recently registered EPIC entries first.
         sql += " ORDER BY COALESCE(e.registration_date, '') DESC, e.id DESC "
         records = conn.execute(sql, params).fetchall()

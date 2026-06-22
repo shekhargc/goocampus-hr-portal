@@ -125,11 +125,12 @@ def ops_consulting_online_courses_list():
             params.append(provider_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                c.courses_name LIKE ? OR c.registration_number LIKE ? OR
-                c.course_provider LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                c.courses_name ILIKE ? OR c.registration_number ILIKE ? OR
+                c.course_provider ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: most recently started at the top, then by id desc.
         sql += " ORDER BY c.start_date DESC NULLS LAST, c.id DESC "
         records = conn.execute(sql, params).fetchall()

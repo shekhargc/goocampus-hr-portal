@@ -53,8 +53,9 @@ def ops_consulting_onboarding_list():
             params.append(status_filter)
     if search:
         where.append("(p.first_name ILIKE ? OR p.last_name ILIKE ? "
-                     " OR p.registration_number ILIKE ? OR p.email ILIKE ?)")
-        params.extend([f'%{search}%'] * 4)
+                     " OR p.registration_number ILIKE ? OR p.email ILIKE ? "
+                     " OR (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?)")
+        params.extend([f'%{search}%'] * 5)
     where_sql = (' AND ' + ' AND '.join(where)) if where else ''
 
     total = conn.execute(

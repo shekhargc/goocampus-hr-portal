@@ -85,11 +85,12 @@ def ops_australia_research_list():
             params.append(batch_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                r.research_topic LIKE ? OR r.registration_number LIKE ? OR
-                r.published_journal_name LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                r.research_topic ILIKE ? OR r.registration_number ILIKE ? OR
+                r.published_journal_name ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: newest research_start_date on top, NULLs at the bottom,
         # then id DESC as a tiebreaker (user request 2026-06-01).
         sql += " ORDER BY r.research_start_date DESC NULLS LAST, r.id DESC "

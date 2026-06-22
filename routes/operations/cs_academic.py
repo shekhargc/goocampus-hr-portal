@@ -87,11 +87,12 @@ def ops_consulting_academic_list():
             params.append(working_status_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                a.registration_number LIKE ? OR
-                a.img_medical_college LIKE ? OR a.fmg_medical_college LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                a.registration_number ILIKE ? OR
+                a.img_medical_college ILIKE ? OR a.fmg_medical_college ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first ordering (created_at desc with id as tiebreaker).
         sql += " ORDER BY a.created_at DESC NULLS LAST, a.id DESC "
         records = conn.execute(sql, params).fetchall()

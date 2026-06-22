@@ -88,11 +88,12 @@ def ops_portfolio_webinars_list():
             params.append(event_value_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                w.event_name LIKE ? OR w.registration_number LIKE ? OR
-                w.notes LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                w.event_name ILIKE ? OR w.registration_number ILIKE ? OR
+                w.notes ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: order by start_date DESC NULLS LAST, then id DESC.
         sql += " ORDER BY w.start_date DESC NULLS LAST, w.id DESC "
         records = conn.execute(sql, params).fetchall()

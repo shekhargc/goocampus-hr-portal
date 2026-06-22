@@ -90,11 +90,12 @@ def ops_consulting_training_list():
             params.append(vendor_filter)
         if search:
             sql += """ AND (
-                p.first_name LIKE ? OR p.last_name LIKE ? OR
-                t.vendor_provider LIKE ? OR t.english_training LIKE ? OR
-                t.registration_number LIKE ?
+                p.first_name ILIKE ? OR p.last_name ILIKE ? OR
+                t.vendor_provider ILIKE ? OR t.english_training ILIKE ? OR
+                t.registration_number ILIKE ? OR
+                (COALESCE(p.prefix,'')||' '||p.first_name||' '||COALESCE(p.last_name,'')) ILIKE ?
             ) """
-            params.extend([f'%{search}%'] * 5)
+            params.extend([f'%{search}%'] * 6)
         # Recent-first: order by start_date DESC NULLS LAST, then id DESC.
         sql += " ORDER BY t.start_date DESC NULLS LAST, t.id DESC "
         records = conn.execute(sql, params).fetchall()
