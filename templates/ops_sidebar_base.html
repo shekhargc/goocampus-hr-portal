@@ -305,7 +305,15 @@
 {% endblock %}
 
 {% block content %}
-<div class="ops-layout">
+{% set _embed = request.args.get('embed') %}
+<style>
+  /* Embed mode: a section's add form loaded inside the client-profile drawer.
+     Hide the ops chrome so only the form shows. */
+  .ops-embed .ops-sidebar, .ops-embed .ops-sidebar-toggle { display: none !important; }
+  .ops-embed .ops-main { margin-left: 0 !important; padding: 14px 16px !important; }
+  .ops-embed .ops-layout { display: block; }
+</style>
+<div class="ops-layout{% if _embed %} ops-embed{% endif %}">
     <!-- Sidebar -->
     <aside class="ops-sidebar" id="opsSidebar">
         <div class="ops-sidebar-header">
@@ -1051,6 +1059,23 @@
         {% block ops_content %}{% endblock %}
     </main>
 </div>
+{% if _embed %}
+<script>
+  /* In drawer/embed mode, pre-fill the client from the URL (?reg=&cname=) so the
+     team doesn't re-search. Field ids are consistent across the section forms. */
+  (function(){
+    var p = new URLSearchParams(window.location.search);
+    var reg = p.get('reg'), cname = p.get('cname');
+    function fill(){
+      var h = document.getElementById('reg_number_val');
+      var s = document.getElementById('client_search');
+      if (h && reg) h.value = reg;
+      if (s && cname){ s.value = cname; s.readOnly = true; s.style.background = '#f0fdf4'; s.style.borderColor = '#16a34a'; }
+    }
+    if (document.readyState !== 'loading') fill(); else document.addEventListener('DOMContentLoaded', fill);
+  })();
+</script>
+{% endif %}
 {% endblock %}
 
 {% block extra_js %}
