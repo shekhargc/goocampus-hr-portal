@@ -326,6 +326,7 @@
                    to a shared admin page made the selector flip back to PLAB. #}
                 {% set _pw = active_pathway|default('plab') %}
                 {% set _pathway_name_map = {
+                    'main':       'All Pathways',
                     'plab':       'UK / PLAB Pathway',
                     'australia':  'AMC Pathway',
                     'uae':        'UAE Pathway',
@@ -862,6 +863,23 @@
                 <span class="ops-nav-text">Vendors &amp; Providers</span>
             </a>
             {% endif %}
+
+            {% elif active_pathway == 'main' %}
+            {# ─── Main Operations dashboard: just list the pathways to pick from
+                   (no single-pathway sections, so UK isn't the confusing default) ─── #}
+            <div class="ops-nav-group-label">Pathways</div>
+            <a href="/operations/uk-pathway" class="ops-nav-item" data-tooltip="UK / PLAB Pathway">
+                <span class="ops-nav-icon">&#127468;&#127463;</span><span class="ops-nav-text">UK / PLAB Pathway</span></a>
+            <a href="/operations/australia-pathway" class="ops-nav-item" data-tooltip="AMC Pathway">
+                <span class="ops-nav-icon">&#127462;&#127482;</span><span class="ops-nav-text">AMC Pathway</span></a>
+            <a href="/operations/uae" class="ops-nav-item" data-tooltip="UAE Pathway">
+                <span class="ops-nav-icon">&#127462;&#127466;</span><span class="ops-nav-text">UAE Pathway</span></a>
+            <a href="/operations/consulting" class="ops-nav-item" data-tooltip="Standard Consulting">
+                <span class="ops-nav-icon">&#129517;</span><span class="ops-nav-text">Standard Consulting</span></a>
+            <a href="/operations/portfolio" class="ops-nav-item" data-tooltip="Portfolio Pathway">
+                <span class="ops-nav-icon">&#128188;</span><span class="ops-nav-text">Portfolio Pathway</span></a>
+            <a href="/operations/training" class="ops-nav-item" data-tooltip="Training Pathway">
+                <span class="ops-nav-icon">&#127891;</span><span class="ops-nav-text">Training Pathway</span></a>
 
             {% else %}
             {# ─── PLAB / UK PATHWAY SIDEBAR (per-item gated via can_access) ─── #}

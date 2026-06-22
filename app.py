@@ -15707,7 +15707,7 @@ def ops_main_dashboard():
     return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
                            status_labels=[label for label, _ in STATUS_DEFS],
                            recent_payments=recent_payments,
-                           active_ops_page='ops-dashboard', user=user)
+                           active_ops_page='ops-dashboard', active_pathway='main', user=user)
 
 
 @app.route('/operations/uk-pathway')

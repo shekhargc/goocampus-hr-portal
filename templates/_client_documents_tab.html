@@ -1,0 +1,141 @@
+    <div id="dt-documents" class="dtab-panel" style="display:none;">
+      <h4 style="margin:0 0 14px 0;font-size:15px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:10px;">Documents ({{ documents|length }})</h4>
+      {% if documents %}
+      <table style="width:100%;border-collapse:collapse;font-size:13px;">
+        <thead>
+          <tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+            <th style="padding:8px;text-align:left;font-weight:600;color:var(--navy);">Document</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Category</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Status</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Uploaded</th>
+            <th style="padding:8px;text-align:center;font-weight:600;color:var(--navy);">Actions</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for doc in documents %}
+          {% set doc_ext = doc.file_name.rsplit('.', 1)[-1]|lower if '.' in (doc.file_name or '') else '' %}
+          <tr style="border-bottom:1px solid var(--gray-100);" id="doc-row-{{ doc.id }}">
+            <td style="padding:8px;">
+              <a href="javascript:void(0)" onclick="openProfileDocViewer({{ doc.id }},'{{ doc.doc_type }}','{{ doc_ext }}')" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ doc.doc_type }}</a>
+              <div style="font-size:11px;color:var(--gray-500);">{{ doc.file_name }}</div>
+            </td>
+            <td style="padding:8px;text-align:center;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-600);font-weight:600;">{{ doc.doc_category|capitalize }}</span>
+            </td>
+            <td style="padding:8px;text-align:center;">
+              <span style="font-size:11px;padding:2px 8px;border-radius:10px;font-weight:600;
+                {% if doc.status == 'verified' %}background:#d1fae5;color:#065f46;
+                {% elif doc.status == 'rejected' %}background:#fee2e2;color:#991b1b;
+                {% else %}background:#fef3c7;color:#92400e;{% endif %}">{{ doc.status|capitalize }}</span>
+              {% if doc.verifier_name %}
+              <div style="font-size:10px;color:var(--gray-500);margin-top:2px;">by {{ doc.verifier_name }}</div>
+              {% endif %}
+              {% if doc.notes %}
+              <div style="font-size:10px;color:var(--gray-500);margin-top:2px;font-style:italic;">{{ doc.notes }}</div>
+              {% endif %}
+            </td>
+            <td style="padding:8px;text-align:center;font-size:12px;color:var(--gray-600);">{{ doc.uploaded_at|string|truncate(10, True, '') if doc.uploaded_at else '—' }}</td>
+            <td style="padding:8px;text-align:center;">
+              <div style="display:flex;gap:4px;justify-content:center;flex-wrap:wrap;">
+                <a href="/operations/plab/doc/{{ doc.id }}/download" style="padding:3px 8px;background:var(--gray-100);color:var(--navy);border:none;border-radius:4px;font-size:11px;font-weight:600;text-decoration:none;cursor:pointer;">Download</a>
+                {% if doc.status != 'verified' %}
+                <button onclick="verifyPlabDoc({{ doc.id }}, 'verified')" style="padding:3px 8px;background:#d1fae5;color:#065f46;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Verify</button>
+                {% endif %}
+                {% if doc.status != 'rejected' %}
+                <button onclick="rejectPlabDoc({{ doc.id }})" style="padding:3px 8px;background:#fee2e2;color:#991b1b;border:none;border-radius:4px;font-size:11px;font-weight:600;cursor:pointer;">Reject</button>
+                {% endif %}
+              </div>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="margin:0;color:var(--gray-500);font-size:13px;text-align:center;padding:20px 0;">No documents uploaded yet</p>
+      {% endif %}
+
+      <!-- Missing Documents Checklist -->
+      {% set uploaded_types = documents|map(attribute='doc_type')|list %}
+      {% set all_required = plab_doc_types.get('personal', []) + plab_doc_types.get('academic', []) %}
+      {% set missing = [] %}
+      {% for dt in all_required %}{% if dt not in uploaded_types %}{% if missing.append(dt) %}{% endif %}{% endif %}{% endfor %}
+      {% if missing %}
+      <div style="margin-top:16px;padding:12px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+        <h4 style="margin:0 0 8px 0;font-size:12px;font-weight:700;color:#9a3412;">Missing Documents ({{ missing|length }})</h4>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;">
+          {% for m in missing %}
+          <span style="font-size:11px;padding:3px 8px;background:white;border:1px solid #fed7aa;border-radius:10px;color:#9a3412;">{{ m }}</span>
+          {% endfor %}
+        </div>
+      </div>
+      {% endif %}
+    </div><!-- /dt-documents -->
+
+<!-- Document Viewer Modal -->
+<div id="profileDocOverlay" onclick="if(event.target===this)closeProfileDocViewer()" style="position:fixed;inset:0;background:rgba(0,0,0,0.7);z-index:1100;display:none;align-items:center;justify-content:center;">
+  <div style="background:white;border-radius:12px;width:90vw;max-width:1000px;height:85vh;display:flex;flex-direction:column;overflow:hidden;">
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:16px 20px;border-bottom:1px solid var(--gray-200);background:var(--gray-50);">
+      <h4 id="profileDocTitle" style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Document</h4>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <a href="#" id="profileDocDownload" download style="padding:6px 14px;background:var(--navy);color:white;border-radius:6px;font-size:13px;font-weight:600;text-decoration:none;">Download</a>
+        <button onclick="closeProfileDocViewer()" style="background:none;border:none;font-size:28px;color:var(--gray-500);cursor:pointer;line-height:1;">&times;</button>
+      </div>
+    </div>
+    <div id="profileDocBody" style="flex:1;overflow:hidden;display:flex;align-items:center;justify-content:center;background:#f8f8f8;"></div>
+  </div>
+</div>
+
+<script>
+function verifyPlabDoc(docId, status) {
+  fetch('/operations/plab/doc/' + docId + '/verify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: status, notes: ''})
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success) location.reload();
+    else alert(data.error || 'Failed');
+  });
+}
+
+function rejectPlabDoc(docId) {
+  var notes = prompt('Rejection reason (optional):');
+  if (notes === null) return;
+  fetch('/operations/plab/doc/' + docId + '/verify', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({status: 'rejected', notes: notes})
+  }).then(function(r) { return r.json(); }).then(function(data) {
+    if (data.success) location.reload();
+    else alert(data.error || 'Failed');
+  });
+}
+
+// Document viewer modal
+function openProfileDocViewer(docId, docType, ext) {
+  var overlay = document.getElementById('profileDocOverlay');
+  var body = document.getElementById('profileDocBody');
+  var titleEl = document.getElementById('profileDocTitle');
+  var dlBtn = document.getElementById('profileDocDownload');
+  titleEl.textContent = docType;
+  var fileUrl = '/operations/plab/doc/' + docId + '/file';
+  var downloadUrl = '/operations/plab/doc/' + docId + '/download';
+  dlBtn.href = downloadUrl;
+  var isImage = ['jpg','jpeg','png','gif','webp'].indexOf(ext) >= 0;
+  var isPdf = ext === 'pdf';
+  if (isImage) {
+    body.innerHTML = '<img src="' + fileUrl + '" alt="' + docType + '" style="max-width:100%;max-height:100%;object-fit:contain;">';
+  } else if (isPdf) {
+    body.innerHTML = '<iframe src="' + fileUrl + '" style="width:100%;height:100%;border:none;"></iframe>';
+  } else {
+    body.innerHTML = '<div style="text-align:center;padding:40px;"><p style="font-size:16px;color:var(--gray-500);margin-bottom:16px;">Preview not available for this file type</p><a href="' + downloadUrl + '" style="padding:10px 24px;background:var(--orange);color:white;border-radius:8px;font-weight:600;text-decoration:none;">Download File</a></div>';
+  }
+  overlay.style.display = 'flex';
+}
+function closeProfileDocViewer() {
+  document.getElementById('profileDocOverlay').style.display = 'none';
+  document.getElementById('profileDocBody').innerHTML = '';
+}
+document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && document.getElementById('profileDocOverlay').style.display === 'flex') closeProfileDocViewer();
+});
+</script>

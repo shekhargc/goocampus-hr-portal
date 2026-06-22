@@ -669,7 +669,7 @@
       </thead>
       <tbody>
         {% for client in clients %}
-        <tr class="clickable-row" id="row-{{ client.id }}" onclick="openPlabDetail({{ client.id }})">
+        <tr class="clickable-row" title="Phone: {{ client.mobile or client.whatsapp1 or '—' }}  ·  Email: {{ client.email or '—' }}  ·  DOB: {{ client.dob or '—' }}" id="row-{{ client.id }}" onclick="openPlabDetail({{ client.id }})">
           <td>{{ client.registration_number|format_reg }}</td>
           <td>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}</td>
           <td>{{ client.current_stage or '–' }}</td>
