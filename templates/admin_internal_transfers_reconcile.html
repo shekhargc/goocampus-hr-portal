@@ -1,0 +1,69 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Reconcile Switched Programs{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="margin-bottom:18px;">
+    <a href="{{ url_for('admin_internal_transfers') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">&larr; Internal Transfers</a>
+    <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:700;color:var(--navy);">Reconcile Switched Programs</h1>
+    <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);max-width:720px;">These {{ rows|length }} clients are marked <b>Switched Program</b> with a free-text label. Link each to a real product so the data is consistent. Leave a row unchanged to keep its current label.</p>
+  </div>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% for cat, msg in messages %}
+    <div style="margin-bottom:14px;padding:11px 14px;border-radius:8px;font-size:0.86rem;font-weight:600;background:{{ '#ECFDF5' if cat=='success' else '#FEF2F2' }};color:{{ '#065F46' if cat=='success' else '#991B1B' }};">{{ msg }}</div>
+    {% endfor %}
+  {% endwith %}
+
+  {% if rows %}
+  <form method="POST">
+    <div style="background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow:auto;">
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+        <thead>
+          <tr style="text-align:left;color:var(--gray-500);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;background:var(--gray-50);">
+            <th style="padding:11px 12px;">Client</th>
+            <th style="padding:11px 12px;">Pathway</th>
+            <th style="padding:11px 12px;">Current label</th>
+            <th style="padding:11px 12px;">Link to product</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% set ns = namespace(grp='__start__') %}
+          {% for r in rows %}
+            {% if (r.switched_program or '(blank)') != ns.grp %}
+              {% set ns.grp = (r.switched_program or '(blank)') %}
+              <tr style="background:#FFF7ED;"><td colspan="4" style="padding:7px 12px;font-size:0.72rem;font-weight:700;color:#9A3412;text-transform:uppercase;letter-spacing:0.5px;">{{ r.switched_program or 'No label' }}</td></tr>
+            {% endif %}
+            <tr style="border-top:1px solid var(--gray-100);">
+              <td style="padding:9px 12px;">
+                <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
+                <div style="font-size:0.74rem;color:var(--gray-400);">{{ r.registration_number|format_reg }}</div>
+              </td>
+              <td style="padding:9px 12px;"><span style="font-size:0.72rem;font-weight:700;background:var(--gray-100);color:var(--gray-600);padding:2px 8px;border-radius:999px;">{{ r.pathway|upper }}</span></td>
+              <td style="padding:9px 12px;color:var(--gray-500);">{{ r.switched_program or '—' }}</td>
+              <td style="padding:9px 12px;">
+                <select name="map_{{ r.registration_number }}" style="width:100%;max-width:320px;padding:7px 9px;border:1px solid var(--gray-200);border-radius:6px;font-size:0.82rem;">
+                  <option value="">{% if r.switched_program %}— keep: {{ r.switched_program }} —{% else %}— not set —{% endif %}</option>
+                  {% for grp, plist in products|groupby('pathway') %}
+                  <optgroup label="{{ grp|upper or 'OTHER' }}">
+                    {% for p in plist %}<option value="{{ p.name }}"{% if p.name == r.switched_program %} selected{% endif %}>{{ p.name }}</option>{% endfor %}
+                  </optgroup>
+                  {% endfor %}
+                </select>
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    <div style="position:sticky;bottom:0;margin-top:16px;display:flex;gap:12px;">
+      <button type="submit" style="background:var(--orange);color:#fff;padding:11px 24px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Save links</button>
+      <a href="{{ url_for('admin_internal_transfers') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
+    </div>
+  </form>
+  {% else %}
+  <div style="background:#fff;border-radius:12px;padding:40px;text-align:center;color:var(--gray-400);box-shadow:0 1px 3px rgba(0,0,0,0.08);">No Switched Program records to reconcile. 🎉</div>
+  {% endif %}
+
+</div>
+{% endblock %}

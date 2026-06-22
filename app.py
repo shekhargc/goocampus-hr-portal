@@ -21805,6 +21805,37 @@ def admin_internal_transfer_reject(tid):
     return redirect(url_for('admin_internal_transfers'))
 
 
+@app.route('/admin/internal-transfers/reconcile', methods=['GET', 'POST'])
+@admin_required
+def admin_internal_transfers_reconcile():
+    """Link the existing 'Switched Program' clients (whose switched_program is
+    free text like 'NEET India' / 'Australia') to a real product, so the data is
+    consistent. Updates plab_clients.switched_program to the chosen product name."""
+    conn = get_db()
+    if request.method == 'POST':
+        updated = 0
+        for k, v in request.form.items():
+            if k.startswith('map_') and (v or '').strip():
+                reg = k[4:]
+                conn.execute("""UPDATE plab_clients SET switched_program = ?, updated_at = CURRENT_TIMESTAMP
+                    WHERE registration_number = ? AND account_status = 'Switched Program'""", (v.strip(), reg))
+                updated += 1
+        conn.commit()
+        conn.close()
+        flash(f'Linked {updated} record(s) to a product.', 'success')
+        return redirect(url_for('admin_internal_transfers_reconcile'))
+    rows = conn.execute("""SELECT registration_number, prefix, first_name, last_name,
+        COALESCE(pathway,'plab') AS pathway, COALESCE(switched_program,'') AS switched_program
+        FROM plab_clients WHERE account_status = 'Switched Program'
+        ORDER BY COALESCE(NULLIF(switched_program,''),'~~~'), first_name""", []).fetchall()
+    products = conn.execute("""SELECT name, COALESCE(pathway,'') AS pathway FROM products_services
+        WHERE COALESCE(status,'active')='active' ORDER BY pathway, name""", []).fetchall()
+    prod_names = set(p['name'] for p in products)
+    conn.close()
+    return render_template('admin_internal_transfers_reconcile.html', rows=rows, products=products,
+                           prod_names=prod_names, active_section='clients')
+
+
 REFUND_METHODS = ['Bank Transfer', 'UPI / Online', 'Cheque', 'Cash']
 
 
@@ -34439,8 +34470,31 @@ def can_access(main_section, sub_section, action='view'):
     return has_section_permission(user, main_section, sub_section, action)
 
 
+def client_transfer_info(reg):
+    """For a client reg, return {'out': row|None, 'in': row|None} describing an
+    APPROVED internal transfer where this client switched OUT (source) or was
+    transferred IN (destination). Used to badge client profiles on both ends.
+    Read-only; swallows errors so a profile never breaks on this."""
+    blank = {'out': None, 'in': None}
+    if not reg:
+        return blank
+    try:
+        conn = get_db()
+        out = conn.execute("""SELECT to_reg, to_product, to_pathway, transfer_date FROM internal_transfers
+            WHERE from_reg = ? AND COALESCE(status,'approved') = 'approved' ORDER BY id DESC LIMIT 1""", (reg,)).fetchone()
+        inn = conn.execute("""SELECT from_reg, from_product, from_pathway, transfer_date FROM internal_transfers
+            WHERE to_reg = ? AND COALESCE(status,'approved') = 'approved' ORDER BY id DESC LIMIT 1""", (reg,)).fetchone()
+        conn.close()
+        return {'out': out, 'in': inn}
+    except Exception:
+        try: conn.close()
+        except Exception: pass
+        return blank
+
+
 # Expose to every template (no per-route render_template change needed).
 app.jinja_env.globals['can_access'] = can_access
+app.jinja_env.globals['client_transfer_info'] = client_transfer_info
 app.jinja_env.globals['ACCESS_MASTER_ENFORCE'] = lambda: ACCESS_MASTER_ENFORCE
 
 
