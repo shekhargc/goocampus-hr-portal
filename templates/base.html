@@ -399,6 +399,7 @@
     {% block extra_css %}{% endblock %}
 </head>
 <body>
+    {% if not request.args.get('embed') %}
     <nav class="navbar">
         <div class="navbar-inner">
             <a href="/" class="navbar-brand">
@@ -481,6 +482,7 @@
             </ul>
         </div>
     </nav>
+    {% endif %}
 
     {% if session.get('show_welcome') %}
     <div id="welcome-overlay" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:9999;display:flex;align-items:center;justify-content:center;">
@@ -540,6 +542,7 @@
         {% block content %}{% endblock %}
     </div>
 
+    {% if not request.args.get('embed') %}
     <footer class="site-footer">
         <div class="site-footer-inner">
             <div>
@@ -576,6 +579,7 @@
             </div>
         </div>
     </footer>
+    {% endif %}
 
     <script>
     var notifOpen = false;
