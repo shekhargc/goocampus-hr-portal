@@ -31337,6 +31337,9 @@ ACCESS_SECTION_CATALOG = [
             ('welcome_kit',     'Welcome Kit',         'Per-product onboarding checklist template'),
             ('doc_requests',    'Document Requests',   'Ops doc request queue'),
             ('notifications',   'Notification Log',    'Client notification log'),
+            ('payments_hub',    'Payments Hub',        'Centralised admin payments + GST'),
+            ('refunds',         'Refunds',             'Refund ledger + processing'),
+            ('internal_transfers','Internal Transfers','Move clients between pathways + approvals'),
         ],
     },
     # ── Dashboard (landing pages) ──────────────────────────────────────────
@@ -33623,6 +33626,8 @@ def realign_access_master_baseline_once():
         ('clients', 'invitations'), ('clients', 'registrations'),
         ('clients', 'form_config'), ('clients', 'doc_requests'),
         ('clients', 'notifications'),
+        ('clients', 'payments_hub'), ('clients', 'refunds'),
+        ('clients', 'internal_transfers'),
         ('dashboard', 'admin'),
         ('kra', 'goals'),
     ]
@@ -34064,6 +34069,18 @@ def _ap(main, sub, action='view'):
 
 
 ACCESS_ROUTE_MAP = {
+    # ── Clients: admin money sections (Payments Hub / Refunds / Internal Transfers) ──
+    'admin_payments_hub':                           _ap('clients', 'payments_hub'),
+    'admin_payments_add':                           _ap('clients', 'payments_hub', 'add'),
+    'admin_payments_edit':                          _ap('clients', 'payments_hub', 'edit'),
+    'admin_refunds':                                _ap('clients', 'refunds'),
+    'admin_refunds_add':                            _ap('clients', 'refunds', 'add'),
+    'admin_internal_transfers':                     _ap('clients', 'internal_transfers'),
+    'admin_internal_transfer_client_info':          _ap('clients', 'internal_transfers'),
+    'admin_internal_transfer_new':                  _ap('clients', 'internal_transfers', 'add'),
+    'admin_internal_transfer_approve':              _ap('clients', 'internal_transfers', 'edit'),
+    'admin_internal_transfer_reject':               _ap('clients', 'internal_transfers', 'edit'),
+    'admin_internal_transfers_reconcile':           _ap('clients', 'internal_transfers', 'edit'),
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
