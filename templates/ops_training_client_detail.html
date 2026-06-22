@@ -261,6 +261,29 @@
 
   <!-- ═══════════ LINKED SECTIONS (same card layout as PLAB) ═══════════ -->
 
+  <!-- Call Notes -->
+  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
+      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <button type="button" onclick="openAddDrawer('{{ url_for('ops_training_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip())|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
+        <a href="{{ url_for('ops_training_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
+      </div>
+    </div>
+    {% if sections.call_notes %}
+    <div style="max-height:400px;overflow-y:auto;">
+      {% for r in sections.call_notes[:20] %}
+      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
+          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
+          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
+        </div>
+        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
+      </div>
+      {% endfor %}
+    </div>
+    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
+  </div>
   <!-- Payments -->
   <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
@@ -289,29 +312,6 @@
       </tbody>
     </table></div>
     {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No payments recorded.</p>{% endif %}
-  </div>
-  <!-- Call Notes -->
-  <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;padding-bottom:12px;border-bottom:2px solid var(--orange);">
-      <h3 style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">Call Notes ({{ sections.call_notes|length }})</h3>
-      <div style="display:flex;gap:10px;align-items:center;">
-        <button type="button" onclick="openAddDrawer('{{ url_for('ops_training_call_notes_add') }}?embed=1&reg={{ client.registration_number|urlencode }}&cname={{ (((client.prefix or '') ~ ' ' ~ (client.first_name or '') ~ ' ' ~ (client.last_name or '')).strip())|urlencode }}','Add Call Note')" style="background:var(--orange);color:#fff;border:none;border-radius:6px;padding:6px 12px;font-size:12px;font-weight:600;cursor:pointer;">+ Add Record</button>
-        <a href="{{ url_for('ops_training_call_notes_list') }}" style="font-size:12px;color:var(--orange);text-decoration:none;font-weight:600;">View all &rarr;</a>
-      </div>
-    </div>
-    {% if sections.call_notes %}
-    <div style="max-height:400px;overflow-y:auto;">
-      {% for r in sections.call_notes[:20] %}
-      <div style="padding:12px 0;border-bottom:1px solid var(--gray-100);">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px;">
-          <span style="font-size:12px;color:var(--gray-500);font-weight:600;">{{ r.call_date or '—' }}</span>
-          <span style="font-size:12px;color:var(--gray-500);">by {{ r.added_by or '—' }}</span>
-        </div>
-        <p style="margin:0;color:var(--gray-700);font-size:13px;line-height:1.6;white-space:pre-wrap;">{{ r.call_note or '—' }}</p>
-      </div>
-      {% endfor %}
-    </div>
-    {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No call notes recorded.</p>{% endif %}
   </div>
 </div>
 {% include '_section_add_drawer.html' %}

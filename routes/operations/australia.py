@@ -409,6 +409,8 @@ def ops_australia_client_detail(client_id):
     pct = (amount_paid / final_pkg * 100) if final_pkg > 0 else 0
 
     # Related sections — only pull pathway='australia' rows for safety.
+    # Each fetch returns a list of plain dicts so the section_block macro
+    # in the template can iterate columns with .items().
     def fetch(table, order=None):
         try:
             sql = (
@@ -418,20 +420,22 @@ def ops_australia_client_detail(client_id):
             )
             if order:
                 sql += f" ORDER BY {order} "
-            return conn.execute(sql, (reg,)).fetchall()
+            return [dict(x) for x in conn.execute(sql, (reg,)).fetchall()]
         except Exception:
             return []
 
     sections = {
-        'test_bookings': fetch('ops_test_bookings', 'exam_date DESC NULLS LAST'),
-        'academic':      fetch('ops_academic_details', 'created_at DESC'),
-        'epic':          fetch('ops_epic_registration', 'created_at DESC'),
-        'training':      fetch('ops_coaching', 'created_at DESC'),
-        'online_courses': fetch('ops_online_subscriptions', 'created_at DESC'),
-        'payments':      fetch('ops_payments', 'payment_date DESC NULLS LAST'),
-        'call_notes':    fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
-        'research':      fetch('ops_research_publication', 'created_at DESC'),
-        'webinars':      fetch('ops_webinars_conferences', 'created_at DESC'),
+        'academic':             fetch('ops_academic_details', 'id DESC'),
+        'epic':                 fetch('ops_epic_registration', 'id DESC'),
+        'amc_registration':     fetch('ops_amc_registration', 'id DESC'),
+        'training':             fetch('ops_coaching', 'id DESC'),
+        'test_bookings':        fetch('ops_test_bookings', 'id DESC'),
+        'online_courses':       fetch('ops_online_courses', 'id DESC'),
+        'online_subscriptions': fetch('ops_online_subscriptions', 'id DESC'),
+        'research':             fetch('ops_research_publication', 'id DESC'),
+        'webinars':             fetch('ops_webinars_conferences', 'id DESC'),
+        'call_notes':           fetch('ops_call_notes', 'id DESC'),
+        'payments':             fetch('ops_payments', 'id DESC'),
     }
     conn.close()
 
