@@ -91,13 +91,6 @@
         {% if (referred_count or 0) >= 1 %}
         <span style="display:inline-block;margin-left:8px;padding:6px 12px;border-radius:999px;font-size:12px;font-weight:600;background:#FFF7ED;color:#C2410C;border:1px solid #FED7AA;">&#9733; Referred {{ referred_count }} client{{ '' if referred_count == 1 else 's' }}</span>
         {% endif %}
-        {# Compact info row: Counsellor · Joined Stage · Phone · Email #}
-        <div style="display:flex;flex-wrap:wrap;gap:8px 24px;margin-top:14px;">
-          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Counsellor:</span> <span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></span>
-          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Joined Stage:</span> <span style="color:var(--navy);font-weight:600;">{{ client.joined_stage or client.current_stage or '—' }}</span></span>
-          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Phone:</span> <span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></span>
-          <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Email:</span> <span style="color:var(--navy);font-weight:600;">{{ client.email or '—' }}</span></span>
-        </div>
       </div>
       </div>{# /X-1 photo+text wrapper #}
       <div style="display:flex;gap:12px;">
@@ -105,39 +98,40 @@
            style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
           Edit Client
         </a>
-        {# Z-1: Delete button matches PLAB client profile (Edit + Delete pair) #}
-        <form method="POST" action="{{ url_for('ops_uae_client_delete', client_id=client.id) }}" style="display:inline;" onsubmit="return confirm('Are you sure you want to delete this client? This action cannot be undone.');">
-          <button type="submit" style="padding:10px 20px;background:#FEF2F2;color:#991B1B;border:1px solid #FECACA;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">
-            Delete
-          </button>
-        </form>
       </div>
+    </div>
+    {# Compact info row: Counsellor · Joined Stage · Phone · Email — slim strip at bottom of banner #}
+    <div style="display:flex;flex-wrap:wrap;gap:8px 24px;border-top:1px solid var(--gray-100);margin-top:16px;padding-top:14px;">
+      <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Counsellor:</span> <span style="color:var(--navy);font-weight:600;">{{ client.counsellor or '—' }}</span></span>
+      <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Joined Stage:</span> <span style="color:var(--navy);font-weight:600;">{{ client.joined_stage or client.current_stage or '—' }}</span></span>
+      <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Phone:</span> <span style="color:var(--navy);font-weight:600;">{{ client.mobile or '—' }}</span></span>
+      <span style="font-size:13px;"><span style="color:var(--gray-500);font-weight:500;">Email:</span> <span style="color:var(--navy);font-weight:600;">{{ client.email or '—' }}</span></span>
     </div>
   </div>
 
   <!-- ── Stat Cards Row ── -->
-  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:16px;margin-bottom:24px;">
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Current Stage</p>
-      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">{{ client.current_stage or 'Not Set' }}</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:16px;margin-bottom:24px;">
+    <div style="background:white;border-radius:12px;padding:13px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:10.5px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Current Stage</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">{{ client.current_stage or 'Not Set' }}</p>
     </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Package Value</p>
-      <p style="margin:0;font-size:20px;font-weight:700;color:var(--navy);">&#8377;{{ '{:,.0f}'.format(final_pkg or 0) }}</p>
+    <div style="background:white;border-radius:12px;padding:13px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:10.5px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Package Value</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:var(--navy);">&#8377;{{ '{:,.0f}'.format(final_pkg or 0) }}</p>
       {% if (client.discount_allowed or 0) > 0 %}
       <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">
         &#8377;{{ '{:,.0f}'.format(client.package_amount or 0) }} - &#8377;{{ '{:,.0f}'.format(client.discount_allowed or 0) }} discount
       </p>
       {% endif %}
     </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Total Paid</p>
-      <p style="margin:0;font-size:20px;font-weight:700;color:#059669;">&#8377;{{ '{:,.0f}'.format(amount_paid or 0) }}</p>
+    <div style="background:white;border-radius:12px;padding:13px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:10.5px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Total Paid</p>
+      <p style="margin:0;font-size:16px;font-weight:700;color:#059669;">&#8377;{{ '{:,.0f}'.format(amount_paid or 0) }}</p>
       <p style="margin:4px 0 0 0;font-size:11px;color:var(--gray-500);">GST: &#8377;{{ '{:,.0f}'.format(gst_paid or 0) }}</p>
     </div>
-    <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-      <p style="margin:0 0 8px 0;font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Balance Due</p>
-      <p style="margin:0;font-size:20px;font-weight:700;{% if balance > 0 %}color:#DC2626;{% else %}color:#059669;{% endif %}">&#8377;{{ '{:,.0f}'.format(balance or 0) }}</p>
+    <div style="background:white;border-radius:12px;padding:13px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
+      <p style="margin:0 0 8px 0;font-size:10.5px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:0.5px;">Balance Due</p>
+      <p style="margin:0;font-size:16px;font-weight:700;{% if balance > 0 %}color:#DC2626;{% else %}color:#059669;{% endif %}">&#8377;{{ '{:,.0f}'.format(balance or 0) }}</p>
     </div>
   </div>
 
@@ -221,6 +215,7 @@
       <button type="button" id="dtbtn-parents" class="dtab-btn" onclick="showDtab('dt-parents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Parents</button>
       <button type="button" id="dtbtn-plan" class="dtab-btn" onclick="showDtab('dt-plan', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Plan &amp; Stage</button>
       <button type="button" id="dtbtn-counsellor" class="dtab-btn" onclick="showDtab('dt-counsellor', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Counsellor &amp; Lead</button>
+      <button type="button" id="dtbtn-onboarding" class="dtab-btn" onclick="showDtab('dt-onboarding', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Onboarding</button>
     </div>
 
     <!-- Panel: Personal -->
@@ -352,6 +347,16 @@
       </div>
 
     </div><!-- /dt-counsellor -->
+
+    <!-- Panel: Onboarding -->
+    <div id="dt-onboarding" class="dtab-panel" style="display:none;">
+      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_call_by or '—' }}{% if client.welcome_call_date %} ({{ client.welcome_call_date }}){% endif %}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Mail:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_mail or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span style="color:var(--navy);font-weight:600;">{{ client.service_agreement or '—' }}</span></div>
+        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span style="color:var(--navy);font-weight:600;">{{ client.refund_policy or '—' }}</span></div>
+      </div>
+    </div><!-- /dt-onboarding -->
 
   </div><!-- /detail tabs container -->
 
