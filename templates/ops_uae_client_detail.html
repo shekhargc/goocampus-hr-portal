@@ -215,7 +215,6 @@
       <button type="button" id="dtbtn-parents" class="dtab-btn" onclick="showDtab('dt-parents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Parents</button>
       <button type="button" id="dtbtn-plan" class="dtab-btn" onclick="showDtab('dt-plan', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Plan &amp; Stage</button>
       <button type="button" id="dtbtn-counsellor" class="dtab-btn" onclick="showDtab('dt-counsellor', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Counsellor &amp; Lead</button>
-      <button type="button" id="dtbtn-onboarding" class="dtab-btn" onclick="showDtab('dt-onboarding', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Onboarding</button>
     </div>
 
     <!-- Panel: Personal -->
@@ -348,15 +347,6 @@
 
     </div><!-- /dt-counsellor -->
 
-    <!-- Panel: Onboarding -->
-    <div id="dt-onboarding" class="dtab-panel" style="display:none;">
-      <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;max-width:560px;">
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Call:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_call_by or '—' }}{% if client.welcome_call_date %} ({{ client.welcome_call_date }}){% endif %}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Welcome Mail:</span><span style="color:var(--navy);font-weight:600;">{{ client.welcome_mail or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Service Agreement:</span><span style="color:var(--navy);font-weight:600;">{{ client.service_agreement or '—' }}</span></div>
-        <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Refund Policy:</span><span style="color:var(--navy);font-weight:600;">{{ client.refund_policy or '—' }}</span></div>
-      </div>
-    </div><!-- /dt-onboarding -->
 
   </div><!-- /detail tabs container -->
 
