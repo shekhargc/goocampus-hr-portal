@@ -193,7 +193,7 @@
         </thead>
         <tbody>
         {% for r in records %}
-            <tr class="clickable-row" id="row-{{ r.id }}" onclick="openCsDetail({{ r.id }})">
+            <tr class="clickable-row" title="Phone: {{ r.mobile or r.whatsapp1 or '—' }}  ·  Email: {{ r.email or '—' }}  ·  DOB: {{ r.dob or '—' }}" id="row-{{ r.id }}" onclick="openCsDetail({{ r.id }})">
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}

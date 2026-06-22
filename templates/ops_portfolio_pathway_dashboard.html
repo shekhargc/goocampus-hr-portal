@@ -299,10 +299,29 @@
 <div class="dash-header">
     <h1><span>Portfolio</span> Pathway Dashboard</h1>
     <div class="dash-header-actions">
-        <a href="{{ url_for('ops_portfolio_clients_list') }}">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-            All Clients
-        </a>
+        <div style="position:relative;display:inline-block;">
+    <input type="text" id="profileSearch" autocomplete="off" placeholder="View client profile — name or reg #…" style="padding:8px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.85rem;min-width:270px;box-sizing:border-box;">
+    <div id="profileSearchResults" style="display:none;position:absolute;left:0;right:0;top:calc(100% + 4px);z-index:60;background:#fff;border:1px solid var(--gray-200);border-radius:6px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:280px;overflow:auto;text-align:left;"></div>
+    <script>
+    (function(){
+      var PW='portfolio', BYREG='/operations/portfolio/clients/by-reg/';
+      var s=document.getElementById('profileSearch'), box=document.getElementById('profileSearchResults'), t=null;
+      if(!s) return;
+      s.addEventListener('input', function(){
+        var q=s.value.trim(); if(q.length<2){box.style.display='none';return;}
+        clearTimeout(t); t=setTimeout(function(){
+          fetch('/operations/api/client-search?pathway='+PW+'&q='+encodeURIComponent(q)).then(function(r){return r.json();}).then(function(list){
+            if(!list.length){box.style.display='none';return;}
+            box.innerHTML=list.map(function(c){return '<div class="ps-item" data-reg="'+c.reg+'" style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f1f1;"><div style="font-weight:600;color:#1e293b;font-size:0.85rem;">'+c.name+'</div><div style="font-size:0.74rem;color:#94a3b8;">'+(c.display_reg||c.reg)+'</div></div>';}).join('');
+            box.style.display='block';
+            box.querySelectorAll('.ps-item').forEach(function(el){el.addEventListener('mousedown',function(e){e.preventDefault();window.location.href=BYREG+encodeURIComponent(this.getAttribute('data-reg'));});});
+          });
+        },220);
+      });
+      document.addEventListener('click',function(e){if(!box.contains(e.target)&&e.target!==s)box.style.display='none';});
+    })();
+    </script>
+</div>
     </div>
 </div>
 
