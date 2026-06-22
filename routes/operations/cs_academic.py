@@ -312,7 +312,7 @@ def ops_consulting_academic_add_save():
             f"INSERT INTO ops_academic_details ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Academic record added.', 'success')
         return redirect(url_for('ops_consulting_academic_detail', rid=new_id))

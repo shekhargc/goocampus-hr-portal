@@ -284,7 +284,7 @@ def ops_uae_data_flow_add_save():
             f"VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Data flow record added.', 'success')
         return redirect(url_for('ops_uae_data_flow_detail', rid=new_id))

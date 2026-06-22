@@ -348,7 +348,7 @@ def ops_portfolio_webinars_add_save():
             f"INSERT INTO ops_webinars_conferences ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Webinar / conference record added.', 'success')
         return redirect(url_for('ops_portfolio_webinars_detail', rid=new_id))

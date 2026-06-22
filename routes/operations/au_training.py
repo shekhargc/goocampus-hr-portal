@@ -345,7 +345,7 @@ def ops_australia_training_add_save():
             f"INSERT INTO ops_coaching ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Training record added.', 'success')
         return redirect(url_for('ops_australia_training_detail', rid=new_id))

@@ -350,7 +350,7 @@ def ops_australia_online_courses_add_save():
             f"INSERT INTO ops_online_subscriptions ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Online course subscription added.', 'success')
         return redirect(url_for('ops_australia_online_courses_detail', rid=new_id))

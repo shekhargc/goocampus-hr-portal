@@ -362,7 +362,7 @@ def ops_australia_test_bookings_add_save():
             f"INSERT INTO ops_test_bookings ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Test booking added.', 'success')
         return redirect(url_for('ops_australia_test_bookings_detail', rid=new_id))
