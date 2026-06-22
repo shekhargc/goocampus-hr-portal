@@ -160,7 +160,7 @@ def ops_consulting_mentorship_add():
                     'consulting', session.get('user_id', 0),
                 ),
             )
-            new_id = cur.fetchone()[0]
+            new_id = cur.fetchone()['id']
             # Guarded write for new optional columns (skipped if not present).
             _mentorship_extra_save(conn, new_id)
             conn.commit()

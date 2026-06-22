@@ -358,7 +358,7 @@ def ops_australia_research_add_save():
             f"INSERT INTO ops_research_publication ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Research record added.', 'success')
         return redirect(url_for('ops_australia_research_detail', rid=new_id))

@@ -331,7 +331,7 @@ def ops_australia_epic_add_save():
             f"INSERT INTO ops_epic_registration ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('EPIC registration added.', 'success')
         return redirect(url_for('ops_australia_epic_detail', rid=new_id))

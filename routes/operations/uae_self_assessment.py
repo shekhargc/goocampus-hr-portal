@@ -276,7 +276,7 @@ def ops_uae_self_assessment_add_save():
             f"VALUES ({placeholders}) RETURNING id",
             vals,
         )
-        new_id = cur.fetchone()[0]
+        new_id = cur.fetchone()['id']
         conn.commit()
         flash('Self assessment record added.', 'success')
         return redirect(url_for('ops_uae_self_assessment_detail', rid=new_id))
