@@ -159,6 +159,8 @@ def ops_australia_pathway():
             try:
                 return conn.execute(sql, params).fetchone()['c']
             except Exception:
+                try: conn.rollback()
+                except Exception: pass
                 return 0
 
         # Coaching / Training
@@ -179,7 +181,7 @@ def ops_australia_pathway():
         # EPIC
         stats['epic_total']       = stats['section_counts']['epic']
         stats['epic_in_process']  = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {AU} AND epic_status = 'In Process'")
-        stats['epic_completed']   = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {AU} AND epic_registration_status = 'Completed'")
+        stats['epic_completed']   = cnt(f"SELECT COUNT(*) AS c FROM ops_epic_registration WHERE {AU} AND epic_status = 'Completed'")
 
         # Academic
         stats['academic_total']   = stats['section_counts']['academic']

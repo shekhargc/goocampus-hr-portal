@@ -153,6 +153,8 @@ def ops_consulting_pathway():
             try:
                 return conn.execute(sql, params).fetchone()['c']
             except Exception:
+                try: conn.rollback()
+                except Exception: pass
                 return 0
         # Sections consulting HAS data for:
         stats['academic_total']     = cnt(f"SELECT COUNT(*) AS c FROM ops_academic_details WHERE {CS}")
