@@ -225,6 +225,7 @@
       <button type="button" id="dtbtn-plan" class="dtab-btn" onclick="showDtab('dt-plan', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Plan &amp; Stage</button>
       <button type="button" id="dtbtn-counsellor" class="dtab-btn" onclick="showDtab('dt-counsellor', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Counsellor &amp; Lead</button>
       <button type="button" id="dtbtn-onboarding" class="dtab-btn" onclick="showDtab('dt-onboarding', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Onboarding</button>
+      <button type="button" id="dtbtn-documents" class="dtab-btn" onclick="showDtab('dt-documents', this)" style="background:none;border:none;border-bottom:3px solid transparent;color:var(--gray-500);font-weight:600;font-size:14px;padding:8px 14px;cursor:pointer;">Documents ({{ documents|length }})</button>
     </div>
 
     <!-- Panel: Personal -->
@@ -370,6 +371,7 @@
 
     </div><!-- /dt-onboarding -->
 
+    {% include '_client_documents_tab.html' %}
 
   </div><!-- /detail tabs container -->
 
