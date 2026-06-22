@@ -414,13 +414,17 @@ def ops_uae_client_detail(client_id):
             )
             if order:
                 sql += f" ORDER BY {order} "
-            return conn.execute(sql, (reg,)).fetchall()
+            return [dict(x) for x in conn.execute(sql, (reg,)).fetchall()]
         except Exception:
             return []
 
     sections = {
         'payments':   fetch('ops_payments', 'payment_date DESC NULLS LAST'),
         'call_notes': fetch('ops_call_notes', 'call_date DESC NULLS LAST'),
+        # UAE-specific manual sections, so the profile shows every record type.
+        'self_assessment':   fetch('ops_self_assessment', 'id DESC'),
+        'eligibility_letter': fetch('ops_eligibility_letter', 'id DESC'),
+        'data_flow':         fetch('ops_data_flow', 'id DESC'),
         # Stubbed to empty so any residual template loops still work.
         'test_bookings':    [],
         'training':         [],
