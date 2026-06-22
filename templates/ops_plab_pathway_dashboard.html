@@ -330,51 +330,34 @@
         font-size: 0.9rem;
     }
 
-    /* ── Quick links grid ── */
-    .quick-links-title {
-        font-size: 0.85rem;
+    /* ── Upcoming exams tabbed header ── */
+    .upcoming-section h3 {
+        font-size: 0.9rem;
         font-weight: 700;
         color: var(--navy);
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        margin-bottom: 1rem;
+        margin: 0;
     }
-    .quick-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 2rem;
+    .uxtab-bar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .uxtabs { display: flex; gap: 0.4rem; flex: 1 1 auto; flex-wrap: wrap; }
+    .uxtab-btn {
+        background: var(--gray-100); border: 1px solid var(--gray-200);
+        color: var(--gray-500); font-size: 0.78rem; font-weight: 600;
+        padding: 0.4rem 0.75rem; border-radius: 0.5rem; cursor: pointer;
     }
-    .quick-link {
-        display: flex;
-        align-items: center;
-        gap: 0.65rem;
-        padding: 0.85rem 1rem;
-        background: white;
-        border: 1px solid var(--gray-200);
-        border-radius: 0.6rem;
-        text-decoration: none;
-        color: var(--gray-700);
-        font-size: 0.82rem;
-        font-weight: 600;
-        transition: border-color 0.2s, box-shadow 0.2s;
+    .uxtab-btn:hover { color: var(--navy); }
+    .uxtab-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+    .ux-order-btn {
+        flex: 0 0 auto; background: white; border: 1px solid var(--gray-200);
+        color: var(--navy); font-size: 1rem; line-height: 1; font-weight: 700;
+        width: 2rem; height: 2rem; border-radius: 0.5rem; cursor: pointer;
     }
-    .quick-link:hover {
-        border-color: var(--orange);
-        box-shadow: 0 2px 8px rgba(245,130,32,0.12);
-        color: var(--orange);
-    }
-    .quick-link svg {
-        flex-shrink: 0;
-        stroke: var(--gray-400);
-        transition: stroke 0.2s;
-    }
-    .quick-link:hover svg { stroke: var(--orange); }
+    .ux-order-btn:hover { background: var(--gray-100); }
+    .upcoming-section .upcoming-table th { padding: 0.55rem 0.65rem; }
+    .upcoming-section .upcoming-table td { padding: 0.6rem 0.65rem; }
 
     @media (max-width: 768px) {
         .hero-stats { grid-template-columns: repeat(2, 1fr); }
         .section-grid { grid-template-columns: 1fr; }
-        .quick-grid { grid-template-columns: repeat(2, 1fr); }
         .pipeline-seg { font-size: 0.65rem; padding: 0 0.4rem; }
     }
 </style>
@@ -502,50 +485,102 @@
     </div>
 </div>
 
-<!-- ── Section cards ── -->
-<div class="section-grid">
-
-    <!-- Coaching -->
-    <div class="sec-card">
-        <div class="sec-card-head">
-            <div class="sec-icon" style="background: #EFF6FF;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-            </div>
-            <h3>Coaching & Training</h3>
-            <div class="sec-total">{{ coaching_total }}</div>
+<!-- ── Upcoming Exams (tabbed) ── -->
+{% set ue7  = upcoming_exams | selectattr('days_until', 'le', 7)  | list %}
+{% set ue30 = upcoming_exams | selectattr('days_until', 'le', 30) | list %}
+{% set ue30p = upcoming_exams | selectattr('days_until', 'gt', 30) | list %}
+<div class="upcoming-section" style="padding:1.25rem 1.5rem;">
+    <div class="uxtab-bar">
+        <h3 style="margin:0;flex:0 0 auto;">Upcoming Exams</h3>
+        <div class="uxtabs">
+            <button type="button" class="uxtab-btn active" id="uxtab-7"  onclick="showUxTab('7', this)">Next 7 Days ({{ ue7 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30" onclick="showUxTab('30', this)">Next 30 Days ({{ ue30 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30p" onclick="showUxTab('30p', this)">30 Days + ({{ ue30p | length }})</button>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ coaching_ongoing }}</span><span class="lbl">Ongoing</span></div>
-                <div class="sec-stat"><div class="dot dot-navy"></div><span class="num">{{ coaching_total - coaching_ongoing }}</span><span class="lbl">Completed</span></div>
-            </div>
-        </div>
-        <div class="sec-card-foot">
-            <a href="/operations/coaching">View All</a>
-            <a href="/operations/coaching/add">+ Add Entry</a>
-        </div>
+        <button type="button" class="ux-order-btn" title="Toggle date order" onclick="toggleExamOrder()">&#x2195;</button>
     </div>
+
+    {% for tab in [('7', ue7), ('30', ue30), ('30p', ue30p)] %}
+    <div class="uxpanel" id="uxpanel-{{ tab[0] }}" style="{% if tab[0] != '7' %}display:none;{% endif %}">
+        {% if tab[1] %}
+        <table class="upcoming-table">
+            <thead>
+                <tr>
+                    <th>Candidate</th>
+                    <th>Exam</th>
+                    <th>Exam Date</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in tab[1] %}
+                <tr>
+                    <td style="font-weight:600;color:var(--navy);">{{ e.prefix or '' }} {{ e.first_name or '' }} {{ e.last_name or '' }}</td>
+                    <td>
+                        {% set ename = (e.exam or '')|lower %}
+                        <span class="exam-badge {% if 'plab 1' in ename %}plab1{% elif 'plab 2' in ename %}plab2{% elif 'oet' in ename %}oet{% elif 'ielts' in ename %}ielts{% else %}other{% endif %}">{{ e.exam or '—' }}{% if e.exam_type %} ({{ e.exam_type }}){% endif %}</span>
+                    </td>
+                    <td style="font-weight:600;">{{ e.exam_date or '—' }}</td>
+                    <td>in {{ e.days_until }} day{{ '' if e.days_until == 1 else 's' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-upcoming" style="padding:1.5rem;">No exams in this window.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- ── Section cards (comprehensive grid: every PLAB section) ──
+     Each card mirrors the PLAB client-profile section_block list + sidebar.
+     "View all" -> section list endpoint; "+ Add Record" -> add page.
+     Payments, Documents and Onboarding are list-only (no add endpoint)
+     and show "View all" alone. -->
+<div class="section-grid">
 
     <!-- Test Bookings -->
     <div class="sec-card">
         <div class="sec-card-head">
             <div class="sec-icon" style="background: #FFF7ED;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
             </div>
             <h3>Test Bookings</h3>
             <div class="sec-total">{{ test_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ plab1_upcoming }}</span><span class="lbl">PLAB 1 upcoming</span></div>
-                <div class="sec-stat"><div class="dot dot-yellow"></div><span class="num">{{ plab2_upcoming }}</span><span class="lbl">PLAB 2 upcoming</span></div>
-                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ awaiting_results }}</span><span class="lbl">Awaiting results</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ recent_passes }}</span><span class="lbl">Passed (30d)</span></div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_test_bookings_list') }}">View all</a>
+            <a href="{{ url_for('ops_test_bookings_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Coaching & Training -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
             </div>
+            <h3>Coaching &amp; Training</h3>
+            <div class="sec-total">{{ coaching_total }}</div>
         </div>
         <div class="sec-card-foot">
-            <a href="/operations/test-bookings">View All</a>
-            <a href="/operations/test-bookings/add">+ Add Entry</a>
+            <a href="{{ url_for('ops_coaching_list') }}">View all</a>
+            <a href="{{ url_for('ops_coaching_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- English Logins -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #F0FDF4;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+            </div>
+            <h3>English Logins</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_english_logins_list') }}">View all</a>
+            <a href="{{ url_for('ops_english_logins_add') }}">+ Add Record</a>
         </div>
     </div>
 
@@ -558,15 +593,9 @@
             <h3>EPIC Registration</h3>
             <div class="sec-total">{{ epic_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ epic_in_process }}</span><span class="lbl">In Process</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ epic_sent_gmc }}</span><span class="lbl">Sent to GMC</span></div>
-            </div>
-        </div>
         <div class="sec-card-foot">
-            <a href="/operations/epic">View All</a>
-            <a href="/operations/epic/add">+ Add Entry</a>
+            <a href="{{ url_for('ops_epic_list') }}">View all</a>
+            <a href="{{ url_for('ops_epic_add') }}">+ Add Record</a>
         </div>
     </div>
 
@@ -579,58 +608,23 @@
             <h3>GMC Registration</h3>
             <div class="sec-total">{{ gmc_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ gmc_completed }}</span><span class="lbl">Setup Done</span></div>
-                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ gmc_license_received }}</span><span class="lbl">License Received</span></div>
-            </div>
-        </div>
         <div class="sec-card-foot">
-            <a href="/operations/gmc">View All</a>
-            <a href="/operations/gmc/add">+ Add Entry</a>
+            <a href="{{ url_for('ops_gmc_list') }}">View all</a>
+            <a href="{{ url_for('ops_gmc_add') }}">+ Add Record</a>
         </div>
     </div>
 
-    <!-- Research & Publication -->
+    <!-- Job Stage -->
     <div class="sec-card">
         <div class="sec-card-head">
-            <div class="sec-icon" style="background: #FDF4FF;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"><rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 00-2-2h-4a2 2 0 00-2 2v16"/></svg>
             </div>
-            <h3>Research & Publication</h3>
-            <div class="sec-total">{{ research_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ research_started }}</span><span class="lbl">Started</span></div>
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ research_completed }}</span><span class="lbl">Completed</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ research_published }}</span><span class="lbl">Published</span></div>
-            </div>
+            <h3>Job Stage</h3>
         </div>
         <div class="sec-card-foot">
-            <a href="/operations/research-publication">View All</a>
-            <a href="/operations/research-publication/add">+ Add Entry</a>
-        </div>
-    </div>
-
-    <!-- UK Visa & Travel -->
-    <div class="sec-card">
-        <div class="sec-card-head">
-            <div class="sec-icon" style="background: #FEF3C7;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-            </div>
-            <h3>UK Visa & Travel</h3>
-            <div class="sec-total">{{ visa_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ visa_in_process }}</span><span class="lbl">In Process</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ visa_accepted }}</span><span class="lbl">Accepted</span></div>
-            </div>
-        </div>
-        <div class="sec-card-foot">
-            <a href="/operations/uk-visa-travel">View All</a>
-            <a href="/operations/uk-visa-travel/add">+ Add Entry</a>
+            <a href="{{ url_for('ops_job_stage_list') }}">View all</a>
+            <a href="{{ url_for('ops_job_stage_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
@@ -643,146 +637,200 @@
             <h3>Academic Details</h3>
             <div class="sec-total">{{ academic_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-navy"></div><span class="num">{{ academic_total }}</span><span class="lbl">Records filed</span></div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_academic_list') }}">View all</a>
+            <a href="{{ url_for('ops_academic_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Research & Publications -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FDF4FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#A855F7"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
             </div>
+            <h3>Research &amp; Publications</h3>
+            <div class="sec-total">{{ research_total }}</div>
         </div>
         <div class="sec-card-foot">
-            <a href="/operations/academic-details">View All</a>
-            <a href="/operations/academic-details/add">+ Add Entry</a>
+            <a href="{{ url_for('ops_research_list') }}">View all</a>
+            <a href="{{ url_for('ops_research_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Online Subscriptions -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EDE9FE;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            </div>
+            <h3>Online Subscriptions</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_subscriptions_list') }}">View all</a>
+            <a href="{{ url_for('ops_subscriptions_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Webinars & Conferences -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFE4E6;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E11D48"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+            </div>
+            <h3>Webinars &amp; Conferences</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_webinars_list') }}">View all</a>
+            <a href="{{ url_for('ops_webinars_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- NGO Activities -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF2F2;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DC2626"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
+            </div>
+            <h3>NGO Activities</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_ngo_list') }}">View all</a>
+            <a href="{{ url_for('ops_ngo_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Mentorship -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EDE9FE;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
+            </div>
+            <h3>Mentorship</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_mentorship_list') }}">View all</a>
+            <a href="{{ url_for('ops_mentorship_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- UK Visa & Travel -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF3C7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
+            </div>
+            <h3>UK Visa &amp; Travel</h3>
+            <div class="sec-total">{{ visa_total }}</div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_visa_list') }}">View all</a>
+            <a href="{{ url_for('ops_visa_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- UK Cab Bookings -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF3C7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706"><path d="M5 17h14v2H5z"/><path d="M5 11l2-6h10l2 6"/><circle cx="7.5" cy="15.5" r="1.5"/><circle cx="16.5" cy="15.5" r="1.5"/></svg>
+            </div>
+            <h3>UK Cab Bookings</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_cab_list') }}">View all</a>
+            <a href="{{ url_for('ops_cab_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- UK Observerships -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+            </div>
+            <h3>UK Observerships</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_observerships_list') }}">View all</a>
+            <a href="{{ url_for('ops_observerships_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Call Notes -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #F0FDF4;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+            </div>
+            <h3>Call Notes</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_call_notes_list') }}">View all</a>
+            <a href="{{ url_for('ops_call_notes_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Payments (list-only: no add endpoint) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #DCFCE7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <h3>Payments</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_payments_list') }}">View all</a>
+        </div>
+    </div>
+
+    <!-- Documents (upload-only: no add button) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFF7ED;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <h3>Documents</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_documents_list') }}">View all</a>
+        </div>
+    </div>
+
+    <!-- Onboarding (list-only: no add button) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3>Onboarding</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_onboarding_list') }}">View all</a>
         </div>
     </div>
 
 </div>
 
-<!-- ── Upcoming exams table ── -->
-<div class="upcoming-section">
-    <div class="upcoming-head">
-        <h3>Upcoming Exams</h3>
-        <a href="/operations/test-bookings">View all bookings &rarr;</a>
-    </div>
-    {% if upcoming_exams %}
-    <table class="upcoming-table">
-        <thead>
-            <tr>
-                <th>Client</th>
-                <th>Exam</th>
-                <th>Exam Date</th>
-                <th>Test Centre</th>
-                <th>City</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for t in upcoming_exams %}
-            <tr>
-                <td style="font-weight:600; color:var(--navy);">{{ t.prefix or '' }} {{ t.first_name }} {{ t.last_name or '' }}</td>
-                <td>
-                    {% set ename = (t.exam or '')|lower %}
-                    <span class="exam-badge {% if 'plab 1' in ename %}plab1{% elif 'plab 2' in ename %}plab2{% elif 'oet' in ename %}oet{% elif 'ielts' in ename %}ielts{% else %}other{% endif %}">{{ t.exam }}{% if t.exam_type %} ({{ t.exam_type }}){% endif %}</span>
-                </td>
-                <td style="font-weight:600;">{{ t.exam_date|format_date }}</td>
-                <td>{{ t.test_center or '—' }}</td>
-                <td>{{ t.city_state or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="empty-upcoming">
-        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" style="opacity:0.3; margin-bottom:0.5rem;"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
-        <p>No upcoming exams booked</p>
-    </div>
-    {% endif %}
-</div>
-
-<!-- ── Quick links to all operations ──
-     Mirrors the PLAB sidebar sections exactly so admins land on the
-     same pages from either the sidebar or the dashboard.  If you add
-     or remove a sidebar entry under templates/ops_sidebar_base.html
-     (PLAB branch), update this block to match.  -->
-<div class="quick-links-title">Quick Links — All Operations</div>
-<div class="quick-grid">
-    <a href="/operations/plab" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        Registration
-    </a>
-    <a href="/operations/onboarding" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Onboarding
-    </a>
-    <a href="/operations/call-notes" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        Call Notes
-    </a>
-    <a href="/operations/payments" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Payments
-    </a>
-    <a href="/operations/documents" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        Documents
-    </a>
-    <a href="/operations/coaching" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        Coaching & Training
-    </a>
-    <a href="/operations/test-bookings" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Test Bookings
-    </a>
-    <a href="/operations/english-logins" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-        English Logins
-    </a>
-    <a href="/operations/online-courses" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-        Online Courses
-    </a>
-    <a href="/operations/epic" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        EPIC Registration
-    </a>
-    <a href="/operations/gmc" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
-        GMC Registration
-    </a>
-    <a href="/operations/uk-visa-travel" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M2 10h20"/></svg>
-        UK Visa & Travel
-    </a>
-    <a href="/operations/uk-cab-bookings" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M5 17h14v2H5z"/><path d="M5 11l2-6h10l2 6"/><circle cx="7.5" cy="15.5" r="1.5"/><circle cx="16.5" cy="15.5" r="1.5"/></svg>
-        UK Cab Bookings
-    </a>
-    <a href="/operations/uk-observerships" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
-        UK Observerships
-    </a>
-    <a href="/operations/academic-details" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
-        Academic Details
-    </a>
-    <a href="/operations/research-publication" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        Research & Publication
-    </a>
-    <a href="/operations/online-subscriptions" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-        Online Subscriptions
-    </a>
-    <a href="/operations/webinars-conferences" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        Webinars & Conferences
-    </a>
-    <a href="/operations/ngo-activities" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M20.84 4.61a5.5 5.5 0 00-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 00-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 000-7.78z"/></svg>
-        NGO Activities
-    </a>
-    <a href="/operations/mentorship" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        Mentorship
-    </a>
-</div>
+<script>
+function showUxTab(id, btn) {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (p) p.style.display = (t === id) ? '' : 'none';
+    });
+    document.querySelectorAll('.uxtab-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+}
+function toggleExamOrder() {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (!p || p.style.display === 'none') return;
+        var tb = p.querySelector('tbody');
+        if (!tb) return;
+        var rows = Array.prototype.slice.call(tb.children);
+        rows.reverse().forEach(function(r) { tb.appendChild(r); });
+    });
+}
+</script>
 
 {% endblock %}

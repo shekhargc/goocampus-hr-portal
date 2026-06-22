@@ -211,6 +211,12 @@
         border: 1px solid var(--gray-200);
     }
     .sec-card-foot a:hover { background: var(--orange); color: white; border-color: var(--orange); }
+    .sec-card-foot a.add {
+        background: var(--orange);
+        color: white;
+        border-color: var(--orange);
+    }
+    .sec-card-foot a.add:hover { background: var(--orange-dark); border-color: var(--orange-dark); }
 
     /* ── Upcoming exams ── */
     .upcoming-section {
@@ -247,51 +253,21 @@
         border-bottom: 1px solid var(--gray-100);
     }
     .upcoming-empty { padding: 1.5rem; text-align: center; color: var(--gray-500); font-size: 0.85rem; }
-
-    /* ── Quick links grid (mirrors PLAB dashboard style) ── */
-    .quick-links-title {
-        font-size: 0.85rem;
-        font-weight: 700;
-        color: var(--navy);
-        text-transform: uppercase;
-        letter-spacing: 0.4px;
-        margin-bottom: 1rem;
+    .uxtab-bar { display: flex; align-items: center; gap: 1rem; margin-bottom: 1rem; flex-wrap: wrap; }
+    .uxtabs { display: flex; gap: 0.4rem; flex: 1 1 auto; flex-wrap: wrap; }
+    .uxtab-btn {
+        background: var(--gray-100); border: 1px solid var(--gray-200);
+        color: var(--gray-500); font-size: 0.78rem; font-weight: 600;
+        padding: 0.4rem 0.75rem; border-radius: 0.5rem; cursor: pointer;
     }
-    .quick-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-        gap: 0.75rem;
-        margin-bottom: 2rem;
+    .uxtab-btn:hover { color: var(--navy); }
+    .uxtab-btn.active { background: var(--navy); border-color: var(--navy); color: #fff; }
+    .ux-order-btn {
+        flex: 0 0 auto; background: white; border: 1px solid var(--gray-200);
+        color: var(--navy); font-size: 1rem; line-height: 1; font-weight: 700;
+        width: 2rem; height: 2rem; border-radius: 0.5rem; cursor: pointer;
     }
-    .quick-link {
-        display: flex;
-        align-items: center;
-        gap: 0.65rem;
-        padding: 0.85rem 1rem;
-        background: white;
-        border: 1px solid var(--gray-200);
-        border-radius: 0.6rem;
-        text-decoration: none;
-        color: var(--gray-700);
-        font-size: 0.82rem;
-        font-weight: 600;
-        transition: border-color 0.2s, box-shadow 0.2s;
-    }
-    .quick-link:hover {
-        border-color: var(--orange);
-        box-shadow: 0 2px 8px rgba(245,130,32,0.12);
-        color: var(--orange);
-    }
-    .quick-link svg {
-        flex-shrink: 0;
-        stroke: var(--gray-400);
-        transition: stroke 0.2s;
-    }
-    .quick-link:hover svg { stroke: var(--orange); }
-
-    @media (max-width: 768px) {
-        .quick-grid { grid-template-columns: repeat(2, 1fr); }
-    }
+    .ux-order-btn:hover { background: var(--gray-100); }
 </style>
 {% endblock %}
 
@@ -397,48 +373,71 @@
     </div>
 </div>
 
-<!-- ── Section cards ── -->
-<div class="section-grid">
-
-    <!-- Training (Coaching) -->
-    <div class="sec-card">
-        <div class="sec-card-head">
-            <div class="sec-icon" style="background: #EFF6FF;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-            </div>
-            <h3>Training</h3>
-            <div class="sec-total">{{ stats.coaching_total }}</div>
+<!-- ── Upcoming Exams (tabbed) ── -->
+{% set ue7  = stats.upcoming_exams | selectattr('days_until', 'le', 7)  | list %}
+{% set ue30 = stats.upcoming_exams | selectattr('days_until', 'le', 30) | list %}
+{% set ue30p = stats.upcoming_exams | selectattr('days_until', 'gt', 30) | list %}
+<div class="upcoming-section">
+    <div class="uxtab-bar">
+        <h3 style="margin:0;flex:0 0 auto;">Upcoming Exams</h3>
+        <div class="uxtabs">
+            <button type="button" class="uxtab-btn active" id="uxtab-7"  onclick="showUxTab('7', this)">Next 7 Days ({{ ue7 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30" onclick="showUxTab('30', this)">Next 30 Days ({{ ue30 | length }})</button>
+            <button type="button" class="uxtab-btn"        id="uxtab-30p" onclick="showUxTab('30p', this)">30 Days + ({{ ue30p | length }})</button>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.coaching_ongoing }}</span><span class="lbl">Ongoing</span></div>
-                <div class="sec-stat"><div class="dot dot-navy"></div><span class="num">{{ stats.coaching_total - stats.coaching_ongoing }}</span><span class="lbl">Completed</span></div>
-            </div>
-        </div>
-        <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_training_list') }}">View All</a>
-        </div>
+        <button type="button" class="ux-order-btn" title="Toggle date order" onclick="toggleExamOrder()">&#x2195;</button>
     </div>
 
-    <!-- Test Bookings -->
+    {% for tab in [('7', ue7), ('30', ue30), ('30p', ue30p)] %}
+    <div class="uxpanel" id="uxpanel-{{ tab[0] }}" style="{% if tab[0] != '7' %}display:none;{% endif %}">
+        {% if tab[1] %}
+        <table class="upcoming-table">
+            <thead>
+                <tr>
+                    <th>Candidate</th>
+                    <th>Exam</th>
+                    <th>Exam Date</th>
+                    <th>When</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for e in tab[1] %}
+                <tr>
+                    <td>{{ e.prefix or '' }} {{ e.first_name or '' }} {{ e.last_name or '' }}</td>
+                    <td>{{ e.exam or '—' }}</td>
+                    <td>{{ e.exam_date or '—' }}</td>
+                    <td>in {{ e.days_until }} day{{ '' if e.days_until == 1 else 's' }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="upcoming-empty">No exams in this window.</div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>
+
+<!-- ── Section cards (comprehensive grid: every Australia section) ──
+     Each card mirrors the client-profile section_block list + the Australia
+     sidebar. "View all" -> section list endpoint; "+ Add Record" -> add page
+     (the add page carries its own client search). Payments shows the total
+     and a "View all" only (no add). Documents and Onboarding are list-only
+     and show "View all" alone. -->
+<div class="section-grid">
+
+    <!-- Academic Details -->
     <div class="sec-card">
         <div class="sec-card-head">
-            <div class="sec-icon" style="background: #FFF7ED;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            <div class="sec-icon" style="background: #FCE7F3;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DB2777" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
             </div>
-            <h3>Test Bookings</h3>
-            <div class="sec-total">{{ stats.test_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.amc_mcq_upcoming }}</span><span class="lbl">AMC MCQ upcoming</span></div>
-                <div class="sec-stat"><div class="dot dot-yellow"></div><span class="num">{{ stats.amc_clin_upcoming }}</span><span class="lbl">AMC Clinical</span></div>
-                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.awaiting_results }}</span><span class="lbl">Awaiting results</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.recent_passes }}</span><span class="lbl">Passed (30d)</span></div>
-            </div>
+            <h3>Academic Details</h3>
+            <div class="sec-total">{{ stats.academic_total }}</div>
         </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_test_bookings_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_academic_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_academic_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
@@ -451,58 +450,57 @@
             <h3>EPIC Registration</h3>
             <div class="sec-total">{{ stats.epic_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.epic_in_process }}</span><span class="lbl">In Process</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.epic_completed }}</span><span class="lbl">Completed</span></div>
-            </div>
-        </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_epic_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_epic_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_epic_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
-    <!-- Research & Publication -->
+    <!-- AMC Registration -->
     <div class="sec-card">
         <div class="sec-card-head">
             <div class="sec-icon" style="background: #FEF3C7;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
             </div>
-            <h3>Research &amp; Publication</h3>
-            <div class="sec-total">{{ stats.research_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.research_started }}</span><span class="lbl">Started</span></div>
-                <div class="sec-stat"><div class="dot dot-blue"></div><span class="num">{{ stats.research_completed }}</span><span class="lbl">Completed</span></div>
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">{{ stats.research_published }}</span><span class="lbl">Published</span></div>
-            </div>
+            <h3>AMC Registration</h3>
         </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_research_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_amc_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_amc_add') }}">+ Add Record</a>
         </div>
     </div>
 
-    <!-- Academic Details -->
+    <!-- Training -->
     <div class="sec-card">
         <div class="sec-card-head">
-            <div class="sec-icon" style="background: #FCE7F3;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#DB2777" stroke-width="2"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
             </div>
-            <h3>Academic Details</h3>
-            <div class="sec-total">{{ stats.academic_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.academic_total }}</span><span class="lbl">Records on file</span></div>
-            </div>
+            <h3>Training</h3>
+            <div class="sec-total">{{ stats.coaching_total }}</div>
         </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_academic_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_training_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_training_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
-    <!-- Online Courses & Subscriptions -->
+    <!-- Test Bookings -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFF7ED;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/></svg>
+            </div>
+            <h3>Test Bookings</h3>
+            <div class="sec-total">{{ stats.test_total }}</div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_test_bookings_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_test_bookings_add_page') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Online Courses -->
     <div class="sec-card">
         <div class="sec-card-head">
             <div class="sec-icon" style="background: #EDE9FE;">
@@ -511,32 +509,38 @@
             <h3>Online Courses</h3>
             <div class="sec-total">{{ stats.oc_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.oc_total }}</span><span class="lbl">Subscriptions</span></div>
-            </div>
-        </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_online_courses_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_online_courses_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_online_courses_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
-    <!-- Payments -->
+    <!-- Online Subscriptions (shares the Online Courses list/add endpoints) -->
     <div class="sec-card">
         <div class="sec-card-head">
-            <div class="sec-icon" style="background: #DCFCE7;">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            <div class="sec-icon" style="background: #EDE9FE;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#7C3AED" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
             </div>
-            <h3>Payments</h3>
-            <div class="sec-total">{{ stats.payments_total }}</div>
-        </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-green"></div><span class="num">&#8377;{{ '{:,.0f}'.format(stats.payments_sum) }}</span><span class="lbl">Total collected</span></div>
-            </div>
+            <h3>Online Subscriptions</h3>
         </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_payments_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_online_courses_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_online_courses_add_page') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Research & Publications -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FEF3C7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#D97706" stroke-width="2"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
+            </div>
+            <h3>Research &amp; Publications</h3>
+            <div class="sec-total">{{ stats.research_total }}</div>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_research_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_research_add_page') }}">+ Add Record</a>
         </div>
     </div>
 
@@ -549,106 +553,86 @@
             <h3>Webinars &amp; Conferences</h3>
             <div class="sec-total">{{ stats.webinars_total }}</div>
         </div>
-        <div class="sec-card-body">
-            <div class="sec-stats">
-                <div class="sec-stat"><div class="dot dot-orange"></div><span class="num">{{ stats.webinars_total }}</span><span class="lbl">Recorded events</span></div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_webinars_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_webinars_add_page') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Call Notes -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #F0FDF4;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
             </div>
+            <h3>Call Notes</h3>
         </div>
         <div class="sec-card-foot">
-            <a href="{{ url_for('ops_australia_webinars_list') }}">View All</a>
+            <a href="{{ url_for('ops_australia_call_notes_list') }}">View all</a>
+            <a class="add" href="{{ url_for('ops_australia_call_notes_add') }}">+ Add Record</a>
+        </div>
+    </div>
+
+    <!-- Payments (list-only: no add endpoint) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #DCFCE7;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#16A34A" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+            </div>
+            <h3>Payments</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_payments_list') }}">View all</a>
+        </div>
+    </div>
+
+    <!-- Documents (upload-only: no add button) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #FFF7ED;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#EA580C" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+            </div>
+            <h3>Documents</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="{{ url_for('ops_australia_documents_list') }}">View all</a>
+        </div>
+    </div>
+
+    <!-- Onboarding (list-only: literal path, no url_for endpoint) -->
+    <div class="sec-card">
+        <div class="sec-card-head">
+            <div class="sec-icon" style="background: #EFF6FF;">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3B82F6" stroke-width="2"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h3>Onboarding</h3>
+        </div>
+        <div class="sec-card-foot">
+            <a href="/operations/australia/onboarding">View all</a>
         </div>
     </div>
 
 </div>
 
-<!-- ── Upcoming Exams ── -->
-<div class="upcoming-section">
-    <h3>Upcoming Exams (next 5)</h3>
-    {% if stats.upcoming_exams %}
-    <table class="upcoming-table">
-        <thead>
-            <tr>
-                <th>Candidate</th>
-                <th>Exam</th>
-                <th>Exam Date</th>
-                <th>Country</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for r in stats.upcoming_exams %}
-            <tr>
-                <td>{{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}</td>
-                <td>{{ r.exam or '—' }}</td>
-                <td>{{ r.exam_date or '—' }}</td>
-                <td>{{ r.country or '—' }}</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-    {% else %}
-    <div class="upcoming-empty">No upcoming exams booked.</div>
-    {% endif %}
-</div>
-
-<!-- ── Quick Links ──
-     Mirrors the AMC Pathway sidebar exactly (see templates/ops_sidebar_base.html
-     active_pathway == 'australia' branch). If you add or remove a sidebar
-     entry there, update this block to match. Icon-style cards match the
-     PLAB Pathway dashboard so the look is consistent across pathways. -->
-<div class="quick-links-title">Quick Links — All AMC Operations</div>
-<div class="quick-grid">
-    <a href="{{ url_for('ops_australia_clients_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87"/><path d="M16 3.13a4 4 0 010 7.75"/></svg>
-        Registration
-    </a>
-    <a href="{{ url_for('ops_australia_documents_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
-        Documents
-    </a>
-    <a href="{{ url_for('ops_australia_call_notes_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
-        Call Notes
-    </a>
-    <a href="{{ url_for('ops_australia_payments_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
-        Payments
-    </a>
-    <a href="/operations/australia/onboarding" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 11.08V12a10 10 0 11-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        Onboarding
-    </a>
-    <a href="{{ url_for('ops_australia_training_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        Training
-    </a>
-    <a href="{{ url_for('ops_australia_test_bookings_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-        Test Bookings
-    </a>
-    <a href="{{ url_for('ops_australia_online_courses_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-        Online Courses
-    </a>
-    <a href="{{ url_for('ops_australia_epic_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-        EPIC Registration
-    </a>
-    <a href="{{ url_for('ops_australia_amc_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1"/></svg>
-        AMC Registration
-    </a>
-    <a href="{{ url_for('ops_australia_academic_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 2 3 3 6 3s6-1 6-3v-5"/></svg>
-        Academic Details
-    </a>
-    <a href="{{ url_for('ops_australia_research_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M2 3h6a4 4 0 014 4v14a3 3 0 00-3-3H2z"/><path d="M22 3h-6a4 4 0 00-4 4v14a3 3 0 013-3h7z"/></svg>
-        Research & Publication
-    </a>
-    <a href="{{ url_for('ops_australia_webinars_list') }}" class="quick-link">
-        <svg width="16" height="16" viewBox="0 0 24 24" fill="none"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
-        Webinars & Conferences
-    </a>
-</div>
+<script>
+function showUxTab(id, btn) {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (p) p.style.display = (t === id) ? '' : 'none';
+    });
+    document.querySelectorAll('.uxtab-btn').forEach(function(b) { b.classList.remove('active'); });
+    if (btn) btn.classList.add('active');
+}
+function toggleExamOrder() {
+    ['7', '30', '30p'].forEach(function(t) {
+        var p = document.getElementById('uxpanel-' + t);
+        if (!p || p.style.display === 'none') return;
+        var tb = p.querySelector('tbody');
+        if (!tb) return;
+        var rows = Array.prototype.slice.call(tb.children);
+        rows.reverse().forEach(function(r) { tb.appendChild(r); });
+    });
+}
+</script>
 
 {% endblock %}

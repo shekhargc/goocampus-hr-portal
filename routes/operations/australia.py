@@ -46,6 +46,8 @@ def ops_australia_pathway():
         'this_fy_new':          0,    # signups in current Indian FY
         # Section counts shown on the dashboard tile grid.
         'section_counts':       {},   # {slug: count}
+        # Upcoming booked exams, each with a clamped `days_until` int.
+        'upcoming_exams':       [],
     }
 
     try:
@@ -203,9 +205,14 @@ def ops_australia_pathway():
         # Webinars
         stats['webinars_total']   = stats['section_counts']['webinars']
 
-        # ── Upcoming exams list (next 5 by exam_date) ──
+        # ── Upcoming exams list (all booked, soonest first) ──
+        # Mirrors the Consulting dashboard: pull a wide window (LIMIT 200),
+        # convert rows to dicts and attach a clamped `days_until` integer so
+        # the tabbed Upcoming Exams widget can split them into 7 / 30 / 30+
+        # day buckets. Un-parseable exam_dates are skipped.
         try:
-            stats['upcoming_exams'] = conn.execute(
+            from datetime import datetime
+            rows = conn.execute(
                 f"""SELECT t.*, p.prefix, p.first_name, p.last_name
                       FROM ops_test_bookings t
                  LEFT JOIN plab_clients p ON p.registration_number = t.registration_number
@@ -213,9 +220,30 @@ def ops_australia_pathway():
                      WHERE COALESCE(t.pathway, 'plab') = 'australia'
                        AND t.exam_date >= ?
                        AND t.exam_status = 'Booked'
-                  ORDER BY t.exam_date ASC LIMIT 5""",
+                  ORDER BY t.exam_date ASC LIMIT 200""",
                 (today,),
             ).fetchall()
+            today_d = date.today()
+            ue = []
+            for r in rows:
+                d = dict(r)
+                ed = (d.get('exam_date') or '').strip() if isinstance(d.get('exam_date'), str) else d.get('exam_date')
+                days_until = None
+                try:
+                    if ed:
+                        # exam_date is stored as an ISO 'YYYY-MM-DD' string
+                        exam_d = datetime.strptime(str(ed)[:10], '%Y-%m-%d').date()
+                        days_until = (exam_d - today_d).days
+                        if days_until < 0:
+                            days_until = 0
+                except Exception:
+                    days_until = None
+                if days_until is None:
+                    # un-parseable date -> skip so the windows stay clean
+                    continue
+                d['days_until'] = days_until
+                ue.append(d)
+            stats['upcoming_exams'] = ue
         except Exception:
             stats['upcoming_exams'] = []
 

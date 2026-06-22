@@ -15798,16 +15798,41 @@ def ops_plab_pathway_dashboard():
         # ── Academic Details ──
         academic_total = conn.execute(f"SELECT COUNT(*) as c FROM ops_academic_details WHERE {PLAB}").fetchone()['c']
 
-        # ── Upcoming exams list (next 5) ──
-        upcoming_exams = conn.execute("""
+        # ── Upcoming exams list (all booked, soonest first) ──
+        # Mirrors the Consulting dashboard: convert rows to dicts and tag
+        # each with a `days_until` integer so the tabbed widget can bucket
+        # them into Next 7 / Next 30 / 30 Days+ windows.
+        from datetime import datetime
+        exam_rows = conn.execute("""
             SELECT t.*, p.prefix, p.first_name, p.last_name
             FROM ops_test_bookings t
             JOIN plab_clients p ON p.registration_number = t.registration_number
             WHERE COALESCE(t.pathway, 'plab') = 'plab'
               AND COALESCE(p.pathway, 'plab') = 'plab'
               AND t.exam_date >= ? AND t.exam_status = 'Booked'
-            ORDER BY t.exam_date ASC LIMIT 5
+            ORDER BY t.exam_date ASC LIMIT 200
         """, (today,)).fetchall()
+        today_d = date.today()
+        upcoming_exams = []
+        for r in exam_rows:
+            d = dict(r)
+            ed = d.get('exam_date')
+            ed = ed.strip() if isinstance(ed, str) else ed
+            days_until = None
+            try:
+                if ed:
+                    # exam_date is stored as an ISO 'YYYY-MM-DD' string
+                    exam_d = datetime.strptime(str(ed)[:10], '%Y-%m-%d').date()
+                    days_until = (exam_d - today_d).days
+                    if days_until < 0:
+                        days_until = 0
+            except Exception:
+                days_until = None
+            if days_until is None:
+                # un-parseable date -> skip so the windows stay clean
+                continue
+            d['days_until'] = days_until
+            upcoming_exams.append(d)
 
     except Exception as e:
         logging.error(f"plab_pathway_dashboard error: {e}")
