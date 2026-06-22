@@ -1,0 +1,158 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}{{ 'Edit' if record else 'Add' }} Payment{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:680px;margin:0 auto;">
+
+    <div style="margin-bottom:18px;">
+      <a href="{{ url_for('admin_payments_hub') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Payments Hub</a>
+      <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:700;color:var(--navy);">{{ 'Edit' if record else 'Add' }} Payment</h1>
+    </div>
+
+    <form method="POST" style="background:#fff;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.08);display:flex;flex-direction:column;gap:16px;">
+
+      <!-- Client -->
+      <div style="position:relative;">
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Client *</label>
+        <input type="text" id="clientSearch" autocomplete="off" required
+               placeholder="Search name or registration #"
+               value="{% if record %}{{ (record.prefix or '') }} {{ (record.first_name or '') }} {{ (record.last_name or '') }} — {{ record.registration_number }}{% endif %}"
+               style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        <input type="hidden" name="registration_number" id="regNum" value="{{ record.registration_number if record else '' }}">
+        <div id="clientResults" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:240px;overflow:auto;display:none;"></div>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Payment Date *</label>
+          <input type="date" name="payment_date" required value="{{ record.payment_date if record else '' }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Payment Method *</label>
+          <select name="payment_method" id="method" required style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+            <option value="">-- Select --</option>
+            {% for m in payment_methods %}<option value="{{ m }}" {% if record and record.payment_method==m %}selected{% endif %}>{{ m }}</option>{% endfor %}
+          </select>
+        </div>
+      </div>
+
+      <!-- Source product (internal transfer) -->
+      <div id="srcWrap" style="display:none;background:#FFF7ED;border:1px solid #FED7AA;border-radius:8px;padding:12px 14px;">
+        <label style="font-size:0.78rem;font-weight:700;color:#9A3412;display:block;margin-bottom:5px;">Switched from which product? *</label>
+        <select name="source_product" id="srcProduct" style="width:100%;padding:10px 12px;border:1px solid #FED7AA;border-radius:8px;">
+          <option value="">-- Select source product --</option>
+          {% for p in products %}<option value="{{ p }}" {% if record and record.source_product==p %}selected{% endif %}>{{ p }}</option>{% endfor %}
+        </select>
+        <p style="margin:8px 0 0;font-size:0.74rem;color:#9A3412;">This records an internal transfer — the client moved from the product above into their current product.</p>
+      </div>
+
+      <!-- Total + auto GST -->
+      <div style="background:var(--gray-50);border-radius:10px;padding:16px;">
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Total Amount (₹) *  <span style="font-weight:400;color:var(--gray-400);">— what the client paid</span></label>
+        <input type="number" name="total_amount_paid" id="total" step="0.01" min="0" required
+               value="{{ record.total_amount_paid if record else '' }}"
+               style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;font-size:1.05rem;font-weight:700;">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-top:12px;">
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">Amount Paid (base)</label>
+            <input type="text" id="amountPaid" readonly value="{{ '%.2f'|format(record.amount_paid) if record and record.amount_paid else '' }}" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;background:#fff;color:var(--navy);font-weight:700;">
+          </div>
+          <div>
+            <label style="font-size:0.72rem;font-weight:700;color:var(--gray-500);display:block;margin-bottom:4px;">GST @ 18% <span id="gstNote" style="font-weight:400;color:var(--gray-400);"></span></label>
+            <input type="text" id="gstShown" readonly value="{{ '%.2f'|format(record.gst_paid) if record and record.gst_paid else '' }}" style="width:100%;padding:9px 11px;border:1px solid var(--gray-200);border-radius:7px;background:#fff;color:var(--gray-600);font-weight:700;">
+          </div>
+        </div>
+        <p style="margin:10px 0 0;font-size:0.74rem;color:var(--gray-400);">GST is auto-calculated from the total. For <strong>Discount</strong>, no GST is applied and the full amount is recorded as paid.</p>
+      </div>
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:14px;">
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Instalment</label>
+          <select name="instalment" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+            <option value="">--</option>
+            {% for i in instalment_options %}<option value="{{ i }}" {% if record and record.instalment==i %}selected{% endif %}>{{ i }}</option>{% endfor %}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Total Package (₹)</label>
+          <input type="number" name="total_package" step="0.01" min="0" value="{{ record.total_package if record else '' }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
+        </div>
+      </div>
+
+      <div>
+        <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Notes</label>
+        <textarea name="notes" rows="2" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">{{ record.notes if record else '' }}</textarea>
+      </div>
+
+      <div style="display:flex;gap:12px;margin-top:6px;">
+        <button type="submit" class="button" style="background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">{{ 'Save Changes' if record else 'Add Payment' }}</button>
+        <a href="{{ url_for('admin_payments_hub') }}" style="padding:11px 16px;color:var(--gray-500);text-decoration:none;">Cancel</a>
+      </div>
+    </form>
+  </div>
+</div>
+
+<script>
+(function(){
+  const NO_GST = {{ no_gst_methods|tojson }};
+  const TRANSFER = {{ transfer_method|tojson }};
+  const methodEl = document.getElementById('method');
+  const totalEl  = document.getElementById('total');
+  const amountEl = document.getElementById('amountPaid');
+  const gstEl    = document.getElementById('gstShown');
+  const gstNote  = document.getElementById('gstNote');
+  const srcWrap  = document.getElementById('srcWrap');
+  const srcSel   = document.getElementById('srcProduct');
+
+  function recompute(){
+    const method = methodEl.value;
+    const total = parseFloat(totalEl.value) || 0;
+    const noGst = NO_GST.includes(method);
+    let base, gst;
+    if (noGst) { base = total; gst = 0; }
+    else { base = Math.round((total/1.18)*100)/100; gst = Math.round((total-base)*100)/100; }
+    amountEl.value = total ? base.toFixed(2) : '';
+    gstEl.value    = (noGst || !total) ? '' : gst.toFixed(2);
+    gstNote.textContent = noGst ? '(not applied)' : '';
+    const isTransfer = (method === TRANSFER);
+    srcWrap.style.display = isTransfer ? '' : 'none';
+    if (srcSel) srcSel.required = isTransfer;
+  }
+  methodEl.addEventListener('change', recompute);
+  totalEl.addEventListener('input', recompute);
+  recompute();
+
+  // client autocomplete (all pathways)
+  const search = document.getElementById('clientSearch');
+  const results = document.getElementById('clientResults');
+  const regNum = document.getElementById('regNum');
+  let timer = null;
+  search.addEventListener('input', function(){
+    regNum.value = '';
+    const q = search.value.trim();
+    if (q.length < 2){ results.style.display='none'; return; }
+    clearTimeout(timer);
+    timer = setTimeout(function(){
+      fetch('/operations/api/client-search?pathway=all&q=' + encodeURIComponent(q))
+        .then(r => r.json())
+        .then(list => {
+          if (!list.length){ results.style.display='none'; return; }
+          results.innerHTML = list.map(c =>
+            '<div class="cr-item" data-reg="'+c.reg+'" data-label="'+ (c.name + ' — ' + (c.display_reg||c.reg)).replace(/"/g,'&quot;') +'" '+
+            'style="padding:9px 12px;cursor:pointer;border-bottom:1px solid #f1f1f1;">'+
+            '<div style="font-weight:600;color:#1e293b;">'+c.name+'</div>'+
+            '<div style="font-size:0.74rem;color:#94a3b8;">'+(c.display_reg||c.reg)+' · '+(c.pathway_label||c.pathway||'')+'</div></div>'
+          ).join('');
+          results.style.display='block';
+          results.querySelectorAll('.cr-item').forEach(el => el.addEventListener('click', function(){
+            regNum.value = this.getAttribute('data-reg');
+            search.value = this.getAttribute('data-label');
+            results.style.display='none';
+          }));
+        });
+    }, 220);
+  });
+  document.addEventListener('click', e => { if (!results.contains(e.target) && e.target !== search) results.style.display='none'; });
+})();
+</script>
+{% endblock %}

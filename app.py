@@ -7420,6 +7420,9 @@ def ensure_crm_tables():
             ('client_registrations',     'dropped_date',           'TEXT'),
             ('client_registrations',     'switched_program',       'TEXT'),
             ('client_registrations',     'upgraded_to',            'TEXT'),
+            # Centralised admin payments hub: source product for internal
+            # transfers ("Switched from other program").
+            ('ops_payments',             'source_product',         'TEXT'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -15635,6 +15638,20 @@ def ops_main_dashboard():
         d = stats(pw)
         d.update({'key': pw, 'label': label, 'url': url, 'color': color})
         cards.append(d)
+
+    # Recent payment activity — surfaced here so ops sees what admin records.
+    try:
+        recent_payments = conn.execute("""
+            SELECT t.payment_date, t.total_amount_paid, t.payment_method,
+                   COALESCE(t.pathway, 'plab') AS pathway, t.created_at,
+                   p.prefix, p.first_name, p.last_name, e.name AS by_name
+              FROM ops_payments t
+         LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
+         LEFT JOIN employees e ON e.id = t.created_by
+          ORDER BY t.id DESC
+             LIMIT 8""", []).fetchall()
+    except Exception:
+        recent_payments = []
     conn.close()
 
     totals = {
@@ -15643,6 +15660,7 @@ def ops_main_dashboard():
     }
     return render_template('ops_main_dashboard.html', cards=cards, totals=totals,
                            status_labels=[label for label, _ in STATUS_DEFS],
+                           recent_payments=recent_payments,
                            active_ops_page='ops-dashboard', user=user)
 
 
@@ -21205,6 +21223,158 @@ def ops_payments_delete(record_id):
     conn.close()
     flash('Payment deleted', 'success')
     return redirect(request.args.get('next') or url_for('ops_payments_list'))
+
+
+# ─────────────────────────────────────────────────────────
+#  ADMIN – Centralised Payments Hub (all products)
+# ─────────────────────────────────────────────────────────
+# One place for admin to add/update payments for any client across every
+# pathway. GST is computed server-side (authoritative); the form mirrors it
+# for live preview. "Switched from other program" captures the source product
+# (internal-transfer groundwork). Adding a payment notifies the ops team.
+
+HUB_PAYMENT_METHODS = ['Bank Transfer', 'Cash Deposit', 'Online Payment', 'Cheque',
+                       'Discount', 'Switched from other program']
+HUB_NO_GST_METHODS = {'Discount'}
+HUB_TRANSFER_METHOD = 'Switched from other program'
+
+
+def _compute_payment_amounts(total, method):
+    """GST-inclusive: the entered total is what the client paid.
+    Returns (amount_paid_base, gst, total). Discount carries no GST."""
+    total = round(float(total or 0), 2)
+    if method in HUB_NO_GST_METHODS:
+        return total, 0.0, total
+    base = round(total / 1.18, 2)
+    return base, round(total - base, 2), total
+
+
+def _notify_payment_added(conn, client_name, amount, pathway, method):
+    """In-app activity to every ops/admin team member when a payment is added."""
+    try:
+        ops = conn.execute("SELECT id FROM employees WHERE is_admin = 1 AND is_active = 1").fetchall()
+        msg = f"₹{amount:,.0f} ({method}) recorded for {client_name} — {(pathway or 'plab').upper()}"
+        link = url_for('admin_payments_hub')
+        for e in ops:
+            try:
+                create_notification(conn, e['id'], "Payment added", msg, 'payment', link)
+            except Exception:
+                pass
+    except Exception as ex:
+        logging.warning(f"_notify_payment_added: {ex}")
+
+
+@app.route('/admin/payments')
+@admin_required
+def admin_payments_hub():
+    conn = get_db()
+    q = request.args.get('q', '').strip()
+    method = request.args.get('method', '').strip()
+    pathway = request.args.get('pathway', '').strip()
+    where, params = [], []
+    if q:
+        where.append("(LOWER(p.first_name) LIKE LOWER(?) OR LOWER(p.last_name) LIKE LOWER(?) OR LOWER(t.registration_number) LIKE LOWER(?))")
+        params += [f"%{q}%", f"%{q}%", f"%{q}%"]
+    if method:
+        where.append("t.payment_method = ?"); params.append(method)
+    if pathway:
+        where.append("COALESCE(p.pathway, t.pathway, 'plab') = ?"); params.append(pathway)
+    wsql = ("WHERE " + " AND ".join(where)) if where else ""
+    rows = conn.execute(f"""
+        SELECT t.*, p.prefix, p.first_name, p.last_name,
+               COALESCE(p.pathway, t.pathway, 'plab') AS client_pathway
+          FROM ops_payments t
+     LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
+          {wsql}
+      ORDER BY t.payment_date DESC, t.id DESC
+         LIMIT 500""", params).fetchall()
+    stats = conn.execute(f"""SELECT COUNT(*) AS n,
+               COALESCE(SUM(t.total_amount_paid),0) AS total,
+               COALESCE(SUM(t.gst_paid),0) AS gst
+          FROM ops_payments t
+     LEFT JOIN plab_clients p ON t.registration_number = p.registration_number {wsql}""", params).fetchone()
+    methods = conn.execute("SELECT DISTINCT payment_method FROM ops_payments WHERE payment_method IS NOT NULL AND payment_method <> '' ORDER BY payment_method").fetchall()
+    pathways = conn.execute("SELECT DISTINCT COALESCE(pathway,'plab') AS pw FROM ops_payments ORDER BY pw").fetchall()
+    conn.close()
+    return render_template('admin_payments_hub.html', rows=rows, stats=stats, q=q,
+        method=method, pathway=pathway, methods=[m['payment_method'] for m in methods],
+        pathways=[p['pw'] for p in pathways], active_section='clients')
+
+
+@app.route('/admin/payments/add', methods=['GET', 'POST'])
+@admin_required
+def admin_payments_add():
+    conn = get_db()
+    if request.method == 'POST':
+        reg = request.form.get('registration_number', '').strip()
+        method = request.form.get('payment_method', '')
+        source_product = request.form.get('source_product', '') if method == HUB_TRANSFER_METHOD else ''
+        try:
+            amount_paid, gst_paid, total_amount_paid = _compute_payment_amounts(request.form.get('total_amount_paid', '0'), method)
+            crow = conn.execute("SELECT COALESCE(pathway,'plab') AS pw, prefix, first_name, last_name FROM plab_clients WHERE registration_number = ? LIMIT 1", (reg,)).fetchone()
+            pathway = crow['pw'] if crow else 'plab'
+            conn.execute('''INSERT INTO ops_payments
+                (registration_number, payment_date, amount_paid, gst_paid, total_amount_paid,
+                 instalment, payment_method, total_package, notes, source_product, pathway, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                (reg, request.form.get('payment_date'), amount_paid, gst_paid, total_amount_paid,
+                 request.form.get('instalment'), method, float(request.form.get('total_package', 0) or 0),
+                 request.form.get('notes', ''), source_product, pathway, session.get('user_id')))
+            cname = (f"{crow['prefix'] or ''} {crow['first_name'] or ''} {crow['last_name'] or ''}".strip() if crow else reg) or reg
+            _notify_payment_added(conn, cname, total_amount_paid, pathway, method)
+            conn.commit()
+            conn.close()
+            flash('Payment added. Operations team notified.', 'success')
+            return redirect(url_for('admin_payments_hub'))
+        except Exception as e:
+            logging.error(f"admin_payments_add: {e}")
+            flash('Error adding payment', 'error')
+    products = conn.execute("SELECT name FROM products_services WHERE COALESCE(status,'active')='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('admin_payment_form.html', record=None, products=[p['name'] for p in products],
+        payment_methods=HUB_PAYMENT_METHODS, no_gst_methods=list(HUB_NO_GST_METHODS),
+        transfer_method=HUB_TRANSFER_METHOD, instalment_options=get_lookup_options('instalment'),
+        active_section='clients')
+
+
+@app.route('/admin/payments/<int:record_id>/edit', methods=['GET', 'POST'])
+@admin_required
+def admin_payments_edit(record_id):
+    conn = get_db()
+    record = conn.execute("""SELECT t.*, p.prefix, p.first_name, p.last_name,
+               COALESCE(p.pathway, t.pathway, 'plab') AS client_pathway
+          FROM ops_payments t
+     LEFT JOIN plab_clients p ON t.registration_number = p.registration_number
+         WHERE t.id = ?""", (record_id,)).fetchone()
+    if not record:
+        conn.close()
+        flash('Payment not found', 'error')
+        return redirect(url_for('admin_payments_hub'))
+    if request.method == 'POST':
+        method = request.form.get('payment_method', '')
+        source_product = request.form.get('source_product', '') if method == HUB_TRANSFER_METHOD else ''
+        try:
+            amount_paid, gst_paid, total_amount_paid = _compute_payment_amounts(request.form.get('total_amount_paid', '0'), method)
+            conn.execute('''UPDATE ops_payments SET registration_number = ?, payment_date = ?, amount_paid = ?,
+                gst_paid = ?, total_amount_paid = ?, instalment = ?, payment_method = ?, total_package = ?,
+                notes = ?, source_product = ? WHERE id = ?''',
+                (request.form.get('registration_number'), request.form.get('payment_date'), amount_paid,
+                 gst_paid, total_amount_paid, request.form.get('instalment'), method,
+                 float(request.form.get('total_package', 0) or 0), request.form.get('notes', ''),
+                 source_product, record_id))
+            conn.commit()
+            conn.close()
+            flash('Payment updated', 'success')
+            return redirect(url_for('admin_payments_hub'))
+        except Exception as e:
+            logging.error(f"admin_payments_edit: {e}")
+            flash('Error updating payment', 'error')
+    products = conn.execute("SELECT name FROM products_services WHERE COALESCE(status,'active')='active' ORDER BY name").fetchall()
+    conn.close()
+    return render_template('admin_payment_form.html', record=record, products=[p['name'] for p in products],
+        payment_methods=HUB_PAYMENT_METHODS, no_gst_methods=list(HUB_NO_GST_METHODS),
+        transfer_method=HUB_TRANSFER_METHOD, instalment_options=get_lookup_options('instalment'),
+        active_section='clients')
 
 
 # ─────────────────────────────────────────────────────────
