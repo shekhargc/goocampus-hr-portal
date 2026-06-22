@@ -14836,7 +14836,7 @@ def ensure_ops_tables():
         SEED_DATA = {
                 # Client/Pipeline
                 'plab_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'Job Stage'],
-                'account_status': ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
+                'account_status': ['Pending Verification', 'In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed'],
                 'switched_program': ['BAPIO Program', 'IMT', 'USMLE Pathway', 'NEET India', 'Australia'],
                 'plan_type': ['Full Spon', 'Integrated Consulting', 'Integrated Consulting - Dual', '2022 Integrated Consulting', '2022 Integrated Consulting - Dual', '2022 Premium Consulting', '2022 Premium Consulting - Dual', 'PGCP 2023', 'PGCP 2023 - Dual', 'PGCP 2024', 'PGCP 2024 - Dual', 'PGCP 2025'],
                 'joined_stage': ['English Stage', 'PLAB 1 Stage', 'PLAB 2 Stage', 'GMC Stage'],
@@ -15456,7 +15456,7 @@ def categorise_by_stage(days_since, stage):
         return 'ok'
     else:
         return 'recent'
-ACCOUNT_STATUSES = ['In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
+ACCOUNT_STATUSES = ['Pending Verification', 'In Process', 'Switched Program', 'Dropped and Refunded', 'Dropped Out', 'On Hold', 'Completed']
 PLAN_TYPES = [
     'Full Spon', 'Integrated Consulting',
     '2022 UK - Full Sponsorship', '2022 UK - IC',
@@ -15628,6 +15628,7 @@ def _next_registration_number(conn):
 
 # (display label, exact account_status value) — full client lifecycle breakdown
 STATUS_DEFS = [
+    ('Pending Verification', 'Pending Verification'),
     ('In Process',           'In Process'),
     ('On Hold',              'On Hold'),
     ('Completed',            'Completed'),
@@ -21556,7 +21557,8 @@ _TRANSFER_COPY_COLS = ['customer_id', 'prefix', 'first_name', 'last_name', 'mobi
     'whatsapp1', 'whatsapp2', 'email', 'dob', 'city', 'state', 'instagram', 'facebook',
     'linkedin', 'photo_path', 'father_name', 'father_phone', 'mother_name', 'mother_phone',
     'parents_email', 'counsellor', 'counsellor_email', 'counsellor_number', 'counsellor_id',
-    'lead_source', 'perm_address_line1', 'perm_address_line2', 'perm_city_district',
+    'lead_source', 'referral_source_pathway', 'referral_client_reg', 'referral_client_name',
+    'referral_channel', 'perm_address_line1', 'perm_address_line2', 'perm_city_district',
     'perm_state_province', 'perm_postal_code', 'perm_country', 'comm_address_same',
     'comm_address_line1', 'comm_address_line2', 'comm_city_district', 'comm_state_province',
     'comm_postal_code', 'comm_country']
@@ -21625,8 +21627,11 @@ def admin_internal_transfer_new():
             from_product = src_prod['name'] if src_prod else (src['pathway'] or 'plab')
             # 1) create the NEW destination client (copy personal data)
             data = {c: src[c] for c in _TRANSFER_COPY_COLS if c in src.keys()}
+            # Created in 'Pending Verification' so sales re-enter their fields
+            # (plan type, joined stage, package etc. are deliberately NOT copied —
+            # they're pathway-specific) and ops then verify (→ In Process).
             data.update({'registration_number': new_reg, 'registration_date': transfer_date or _date.today().isoformat(),
-                         'pathway': to_pathway, 'product_id': to_product_id, 'account_status': 'In Process',
+                         'pathway': to_pathway, 'product_id': to_product_id, 'account_status': 'Pending Verification',
                          'created_by': session.get('user_id')})
             cols = list(data.keys())
             conn.execute(f"INSERT INTO plab_clients ({', '.join(cols)}) VALUES ({', '.join(['?']*len(cols))})", list(data.values()))
