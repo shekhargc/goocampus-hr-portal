@@ -14533,6 +14533,22 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Internal Transfers (client moved from one product to another) ──
+        # First-class ledger of internal transfers, synced from payments whose
+        # method is "Switched from other program". from_product -> to_pathway.
+        conn.execute('''CREATE TABLE IF NOT EXISTS internal_transfers (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            from_product TEXT,
+            to_pathway TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            transfer_date TEXT,
+            payment_id INTEGER,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── Client Document Requests (ops asks client for more docs) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_doc_requests (
             id SERIAL PRIMARY KEY,
@@ -21264,6 +21280,28 @@ def _notify_payment_added(conn, client_name, amount, pathway, method):
         logging.warning(f"_notify_payment_added: {ex}")
 
 
+def _sync_internal_transfer(conn, payment_id, reg, from_product, to_pathway, amount, date, created_by):
+    """Keep an internal_transfers row in step with a transfer-method payment.
+    One transfer per payment_id: upsert when it's a transfer, delete otherwise."""
+    try:
+        existing = conn.execute("SELECT id FROM internal_transfers WHERE payment_id = ?", (payment_id,)).fetchone()
+        if from_product:
+            if existing:
+                conn.execute("""UPDATE internal_transfers SET registration_number=?, from_product=?,
+                    to_pathway=?, amount=?, transfer_date=? WHERE payment_id=?""",
+                    (reg, from_product, to_pathway, amount, date, payment_id))
+            else:
+                conn.execute("""INSERT INTO internal_transfers
+                    (registration_number, from_product, to_pathway, amount, transfer_date, payment_id, created_by)
+                    VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                    (reg, from_product, to_pathway, amount, date, payment_id, created_by))
+        elif existing:
+            # method was changed away from transfer — drop the stale transfer row
+            conn.execute("DELETE FROM internal_transfers WHERE payment_id = ?", (payment_id,))
+    except Exception as ex:
+        logging.warning(f"_sync_internal_transfer: {ex}")
+
+
 @app.route('/admin/payments')
 @admin_required
 def admin_payments_hub():
@@ -21322,6 +21360,12 @@ def admin_payments_add():
                  request.form.get('notes', ''), source_product, pathway, session.get('user_id')))
             cname = (f"{crow['prefix'] or ''} {crow['first_name'] or ''} {crow['last_name'] or ''}".strip() if crow else reg) or reg
             _notify_payment_added(conn, cname, total_amount_paid, pathway, method)
+            if method == HUB_TRANSFER_METHOD and source_product:
+                newp = conn.execute("SELECT id FROM ops_payments WHERE registration_number = ? AND created_by = ? ORDER BY id DESC LIMIT 1",
+                                    (reg, session.get('user_id'))).fetchone()
+                if newp:
+                    _sync_internal_transfer(conn, newp['id'], reg, source_product, pathway,
+                                            total_amount_paid, request.form.get('payment_date'), session.get('user_id'))
             conn.commit()
             conn.close()
             flash('Payment added. Operations team notified.', 'success')
@@ -21362,6 +21406,9 @@ def admin_payments_edit(record_id):
                  gst_paid, total_amount_paid, request.form.get('instalment'), method,
                  float(request.form.get('total_package', 0) or 0), request.form.get('notes', ''),
                  source_product, record_id))
+            _sync_internal_transfer(conn, record_id, request.form.get('registration_number'),
+                                    source_product, record['client_pathway'], total_amount_paid,
+                                    request.form.get('payment_date'), session.get('user_id'))
             conn.commit()
             conn.close()
             flash('Payment updated', 'success')
@@ -21375,6 +21422,20 @@ def admin_payments_edit(record_id):
         payment_methods=HUB_PAYMENT_METHODS, no_gst_methods=list(HUB_NO_GST_METHODS),
         transfer_method=HUB_TRANSFER_METHOD, instalment_options=get_lookup_options('instalment'),
         active_section='clients')
+
+
+@app.route('/admin/internal-transfers')
+@admin_required
+def admin_internal_transfers():
+    """Ledger of internal transfers (clients moved between products)."""
+    conn = get_db()
+    rows = conn.execute("""SELECT it.*, p.prefix, p.first_name, p.last_name
+          FROM internal_transfers it
+     LEFT JOIN plab_clients p ON it.registration_number = p.registration_number
+      ORDER BY it.transfer_date DESC, it.id DESC""", []).fetchall()
+    summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM internal_transfers", []).fetchone()
+    conn.close()
+    return render_template('admin_internal_transfers.html', rows=rows, summary=summary, active_section='clients')
 
 
 # ─────────────────────────────────────────────────────────

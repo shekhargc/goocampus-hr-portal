@@ -1,0 +1,58 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Internal Transfers{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+
+  <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:12px;margin-bottom:20px;">
+    <div>
+      <h1 style="margin:0;font-size:1.35rem;font-weight:700;color:var(--navy);">Internal Transfers</h1>
+      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Clients who moved from one product into another, recorded as a transfer (not new revenue).</p>
+    </div>
+    <a href="{{ url_for('admin_payments_hub') }}" style="font-size:0.85rem;color:var(--orange);text-decoration:none;font-weight:600;">← Payments Hub</a>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:14px;margin-bottom:18px;">
+    <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Transfers</div>
+      <div style="font-size:1.8rem;font-weight:800;color:var(--navy);margin-top:4px;">{{ summary.n }}</div>
+    </div>
+    <div style="background:#fff;border-radius:12px;padding:16px 18px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <div style="font-size:0.72rem;font-weight:700;color:var(--gray-500);text-transform:uppercase;">Total Transferred</div>
+      <div style="font-size:1.8rem;font-weight:800;color:var(--orange);margin-top:4px;">₹{{ '{:,.0f}'.format(summary.amt or 0) }}</div>
+    </div>
+  </div>
+
+  <div style="background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);overflow:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.85rem;">
+      <thead>
+        <tr style="text-align:left;color:var(--gray-500);font-size:0.7rem;text-transform:uppercase;letter-spacing:0.5px;background:var(--gray-50);">
+          <th style="padding:11px 12px;">Date</th>
+          <th style="padding:11px 12px;">Client</th>
+          <th style="padding:11px 12px;">Transfer</th>
+          <th style="padding:11px 12px;text-align:right;">Amount</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in rows %}
+        <tr style="border-top:1px solid var(--gray-100);">
+          <td style="padding:10px 12px;color:var(--gray-600);white-space:nowrap;">{{ r.transfer_date or '—' }}</td>
+          <td style="padding:10px 12px;">
+            <div style="font-weight:600;color:var(--navy);">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</div>
+            <div style="font-size:0.75rem;color:var(--gray-400);">{{ r.registration_number }}</div>
+          </td>
+          <td style="padding:10px 12px;">
+            <span style="font-weight:600;color:var(--gray-700);">{{ r.from_product or '—' }}</span>
+            <span style="color:var(--orange);font-weight:700;margin:0 6px;">→</span>
+            <span style="font-size:0.72rem;font-weight:700;background:#FFF7ED;color:#9A3412;padding:2px 9px;border-radius:999px;">{{ (r.to_pathway or 'plab')|upper }}</span>
+          </td>
+          <td style="padding:10px 12px;text-align:right;font-weight:700;color:var(--navy);">₹{{ '{:,.0f}'.format(r.amount or 0) }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="4" style="padding:40px;text-align:center;color:var(--gray-400);">No internal transfers recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+
+</div>
+{% endblock %}
