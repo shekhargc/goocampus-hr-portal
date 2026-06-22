@@ -14549,6 +14549,21 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Refunds (for clients backed out / "Dropped and Refunded") ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS refunds (
+            id SERIAL PRIMARY KEY,
+            registration_number TEXT,
+            amount NUMERIC(14,2) DEFAULT 0,
+            refund_date TEXT,
+            refund_method TEXT,
+            reason TEXT,
+            pathway TEXT,
+            original_payment_id INTEGER,
+            notes TEXT,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+
         # ── Client Document Requests (ops asks client for more docs) ──
         conn.execute('''CREATE TABLE IF NOT EXISTS client_doc_requests (
             id SERIAL PRIMARY KEY,
@@ -21436,6 +21451,62 @@ def admin_internal_transfers():
     summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM internal_transfers", []).fetchone()
     conn.close()
     return render_template('admin_internal_transfers.html', rows=rows, summary=summary, active_section='clients')
+
+
+REFUND_METHODS = ['Bank Transfer', 'UPI / Online', 'Cheque', 'Cash']
+
+
+@app.route('/admin/refunds')
+@admin_required
+def admin_refunds():
+    """Refund ledger + clients marked 'Dropped and Refunded' still needing a refund record."""
+    conn = get_db()
+    rows = conn.execute("""SELECT r.*, p.prefix, p.first_name, p.last_name, COALESCE(p.pathway,'plab') AS client_pathway
+          FROM refunds r
+     LEFT JOIN plab_clients p ON r.registration_number = p.registration_number
+      ORDER BY r.refund_date DESC, r.id DESC""", []).fetchall()
+    summary = conn.execute("SELECT COUNT(*) AS n, COALESCE(SUM(amount),0) AS amt FROM refunds", []).fetchone()
+    # Clients flagged refunded but with no refund row yet — the work list.
+    pending = conn.execute("""SELECT pc.registration_number, pc.prefix, pc.first_name, pc.last_name,
+               COALESCE(pc.pathway,'plab') AS pathway
+          FROM plab_clients pc
+         WHERE pc.account_status = 'Dropped and Refunded'
+           AND NOT EXISTS (SELECT 1 FROM refunds r WHERE r.registration_number = pc.registration_number)
+      ORDER BY pc.first_name""", []).fetchall()
+    conn.close()
+    return render_template('admin_refunds.html', rows=rows, summary=summary, pending=pending, active_section='clients')
+
+
+@app.route('/admin/refunds/add', methods=['GET', 'POST'])
+@admin_required
+def admin_refunds_add():
+    conn = get_db()
+    if request.method == 'POST':
+        reg = request.form.get('registration_number', '').strip()
+        try:
+            crow = conn.execute("SELECT COALESCE(pathway,'plab') AS pw FROM plab_clients WHERE registration_number = ? LIMIT 1", (reg,)).fetchone()
+            conn.execute('''INSERT INTO refunds
+                (registration_number, amount, refund_date, refund_method, reason, pathway, notes, created_by)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
+                (reg, float(request.form.get('amount', 0) or 0), request.form.get('refund_date'),
+                 request.form.get('refund_method', ''), request.form.get('reason', ''),
+                 crow['pw'] if crow else 'plab', request.form.get('notes', ''), session.get('user_id')))
+            conn.commit()
+            conn.close()
+            flash('Refund recorded', 'success')
+            return redirect(url_for('admin_refunds'))
+        except Exception as e:
+            logging.error(f"admin_refunds_add: {e}")
+            flash('Error recording refund', 'error')
+    pre_reg = request.args.get('reg', '')
+    pre_name = ''
+    if pre_reg:
+        c = conn.execute("SELECT prefix, first_name, last_name FROM plab_clients WHERE registration_number = ? LIMIT 1", (pre_reg,)).fetchone()
+        if c:
+            pre_name = f"{c['prefix'] or ''} {c['first_name'] or ''} {c['last_name'] or ''} — {pre_reg}".strip()
+    conn.close()
+    return render_template('admin_refund_form.html', refund_methods=REFUND_METHODS,
+        pre_reg=pre_reg, pre_name=pre_name, active_section='clients')
 
 
 # ─────────────────────────────────────────────────────────
