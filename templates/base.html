@@ -725,11 +725,9 @@
     (function(){
       if (window.__colChooserInit) return; window.__colChooserInit = true;
       function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+      function prettify(k){ return k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
       ready(function(){
-        // Find the primary list table: first <table> with a thead + >=2 headers,
-        // not inside a nav/sidebar/aside.
-        var table = null;
-        var tables = document.querySelectorAll('table');
+        var table = null, tables = document.querySelectorAll('table');
         for (var i=0;i<tables.length;i++){
           var t = tables[i];
           if (t.closest('nav') || t.closest('aside') || t.closest('.ops-sidebar') || t.closest('.sec-sidebar')) continue;
@@ -738,51 +736,76 @@
         if (!table) return;
         var headers = Array.prototype.map.call(table.querySelectorAll('thead tr th'), function(th){ return th.textContent.trim(); });
         if (!headers.length) return;
-        // Section key from the path (strip trailing /<id> or /<id>/edit).
+        var headerSetLC = {}; headers.forEach(function(h){ headerSetLC[h.toLowerCase()] = 1; });
         var key = location.pathname.replace(/\/\d+(\/[a-z-]+)?\/?$/, '').replace(/\/$/, '') || location.pathname;
-        // Columns hidden by default (e.g. optional registration fields) when the
-        // user has no saved preference. Lets a page offer many fields but show few.
         var defaultHidden = [];
         try { defaultHidden = JSON.parse(table.getAttribute('data-default-hidden') || '[]'); } catch(e) { defaultHidden = []; }
-        var hidden = new Set();
 
+        // Per-row full record (data-rec) → discover EVERY field for "add as column".
+        var recByRow = [], allKeys = [], seen = {};
+        Array.prototype.forEach.call(table.querySelectorAll('tbody tr[data-rec]'), function(tr){
+          var rec = {}; try { rec = JSON.parse(tr.getAttribute('data-rec') || '{}'); } catch(e) { rec = {}; }
+          recByRow.push({tr: tr, rec: rec});
+          for (var k in rec){ if(!seen[k]){ seen[k]=1; allKeys.push(k); } }
+        });
+        // Extra = fields whose label isn't already a visible column.
+        var extraFields = allKeys.filter(function(k){ return !headerSetLC[prettify(k).toLowerCase()]; });
+        var extraValid = {}; extraFields.forEach(function(k){ extraValid[k]=1; });
+
+        var hidden = new Set(), extra = new Set();
+
+        function applyExtras(){
+          table.querySelectorAll('.cc-extra').forEach(function(el){ el.remove(); });
+          var headRow = table.querySelector('thead tr');
+          extraFields.forEach(function(k){
+            if (!extra.has(k)) return;
+            var th = document.createElement('th'); th.className='cc-extra'; th.textContent = prettify(k); headRow.appendChild(th);
+            recByRow.forEach(function(o){
+              var td = document.createElement('td'); td.className='cc-extra';
+              var v = o.rec[k]; td.textContent = (v===undefined||v===null||v==='') ? '—' : v; o.tr.appendChild(td);
+            });
+          });
+        }
         function applyHidden(){
           var ths = table.querySelectorAll('thead tr th');
-          var colHide = [];
-          for (var i=0;i<ths.length;i++){ colHide[i] = hidden.has(headers[i]); ths[i].style.display = colHide[i] ? 'none' : ''; }
-          var rows = table.querySelectorAll('tbody tr');
-          rows.forEach(function(tr){
-            if (tr.children.length !== ths.length) return; // skip colspan/empty rows
-            for (var i=0;i<tr.children.length;i++){ tr.children[i].style.display = colHide[i] ? 'none' : ''; }
+          for (var i=0;i<headers.length;i++){ if(ths[i]) ths[i].style.display = hidden.has(headers[i]) ? 'none' : ''; }
+          table.querySelectorAll('tbody tr').forEach(function(tr){
+            if (tr.children.length < headers.length) return; // skip colspan/empty rows
+            for (var i=0;i<headers.length;i++){ if(tr.children[i]) tr.children[i].style.display = hidden.has(headers[i]) ? 'none' : ''; }
           });
         }
         function save(scope){
           return fetch('/api/view-prefs', {method:'POST', headers:{'Content-Type':'application/json'},
-            body: JSON.stringify({section:key, scope:scope, hidden: Array.from(hidden)})});
+            body: JSON.stringify({section:key, scope:scope, hidden: Array.from(hidden), extra: Array.from(extra)})});
         }
 
-        var wrap = document.createElement('div');
-        wrap.style.cssText = 'position:relative;display:inline-block;margin:0 0 10px 0;';
-        var btn = document.createElement('button');
-        btn.type='button'; btn.textContent='⚙ Columns';
+        var wrap = document.createElement('div'); wrap.style.cssText='position:relative;display:inline-block;margin:0 0 10px 0;';
+        var btn = document.createElement('button'); btn.type='button'; btn.textContent='⚙ Columns';
         btn.style.cssText='font-size:0.78rem;font-weight:600;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:6px 12px;cursor:pointer;';
         var panel = document.createElement('div');
-        panel.style.cssText='display:none;position:absolute;z-index:60;top:110%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.14);padding:10px;min-width:220px;max-height:340px;overflow:auto;';
+        panel.style.cssText='display:none;position:absolute;z-index:60;top:110%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.14);padding:10px;min-width:230px;max-height:380px;overflow:auto;';
         wrap.appendChild(btn); wrap.appendChild(panel);
-        btn.addEventListener('click', function(){ panel.style.display = (panel.style.display==='none'?'block':'none'); });
+        btn.addEventListener('click', function(){ panel.style.display=(panel.style.display==='none'?'block':'none'); });
         document.addEventListener('click', function(e){ if(!wrap.contains(e.target)) panel.style.display='none'; });
 
+        function secTitle(txt){ var d=document.createElement('div'); d.textContent=txt; d.style.cssText='font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin:2px 0 6px;'; return d; }
+        function checkRow(txt, checked, onchange){
+          var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:0.82rem;color:#1e293b;cursor:pointer;';
+          var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=checked; cb.addEventListener('change', function(){ onchange(cb.checked); });
+          lbl.appendChild(cb); lbl.appendChild(document.createTextNode(txt)); return lbl;
+        }
         function renderPanel(isAdmin){
           panel.innerHTML='';
-          var title=document.createElement('div'); title.textContent='Show columns';
-          title.style.cssText='font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;'; panel.appendChild(title);
-          headers.forEach(function(h){
-            if(!h) return;
-            var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:0.82rem;color:#1e293b;cursor:pointer;';
-            var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!hidden.has(h);
-            cb.addEventListener('change', function(){ if(cb.checked) hidden.delete(h); else hidden.add(h); applyHidden(); save('me'); });
-            lbl.appendChild(cb); lbl.appendChild(document.createTextNode(h)); panel.appendChild(lbl);
+          panel.appendChild(secTitle('Show columns'));
+          headers.forEach(function(h){ if(!h) return;
+            panel.appendChild(checkRow(h, !hidden.has(h), function(on){ if(on) hidden.delete(h); else hidden.add(h); applyHidden(); save('me'); }));
           });
+          if (extraFields.length){
+            panel.appendChild(secTitle('Add more fields'));
+            extraFields.forEach(function(k){
+              panel.appendChild(checkRow(prettify(k), extra.has(k), function(on){ if(on) extra.add(k); else extra.delete(k); applyExtras(); applyHidden(); save('me'); }));
+            });
+          }
           var foot=document.createElement('div'); foot.style.cssText='display:flex;gap:6px;margin-top:8px;border-top:1px solid #f1f5f9;padding-top:8px;flex-wrap:wrap;';
           var reset=document.createElement('button'); reset.type='button'; reset.textContent='Reset mine';
           reset.style.cssText='font-size:0.72rem;border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 9px;cursor:pointer;';
@@ -798,13 +821,13 @@
         }
 
         fetch('/api/view-prefs?section='+encodeURIComponent(key)).then(function(r){return r.json();}).then(function(d){
-          var eff;
-          if (d.has_mine) eff = d.mine || [];
-          else if (d.has_default) eff = d.default || [];
-          else eff = defaultHidden;
-          (eff||[]).forEach(function(h){ hidden.add(h); });
-          applyHidden();
-          renderPanel(!!d.is_admin);
+          var effH, effE;
+          if (d.has_mine){ effH=d.hidden||[]; effE=d.extra||[]; }
+          else if (d.has_default){ effH=d.default_hidden||[]; effE=d.default_extra||[]; }
+          else { effH=defaultHidden; effE=[]; }
+          effH.forEach(function(h){ hidden.add(h); });
+          effE.forEach(function(k){ if (extraValid[k]) extra.add(k); });
+          applyExtras(); applyHidden(); renderPanel(!!d.is_admin);
         }).catch(function(){ defaultHidden.forEach(function(h){ hidden.add(h); }); applyHidden(); renderPanel(false); });
 
         table.parentNode.insertBefore(wrap, table);

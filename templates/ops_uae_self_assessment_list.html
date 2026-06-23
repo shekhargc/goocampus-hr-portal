@@ -64,7 +64,7 @@
         </thead>
         <tbody>
         {% for r in records %}
-            <tr class="clickable-row" onclick="window.location='{{ url_for('ops_uae_self_assessment_detail', rid=r.id) }}'">
+            <tr data-rec="{{ rec_json(r) }}" class="clickable-row" onclick="window.location='{{ url_for('ops_uae_self_assessment_detail', rid=r.id) }}'">
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

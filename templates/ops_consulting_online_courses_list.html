@@ -195,7 +195,7 @@
         </thead>
         <tbody>
         {% for r in records %}
-            <tr class="clickable-row" id="row-{{ r.id }}" onclick="openCsOcDetail({{ r.id }})">
+            <tr data-rec="{{ rec_json(r) }}" class="clickable-row" id="row-{{ r.id }}" onclick="openCsOcDetail({{ r.id }})">
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

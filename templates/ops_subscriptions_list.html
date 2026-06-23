@@ -91,7 +91,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                 </thead>
                 <tbody>
                     {% for record in records %}
-                    <tr class="clickable-row" id="row-{{ record.id }}" onclick="openSubsDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                    <tr data-rec="{{ rec_json(record) }}" class="clickable-row" id="row-{{ record.id }}" onclick="openSubsDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ (record.registration_number or '')|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.online_subscription or '—' }}</td>

@@ -110,7 +110,7 @@
           </tr></thead>
           <tbody>
             {% for r in records %}
-            <tr style="border-top:1px solid var(--gray-100);">
+            <tr data-rec="{{ rec_json(r) }}" style="border-top:1px solid var(--gray-100);">
               <td style="padding:8px 10px;"><input type="checkbox" class="rowchk" name="record_ids" value="{{ r.id }}"></td>
               <td style="padding:8px 10px;color:var(--navy);font-weight:600;">{{ (r.prefix or '') }} {{ (r.first_name or '') }} {{ (r.last_name or '') }}</td>
               <td style="padding:8px 10px;color:var(--gray-400);">{{ r.registration_number }}</td>

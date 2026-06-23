@@ -21855,8 +21855,10 @@ def get_view_prefs():
     Member's own row wins; otherwise the admin default (employee_id NULL)."""
     import json as _json
     section = (request.args.get('section') or '').strip()
+    base = {'hidden': [], 'extra': [], 'default_hidden': [], 'default_extra': [],
+            'has_mine': False, 'has_default': False, 'is_admin': bool(session.get('is_admin'))}
     if not section:
-        return jsonify({'hidden': [], 'mine': None, 'default': [], 'has_mine': False, 'is_admin': bool(session.get('is_admin'))})
+        return jsonify(base)
     uid = session.get('user_id')
     conn = get_db()
     try:
@@ -21865,17 +21867,21 @@ def get_view_prefs():
     finally:
         try: conn.close()
         except Exception: pass
-    def _parse(r):
+    def _norm(r):
+        # Stored value may be a legacy list (hidden only) or {hidden, extra}.
         if not r or not r['hidden_columns']:
             return None
-        try: return _json.loads(r['hidden_columns'])
+        try: v = _json.loads(r['hidden_columns'])
         except Exception: return None
-    mine_h = _parse(mine)
-    def_raw = _parse(deflt)
-    def_h = def_raw or []
-    effective = mine_h if mine_h is not None else def_h
-    return jsonify({'hidden': effective, 'mine': mine_h, 'default': def_h,
-                    'has_mine': mine_h is not None, 'has_default': def_raw is not None,
+        if isinstance(v, list): return {'hidden': v, 'extra': []}
+        if isinstance(v, dict): return {'hidden': v.get('hidden') or [], 'extra': v.get('extra') or []}
+        return None
+    mine_n = _norm(mine)
+    def_n = _norm(deflt)
+    eff = mine_n if mine_n is not None else (def_n or {'hidden': [], 'extra': []})
+    return jsonify({'hidden': eff['hidden'], 'extra': eff['extra'],
+                    'default_hidden': (def_n or {}).get('hidden', []), 'default_extra': (def_n or {}).get('extra', []),
+                    'has_mine': mine_n is not None, 'has_default': def_n is not None,
                     'is_admin': bool(session.get('is_admin'))})
 
 
@@ -21904,9 +21910,12 @@ def save_view_prefs():
         else:
             target = uid
         hidden = data.get('hidden')
+        extra = data.get('extra')
         if not isinstance(hidden, list):
             hidden = []
-        hj = _json.dumps([str(x) for x in hidden])
+        if not isinstance(extra, list):
+            extra = []
+        hj = _json.dumps({'hidden': [str(x) for x in hidden], 'extra': [str(x) for x in extra]})
         if target is None:
             ex = conn.execute("SELECT id FROM view_preferences WHERE employee_id IS NULL AND section_key = ?", (section,)).fetchone()
         else:
@@ -34613,10 +34622,33 @@ REGISTRATION_OPTIONAL_FIELDS = [
     ('perm_city_district', 'Permanent City'), ('perm_state_province', 'Permanent State'),
 ]
 
+_RECJSON_NOISE = {'pathway', 'created_at', 'updated_at', 'created_by', 'photo_path', 'welcome_kit_sent'}
+
+def rec_json(r):
+    """JSON-encode a DB record for the generic 'add any field as a column' chooser.
+    Safe: non-primitive values (dates/Decimals) become strings; None/noise dropped.
+    Used as a row data-attribute so the chooser can surface ANY field as a column."""
+    import json as _json
+    try:
+        d = dict(r)
+    except Exception:
+        return '{}'
+    out = {}
+    for k, v in d.items():
+        if v is None or k in _RECJSON_NOISE:
+            continue
+        out[k] = v if isinstance(v, (str, int, float, bool)) else str(v)
+    try:
+        return _json.dumps(out, ensure_ascii=False)
+    except Exception:
+        return '{}'
+
+
 # Expose to every template (no per-route render_template change needed).
 app.jinja_env.globals['can_access'] = can_access
 app.jinja_env.globals['client_transfer_info'] = client_transfer_info
 app.jinja_env.globals['registration_optional_fields'] = REGISTRATION_OPTIONAL_FIELDS
+app.jinja_env.globals['rec_json'] = rec_json
 app.jinja_env.globals['ACCESS_MASTER_ENFORCE'] = lambda: ACCESS_MASTER_ENFORCE
 
 
