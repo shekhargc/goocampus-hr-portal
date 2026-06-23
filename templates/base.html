@@ -782,6 +782,10 @@
             }
           }
         }
+        // Authoritative: the fields the template actually renders in its cells,
+        // declared on the table — excluded precisely regardless of formatting
+        // (dates, Yes/No badges, composite cells) where value/label match can miss.
+        try { (JSON.parse(table.getAttribute('data-shown-keys') || '[]') || []).forEach(function(k){ shownKeys[k] = 1; }); } catch(e) {}
         var extraFields = allKeys.filter(function(k){ return !SYSTEM[k] && !shownKeys[k]; });
         var extraValid = {}; extraFields.forEach(function(k){ extraValid[k]=1; });
 

@@ -104,7 +104,7 @@
         <label style="font-size:0.8rem;font-weight:600;color:var(--gray-600);"><input type="checkbox" id="selAll"> Select all ({{ records|length }})</label>
       </div>
       <div style="max-height:420px;overflow:auto;border:1px solid var(--gray-100);border-radius:8px;">
-        <table style="width:100%;border-collapse:collapse;font-size:0.83rem;">
+        <table data-shown-keys='["first_name", "id", "last_name", "prefix", "registration_number"]' style="width:100%;border-collapse:collapse;font-size:0.83rem;">
           <thead><tr style="background:var(--gray-50);color:var(--gray-500);font-size:0.7rem;text-transform:uppercase;text-align:left;">
             <th style="padding:9px 10px;"></th><th style="padding:9px 10px;">Client</th><th style="padding:9px 10px;">Reg #</th>
           </tr></thead>
