@@ -143,6 +143,28 @@ def ensure_college_tables():
         logging.error(f"ensure_college_tables: {e}")
 
 
+def ensure_neetpg_doctype_column():
+    """Add the doc_type column to neetpg_pdfs (base table created in app.py).
+
+    Document type is a separate dimension from the existing `category` column
+    (which means exam type: neetpg vs dnb). doc_type ∈ {cutoff,
+    stipend_bond_penalty, mcc_profile}. Existing rows backfill to 'cutoff'
+    via the DEFAULT. Idempotent — safe to run on every boot."""
+    conn = get_db()
+    try:
+        conn.execute("ALTER TABLE neetpg_pdfs ADD COLUMN doc_type TEXT DEFAULT 'cutoff'")
+        conn.commit()
+        logging.info("neetpg_pdfs.doc_type column added")
+    except Exception:
+        # Column already exists (or table not yet created) — roll back and move on.
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+    finally:
+        conn.close()
+
+
 def _auto_seed_russian_colleges():
     """Auto-seed Russian colleges from college_seed_data.py if not already present."""
     try:

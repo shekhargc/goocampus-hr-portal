@@ -300,6 +300,48 @@
         /* ── Content area ── */
         .content-area { min-width: 0; }
 
+        /* ── Document-type tabs (top level) ── */
+        .doctype-bar {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            margin-bottom: 16px;
+        }
+        .doctype-pill {
+            padding: 10px 18px;
+            font-weight: 700;
+            font-size: 14px;
+            cursor: pointer;
+            border-radius: var(--radius);
+            border: 2px solid transparent;
+            background: var(--white);
+            color: var(--gray-500);
+            box-shadow: var(--shadow);
+            font-family: inherit;
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            transition: all 0.2s;
+        }
+        .doctype-pill:hover { color: var(--navy); }
+        .doctype-pill.active {
+            color: var(--white);
+            background: var(--navy);
+            border-color: var(--navy);
+        }
+        .doctype-pill-count {
+            display: inline-block;
+            background: var(--gray-200);
+            color: var(--gray-600);
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 12px;
+        }
+        .doctype-pill.active .doctype-pill-count {
+            background: var(--orange);
+            color: white;
+        }
+
         /* ── Section tabs ── */
         .section-tabs {
             display: flex;
@@ -873,8 +915,8 @@
 <!-- Hero -->
 <div class="hero">
     <div class="hero-badge">FREE RESOURCE FOR NEET PG 2026 ASPIRANTS</div>
-    <h1>NEET PG 2025 MCC Cut-Off PDFs</h1>
-    <p>Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.</p>
+    <h1 id="heroTitle">NEET PG 2025 MCC Cut-Off PDFs</h1>
+    <p id="heroSubtitle">Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.</p>
     <div class="hero-stats">
         <div class="hero-stat">
             <div class="num">{{ neetpg_pdfs|length }}</div>
@@ -911,18 +953,13 @@
                 <div class="sidebar-item active" data-state="all" onclick="filterByState('all', this)">
                     <i class="fas fa-globe-asia" style="font-size:12px;"></i> All States
                 </div>
-                <!-- NEET PG States -->
-                {% for st in neetpg_states %}
-                <div class="sidebar-item" data-state="{{ st }}" data-cat="neetpg" onclick="filterByState('{{ st }}', this)">
-                    {{ st }}
-                    <span class="count">{{ neetpg_pdfs|selectattr('state', 'equalto', st)|list|length }}</span>
-                </div>
-                {% endfor %}
-                <!-- DNB States -->
-                {% for st in dnb_states %}
-                <div class="sidebar-item" data-state="{{ st }}" data-cat="dnb" onclick="filterByState('{{ st }}', this)" style="display:none;">
-                    {{ st }}
-                    <span class="count">{{ dnb_pdfs|selectattr('state', 'equalto', st)|list|length }}</span>
+                {# Items tagged by both category (neetpg/dnb) and doc_type; JS shows the matching set. #}
+                {% for it in states_items %}
+                <div class="sidebar-item" data-state="{{ it.state }}" data-cat="{{ it.cat }}" data-doctype="{{ it.doc_type }}"
+                     onclick="filterByState('{{ it.state }}', this)"
+                     {% if not (it.cat == 'neetpg' and it.doc_type == 'cutoff') %}style="display:none;"{% endif %}>
+                    {{ it.state }}
+                    <span class="count">{{ it.count }}</span>
                 </div>
                 {% endfor %}
             </div>
@@ -931,7 +968,7 @@
         <!-- Course/Specialty Filter -->
         <div class="sidebar-card">
             <div class="sidebar-title" style="display:flex;align-items:center;justify-content:space-between;">
-                <span><i class="fas fa-stethoscope" style="margin-right:4px;color:var(--orange);"></i> Specialty</span>
+                <span><i class="fas fa-stethoscope" style="margin-right:4px;color:var(--orange);"></i> <span id="courseFilterTitle">Specialty</span></span>
                 <button class="clear-filter-btn" id="clearCourseBtn" onclick="filterByCourse('all', null)" style="display:none;">Clear</button>
             </div>
             <div class="sidebar-search">
@@ -939,18 +976,14 @@
             </div>
             <div class="sidebar-list" id="courseList">
                 <div class="sidebar-item active" data-course="all" onclick="filterByCourse('all', this)">
-                    <i class="fas fa-th" style="font-size:12px;"></i> All Specialties
+                    <i class="fas fa-th" style="font-size:12px;"></i> <span id="allCourseLabel">All Specialties</span>
                 </div>
-                <!-- NEET PG Courses -->
-                {% for course in neetpg_courses %}
-                <div class="sidebar-item" data-course="{{ course }}" data-cat="neetpg" onclick="filterByCourse('{{ course }}', this)">
-                    {{ course }}
-                </div>
-                {% endfor %}
-                <!-- DNB Courses -->
-                {% for course in dnb_courses %}
-                <div class="sidebar-item" data-course="{{ course }}" data-cat="dnb" onclick="filterByCourse('{{ course }}', this)" style="display:none;">
-                    {{ course }}
+                {# Items tagged by both category and doc_type; for MCC profiles these are college names. #}
+                {% for it in courses_items %}
+                <div class="sidebar-item" data-course="{{ it.course }}" data-cat="{{ it.cat }}" data-doctype="{{ it.doc_type }}"
+                     onclick="filterByCourse(this.dataset.course, this)"
+                     {% if not (it.cat == 'neetpg' and it.doc_type == 'cutoff') %}style="display:none;"{% endif %}>
+                    {{ it.course }}
                 </div>
                 {% endfor %}
             </div>
@@ -959,7 +992,17 @@
 
     <!-- Content -->
     <div class="content-area">
-        <!-- Tabs -->
+        <!-- Document-type tabs (top level) -->
+        <div class="doctype-bar">
+            {% for key, label in doc_types %}
+            <button class="doctype-pill {{ 'active' if loop.first else '' }}" data-doctype="{{ key }}" onclick="switchDocType('{{ key }}')">
+                {{ label }}
+                <span class="doctype-pill-count">{{ doctype_counts.get(key, 0) }}</span>
+            </button>
+            {% endfor %}
+        </div>
+
+        <!-- Tabs (NEET PG / DNB, within active document type) -->
         <div class="section-tabs">
             <div class="section-tab active" onclick="switchTab('neetpg')">
                 <i class="fas fa-stethoscope"></i> NEET PG (MD/MS)
@@ -988,7 +1031,7 @@
             {% if neetpg_pdfs %}
             <div class="pdf-grid" id="grid-neetpg">
                 {% for pdf in neetpg_pdfs %}
-                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1015,7 +1058,7 @@
                 {% endfor %}
                 {# ── Coming Soon cards (scheduled, not yet published) ── #}
                 {% for pdf in neetpg_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1044,7 +1087,7 @@
             {% if neetpg_scheduled %}
             <div class="pdf-grid" id="grid-neetpg">
                 {% for pdf in neetpg_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1083,7 +1126,7 @@
             {% if dnb_pdfs %}
             <div class="pdf-grid" id="grid-dnb">
                 {% for pdf in dnb_pdfs %}
-                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}">
+                <div class="pdf-card" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="{{ pdf.published_at }}" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-new-badge" style="display:none;" data-new-check="1">NEW</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1110,7 +1153,7 @@
                 {% endfor %}
                 {# ── Coming Soon cards (scheduled DNB) ── #}
                 {% for pdf in dnb_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1139,7 +1182,7 @@
             {% if dnb_scheduled %}
             <div class="pdf-grid" id="grid-dnb">
                 {% for pdf in dnb_scheduled %}
-                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="">
+                <div class="pdf-card coming-soon" data-id="{{ pdf.id }}" data-specialty="{{ pdf.specialty }}" data-state="{{ pdf.state or 'All India/MCC' }}" data-title="{{ pdf.title }}" data-published="" data-doctype="{{ pdf.doc_type or 'cutoff' }}">
                     <div class="pdf-card-top">
                         <span class="pdf-coming-badge"><i class="fas fa-clock" style="font-size:8px;margin-right:3px;"></i>COMING SOON</span>
                         <h3>{{ pdf.title }}</h3>
@@ -1336,9 +1379,77 @@
     let pendingViewTitle = null;
     let currentViewerId = null;
     let activeTab = 'neetpg';
+    let activeDocType = 'cutoff';
     let activeState = 'all';
     let activeCourse = 'all';
     let resendCountdown = null;
+
+    // Per-doc-type hero copy + sidebar labels (MCC profiles use "College" not "Specialty").
+    var DOCTYPE_META = {
+        'cutoff': {
+            title: 'NEET PG 2025 MCC Cut-Off PDFs',
+            subtitle: 'Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.',
+            courseLabel: 'Specialty', allCourse: 'All Specialties', courseSearch: 'Search specialty...'
+        },
+        'stipend_bond_penalty': {
+            title: 'NEET PG Stipend, Bond & Penalty PDFs',
+            subtitle: 'State-wise stipend, service bond and penalty details for NEET PG and DNB seats.',
+            courseLabel: 'Specialty', allCourse: 'All Specialties', courseSearch: 'Search specialty...'
+        },
+        'mcc_profile': {
+            title: 'MCC College Profile PDFs',
+            subtitle: 'College profiles for NEET PG and DNB institutions under MCC Counselling 2025.',
+            courseLabel: 'College', allCourse: 'All Colleges', courseSearch: 'Search college...'
+        }
+    };
+
+    function updateDocTypeLabels(dt) {
+        var m = DOCTYPE_META[dt] || DOCTYPE_META['cutoff'];
+        var t = document.getElementById('heroTitle'); if (t) t.textContent = m.title;
+        var s = document.getElementById('heroSubtitle'); if (s) s.textContent = m.subtitle;
+        var ct = document.getElementById('courseFilterTitle'); if (ct) ct.textContent = m.courseLabel;
+        var al = document.getElementById('allCourseLabel'); if (al) al.textContent = m.allCourse;
+        var cs = document.getElementById('courseSearchInput'); if (cs) cs.placeholder = m.courseSearch;
+    }
+
+    // Recompute the NEET PG / DNB sub-tab counts for the active document type.
+    function updateTabCounts() {
+        ['neetpg', 'dnb'].forEach(function(cat) {
+            var section = document.getElementById('section-' + cat);
+            var n = 0;
+            if (section) {
+                section.querySelectorAll('.pdf-card:not(.coming-soon)').forEach(function(card) {
+                    if ((card.getAttribute('data-doctype') || 'cutoff') === activeDocType) n++;
+                });
+            }
+            var el = document.getElementById(cat + 'Count');
+            if (el) el.textContent = n;
+        });
+    }
+
+    // ── Document-type switching (top-level tabs) ──
+    function switchDocType(dt) {
+        activeDocType = dt;
+        document.querySelectorAll('.doctype-pill').forEach(function(p) {
+            p.classList.toggle('active', p.getAttribute('data-doctype') === dt);
+        });
+        // Reset sub-filters and return to the NEET PG sub-tab
+        activeState = 'all';
+        activeCourse = 'all';
+        activeTab = 'neetpg';
+        document.querySelectorAll('.section-tab').forEach(function(t, i) {
+            t.classList.toggle('active', i === 0);
+        });
+        document.getElementById('section-neetpg').classList.add('active');
+        document.getElementById('section-dnb').classList.remove('active');
+        document.getElementById('searchInput').value = '';
+        var cs = document.getElementById('courseSearchInput'); if (cs) cs.value = '';
+        updateDocTypeLabels(dt);
+        updateSidebarForTab(activeTab);
+        updateTabCounts();
+        applyFilters();
+        updateChips();
+    }
 
     // ── Viewed PDFs cookie helpers ──
     function getViewedPdfs() {
@@ -1401,18 +1512,20 @@
     }
 
     function updateSidebarForTab(tab) {
-        // State filter items
+        // State filter items — show only those matching active sub-tab AND active doc type
         document.querySelectorAll('#stateList .sidebar-item').forEach(function(item) {
             var cat = item.getAttribute('data-cat');
             if (!cat) { item.style.display = ''; item.classList.toggle('active', item.getAttribute('data-state') === 'all'); return; }
-            item.style.display = (cat === tab) ? '' : 'none';
+            var dtype = item.getAttribute('data-doctype') || 'cutoff';
+            item.style.display = (cat === tab && dtype === activeDocType) ? '' : 'none';
             item.classList.remove('active');
         });
         // Course filter items
         document.querySelectorAll('#courseList .sidebar-item').forEach(function(item) {
             var cat = item.getAttribute('data-cat');
             if (!cat) { item.style.display = ''; item.classList.toggle('active', item.getAttribute('data-course') === 'all'); return; }
-            item.style.display = (cat === tab) ? '' : 'none';
+            var dtype = item.getAttribute('data-doctype') || 'cutoff';
+            item.style.display = (cat === tab && dtype === activeDocType) ? '' : 'none';
             item.classList.remove('active');
         });
         // Hide clear buttons
@@ -1449,8 +1562,9 @@
             var course = item.getAttribute('data-course') || '';
             var cat = item.getAttribute('data-cat');
             if (course === 'all') { item.style.display = ''; return; }
-            // Only filter items belonging to the active tab
-            if (cat && cat !== activeTab) return;
+            var dtype = item.getAttribute('data-doctype') || 'cutoff';
+            // Only show items belonging to the active sub-tab AND active doc type
+            if (cat && (cat !== activeTab || dtype !== activeDocType)) { item.style.display = 'none'; return; }
             item.style.display = course.toLowerCase().indexOf(q) > -1 ? '' : 'none';
         });
     }
@@ -1471,8 +1585,13 @@
             var specialty = card.getAttribute('data-specialty') || '';
             var state = card.getAttribute('data-state') || '';
             var title = card.getAttribute('data-title') || '';
+            var docType = card.getAttribute('data-doctype') || 'cutoff';
             var isComingSoon = card.classList.contains('coming-soon');
             var show = true;
+            // Document-type filter (top-level tab)
+            if (docType !== activeDocType) {
+                show = false;
+            }
             // Text search
             if (query && specialty.toLowerCase().indexOf(query) === -1 && title.toLowerCase().indexOf(query) === -1) {
                 show = false;
@@ -1513,7 +1632,8 @@
         }
     }
 
-    // Initial filter count
+    // Initial filter count (default doc type = cutoff)
+    updateTabCounts();
     applyFilters();
 
     // ── Download handling ──

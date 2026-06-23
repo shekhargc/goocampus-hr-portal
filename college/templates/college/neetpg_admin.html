@@ -187,6 +187,41 @@
     .np-tab-panel { display: none; }
     .np-tab-panel.active { display: block; }
 
+    /* ── Document-type filter sub-tabs (pills) ── */
+    .np-doctype-tabs {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+        margin-bottom: 1.25rem;
+    }
+    .np-doctype-tab {
+        padding: 0.4rem 0.9rem;
+        font-weight: 600;
+        font-size: 0.82rem;
+        color: var(--gray-500);
+        background: var(--gray-100);
+        border: 1.5px solid transparent;
+        border-radius: 2rem;
+        text-decoration: none;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        transition: all 0.15s;
+    }
+    .np-doctype-tab:hover { color: var(--navy); border-color: var(--gray-300); }
+    .np-doctype-tab.active {
+        color: #fff;
+        background: var(--orange);
+    }
+    .np-doctype-count {
+        font-size: 0.72rem;
+        padding: 0.05rem 0.45rem;
+        border-radius: 1rem;
+        background: rgba(0,0,0,0.08);
+        font-weight: 700;
+    }
+    .np-doctype-tab.active .np-doctype-count { background: rgba(255,255,255,0.28); }
+
     /* ── Table ── */
     .np-table-wrap {
         background: white;
@@ -479,6 +514,14 @@
                 <input type="text" name="title" class="np-form-input" placeholder="e.g. Radiology Paid Seats 2025" required>
             </div>
             <div class="np-form-group">
+                <label>Document Type</label>
+                <select name="doc_type" id="npDocType" class="np-form-input" required onchange="npUpdateDocType()">
+                    {% for key, label in doc_types %}
+                    <option value="{{ key }}">{{ label }}</option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="np-form-group">
                 <label>Category</label>
                 <select name="category" id="npCategory" class="np-form-input" required onchange="npUpdateSpecialties()">
                     <option value="neetpg">NEET PG (MD/MS)</option>
@@ -529,7 +572,7 @@
                 </select>
             </div>
             <div class="np-form-group np-autocomplete">
-                <label>Specialty (Course)</label>
+                <label id="npSpecialtyLabel">Specialty (Course)</label>
                 <input type="text" name="specialty" id="npSpecialty" class="np-form-input" placeholder="Type to search..." required autocomplete="off"
                        oninput="npFilterSpecialties()" onfocus="npFilterSpecialties()">
                 <div class="np-autocomplete-list" id="npSpecialtyList"></div>
@@ -565,15 +608,29 @@
 
 <!-- PDFs Tab -->
 <div class="np-tab-panel active" id="panel-pdfs">
+    <!-- Document-type filter sub-tabs -->
+    <div class="np-doctype-tabs">
+        <a href="{{ url_for('neetpg_admin', doc_type='all') }}"
+           class="np-doctype-tab {{ 'active' if active_doc_type == 'all' else '' }}">
+            All <span class="np-doctype-count">{{ doctype_counts['all'] }}</span>
+        </a>
+        {% for key, label in doc_types %}
+        <a href="{{ url_for('neetpg_admin', doc_type=key) }}"
+           class="np-doctype-tab {{ 'active' if active_doc_type == key else '' }}">
+            {{ label }} <span class="np-doctype-count">{{ doctype_counts.get(key, 0) }}</span>
+        </a>
+        {% endfor %}
+    </div>
     {% if pdfs %}
     <div class="np-table-wrap">
         <table class="np-table">
             <thead>
                 <tr>
                     <th>Title</th>
+                    <th>Type</th>
                     <th>Category</th>
                     <th>State</th>
-                    <th>Specialty</th>
+                    <th>Specialty / College</th>
                     <th>Size</th>
                     <th>DLs</th>
                     <th>Status</th>
@@ -587,6 +644,9 @@
                     <td>
                         <div style="font-weight:600;color:var(--gray-800);font-size:0.85rem;">{{ pdf.title }}</div>
                         <div class="np-file-name">{{ pdf.file_name }}</div>
+                    </td>
+                    <td>
+                        <span class="np-badge np-badge-orange">{{ doc_type_labels.get(pdf.doc_type or 'cutoff', 'Cut Off') }}</span>
                     </td>
                     <td>
                         <span class="np-badge {{ 'np-badge-navy' if pdf.category == 'neetpg' else 'np-badge-purple' }}">
@@ -657,21 +717,21 @@
     <div style="display:flex;align-items:center;justify-content:center;gap:6px;padding:1.2rem 0 0.5rem;flex-wrap:wrap;">
         <span style="font-size:0.78rem;color:var(--gray-500);margin-right:8px;">Page {{ page }} of {{ total_pages }} ({{ total_pdfs_count }} PDFs)</span>
         {% if page > 1 %}
-        <a href="{{ url_for('neetpg_admin', page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
-        <a href="{{ url_for('neetpg_admin', page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&laquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=page-1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&lsaquo; Prev</a>
         {% endif %}
         {% for p in range(1, total_pages + 1) %}
             {% if p == page %}
             <span style="padding:6px 12px;background:var(--orange);color:white;border-radius:6px;font-size:0.8rem;font-weight:700;">{{ p }}</span>
             {% elif p <= 3 or p >= total_pages - 1 or (p >= page - 1 and p <= page + 1) %}
-            <a href="{{ url_for('neetpg_admin', page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
+            <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=p) }}" style="padding:6px 12px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">{{ p }}</a>
             {% elif p == 4 or p == total_pages - 2 %}
             <span style="padding:6px 4px;color:var(--gray-400);font-size:0.8rem;">...</span>
             {% endif %}
         {% endfor %}
         {% if page < total_pages %}
-        <a href="{{ url_for('neetpg_admin', page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
-        <a href="{{ url_for('neetpg_admin', page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=page+1) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">Next &rsaquo;</a>
+        <a href="{{ url_for('neetpg_admin', doc_type=active_doc_type, page=total_pages) }}" style="padding:6px 10px;border:1px solid var(--gray-300);border-radius:6px;font-size:0.8rem;color:var(--navy);text-decoration:none;font-weight:600;">&raquo;</a>
         {% endif %}
     </div>
     {% endif %}
@@ -1043,7 +1103,34 @@ function npUpdateSpecialties() {
     npHighlightIdx = -1;
 }
 
+// MCC College Profile uses the same DB column (specialty) to hold a free-text
+// College Name, so we relabel the field and disable course autocomplete for it.
+function npIsMccProfile() {
+    var el = document.getElementById('npDocType');
+    return el && el.value === 'mcc_profile';
+}
+
+function npUpdateDocType() {
+    var label = document.getElementById('npSpecialtyLabel');
+    var input = document.getElementById('npSpecialty');
+    if (npIsMccProfile()) {
+        label.textContent = 'College Name';
+        input.placeholder = 'Enter college name...';
+    } else {
+        label.textContent = 'Specialty (Course)';
+        input.placeholder = 'Type to search...';
+    }
+    input.value = '';
+    document.getElementById('npSpecialtyList').classList.remove('show');
+    npHighlightIdx = -1;
+}
+
 function npFilterSpecialties() {
+    // MCC College Profile: free-text college name, no course suggestions.
+    if (npIsMccProfile()) {
+        document.getElementById('npSpecialtyList').classList.remove('show');
+        return;
+    }
     var input = document.getElementById('npSpecialty');
     var list = document.getElementById('npSpecialtyList');
     var val = input.value.trim().toLowerCase();
