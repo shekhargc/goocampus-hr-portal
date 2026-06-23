@@ -750,25 +750,39 @@
           recByRow.push({tr: tr, rec: rec});
           for (var k in rec){ if(!seen[k]){ seen[k]=1; allKeys.push(k); } }
         });
-        // Extra = fields not already shown and not system/internal. Dedup is
-        // tolerant: a friendly header like "Status" matches DB "research_status"
-        // ("Research Status"), and "Topic" matches "Research Topic", so the same
-        // field never appears twice under two names.
+        // Map each visible column to its underlying field. Match by the actual
+        // cell VALUE (precise: "Vendor" -> vendor_provider, while ielts_vendor /
+        // oet_vendor stay as distinct addable fields), falling back to a LABEL
+        // match for formatted cells ("Start Date" -> research_start_date). Mapped
+        // fields are already shown, so they never re-appear under a raw name.
         var SYSTEM = {id:1, registration_number:1, first_name:1, last_name:1, prefix:1,
                       customer_id:1, product_id:1, counsellor_id:1, photo_path:1};
-        var normHeaders = headers.map(function(h){ return h.toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }).filter(Boolean);
-        function isShown(label){
-          var ll = label.toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
-          for (var i=0;i<normHeaders.length;i++){
-            var h = normHeaders[i];
-            if (!h) continue;
-            if (ll === h) return true;
-            if (ll.length > h.length && ll.slice(-(h.length+1)) === (' '+h)) return true; // "research status" vs "status"
-            if (h.length > ll.length && h.slice(-(ll.length+1)) === (' '+ll)) return true;
+        function normLbl(s){ return s.toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }
+        var sample = recByRow.slice(0, 8);
+        var shownKeys = {};
+        for (var ci=0; ci<headers.length; ci++){
+          var matchedAny = false;
+          for (var ri=0; ri<sample.length; ri++){
+            var cell = sample[ri].tr.children[ci]; if (!cell) continue;
+            var txt = cell.textContent.trim();
+            if (!txt || txt==='—' || txt==='-' || txt==='–') continue;
+            var rec = sample[ri].rec, hit = false;
+            // Exclude EVERY column whose value equals this cell — some schemas store
+            // the same value in several columns (e.g. vendor_provider + ielts_vendor).
+            for (var kk in rec){ if (String(rec[kk]) === txt){ shownKeys[kk] = 1; hit = true; matchedAny = true; } }
+            if (hit) break;
           }
-          return false;
+          if (!matchedAny){
+            var hn = normLbl(headers[ci]);
+            if (hn){
+              for (var j=0;j<allKeys.length;j++){
+                var lk = normLbl(prettify(allKeys[j]));
+                if (lk===hn || (lk.length>hn.length && lk.slice(-(hn.length+1))===(' '+hn))){ shownKeys[allKeys[j]] = 1; break; }
+              }
+            }
+          }
         }
-        var extraFields = allKeys.filter(function(k){ return !SYSTEM[k] && !isShown(prettify(k)); });
+        var extraFields = allKeys.filter(function(k){ return !SYSTEM[k] && !shownKeys[k]; });
         var extraValid = {}; extraFields.forEach(function(k){ extraValid[k]=1; });
 
         var hidden = new Set(), extra = new Set();
