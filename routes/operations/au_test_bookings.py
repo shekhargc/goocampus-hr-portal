@@ -357,6 +357,10 @@ def ops_australia_test_bookings_add_save():
                     v = None
                 cols.append(col)
                 vals.append(v)
+        # Record who created this row (logged-in team member).
+        if 'created_by' not in cols:
+            cols.append('created_by')
+            vals.append((get_user() or {}).get('id'))
         placeholders = ', '.join(['?'] * len(cols))
         cur = conn.execute(
             f"INSERT INTO ops_test_bookings ({', '.join(cols)}) VALUES ({placeholders}) RETURNING id",

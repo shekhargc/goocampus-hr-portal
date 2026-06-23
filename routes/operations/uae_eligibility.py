@@ -273,6 +273,10 @@ def ops_uae_eligibility_add_save():
             if col in request.form:
                 cols.append(col)
                 vals.append((request.form.get(col) or '').strip() or None)
+        # Record who created this row (logged-in team member).
+        if 'created_by' not in cols:
+            cols.append('created_by')
+            vals.append((get_user() or {}).get('id'))
         placeholders = ', '.join(['?'] * len(cols))
         cur = conn.execute(
             f"INSERT INTO ops_eligibility_letter ({', '.join(cols)}) "

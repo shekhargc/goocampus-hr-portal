@@ -196,10 +196,12 @@ def inject_manager_status():
             'has_sales_access': sales_access,
             'has_operations_access': ops_access,
             'operations_landing_url': ops_landing,
+            'current_user_name': (user['name'] if user else ''),
         }
     return {
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
+        'current_user_name': '',
     }
 
 def calculate_monthly_balance(employee_id, year, month):

@@ -69,7 +69,7 @@
                     <select name="booked_by" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Exam Booked By</option>
                         {% for b in exam_booked_by %}
-                        <option value="{{ b }}" {% if record and record.booked_by == b %}selected{% endif %}>{{ b }}</option>
+                        <option value="{{ b }}" {% if (record and record.booked_by == b) or (not record and current_user_name and b == current_user_name) %}selected{% endif %}>{{ b }}</option>
                         {% endfor %}
                     </select>
                 </div>
