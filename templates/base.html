@@ -715,5 +715,93 @@
     </script>
 
     {% block extra_js %}{% endblock %}
+
+    {# ── Generic per-section column chooser (Phase 4) ─────────────────────
+       Adds a "⚙ Columns" button above the main list table on any page, lets
+       each member show/hide columns (saved per member), and lets admins set a
+       default for everyone. Purely additive: no table on a page → does nothing;
+       no saved prefs → everything shows. #}
+    <script>
+    (function(){
+      if (window.__colChooserInit) return; window.__colChooserInit = true;
+      function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+      ready(function(){
+        // Find the primary list table: first <table> with a thead + >=2 headers,
+        // not inside a nav/sidebar/aside.
+        var table = null;
+        var tables = document.querySelectorAll('table');
+        for (var i=0;i<tables.length;i++){
+          var t = tables[i];
+          if (t.closest('nav') || t.closest('aside') || t.closest('.ops-sidebar') || t.closest('.sec-sidebar')) continue;
+          if (t.querySelectorAll('thead tr th').length >= 2){ table = t; break; }
+        }
+        if (!table) return;
+        var headers = Array.prototype.map.call(table.querySelectorAll('thead tr th'), function(th){ return th.textContent.trim(); });
+        if (!headers.length) return;
+        // Section key from the path (strip trailing /<id> or /<id>/edit).
+        var key = location.pathname.replace(/\/\d+(\/[a-z-]+)?\/?$/, '').replace(/\/$/, '') || location.pathname;
+        var hidden = new Set();
+
+        function applyHidden(){
+          var ths = table.querySelectorAll('thead tr th');
+          var colHide = [];
+          for (var i=0;i<ths.length;i++){ colHide[i] = hidden.has(headers[i]); ths[i].style.display = colHide[i] ? 'none' : ''; }
+          var rows = table.querySelectorAll('tbody tr');
+          rows.forEach(function(tr){
+            if (tr.children.length !== ths.length) return; // skip colspan/empty rows
+            for (var i=0;i<tr.children.length;i++){ tr.children[i].style.display = colHide[i] ? 'none' : ''; }
+          });
+        }
+        function save(scope){
+          return fetch('/api/view-prefs', {method:'POST', headers:{'Content-Type':'application/json'},
+            body: JSON.stringify({section:key, scope:scope, hidden: Array.from(hidden)})});
+        }
+
+        var wrap = document.createElement('div');
+        wrap.style.cssText = 'position:relative;display:inline-block;margin:0 0 10px 0;';
+        var btn = document.createElement('button');
+        btn.type='button'; btn.textContent='⚙ Columns';
+        btn.style.cssText='font-size:0.78rem;font-weight:600;color:#1e293b;background:#fff;border:1px solid #e2e8f0;border-radius:7px;padding:6px 12px;cursor:pointer;';
+        var panel = document.createElement('div');
+        panel.style.cssText='display:none;position:absolute;z-index:60;top:110%;left:0;background:#fff;border:1px solid #e2e8f0;border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,0.14);padding:10px;min-width:220px;max-height:340px;overflow:auto;';
+        wrap.appendChild(btn); wrap.appendChild(panel);
+        btn.addEventListener('click', function(){ panel.style.display = (panel.style.display==='none'?'block':'none'); });
+        document.addEventListener('click', function(e){ if(!wrap.contains(e.target)) panel.style.display='none'; });
+
+        function renderPanel(isAdmin){
+          panel.innerHTML='';
+          var title=document.createElement('div'); title.textContent='Show columns';
+          title.style.cssText='font-size:0.7rem;font-weight:700;color:#64748b;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;'; panel.appendChild(title);
+          headers.forEach(function(h){
+            if(!h) return;
+            var lbl=document.createElement('label'); lbl.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 2px;font-size:0.82rem;color:#1e293b;cursor:pointer;';
+            var cb=document.createElement('input'); cb.type='checkbox'; cb.checked=!hidden.has(h);
+            cb.addEventListener('change', function(){ if(cb.checked) hidden.delete(h); else hidden.add(h); applyHidden(); save('me'); });
+            lbl.appendChild(cb); lbl.appendChild(document.createTextNode(h)); panel.appendChild(lbl);
+          });
+          var foot=document.createElement('div'); foot.style.cssText='display:flex;gap:6px;margin-top:8px;border-top:1px solid #f1f5f9;padding-top:8px;flex-wrap:wrap;';
+          var reset=document.createElement('button'); reset.type='button'; reset.textContent='Reset mine';
+          reset.style.cssText='font-size:0.72rem;border:1px solid #e2e8f0;background:#fff;border-radius:6px;padding:4px 9px;cursor:pointer;';
+          reset.addEventListener('click', function(){ fetch('/api/view-prefs',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({section:key,scope:'reset'})}).then(function(){ location.reload(); }); });
+          foot.appendChild(reset);
+          if (isAdmin){
+            var def=document.createElement('button'); def.type='button'; def.textContent='Set as default for everyone';
+            def.style.cssText='font-size:0.72rem;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:6px;padding:4px 9px;cursor:pointer;font-weight:600;';
+            def.addEventListener('click', function(){ save('default').then(function(){ def.textContent='Saved as default ✓'; }); });
+            foot.appendChild(def);
+          }
+          panel.appendChild(foot);
+        }
+
+        fetch('/api/view-prefs?section='+encodeURIComponent(key)).then(function(r){return r.json();}).then(function(d){
+          (d.hidden||[]).forEach(function(h){ hidden.add(h); });
+          applyHidden();
+          renderPanel(!!d.is_admin);
+        }).catch(function(){ renderPanel(false); });
+
+        table.parentNode.insertBefore(wrap, table);
+      });
+    })();
+    </script>
 </body>
 </html>

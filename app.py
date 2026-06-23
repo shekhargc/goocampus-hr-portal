@@ -14596,6 +14596,16 @@ def ensure_ops_tables():
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
 
+        # ── Per-section column visibility (employee_id NULL = admin default) ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS view_preferences (
+            id SERIAL PRIMARY KEY,
+            employee_id INTEGER,
+            section_key TEXT NOT NULL,
+            hidden_columns TEXT,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_view_prefs_sec ON view_preferences(section_key, employee_id)")
+
         # ── Refunds (for clients backed out / "Dropped and Refunded") ──
         conn.execute('''CREATE TABLE IF NOT EXISTS refunds (
             id SERIAL PRIMARY KEY,
@@ -21836,6 +21846,82 @@ def admin_internal_transfers_reconcile():
     conn.close()
     return render_template('admin_internal_transfers_reconcile.html', rows=rows, products=products,
                            prod_names=prod_names, active_section='clients')
+
+
+@app.route('/api/view-prefs')
+@login_required
+def get_view_prefs():
+    """Return the effective hidden-columns list for the current user on a section.
+    Member's own row wins; otherwise the admin default (employee_id NULL)."""
+    import json as _json
+    section = (request.args.get('section') or '').strip()
+    if not section:
+        return jsonify({'hidden': [], 'mine': None, 'default': [], 'has_mine': False, 'is_admin': bool(session.get('is_admin'))})
+    uid = session.get('user_id')
+    conn = get_db()
+    try:
+        mine = conn.execute("SELECT hidden_columns FROM view_preferences WHERE employee_id = ? AND section_key = ?", (uid, section)).fetchone()
+        deflt = conn.execute("SELECT hidden_columns FROM view_preferences WHERE employee_id IS NULL AND section_key = ?", (section,)).fetchone()
+    finally:
+        try: conn.close()
+        except Exception: pass
+    def _parse(r):
+        if not r or not r['hidden_columns']:
+            return None
+        try: return _json.loads(r['hidden_columns'])
+        except Exception: return None
+    mine_h = _parse(mine)
+    def_h = _parse(deflt) or []
+    effective = mine_h if mine_h is not None else def_h
+    return jsonify({'hidden': effective, 'mine': mine_h, 'default': def_h,
+                    'has_mine': mine_h is not None, 'is_admin': bool(session.get('is_admin'))})
+
+
+@app.route('/api/view-prefs', methods=['POST'])
+@login_required
+def save_view_prefs():
+    """Save hidden columns for a section. scope='me' (per member), 'default'
+    (admin-wide, admin only), or 'reset' (drop the member's override)."""
+    import json as _json
+    data = request.get_json(silent=True) or {}
+    section = (data.get('section') or '').strip()
+    scope = (data.get('scope') or 'me').strip()
+    if not section:
+        return jsonify({'error': 'section required'}), 400
+    uid = session.get('user_id')
+    conn = get_db()
+    try:
+        if scope == 'reset':
+            conn.execute("DELETE FROM view_preferences WHERE employee_id = ? AND section_key = ?", (uid, section))
+            conn.commit()
+            return jsonify({'ok': True, 'reset': True})
+        if scope == 'default':
+            if not session.get('is_admin'):
+                return jsonify({'error': 'admin only'}), 403
+            target = None
+        else:
+            target = uid
+        hidden = data.get('hidden')
+        if not isinstance(hidden, list):
+            hidden = []
+        hj = _json.dumps([str(x) for x in hidden])
+        if target is None:
+            ex = conn.execute("SELECT id FROM view_preferences WHERE employee_id IS NULL AND section_key = ?", (section,)).fetchone()
+        else:
+            ex = conn.execute("SELECT id FROM view_preferences WHERE employee_id = ? AND section_key = ?", (target, section)).fetchone()
+        if ex:
+            conn.execute("UPDATE view_preferences SET hidden_columns = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (hj, ex['id']))
+        else:
+            conn.execute("INSERT INTO view_preferences (employee_id, section_key, hidden_columns) VALUES (?, ?, ?)", (target, section, hj))
+        conn.commit()
+        return jsonify({'ok': True})
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        try: conn.close()
+        except Exception: pass
 
 
 REFUND_METHODS = ['Bank Transfer', 'UPI / Online', 'Cheque', 'Cash']
