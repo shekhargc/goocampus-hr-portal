@@ -653,7 +653,7 @@
   <!-- Table -->
   {% if clients %}
   <div class="table-wrapper">
-    <table class="data-table">
+    <table class="data-table" data-default-hidden='[{% for k, lbl in registration_optional_fields %}"{{ lbl }}"{% if not loop.last %}, {% endif %}{% endfor %}]'>
       <thead>
         <tr>
           <th>Reg#</th>
@@ -665,6 +665,7 @@
           <th>Paid (₹)</th>
           <th>Balance (₹)</th>
           <th>Reg Date</th>
+          {% for k, lbl in registration_optional_fields %}<th style="display:none">{{ lbl }}</th>{% endfor %}
         </tr>
       </thead>
       <tbody>
@@ -702,6 +703,7 @@
             </span>
           </td>
           <td>{{ client.registration_date or '–' }}</td>
+          {% for k, lbl in registration_optional_fields %}<td style="display:none">{{ client[k] if client[k] not in [none, ''] else '–' }}</td>{% endfor %}
         </tr>
         {% endfor %}
       </tbody>

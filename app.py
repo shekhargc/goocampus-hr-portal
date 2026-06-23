@@ -34614,12 +34614,16 @@ def client_transfer_info(reg):
 REGISTRATION_OPTIONAL_FIELDS = [
     ('customer_id', 'Customer ID'), ('email', 'Email'), ('dob', 'DOB'),
     ('whatsapp1', 'WhatsApp 1'), ('whatsapp2', 'WhatsApp 2'),
-    ('lead_source', 'Lead Source'), ('plan_type', 'Plan Type'), ('joined_stage', 'Joined Stage'),
+    ('instagram', 'Instagram'), ('facebook', 'Facebook'), ('linkedin', 'LinkedIn'),
+    ('joined_stage', 'Joined Stage'), ('english_training', 'English Training'),
+    ('lead_source', 'Lead Source'), ('referral_type', 'Referral Type'), ('career_stage', 'Career Stage'),
     ('package_amount', 'Package Amount'), ('discount_allowed', 'Discount'),
+    ('additional_package_notes', 'Package Notes'),
     ('father_name', 'Father Name'), ('father_phone', 'Father Phone'),
-    ('mother_name', 'Mother Name'), ('mother_phone', 'Mother Phone'),
-    ('instagram', 'Instagram'), ('linkedin', 'LinkedIn'),
-    ('perm_city_district', 'Permanent City'), ('perm_state_province', 'Permanent State'),
+    ('mother_name', 'Mother Name'), ('mother_phone', 'Mother Phone'), ('parents_email', 'Parents Email'),
+    ('counsellor_email', 'Counsellor Email'), ('counsellor_number', 'Counsellor Phone'),
+    ('perm_city_district', 'Permanent City'), ('perm_state_province', 'Permanent State'), ('perm_country', 'Permanent Country'),
+    ('switched_program', 'Switched Program'), ('upgraded_to', 'Upgraded To'), ('additional_notes', 'Notes'),
 ]
 
 _RECJSON_NOISE = {'pathway', 'created_at', 'updated_at', 'created_by', 'photo_path', 'welcome_kit_sent'}

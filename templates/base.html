@@ -727,6 +727,8 @@
       function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
       function prettify(k){ return k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
       ready(function(){
+        // Payments pages keep their fixed Amount/GST/Total layout — no chooser.
+        if (/\/payments?(?:\/|$)/i.test(location.pathname)) return;
         var table = null, tables = document.querySelectorAll('table');
         for (var i=0;i<tables.length;i++){
           var t = tables[i];
