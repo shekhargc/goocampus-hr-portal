@@ -5,6 +5,13 @@ import requests as http_requests
 
 _currency_cache = {'rates': {}, 'last_fetch': 0}
 
+CURRENCY_SYMBOLS = {
+    'INR': '₹', 'USD': '$', 'EUR': '€', 'GBP': '£', 'RUB': '₽',
+    'AUD': 'A$', 'AED': 'د.إ', 'CNY': '¥', 'UAH': '₴', 'KZT': '₸',
+    'PHP': '₱', 'BDT': '৳', 'NPR': 'रू', 'GEL': '₾', 'KGS': 'сом',
+    'UZS': 'сўм', 'AMD': '֏', 'BYN': 'Br', 'EGP': 'E£', 'MYR': 'RM',
+}
+
 
 def _make_slug(name):
     """Generate URL-friendly slug from college name."""
@@ -23,7 +30,7 @@ def _currency_sym(code):
 
 def _get_exchange_rates():
     """Fetch exchange rates with 6-hour caching."""
-    now = _time.time()
+    now = time.time()
     if _currency_cache['rates'] and (now - _currency_cache['last_fetch']) < 21600:
         return _currency_cache['rates']
     try:
