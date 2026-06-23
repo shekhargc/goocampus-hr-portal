@@ -726,6 +726,13 @@
       if (window.__colChooserInit) return; window.__colChooserInit = true;
       function ready(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
       function prettify(k){ return k.replace(/_/g,' ').replace(/\b\w/g, function(c){ return c.toUpperCase(); }); }
+      // Identifying columns that must never be hidden (so a table can't go blank).
+      function isProtected(h){
+        var n = (h||'').toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+        if (/^reg( |$)/.test(n) || n.indexOf('registration') === 0) return true;   // Reg. No. / Reg# / Reg Number / Registration No
+        if (n === 'name' || n.indexOf('candidate') >= 0) return true;               // Candidate / Candidate Name / Name
+        return false;
+      }
       ready(function(){
         // Payments pages keep their fixed Amount/GST/Total layout — no chooser.
         if (/\/payments?(?:\/|$)/i.test(location.pathname)) return;
@@ -803,12 +810,16 @@
             });
           });
         }
+        function hide(i){ return hidden.has(headers[i]) && !isProtected(headers[i]); }
         function applyHidden(){
+          var hideArr = [], anyShown = false;
+          for (var i=0;i<headers.length;i++){ hideArr[i] = hide(i); if(!hideArr[i]) anyShown = true; }
+          if (!anyShown && headers.length) hideArr[0] = false;  // never let the table go fully blank
           var ths = table.querySelectorAll('thead tr th');
-          for (var i=0;i<headers.length;i++){ if(ths[i]) ths[i].style.display = hidden.has(headers[i]) ? 'none' : ''; }
+          for (var i=0;i<headers.length;i++){ if(ths[i]) ths[i].style.display = hideArr[i] ? 'none' : ''; }
           table.querySelectorAll('tbody tr').forEach(function(tr){
             if (tr.children.length < headers.length) return; // skip colspan/empty rows
-            for (var i=0;i<headers.length;i++){ if(tr.children[i]) tr.children[i].style.display = hidden.has(headers[i]) ? 'none' : ''; }
+            for (var i=0;i<headers.length;i++){ if(tr.children[i]) tr.children[i].style.display = hideArr[i] ? 'none' : ''; }
           });
         }
         function save(scope){
@@ -835,7 +846,11 @@
           panel.innerHTML='';
           panel.appendChild(secTitle('Show columns'));
           headers.forEach(function(h){ if(!h) return;
-            panel.appendChild(checkRow(h, !hidden.has(h), function(on){ if(on) hidden.delete(h); else hidden.add(h); applyHidden(); save('me'); }));
+            var prot = isProtected(h);
+            var row = checkRow(prot ? (h + ' — always shown') : h, prot ? true : !hidden.has(h),
+              function(on){ if(prot) return; if(on) hidden.delete(h); else hidden.add(h); applyHidden(); save('me'); });
+            if (prot){ var cb = row.querySelector('input'); cb.checked = true; cb.disabled = true; cb.style.cursor='not-allowed'; row.style.opacity='0.7'; }
+            panel.appendChild(row);
           });
           if (extraFields.length){
             panel.appendChild(secTitle('Add more fields'));
