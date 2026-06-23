@@ -23,6 +23,12 @@ worktree + branch**. Read this before editing so sessions don't collide.
 4. **Merge daily.** Short-lived branches barely conflict; week-old ones fight.
    Flow: your branch → `develop` → test on staging → `main` (live).
 5. **Don't do big work directly on `develop`/`main`.** Branch first.
+6. **Only the integrator session merges to `develop`/`main`.** Feature sessions
+   (College, etc.) **commit to their own branch and stop there** — do NOT push to
+   `develop` or `main` yourself. One designated "integrator" session pulls each
+   feature branch into `develop` → staging → `main`. This serializes deploys and
+   prevents two sessions racing on `develop`. When your work is committed and
+   ready, tell the user; the integrator does the merge.
 
 ## The College module — `college/` (self-contained)
 ```
