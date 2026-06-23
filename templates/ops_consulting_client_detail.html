@@ -99,7 +99,14 @@
       </div>
       </div>{# /X-1 photo+text wrapper #}
       <div style="display:flex;gap:12px;">
-        <a href="{{ url_for('ops_consulting_client_edit_page', client_id=client.id) }}"
+        {% if client.contract_path %}
+        <button type="button" onclick="ccView('{{ url_for('ops_client_contract_view', client_id=client.id) }}','{{ url_for('ops_client_contract_download', client_id=client.id) }}')" style="padding:10px 18px;background:#0f766e;color:white;border:none;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;">&#128196; View Contract</button>
+        {% else %}
+        <form method="POST" action="{{ url_for('ops_client_contract_upload', client_id=client.id) }}" enctype="multipart/form-data" style="display:inline;margin:0;">
+          <label style="padding:10px 18px;background:#fff;color:#0f766e;border:1px solid #0f766e;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;display:inline-block;">&#128206; Upload Contract<input type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.png" onchange="if(this.files.length)this.form.submit()" style="display:none;"></label>
+        </form>
+        {% endif %}
+        <a href="{{ url_for('ops_consulting_client_edit_page', client_id=client.id) }}", client_id=client.id) }}"
            style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
           Edit Client
         </a>

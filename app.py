@@ -19297,6 +19297,119 @@ def ops_plab_download_doc(doc_id):
     return send_file(BytesIO(file_data), download_name=doc['file_name'], as_attachment=True, mimetype=ct)
 
 
+# ── Client Contract (single file per client, stored in plab_clients.contract_path) ──
+_CONTRACT_CT = {'pdf':'application/pdf','doc':'application/msword','jpg':'image/jpeg','jpeg':'image/jpeg','png':'image/png',
+                'docx':'application/vnd.openxmlformats-officedocument.wordprocessingml.document'}
+
+@app.route('/operations/client/<int:client_id>/contract/upload', methods=['POST'])
+@admin_required
+def ops_client_contract_upload(client_id):
+    """Attach a contract FILE (pdf/doc/image) to a client -> R2 -> contract_path."""
+    back = request.referrer or url_for('ops_main_dashboard')
+    conn = get_db()
+    client = conn.execute("SELECT id, registration_number, COALESCE(pathway,'plab') AS pathway FROM plab_clients WHERE id = ?", (client_id,)).fetchone()
+    if not client:
+        conn.close(); flash('Client not found', 'error'); return redirect(back)
+    file = request.files.get('file')
+    if not file or not file.filename:
+        conn.close(); flash('No file selected', 'error'); return redirect(back)
+    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else 'pdf'
+    file_bytes = file.read()
+    if len(file_bytes) > 15 * 1024 * 1024:
+        conn.close(); flash('File too large (max 15 MB)', 'error'); return redirect(back)
+    from core import storage
+    if not storage.is_configured():
+        conn.close(); flash('File storage not configured', 'error'); return redirect(back)
+    try:
+        r2_key = storage.make_doc_key(client['pathway'], client['registration_number'] or f'client_{client_id}', 'Contract', file.filename)
+        if not storage.upload_bytes(r2_key, file_bytes, _CONTRACT_CT.get(ext, 'application/octet-stream')):
+            conn.close(); flash('Upload to storage failed', 'error'); return redirect(back)
+        conn.execute("UPDATE plab_clients SET contract_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (r2_key, client_id))
+        conn.commit()
+        flash('Contract uploaded.', 'success')
+    except Exception as e:
+        try: conn.rollback()
+        except Exception: pass
+        flash(f'Contract upload failed: {e}', 'error')
+    finally:
+        conn.close()
+    return redirect(back)
+
+@app.route('/operations/client/<int:client_id>/contract/view')
+@admin_required
+def ops_client_contract_view(client_id):
+    """Inline view of the contract (presigned R2 URL) — used by the profile viewer iframe."""
+    conn = get_db(); c = conn.execute("SELECT contract_path FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
+    if not c or not c['contract_path']:
+        return "No contract on file", 404
+    key = _r2_object_key_or_none(c['contract_path'])
+    if key:
+        try:
+            from core import storage
+            url = storage.presigned_get_url(key)
+            if url: return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"contract_view presign: {e}")
+    return "Contract temporarily unavailable", 503
+
+@app.route('/operations/client/<int:client_id>/contract/download')
+@admin_required
+def ops_client_contract_download(client_id):
+    """Download the contract with a friendly filename."""
+    conn = get_db(); c = conn.execute("SELECT contract_path, registration_number FROM plab_clients WHERE id = ?", (client_id,)).fetchone(); conn.close()
+    if not c or not c['contract_path']:
+        return "No contract on file", 404
+    key = _r2_object_key_or_none(c['contract_path'])
+    if key:
+        try:
+            from core import storage
+            ext = key.rsplit('.', 1)[-1] if '.' in key else 'pdf'
+            fn = (c['registration_number'] or 'contract').replace('/', '_') + '_contract.' + ext
+            url = storage.presigned_get_url(key, filename_for_download=fn)
+            if url: return redirect(url, code=302)
+        except Exception as e:
+            logging.error(f"contract_download presign: {e}")
+    return "Contract temporarily unavailable", 503
+
+@app.route('/admin/plab-contracts-bulk', methods=['GET', 'POST'])
+@admin_required
+def admin_plab_contracts_bulk():
+    """One-time: bulk-attach contract files (named by reg, e.g. GCUKIP_25-26_016.pdf)
+    to clients — parses reg from the filename, uploads each to R2, sets contract_path."""
+    if request.method == 'POST':
+        from core import storage
+        if not storage.is_configured():
+            flash('File storage not configured', 'error'); return redirect(url_for('admin_plab_contracts_bulk'))
+        files = request.files.getlist('contracts')
+        conn = get_db(); matched = 0; nomatch = []; errors = []
+        for f in files:
+            if not f or not f.filename:
+                continue
+            base = f.filename.rsplit('.', 1)[0]
+            ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else 'pdf'
+            reg = base.replace('_', '/')   # GCUKIP_25-26_016 -> GCUKIP/25-26/016
+            cl = conn.execute("SELECT id, COALESCE(pathway,'plab') AS pw, registration_number FROM plab_clients WHERE registration_number = ?", (reg,)).fetchone()
+            if not cl:
+                nomatch.append(reg); continue
+            try:
+                b = f.read()
+                key = storage.make_doc_key(cl['pw'], reg, 'Contract', f.filename)
+                if storage.upload_bytes(key, b, _CONTRACT_CT.get(ext, 'application/octet-stream')):
+                    conn.execute("UPDATE plab_clients SET contract_path = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?", (key, cl['id'])); matched += 1
+                else:
+                    errors.append(reg)
+            except Exception as e:
+                errors.append(f"{reg}: {str(e)[:40]}")
+        conn.commit(); conn.close()
+        flash(f'Imported {matched} contract(s). Unmatched: {len(nomatch)}. Errors: {len(errors)}.', 'success')
+        if nomatch:
+            flash('No client found for: ' + ', '.join(nomatch[:25]) + ('…' if len(nomatch) > 25 else ''), 'error')
+        if errors:
+            flash('Errors: ' + ', '.join(errors[:10]), 'error')
+        return redirect(url_for('admin_plab_contracts_bulk'))
+    return render_template('admin_plab_contracts_bulk.html', active_section='clients')
+
+
 @app.route('/operations/plab/doc/<int:doc_id>/delete', methods=['POST'])
 @admin_required
 def ops_plab_delete_doc(doc_id):

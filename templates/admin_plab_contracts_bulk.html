@@ -1,0 +1,27 @@
+{% extends "clients_sidebar_base.html" %}
+{% block title %}Bulk Import Contracts{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:680px;margin:0 auto;">
+    <h1 style="margin:0 0 6px;font-size:1.3rem;font-weight:700;color:var(--navy);">Bulk Import Contracts</h1>
+    <p style="margin:0 0 18px;font-size:0.86rem;color:var(--gray-500);">Select contract files named by registration number (e.g. <code>GCUKIP_25-26_016.pdf</code>). Each is matched to its client by the filename, uploaded to storage, and attached to the client's profile.</p>
+
+    {% with messages = get_flashed_messages(with_categories=true) %}
+      {% for cat, msg in messages %}
+      <div style="margin-bottom:12px;padding:11px 14px;border-radius:8px;font-size:0.85rem;font-weight:600;background:{{ '#ECFDF5' if cat=='success' else '#FEF2F2' }};color:{{ '#065F46' if cat=='success' else '#991B1B' }};">{{ msg }}</div>
+      {% endfor %}
+    {% endwith %}
+
+    <form method="POST" enctype="multipart/form-data" style="background:#fff;border-radius:14px;padding:24px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+      <label style="display:block;font-size:0.8rem;font-weight:700;color:var(--gray-600);margin-bottom:8px;">Contract files (.pdf / .doc / .docx)</label>
+      <input type="file" name="contracts" multiple accept=".pdf,.doc,.docx" required
+             style="width:100%;padding:10px;border:1px dashed var(--gray-300);border-radius:8px;font-size:0.86rem;" id="cfiles">
+      <div id="cnt" style="margin-top:8px;font-size:0.8rem;color:var(--gray-500);"></div>
+      <button type="submit" style="margin-top:16px;background:var(--orange);color:#fff;padding:11px 22px;border:none;border-radius:8px;font-weight:700;cursor:pointer;">Upload &amp; Attach</button>
+    </form>
+  </div>
+</div>
+<script>
+document.getElementById('cfiles').addEventListener('change',function(){ document.getElementById('cnt').textContent = this.files.length + ' file(s) selected'; });
+</script>
+{% endblock %}
