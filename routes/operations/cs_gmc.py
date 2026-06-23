@@ -35,21 +35,21 @@ def _get_lookup_options(category):
     conn = get_db()
     try:
         rows = conn.execute(
-            "SELECT option_value FROM lookup_options "
+            "SELECT value FROM lookup_options "
             "WHERE category = ? AND COALESCE(pathway, 'plab') = 'consulting' "
-            "  AND COALESCE(is_active, 1) = 1 "
+            "  AND is_active = TRUE "
             "ORDER BY sort_order, id",
             (category,),
         ).fetchall()
         if not rows:
             rows = conn.execute(
-                "SELECT option_value FROM lookup_options "
+                "SELECT value FROM lookup_options "
                 "WHERE category = ? AND COALESCE(pathway, 'plab') = 'plab' "
-                "  AND COALESCE(is_active, 1) = 1 "
+                "  AND is_active = TRUE "
                 "ORDER BY sort_order, id",
                 (category,),
             ).fetchall()
-        return [r['option_value'] for r in rows]
+        return [r['value'] for r in rows]
     except Exception as e:
         logging.warning(f"_get_lookup_options({category}): {e}")
         return []
