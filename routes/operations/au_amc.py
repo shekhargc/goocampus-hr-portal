@@ -92,8 +92,6 @@ def ops_australia_amc_list():
         records=records,
         search=search, status_filter=status_filter,
         amc_setup_statuses=_get_lookup_options('amc_setup_status'),
-        amc_english_exams=_get_lookup_options('amc_english_exam'),
-        amc_license_statuses=_get_lookup_options('amc_license_status'),
         active_ops_page='australia-amc',
         active_pathway='australia',
     )
@@ -108,22 +106,14 @@ def ops_australia_amc_add():
         try:
             conn.execute(
                 """INSERT INTO ops_amc_registration (
-                     registration_number, amc_reference_number, login_pwd,
-                     secret_question, secret_answer, amc_setup,
-                     registration_date, english_exam, exam_date,
-                     english_result_expiry_date, license, license_received_date,
-                     candidate_email, mobile_number, notes,
+                     registration_number, amc_reference_number, login_id, login_pwd,
+                     amc_setup, registration_date,
                      pathway, created_by, updated_at
-                   ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+                   ) VALUES (?,?,?,?,?,?,?,?,?)""",
                 (
                     f.get('registration_number'), f.get('amc_reference_number'),
-                    f.get('login_pwd'), f.get('secret_question'),
-                    f.get('secret_answer'), f.get('amc_setup'),
-                    f.get('registration_date'), f.get('english_exam'),
-                    f.get('exam_date'), f.get('english_result_expiry_date'),
-                    f.get('license'), f.get('license_received_date'),
-                    f.get('candidate_email'), f.get('mobile_number'),
-                    f.get('notes'),
+                    f.get('login_id'), f.get('login_pwd'), f.get('amc_setup'),
+                    f.get('registration_date'),
                     'australia', session.get('user_id', 0), datetime.now(),
                 ),
             )
@@ -147,8 +137,6 @@ def ops_australia_amc_add():
     return render_template(
         'ops_australia_amc_form.html', record=None, clients=clients,
         amc_setup_statuses=_get_lookup_options('amc_setup_status'),
-        amc_english_exams=_get_lookup_options('amc_english_exam'),
-        amc_license_statuses=_get_lookup_options('amc_license_status'),
         pre_reg=pre_reg, active_ops_page='australia-amc',
         active_pathway='australia',
     )
@@ -180,22 +168,13 @@ def ops_australia_amc_edit(gid):
         try:
             conn.execute(
                 """UPDATE ops_amc_registration SET
-                     registration_number=?, amc_reference_number=?, login_pwd=?,
-                     secret_question=?, secret_answer=?, amc_setup=?,
-                     registration_date=?, english_exam=?, exam_date=?,
-                     english_result_expiry_date=?, license=?,
-                     license_received_date=?,
-                     candidate_email=?, mobile_number=?, notes=?, updated_at=?
+                     registration_number=?, amc_reference_number=?, login_id=?,
+                     login_pwd=?, amc_setup=?, registration_date=?, updated_at=?
                    WHERE id = ?""",
                 (
                     f.get('registration_number'), f.get('amc_reference_number'),
-                    f.get('login_pwd'), f.get('secret_question'),
-                    f.get('secret_answer'), f.get('amc_setup'),
-                    f.get('registration_date'), f.get('english_exam'),
-                    f.get('exam_date'), f.get('english_result_expiry_date'),
-                    f.get('license'), f.get('license_received_date'),
-                    f.get('candidate_email'), f.get('mobile_number'),
-                    f.get('notes'), datetime.now(), gid,
+                    f.get('login_id'), f.get('login_pwd'), f.get('amc_setup'),
+                    f.get('registration_date'), datetime.now(), gid,
                 ),
             )
             conn.commit()
@@ -217,8 +196,6 @@ def ops_australia_amc_edit(gid):
     return render_template(
         'ops_australia_amc_form.html', record=record, clients=clients,
         amc_setup_statuses=_get_lookup_options('amc_setup_status'),
-        amc_english_exams=_get_lookup_options('amc_english_exam'),
-        amc_license_statuses=_get_lookup_options('amc_license_status'),
         pre_reg='', active_ops_page='australia-amc',
         active_pathway='australia',
     )

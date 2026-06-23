@@ -89,7 +89,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
     <div style="background:white;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.1);overflow:hidden;">
         {% if records %}
         <div style="overflow-x:auto;">
-            <table data-shown-keys='["amc_reference_number", "amc_setup", "first_name", "last_name", "license", "license_received_date", "prefix", "registration_date", "registration_number"]' style="width:100%;border-collapse:collapse;font-size:14px;">
+            <table data-shown-keys='["amc_reference_number", "amc_setup", "first_name", "last_name", "prefix", "registration_date", "registration_number"]' style="width:100%;border-collapse:collapse;font-size:14px;">
                 <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
                     <tr>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
@@ -97,8 +97,6 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">AMC Ref#</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">AMC Setup</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Date</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">License</th>
-                        <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">License Received</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -121,8 +119,6 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                             {% endif %}
                         </td>
                         <td style="padding:12px 16px;">{{ record.registration_date|format_date }}</td>
-                        <td style="padding:12px 16px;">{{ record.license or '—' }}</td>
-                        <td style="padding:12px 16px;">{{ record.license_received_date|format_date }}</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -159,15 +155,8 @@ const AMC_RECORDS = {
         amc_reference_number: {{ (record.amc_reference_number or '')|tojson }},
         amc_setup: {{ (record.amc_setup or '')|tojson }},
         registration_date: {{ (record.registration_date or '')|format_date|tojson }},
-        english_exam: {{ (record.english_exam or '')|tojson }},
-        exam_date: {{ (record.exam_date or '')|format_date|tojson }},
-        english_result_expiry_date: {{ (record.english_result_expiry_date or '')|format_date|tojson }},
-        license: {{ (record.license or '')|tojson }},
-        license_received_date: {{ (record.license_received_date or '')|format_date|tojson }},
-        login_pwd: {{ (record.login_pwd or '')|tojson }},
-        secret_question: {{ (record.secret_question or '')|tojson }},
-        secret_answer: {{ (record.secret_answer or '')|tojson }},
-        notes: {{ (record.notes or '')|tojson }}
+        login_id: {{ (record.login_id or '')|tojson }},
+        login_pwd: {{ (record.login_pwd or '')|tojson }}
     },
     {% endfor %}
 };
@@ -214,36 +203,15 @@ function openAmcDetail(id) {
         ${field('AMC Reference Number', r.amc_reference_number)}
         ${field('AMC Setup', badgeHtml(r.amc_setup))}
         ${field('Registration Date', r.registration_date)}
-        ${field('License', badgeHtml(r.license))}
-        ${field('License Received Date', r.license_received_date)}
     </div>
 
     <div class="drawer-section">
-        <h4>English Exam</h4>
+        <h4>Login Details</h4>
         <div class="drawer-grid">
-            ${field('English Exam', r.english_exam)}
-            ${field('Exam Date', r.exam_date)}
-            ${field('Result Expiry Date', r.english_result_expiry_date)}
-        </div>
-    </div>
-
-    <div class="drawer-section">
-        <h4>Login Credentials</h4>
-        <div class="drawer-grid">
+            ${field('Login Details', r.login_id)}
             ${field('Password', r.login_pwd)}
         </div>
     </div>`;
-
-    if (r.secret_question) {
-        html += `<div class="drawer-section"><h4>Secret Question</h4><div class="drawer-grid">
-            ${field('Question', r.secret_question)}
-            ${field('Answer', r.secret_answer)}
-        </div></div>`;
-    }
-
-    if (r.notes) {
-        html += `<div class="drawer-section"><h4>Notes</h4><p style="font-size:14px;color:var(--navy);margin:0;line-height:1.6;">${r.notes}</p></div>`;
-    }
 
     document.getElementById('amcDrawerBody').innerHTML = html;
     document.getElementById('amcDrawerActions').innerHTML = `

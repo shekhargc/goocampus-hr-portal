@@ -81,18 +81,8 @@
       <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Login Details</h3>
         <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
+          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Login Details:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.login_id or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Login Password:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.login_pwd or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Secret Question:</span><span style="color:var(--navy);font-weight:600;">{{ record.secret_question or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Secret Answer:</span><span style="color:var(--navy);font-weight:600;">{{ record.secret_answer or '—' }}</span></div>
-        </div>
-      </div>
-
-      <!-- License Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">License</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">License Status:</span><span style="color:var(--navy);font-weight:600;">{{ record.license or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">License Received Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.license_received_date or '—' }}</span></div>
         </div>
       </div>
 
@@ -100,16 +90,6 @@
 
     <!-- RIGHT COLUMN -->
     <div style="display:flex;flex-direction:column;gap:24px;">
-
-      <!-- English Exam & Dates Card -->
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">English Exam &amp; Dates</h3>
-        <div style="display:flex;flex-direction:column;gap:12px;font-size:14px;">
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">English Exam:</span><span style="color:var(--navy);font-weight:600;">{{ record.english_exam or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Exam Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.exam_date or '—' }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Result Expiry Date:</span><span style="color:var(--navy);font-weight:600;">{{ record.english_result_expiry_date or '—' }}</span></div>
-        </div>
-      </div>
 
       <!-- Candidate Card -->
       <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
@@ -119,11 +99,6 @@
             {% if record.first_name or record.last_name %}{{ record.prefix or '' }} {{ record.first_name or '' }} {{ record.last_name or '' }}{% else %}—{% endif %}
           </span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Registration:</span><span style="color:var(--navy);font-weight:600;font-family:ui-monospace,Menlo,monospace;">{{ record.registration_number|format_reg }}</span></div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Candidate Email:</span>
-            {% if record.candidate_email %}<a href="mailto:{{ record.candidate_email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.candidate_email }}</a>
-            {% else %}<span style="color:var(--gray-400);font-weight:600;">—</span>{% endif %}
-          </div>
-          <div style="display:flex;justify-content:space-between;align-items:center;"><span style="color:var(--gray-600);font-weight:500;">Mobile Number:</span><span style="color:var(--navy);font-weight:600;">{{ record.mobile_number or record.mobile or '—' }}</span></div>
           <div style="display:flex;justify-content:space-between;align-items:center;">
             <span style="color:var(--gray-600);font-weight:500;">Client Email:</span>
             {% if record.email %}<a href="mailto:{{ record.email }}" style="color:var(--orange);text-decoration:none;font-weight:600;">{{ record.email }}</a>
@@ -132,13 +107,6 @@
         </div>
       </div>
 
-      <!-- Notes Card -->
-      {% if record.notes %}
-      <div style="background:white;border-radius:12px;padding:20px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
-        <h3 style="margin:0 0 16px 0;font-size:16px;font-weight:700;color:var(--navy);border-bottom:2px solid var(--orange);padding-bottom:12px;">Notes</h3>
-        <p style="margin:0;font-size:14px;color:var(--navy);line-height:1.6;white-space:pre-wrap;">{{ record.notes }}</p>
-      </div>
-      {% endif %}
 
     </div>
   </div>

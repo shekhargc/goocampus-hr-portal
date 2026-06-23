@@ -27582,6 +27582,7 @@ def ensure_ops_amc_registration_table():
                 id SERIAL PRIMARY KEY,
                 registration_number TEXT REFERENCES plab_clients(registration_number),
                 amc_reference_number TEXT,
+                login_id TEXT,
                 login_pwd TEXT,
                 secret_question TEXT,
                 secret_answer TEXT,
@@ -27601,6 +27602,12 @@ def ensure_ops_amc_registration_table():
                 updated_at TIMESTAMP
             )
         """)
+        # Migration: add login_id (AMC portal login ID / username) to existing tables
+        try:
+            conn.execute("ALTER TABLE ops_amc_registration ADD COLUMN IF NOT EXISTS login_id TEXT")
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
         conn.commit()
         logging.info("ensure_ops_amc_registration_table: ready")
     except Exception as e:
