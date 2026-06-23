@@ -21013,7 +21013,7 @@ def ops_call_notes_add():
             contacted_status, contact_type
         ) VALUES (?,?,?,?,?,?,?)''', (
             f.get('registration_number'), f.get('call_date'), f.get('call_note'),
-            f.get('added_by', ''), session.get('user_id', 0),
+            ((get_user() or {}).get('name') or f.get('added_by', '')), session.get('user_id', 0),
             f.get('contacted_status', 'Yes'), f.get('contact_type', 'Call')
         ))
         conn.commit()

@@ -584,7 +584,7 @@ def ops_portfolio_call_notes_add():
         call_note           = (request.form.get('call_note') or '').strip()
         contacted_status    = (request.form.get('contacted_status') or 'Yes').strip()
         contact_type        = (request.form.get('contact_type') or 'Call').strip()
-        added_by            = (request.form.get('added_by') or '').strip()
+        added_by            = (user.get('name') if user else None) or (request.form.get('added_by') or '').strip()
 
         if not registration_number:
             flash('Please select a client from the suggestions.', 'error')

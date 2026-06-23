@@ -604,7 +604,7 @@ function renderTrackerDetail(data) {
                     <div class="timeline-content">
                         <div class="timeline-date">${note.date || '—'} &nbsp; ${statusLabel}</div>
                         <div class="timeline-note">${note.text || '(No note text)'}</div>
-                        <div class="timeline-by">${note.added_by ? 'by ' + note.added_by : '—'}</div>
+                        <div class="timeline-by">${note.added_by ? 'by ' + note.added_by : '—'} &middot; <a href="/operations/portfolio/call-notes/${note.id}/edit" style="color:var(--orange);text-decoration:none;font-weight:600;">Edit</a></div>
                     </div>
                 </div>
             `;
@@ -636,7 +636,7 @@ function renderTrackerDetail(data) {
     document.getElementById('drawerTitle').textContent = 'Client Details';
     document.getElementById('cnDrawerBody').innerHTML = html;
     document.getElementById('cnDrawerActions').innerHTML = `
-        <a href="/operations/portfolio/call-notes/add?client=${encodeURIComponent(data.registration_number)}" id="btnEditRecord" style="background:var(--orange);color:white;">Edit Record</a>
+        <a href="/operations/portfolio/call-notes/add?client=${encodeURIComponent(data.registration_number)}" id="btnAddNote" style="background:var(--orange);color:white;">+ Add Note</a>
         <a href="/operations/portfolio/clients/by-reg/${encodeURIComponent(data.registration_number)}" id="btnViewProfile" style="background:var(--navy);color:white;">View Client Profile</a>
     `;
 
