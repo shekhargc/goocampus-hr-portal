@@ -22,6 +22,16 @@ except Exception:
     Workbook = Font = PatternFill = Alignment = Border = Side = None
 from college.utils import _make_slug, _to_inr, _get_exchange_rates, _currency_sym, _currency_cache
 
+# Document type is a separate dimension from `category` (exam type: neetpg/dnb).
+# Order here drives the tab order on admin + landing pages.
+NEETPG_DOC_TYPES = [
+    ('cutoff', 'Cut Off'),
+    ('stipend_bond_penalty', 'Stipend, Bond & Penalty'),
+    ('mcc_profile', 'MCC College Profile'),
+]
+DOC_TYPE_LABELS = dict(NEETPG_DOC_TYPES)
+VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
+
 
 def neetpg_landing():
     conn = get_db()
@@ -36,14 +46,14 @@ def neetpg_landing():
         logging.error(f"neetpg visit track: {e}")
     # Only show published + active PDFs, newest published first
     all_pdfs = conn.execute(
-        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
+        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 1 AND is_active = 1 ORDER BY published_at DESC"
     ).fetchall()
     neetpg_pdfs = [p for p in all_pdfs if p['category'] == 'neetpg']
     dnb_pdfs = [p for p in all_pdfs if p['category'] == 'dnb']
 
     # ── Fetch scheduled (coming soon) PDFs ──
     scheduled_pdfs = conn.execute(
-        "SELECT id, title, category, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
+        "SELECT id, title, category, doc_type, specialty, state, file_name, file_size, upload_date, download_count, published_at FROM neetpg_pdfs WHERE is_published = 0 AND is_active = 1 AND auto_schedule = 1 ORDER BY upload_date ASC"
     ).fetchall()
 
     # ── Compute schedule_map for coming soon PDFs (same FIFO logic as admin) ──
@@ -80,22 +90,36 @@ def neetpg_landing():
     neetpg_scheduled = [p for p in scheduled_pdfs if p['category'] == 'neetpg']
     dnb_scheduled = [p for p in scheduled_pdfs if p['category'] == 'dnb']
 
-    # Build dynamic filter lists per category
-    neetpg_courses = set()
-    neetpg_states = set()
-    dnb_courses = set()
-    dnb_states = set()
+    # ── Sidebar filter items, tagged by both category (neetpg/dnb) AND doc_type ──
+    # The landing page shows/hides these in JS based on the active doc-type tab
+    # and the active NEET/DNB sub-tab, so each item carries both keys.
+    def _dt(p):
+        return (p['doc_type'] or 'cutoff') if 'doc_type' in p.keys() else 'cutoff'
+
+    state_counts = {}    # (cat, doc_type, state) -> count
+    course_seen = set()  # (cat, doc_type, course)
+    courses_items = []
     for p in all_pdfs:
-        if p['category'] == 'neetpg':
-            if p['specialty']:
-                neetpg_courses.add(p['specialty'])
-            if p['state']:
-                neetpg_states.add(p['state'])
-        elif p['category'] == 'dnb':
-            if p['specialty']:
-                dnb_courses.add(p['specialty'])
-            if p['state']:
-                dnb_states.add(p['state'])
+        cat = p['category']
+        dt = _dt(p)
+        st = p['state'] or 'All India/MCC'
+        state_counts[(cat, dt, st)] = state_counts.get((cat, dt, st), 0) + 1
+        sp = p['specialty']
+        if sp and (cat, dt, sp) not in course_seen:
+            course_seen.add((cat, dt, sp))
+            courses_items.append({'course': sp, 'cat': cat, 'doc_type': dt})
+    states_items = [
+        {'state': st, 'cat': cat, 'doc_type': dt, 'count': cnt}
+        for (cat, dt, st), cnt in state_counts.items()
+    ]
+    states_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['state']))
+    courses_items.sort(key=lambda x: (x['cat'], x['doc_type'], x['course']))
+
+    # Published count per doc_type (for the top-level doc-type tab badges)
+    doctype_counts = {k: 0 for k in DOC_TYPE_LABELS}
+    for p in all_pdfs:
+        dt = _dt(p)
+        doctype_counts[dt] = doctype_counts.get(dt, 0) + 1
     conn.close()
     # Check if lead already captured (cookie)
     lead_captured = request.cookies.get('neetpg_lead', '')
@@ -107,10 +131,10 @@ def neetpg_landing():
                            neetpg_scheduled=neetpg_scheduled,
                            dnb_scheduled=dnb_scheduled,
                            schedule_map=schedule_map,
-                           neetpg_courses=sorted(neetpg_courses),
-                           neetpg_states=sorted(neetpg_states),
-                           dnb_courses=sorted(dnb_courses),
-                           dnb_states=sorted(dnb_states),
+                           states_items=states_items,
+                           courses_items=courses_items,
+                           doc_types=NEETPG_DOC_TYPES,
+                           doctype_counts=doctype_counts,
                            lead_captured=lead_captured,
                            lead_name=lead_name))
     resp.headers['Cache-Control'] = 'no-store, no-cache, must-revalidate, max-age=0'
@@ -568,10 +592,26 @@ def neetpg_admin():
         flash('Admin access required', 'error')
         return redirect(url_for('dashboard'))
     conn = get_db()
-    # Pagination for PDFs
+    # ── Document-type filter (sub-tabs): 'all' or one of the valid doc types ──
+    active_doc_type = request.args.get('doc_type', 'all').strip()
+    if active_doc_type not in VALID_DOC_TYPES:
+        active_doc_type = 'all'
+    dt_where = "" if active_doc_type == 'all' else "WHERE doc_type = ?"
+    dt_params = [] if active_doc_type == 'all' else [active_doc_type]
+
+    # Per-type counts for the sub-tab badges
+    doctype_counts = {'all': conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs").fetchone()['c']}
+    for key in DOC_TYPE_LABELS:
+        doctype_counts[key] = conn.execute(
+            "SELECT COUNT(*) as c FROM neetpg_pdfs WHERE doc_type = ?", (key,)
+        ).fetchone()['c']
+
+    # Pagination for PDFs (within the active doc-type filter)
     page = int(request.args.get('page', 1))
     per_page = 20
-    total_pdfs_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_pdfs").fetchone()['c']
+    total_pdfs_count = conn.execute(
+        f"SELECT COUNT(*) as c FROM neetpg_pdfs {dt_where}", dt_params
+    ).fetchone()['c']
     total_pages = max(1, (total_pdfs_count + per_page - 1) // per_page)
     if page < 1:
         page = 1
@@ -579,8 +619,8 @@ def neetpg_admin():
         page = total_pages
     offset = (page - 1) * per_page
     pdfs = conn.execute(
-        "SELECT * FROM neetpg_pdfs ORDER BY upload_date DESC LIMIT ? OFFSET ?",
-        (per_page, offset)
+        f"SELECT * FROM neetpg_pdfs {dt_where} ORDER BY upload_date DESC LIMIT ? OFFSET ?",
+        dt_params + [per_page, offset]
     ).fetchall()
     leads = conn.execute("SELECT * FROM neetpg_leads ORDER BY created_at DESC").fetchall()
     lead_count = conn.execute("SELECT COUNT(*) as c FROM neetpg_leads").fetchone()['c']
@@ -681,6 +721,8 @@ def neetpg_admin():
                            page=page, total_pages=total_pages, total_pdfs_count=total_pdfs_count, schedule_map=schedule_map,
                            doc_requests=doc_requests, request_count=request_count, pending_requests=pending_requests,
                            recent_pdfs=recent_pdfs,
+                           doc_types=NEETPG_DOC_TYPES, doc_type_labels=DOC_TYPE_LABELS,
+                           active_doc_type=active_doc_type, doctype_counts=doctype_counts,
                     active_section='colleges')
 
 
@@ -691,11 +733,16 @@ def neetpg_upload():
         return jsonify({'error': 'Admin required'}), 403
     title = request.form.get('title', '').strip()
     category = request.form.get('category', 'neetpg')
+    doc_type = request.form.get('doc_type', 'cutoff').strip()
+    if doc_type not in VALID_DOC_TYPES:
+        doc_type = 'cutoff'
+    # For MCC College Profile the "specialty" field holds the College Name.
     specialty = request.form.get('specialty', '').strip()
     state = request.form.get('state', 'All India/MCC').strip()
     file = request.files.get('pdf_file')
     if not title or not specialty or not file:
-        flash('Title, specialty, and PDF file are required', 'error')
+        label = 'college name' if doc_type == 'mcc_profile' else 'specialty'
+        flash(f'Title, {label}, and PDF file are required', 'error')
         return redirect(url_for('neetpg_admin'))
     if not file.filename.lower().endswith('.pdf'):
         flash('Only PDF files are allowed', 'error')
@@ -706,8 +753,8 @@ def neetpg_upload():
     try:
         conn = get_db()
         conn.execute(
-            "INSERT INTO neetpg_pdfs (title, category, specialty, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, 0, 1)",
-            (title, category, specialty, file_name, file_size, file_data, state)
+            "INSERT INTO neetpg_pdfs (title, category, doc_type, specialty, file_name, file_size, file_data, state, is_published, auto_schedule) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, 1)",
+            (title, category, doc_type, specialty, file_name, file_size, file_data, state)
         )
         conn.commit()
         conn.close()
