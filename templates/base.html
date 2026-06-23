@@ -750,8 +750,25 @@
           recByRow.push({tr: tr, rec: rec});
           for (var k in rec){ if(!seen[k]){ seen[k]=1; allKeys.push(k); } }
         });
-        // Extra = fields whose label isn't already a visible column.
-        var extraFields = allKeys.filter(function(k){ return !headerSetLC[prettify(k).toLowerCase()]; });
+        // Extra = fields not already shown and not system/internal. Dedup is
+        // tolerant: a friendly header like "Status" matches DB "research_status"
+        // ("Research Status"), and "Topic" matches "Research Topic", so the same
+        // field never appears twice under two names.
+        var SYSTEM = {id:1, registration_number:1, first_name:1, last_name:1, prefix:1,
+                      customer_id:1, product_id:1, counsellor_id:1, photo_path:1};
+        var normHeaders = headers.map(function(h){ return h.toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim(); }).filter(Boolean);
+        function isShown(label){
+          var ll = label.toLowerCase().replace(/[^a-z0-9 ]+/g,' ').replace(/\s+/g,' ').trim();
+          for (var i=0;i<normHeaders.length;i++){
+            var h = normHeaders[i];
+            if (!h) continue;
+            if (ll === h) return true;
+            if (ll.length > h.length && ll.slice(-(h.length+1)) === (' '+h)) return true; // "research status" vs "status"
+            if (h.length > ll.length && h.slice(-(ll.length+1)) === (' '+ll)) return true;
+          }
+          return false;
+        }
+        var extraFields = allKeys.filter(function(k){ return !SYSTEM[k] && !isShown(prettify(k)); });
         var extraValid = {}; extraFields.forEach(function(k){ extraValid[k]=1; });
 
         var hidden = new Set(), extra = new Set();
