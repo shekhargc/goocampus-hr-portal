@@ -271,14 +271,7 @@ def ops_portfolio_clients_list():
         ).fetchone()['c']
 
         records = conn.execute(
-            f"""SELECT id, registration_number, prefix, first_name, last_name,
-                       mobile, email, account_status, current_stage, counsellor,
-                       package_amount, discount_allowed, final_package,
-                       registration_date, dob, city, state, plan_type,
-                       father_name, father_phone, mother_name, mother_phone,
-                       parents_email, counsellor_email, counsellor_number,
-                       lead_source
-                 FROM plab_clients
+            f"""SELECT * FROM plab_clients
                  WHERE {where_sql}
                  ORDER BY registration_date DESC NULLS LAST, id DESC""",
             params,

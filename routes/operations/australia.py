@@ -295,12 +295,7 @@ def ops_australia_clients_list():
     total = 0
 
     try:
-        sql = '''SELECT id, registration_number, registration_date,
-                        prefix, first_name, last_name, mobile, whatsapp1, email,
-                        city, state, account_status, current_stage,
-                        counsellor, plan_type, final_package, total_paid,
-                        lead_source, dob
-                   FROM plab_clients
+        sql = '''SELECT * FROM plab_clients
                   WHERE pathway = 'australia' '''
         params = []
         if status_filter:

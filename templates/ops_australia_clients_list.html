@@ -176,7 +176,7 @@
 
 <div class="table-card">
     {% if records %}
-    <table>
+    <table data-default-hidden='[{% for k, lbl in registration_optional_fields %}"{{ lbl }}"{% if not loop.last %}, {% endif %}{% endfor %}]'>
         <thead>
             <tr>
                 <th>Reg. No.</th>
@@ -189,6 +189,7 @@
                 <th style="text-align:right">Package</th>
                 <th style="text-align:right">Paid</th>
                 <th>Reg. Date</th>
+                {% for k, lbl in registration_optional_fields %}<th style="display:none">{{ lbl }}</th>{% endfor %}
             </tr>
         </thead>
         <tbody>
@@ -225,6 +226,7 @@
                     {% if r.total_paid %}&#8377;{{ '{:,.0f}'.format(r.total_paid) }}{% else %}—{% endif %}
                 </td>
                 <td>{{ r.registration_date or '—' }}</td>
+                {% for k, lbl in registration_optional_fields %}<td style="display:none">{{ r[k] if r[k] not in [none, ''] else '—' }}</td>{% endfor %}
             </tr>
         {% endfor %}
         </tbody>

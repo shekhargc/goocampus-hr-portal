@@ -740,6 +740,10 @@
         if (!headers.length) return;
         // Section key from the path (strip trailing /<id> or /<id>/edit).
         var key = location.pathname.replace(/\/\d+(\/[a-z-]+)?\/?$/, '').replace(/\/$/, '') || location.pathname;
+        // Columns hidden by default (e.g. optional registration fields) when the
+        // user has no saved preference. Lets a page offer many fields but show few.
+        var defaultHidden = [];
+        try { defaultHidden = JSON.parse(table.getAttribute('data-default-hidden') || '[]'); } catch(e) { defaultHidden = []; }
         var hidden = new Set();
 
         function applyHidden(){
@@ -794,10 +798,14 @@
         }
 
         fetch('/api/view-prefs?section='+encodeURIComponent(key)).then(function(r){return r.json();}).then(function(d){
-          (d.hidden||[]).forEach(function(h){ hidden.add(h); });
+          var eff;
+          if (d.has_mine) eff = d.mine || [];
+          else if (d.has_default) eff = d.default || [];
+          else eff = defaultHidden;
+          (eff||[]).forEach(function(h){ hidden.add(h); });
           applyHidden();
           renderPanel(!!d.is_admin);
-        }).catch(function(){ renderPanel(false); });
+        }).catch(function(){ defaultHidden.forEach(function(h){ hidden.add(h); }); applyHidden(); renderPanel(false); });
 
         table.parentNode.insertBefore(wrap, table);
       });

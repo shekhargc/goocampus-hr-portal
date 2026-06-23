@@ -21871,10 +21871,12 @@ def get_view_prefs():
         try: return _json.loads(r['hidden_columns'])
         except Exception: return None
     mine_h = _parse(mine)
-    def_h = _parse(deflt) or []
+    def_raw = _parse(deflt)
+    def_h = def_raw or []
     effective = mine_h if mine_h is not None else def_h
     return jsonify({'hidden': effective, 'mine': mine_h, 'default': def_h,
-                    'has_mine': mine_h is not None, 'is_admin': bool(session.get('is_admin'))})
+                    'has_mine': mine_h is not None, 'has_default': def_raw is not None,
+                    'is_admin': bool(session.get('is_admin'))})
 
 
 @app.route('/api/view-prefs', methods=['POST'])
@@ -34597,9 +34599,24 @@ def client_transfer_info(reg):
         return blank
 
 
+# Optional registration columns a user can reveal via the ⚙ Columns chooser on
+# the pathway Registration lists. Hidden by default (see data-default-hidden);
+# the route must SELECT * so the data is present. Keys are plab_clients columns.
+REGISTRATION_OPTIONAL_FIELDS = [
+    ('customer_id', 'Customer ID'), ('email', 'Email'), ('dob', 'DOB'),
+    ('whatsapp1', 'WhatsApp 1'), ('whatsapp2', 'WhatsApp 2'),
+    ('lead_source', 'Lead Source'), ('plan_type', 'Plan Type'), ('joined_stage', 'Joined Stage'),
+    ('package_amount', 'Package Amount'), ('discount_allowed', 'Discount'),
+    ('father_name', 'Father Name'), ('father_phone', 'Father Phone'),
+    ('mother_name', 'Mother Name'), ('mother_phone', 'Mother Phone'),
+    ('instagram', 'Instagram'), ('linkedin', 'LinkedIn'),
+    ('perm_city_district', 'Permanent City'), ('perm_state_province', 'Permanent State'),
+]
+
 # Expose to every template (no per-route render_template change needed).
 app.jinja_env.globals['can_access'] = can_access
 app.jinja_env.globals['client_transfer_info'] = client_transfer_info
+app.jinja_env.globals['registration_optional_fields'] = REGISTRATION_OPTIONAL_FIELDS
 app.jinja_env.globals['ACCESS_MASTER_ENFORCE'] = lambda: ACCESS_MASTER_ENFORCE
 
 
