@@ -86,6 +86,11 @@ def register_operations_modules(app):
     from . import cs_mentorship
     cs_mentorship.register_routes(app)
 
+    # AMC Pathway — Mentorship Sessions. Mirror of the Consulting Mentorship
+    # handlers (cs_mentorship) scoped to pathway='australia'.
+    from . import au_mentorship
+    au_mentorship.register_routes(app)
+
     # Standard Consulting — Services sections (manual data entry, no import).
     # Each clones the AMC (australia) section module scoped to
     # pathway='consulting'; list (with drawer) + detail + add + edit.
