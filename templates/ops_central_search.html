@@ -73,7 +73,7 @@
       <p class="cs-sub">One search across every pathway &middot; UK &middot; AMC &middot; UAE &middot; Consulting &middot; Portfolio &middot; Training</p>
       <div class="cs-searchbox">
         <i class="ti ti-search" aria-hidden="true"></i>
-        <input id="csInput" type="text" autocomplete="off" placeholder="Search by candidate name or registration number..." />
+        <input id="csInput" type="text" autocomplete="off" placeholder="Search by name, registration number, mobile, or email..." />
       </div>
       <div class="cs-results" id="csResults"></div>
       <div class="cs-hint" id="csHint">Start typing to find any candidate across all pathways.</div>
@@ -116,7 +116,7 @@
     if(q.length<2){results.innerHTML='';hint.style.display='block';return;}
     hint.style.display='none';
     t=setTimeout(()=>{
-      fetch('/operations/api/client-search?pathway=all&q='+encodeURIComponent(q))
+      fetch('/operations/api/client-search?pathway=all&contact=1&q='+encodeURIComponent(q))
         .then(r=>r.json()).then(data=>{
           if(!data.length){results.innerHTML='<div class="cs-hint" style="text-align:center;padding:10px;">No candidates found.</div>';return;}
           results.innerHTML=data.map(d=>

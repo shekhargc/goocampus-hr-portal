@@ -20401,9 +20401,15 @@ def ops_client_search_api():
         return jsonify([])
     conn = get_db()
     try:
-        where = ("(first_name ILIKE ? OR last_name ILIKE ? "
-                 "OR (first_name || ' ' || last_name) ILIKE ? OR registration_number ILIKE ?)")
+        inner = ("first_name ILIKE ? OR last_name ILIKE ? "
+                 "OR (first_name || ' ' || last_name) ILIKE ? OR registration_number ILIKE ?")
         params = [f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%']
+        # Central Search opts in (?contact=1) to ALSO match mobile + email — a
+        # 10-digit number matches inside a stored '+91…' value via substring.
+        if request.args.get('contact') in ('1', 'true', 'yes'):
+            inner += " OR mobile ILIKE ? OR email ILIKE ?"
+            params += [f'%{q}%', f'%{q}%']
+        where = "(" + inner + ")"
         if not all_pw:
             where = "COALESCE(pathway, 'plab') = ? AND " + where
             params = [pathway] + params
