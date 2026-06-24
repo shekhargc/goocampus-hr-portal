@@ -1320,23 +1320,28 @@ def client_invitation_create():
             (token, product_id, client_name, clean, client_email, user['id']))
         conn.commit()
         invite_url = f"https://goocampus.org/client/register/{token}"
-        flash(f'Invitation created! Link: {invite_url}', 'success')
 
-        # Try to send WhatsApp
+        wa_ok = False
         try:
-            _send_client_invite_wa(clean, client_name, invite_url)
+            wa_ok = _send_client_invite_wa(clean, client_name, invite_url)
         except Exception as wa_err:
             logging.error(f"WA invite send failed: {wa_err}")
 
-        # Also email the link when an email was provided.
-        try:
-            if client_email:
-                if _send_client_invite_email(client_email, client_name, invite_url):
-                    flash(f'Invitation email sent to {client_email}', 'success')
-                else:
-                    flash('Invitation created, but the email could not be sent (check email config)', 'warning')
-        except Exception as em_err:
-            logging.error(f"client invite email send failed: {em_err}")
+        email_ok = False
+        if client_email:
+            try:
+                email_ok = _send_client_invite_email(client_email, client_name, invite_url)
+            except Exception as em_err:
+                logging.error(f"client invite email send failed: {em_err}")
+
+        # Report what was actually delivered, so a silent failure is visible to
+        # the rep — and always show the link so they can share it manually.
+        sent = ([ 'WhatsApp' ] if wa_ok else []) + ([ 'email' ] if email_ok else [])
+        if sent:
+            flash(f"Invitation sent via {' + '.join(sent)}. Link: {invite_url}", 'success')
+        else:
+            flash(f"Invitation created, but automatic delivery failed "
+                  f"(WhatsApp/email) — please share this link manually: {invite_url}", 'warning')
 
     except Exception as e:
         logging.error(f"client_invitation_create: {e}")
@@ -2194,12 +2199,20 @@ def _send_client_invite_email(email, name, link):
 
 
 def _send_client_invite_wa(mobile, name, link):
-    """Send WhatsApp template message with invitation link."""
+    """Send WhatsApp template message with invitation link.
+
+    Returns True if Infobip accepted the message, False otherwise. Unlike the
+    old version (which returned silently and ignored the API response), this
+    logs the REAL reason for any failure — missing config, or the Infobip
+    rejection body (e.g. unapproved template / unregistered sender) — so a
+    delivery problem is visible in the logs instead of looking like success."""
     import os, requests as http_requests
     infobip_key = os.environ.get('INFOBIP_API_KEY', '')
     infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
     if not infobip_key or not infobip_base:
-        return
+        logging.error("WA invite NOT sent: INFOBIP_API_KEY / INFOBIP_BASE_URL "
+                      "not configured on this service")
+        return False
     phone = mobile if mobile.startswith('91') else f'91{mobile}'
     url = f"https://{infobip_base}/whatsapp/1/message/template"
     headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
@@ -2215,9 +2228,16 @@ def _send_client_invite_wa(mobile, name, link):
         }]
     }
     try:
-        http_requests.post(url, json=payload, headers=headers, timeout=10)
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=10)
+        if resp.status_code >= 300:
+            logging.error(f"WA invite REJECTED by Infobip ({resp.status_code}) "
+                          f"to {phone}: {resp.text[:600]}")
+            return False
+        logging.info(f"WA invite accepted by Infobip for {phone}: {resp.text[:300]}")
+        return True
     except Exception as e:
         logging.error(f"_send_client_invite_wa: {e}")
+        return False
 
 
 # ── ADMIN: Client Management List ──
