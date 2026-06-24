@@ -151,6 +151,12 @@
     </div>
 </div>
 
+<div style="display:flex;gap:8px;margin:0 0 14px;flex-wrap:wrap;">
+  <a href="{{ url_for('ops_australia_test_bookings_list') }}" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if not view_filter %}background:var(--orange);color:#fff;{% else %}background:var(--gray-100);color:var(--gray-600);{% endif %}">All Bookings</a>
+  <a href="{{ url_for('ops_australia_test_bookings_list') }}?view=upcoming" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if view_filter=='upcoming' %}background:var(--orange);color:#fff;{% else %}background:var(--gray-100);color:var(--gray-600);{% endif %}">Upcoming Exams</a>
+  <a href="{{ url_for('ops_australia_test_bookings_list') }}?view=awaiting" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if view_filter=='awaiting' %}background:var(--orange);color:#fff;{% else %}background:var(--gray-100);color:var(--gray-600);{% endif %}">Awaiting Results</a>
+</div>
+
 <form class="filter-bar" method="get" action="{{ url_for('ops_australia_test_bookings_list') }}">
     <div class="autocomplete-wrap">
         <input type="search" id="ops-search" name="q" value="{{ search }}" placeholder="Search by name, reg no, or test centre…" autocomplete="off" data-pathway="australia">

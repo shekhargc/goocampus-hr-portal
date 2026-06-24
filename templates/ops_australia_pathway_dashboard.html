@@ -313,16 +313,16 @@
         <div class="hero-value">{{ stats.active_clients }}</div>
         <div class="hero-sub">In Process</div>
     </div>
-    <div class="hero-card navy">
-        <div class="hero-label">Upcoming Tests</div>
+    <a href="{{ url_for('ops_australia_test_bookings_list') }}?view=upcoming" class="hero-card navy" style="text-decoration:none;cursor:pointer;">
+        <div class="hero-label">Upcoming Tests &nbsp;&rsaquo;</div>
         <div class="hero-value">{{ stats.upcoming_tests }}</div>
         <div class="hero-sub">AMC MCQ: {{ stats.amc_mcq_upcoming }} &middot; AMC Clinical: {{ stats.amc_clin_upcoming }}</div>
-    </div>
-    <div class="hero-card yellow">
-        <div class="hero-label">Awaiting Results</div>
+    </a>
+    <a href="{{ url_for('ops_australia_test_bookings_list') }}?view=awaiting" class="hero-card yellow" style="text-decoration:none;cursor:pointer;">
+        <div class="hero-label">Awaiting Results &nbsp;&rsaquo;</div>
         <div class="hero-value">{{ stats.awaiting_results }}</div>
         <div class="hero-sub">{{ stats.recent_passes }} passed (30 days)</div>
-    </div>
+    </a>
 </div>
 
 <!-- ── Client Status Pipeline ── -->

@@ -175,7 +175,7 @@ def ops_australia_pathway():
         stats['amc2_upcoming']    = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC 2%'", today)
         stats['amc_mcq_upcoming'] = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC MCQ%'", today)
         stats['amc_clin_upcoming']= cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_date >= ? AND exam_status = 'Booked' AND exam LIKE 'AMC Clinical%'", today)
-        stats['awaiting_results'] = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_status = 'Attended' AND (exam_result IS NULL OR exam_result = '')")
+        stats['awaiting_results'] = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND (exam_result IS NULL OR exam_result = '') AND (exam_status = 'Attended' OR (exam_status = 'Booked' AND exam_date < ?))", today)
         stats['recent_passes']    = cnt(f"SELECT COUNT(*) AS c FROM ops_test_bookings WHERE {AU} AND exam_result = 'Passed' AND exam_result_date >= ?", thirty_ago)
 
         # EPIC
