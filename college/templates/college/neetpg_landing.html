@@ -915,19 +915,19 @@
 <!-- Hero -->
 <div class="hero">
     <div class="hero-badge">FREE RESOURCE FOR NEET PG 2026 ASPIRANTS</div>
-    <h1 id="heroTitle">NEET PG 2025 MCC Cut-Off PDFs</h1>
+    <h1 id="heroTitle">NEET PG 2025 All India/MCC &amp; State Counselling Cut-Off PDFs</h1>
     <p id="heroSubtitle">Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.</p>
     <div class="hero-stats">
         <div class="hero-stat">
-            <div class="num">{{ neetpg_pdfs|length }}</div>
-            <div class="label">NEET PG PDFs</div>
+            <div class="num" id="heroStatNeetpg">{{ neetpg_pdfs|length }}</div>
+            <div class="label">NEET PG MD/MS PDFs</div>
         </div>
         <div class="hero-stat">
-            <div class="num">{{ dnb_pdfs|length }}</div>
+            <div class="num" id="heroStatDnb">{{ dnb_pdfs|length }}</div>
             <div class="label">DNB PDFs</div>
         </div>
         <div class="hero-stat">
-            <div class="num">{{ all_pdfs|length }}</div>
+            <div class="num" id="heroStatTotal">{{ all_pdfs|length }}</div>
             <div class="label">Total PDFs</div>
         </div>
     </div>
@@ -1387,7 +1387,7 @@
     // Per-doc-type hero copy + sidebar labels (MCC profiles use "College" not "Specialty").
     var DOCTYPE_META = {
         'cutoff': {
-            title: 'NEET PG 2025 MCC Cut-Off PDFs',
+            title: 'NEET PG 2025 All India/MCC & State Counselling Cut-Off PDFs',
             subtitle: 'Download specialty-wise NEET PG and DNB cut-off data from MCC Counselling 2025. Updated daily with the latest round data.',
             courseLabel: 'Specialty', allCourse: 'All Specialties', courseSearch: 'Search specialty...'
         },
@@ -1412,8 +1412,10 @@
         var cs = document.getElementById('courseSearchInput'); if (cs) cs.placeholder = m.courseSearch;
     }
 
-    // Recompute the NEET PG / DNB sub-tab counts for the active document type.
+    // Recompute the NEET PG / DNB sub-tab counts AND the hero stat counters
+    // for the active document type (published PDFs only).
     function updateTabCounts() {
+        var totals = {};
         ['neetpg', 'dnb'].forEach(function(cat) {
             var section = document.getElementById('section-' + cat);
             var n = 0;
@@ -1422,9 +1424,14 @@
                     if ((card.getAttribute('data-doctype') || 'cutoff') === activeDocType) n++;
                 });
             }
+            totals[cat] = n;
             var el = document.getElementById(cat + 'Count');
             if (el) el.textContent = n;
         });
+        // Hero stat counters
+        var hn = document.getElementById('heroStatNeetpg'); if (hn) hn.textContent = totals.neetpg;
+        var hd = document.getElementById('heroStatDnb'); if (hd) hd.textContent = totals.dnb;
+        var ht = document.getElementById('heroStatTotal'); if (ht) ht.textContent = totals.neetpg + totals.dnb;
     }
 
     // ── Document-type switching (top-level tabs) ──
