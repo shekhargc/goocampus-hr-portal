@@ -510,10 +510,6 @@
     <form action="{{ url_for('neetpg_upload') }}" method="POST" enctype="multipart/form-data">
         <div class="np-form-row">
             <div class="np-form-group">
-                <label>Title</label>
-                <input type="text" name="title" class="np-form-input" placeholder="e.g. Radiology Paid Seats 2025" required>
-            </div>
-            <div class="np-form-group">
                 <label>Document Type</label>
                 <select name="doc_type" id="npDocType" class="np-form-input" required onchange="npUpdateDocType()">
                     {% for key, label in doc_types %}
@@ -530,7 +526,7 @@
             </div>
             <div class="np-form-group">
                 <label>State</label>
-                <select name="state" class="np-form-input" required>
+                <select name="state" id="npState" class="np-form-input" required onchange="npRefreshTitle()">
                     <option value="All India/MCC">All India/MCC</option>
                     <option value="Andhra Pradesh">Andhra Pradesh</option>
                     <option value="Arunachal Pradesh">Arunachal Pradesh</option>
@@ -574,8 +570,13 @@
             <div class="np-form-group np-autocomplete">
                 <label id="npSpecialtyLabel">Specialty (Course)</label>
                 <input type="text" name="specialty" id="npSpecialty" class="np-form-input" placeholder="Type to search..." required autocomplete="off"
-                       oninput="npFilterSpecialties()" onfocus="npFilterSpecialties()">
+                       oninput="npFilterSpecialties(); npRefreshTitle();" onfocus="npFilterSpecialties()">
                 <div class="np-autocomplete-list" id="npSpecialtyList"></div>
+            </div>
+            <div class="np-form-group">
+                <label>Title <span style="font-weight:400;color:var(--gray-400);font-size:0.72rem;">(auto)</span></label>
+                <input type="text" name="title" id="npTitle" class="np-form-input" placeholder="Auto-generated from fields above" autocomplete="off"
+                       oninput="npTitleManual = true;">
             </div>
             <div class="np-form-group">
                 <label>PDF File</label>
@@ -1092,6 +1093,33 @@ var DNB_COURSES = [
 
 var npHighlightIdx = -1;
 
+// ── Auto-generate the Title from the selected fields ──
+// Format: "<State> <Specialty/College> <NEET PG|DNB> <Doc Type> 2025".
+// Stops auto-filling once the admin edits the Title manually.
+var npTitleManual = false;
+var NP_DOCTYPE_LABELS = {
+    'cutoff': 'Cut Off',
+    'stipend_bond_penalty': 'Stipend, Bond & Penalty',
+    'mcc_profile': 'MCC College Profile'
+};
+
+function npBuildTitle() {
+    var dt = document.getElementById('npDocType').value;
+    var cat = document.getElementById('npCategory').value;
+    var state = document.getElementById('npState').value;
+    var sp = document.getElementById('npSpecialty').value.trim();
+    var catLabel = (cat === 'dnb') ? 'DNB' : 'NEET PG';
+    var dtLabel = NP_DOCTYPE_LABELS[dt] || 'Cut Off';
+    var parts = [state, sp, catLabel, dtLabel, '2025'].filter(function(p) { return p && p.trim(); });
+    return parts.join(' ');
+}
+
+function npRefreshTitle() {
+    if (npTitleManual) return;
+    var t = document.getElementById('npTitle');
+    if (t) t.value = npBuildTitle();
+}
+
 function npGetCurrentCourses() {
     var cat = document.getElementById('npCategory').value;
     return cat === 'dnb' ? DNB_COURSES : NEETPG_COURSES;
@@ -1101,6 +1129,7 @@ function npUpdateSpecialties() {
     document.getElementById('npSpecialty').value = '';
     document.getElementById('npSpecialtyList').classList.remove('show');
     npHighlightIdx = -1;
+    npRefreshTitle();
 }
 
 // MCC College Profile uses the same DB column (specialty) to hold a free-text
@@ -1123,6 +1152,7 @@ function npUpdateDocType() {
     input.value = '';
     document.getElementById('npSpecialtyList').classList.remove('show');
     npHighlightIdx = -1;
+    npRefreshTitle();
 }
 
 function npFilterSpecialties() {
@@ -1190,6 +1220,7 @@ function npSelectSpecialty(value) {
     document.getElementById('npSpecialty').value = value;
     document.getElementById('npSpecialtyList').classList.remove('show');
     npHighlightIdx = -1;
+    npRefreshTitle();
 }
 
 document.getElementById('npSpecialty').addEventListener('keydown', function(e) {
@@ -1229,5 +1260,8 @@ document.addEventListener('click', function(e) {
         npHighlightIdx = -1;
     }
 });
+
+// Build the initial auto-title from the default field values.
+npRefreshTitle();
 </script>
 {% endblock %}
