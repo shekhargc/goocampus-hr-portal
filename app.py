@@ -20502,6 +20502,47 @@ def ops_candidate_card_api():
         return jsonify({'error': str(e)}), 500
 
 
+_last_exam_flip = {'date': None}
+
+
+@app.before_request
+def _auto_attend_past_exams():
+    """Once a day (first /operations request), flip Booked exams whose date has
+    passed to 'Attended', so the pipeline reflects who has sat the exam and now
+    awaits results. 'Booked' is valid only up to the exam date; no-shows are
+    corrected to 'Missed' manually by the team."""
+    try:
+        if not request.path.startswith('/operations'):
+            return
+    except Exception:
+        return
+    from datetime import date as _date
+    today = _date.today().isoformat()
+    if _last_exam_flip['date'] == today:
+        return
+    conn = None
+    try:
+        conn = get_db()
+        conn.execute(
+            "UPDATE ops_test_bookings SET exam_status = 'Attended' "
+            "WHERE exam_status = 'Booked' "
+            "  AND exam_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}' "
+            "  AND exam_date < ?", (today,))
+        conn.commit()
+        _last_exam_flip['date'] = today
+    except Exception as e:
+        logging.error(f"_auto_attend_past_exams: {e}")
+        try:
+            if conn: conn.rollback()
+        except Exception:
+            pass
+    finally:
+        try:
+            if conn: conn.close()
+        except Exception:
+            pass
+
+
 # Human-friendly pathway labels for the centralised referrals report.
 REFERRAL_PATHWAY_LABELS = {
     'plab': 'UK Pathway',
