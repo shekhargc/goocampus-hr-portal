@@ -33,6 +33,17 @@ DOC_TYPE_LABELS = dict(NEETPG_DOC_TYPES)
 VALID_DOC_TYPES = set(DOC_TYPE_LABELS)
 
 
+def _build_neetpg_title(doc_type, category, state, specialty):
+    """Auto-compose a PDF title from the upload fields.
+    Format: "<State> <Specialty/College> <NEET PG|DNB> <Doc Type> 2025".
+    For MCC College Profile, `specialty` holds the College Name. Mirrors the
+    admin-form JS so the saved title matches the live preview."""
+    cat_label = 'DNB' if category == 'dnb' else 'NEET PG'
+    dt_label = DOC_TYPE_LABELS.get(doc_type, 'Cut Off')
+    parts = [state, specialty, cat_label, dt_label, '2025']
+    return ' '.join(p.strip() for p in parts if p and p.strip())
+
+
 def neetpg_landing():
     conn = get_db()
     # Track page visit
@@ -740,10 +751,13 @@ def neetpg_upload():
     specialty = request.form.get('specialty', '').strip()
     state = request.form.get('state', 'All India/MCC').strip()
     file = request.files.get('pdf_file')
-    if not title or not specialty or not file:
+    if not specialty or not file:
         label = 'college name' if doc_type == 'mcc_profile' else 'specialty'
-        flash(f'Title, {label}, and PDF file are required', 'error')
+        flash(f'{label.capitalize()} and PDF file are required', 'error')
         return redirect(url_for('neetpg_admin'))
+    # Title is auto-generated from the fields; only used as-is if admin overrode it.
+    if not title:
+        title = _build_neetpg_title(doc_type, category, state, specialty)
     if not file.filename.lower().endswith('.pdf'):
         flash('Only PDF files are allowed', 'error')
         return redirect(url_for('neetpg_admin'))
