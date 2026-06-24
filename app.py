@@ -1328,6 +1328,16 @@ def client_invitation_create():
         except Exception as wa_err:
             logging.error(f"WA invite send failed: {wa_err}")
 
+        # Also email the link when an email was provided.
+        try:
+            if client_email:
+                if _send_client_invite_email(client_email, client_name, invite_url):
+                    flash(f'Invitation email sent to {client_email}', 'success')
+                else:
+                    flash('Invitation created, but the email could not be sent (check email config)', 'warning')
+        except Exception as em_err:
+            logging.error(f"client invite email send failed: {em_err}")
+
     except Exception as e:
         logging.error(f"client_invitation_create: {e}")
         try:
@@ -2144,7 +2154,43 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
         _send_client_invite_wa(mobile, client_name, invite_url)
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: WA send failed: {e}")
+    # Email the registration link too. Previously the client invite only sent
+    # WhatsApp, so clients who gave an email (but no/invalid WhatsApp) got nothing.
+    try:
+        if client_email:
+            _send_client_invite_email(client_email, client_name, invite_url)
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: email send failed: {e}")
     return token
+
+
+def _send_client_invite_email(email, name, link):
+    """Email the client their registration-invitation link via Resend.
+    Mirrors the partner-invite email. Returns True if Resend accepted it,
+    False if email isn't configured or the send failed (never raises)."""
+    if not email:
+        return False
+    try:
+        from email_utils import send_email
+        html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus</h1></div>
+  <div style="padding:30px;background-color:white;">
+    <h2 style="color:#1e3a5f;margin-top:0;">Welcome to GooCampus!</h2>
+    <p style="font-size:16px;">Hello {name},</p>
+    <p>Thank you for choosing GooCampus. Please click the button below to complete your registration and get started.</p>
+    <div style="text-align:center;margin:30px 0;">
+      <a href="{link}" style="background-color:#F58220;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Complete Registration</a>
+    </div>
+    <p style="font-size:13px;color:#666;">Or copy this link into your browser:<br><a href="{link}" style="color:#F58220;word-break:break-all;">{link}</a></p>
+    <p style="margin-top:30px;">Best regards,<br><strong style="color:#1e3a5f;">GooCampus Team</strong></p>
+  </div>
+  <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+</body></html>'''
+        return send_email([email], 'Complete Your GooCampus Registration', html,
+                          from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.error(f"_send_client_invite_email: {e}")
+        return False
 
 
 def _send_client_invite_wa(mobile, name, link):
