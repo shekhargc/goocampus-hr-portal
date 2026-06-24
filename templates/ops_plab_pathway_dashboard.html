@@ -411,16 +411,16 @@
         <div class="hero-value">{{ active_clients }}</div>
         <div class="hero-sub">In Process</div>
     </div>
-    <div class="hero-card navy">
-        <div class="hero-label">Upcoming Tests</div>
+    <a href="/operations/test-bookings?view=upcoming" class="hero-card navy" style="text-decoration:none;cursor:pointer;">
+        <div class="hero-label">Upcoming Tests &nbsp;&rsaquo;</div>
         <div class="hero-value">{{ upcoming_tests }}</div>
         <div class="hero-sub">PLAB 1: {{ plab1_upcoming }} &middot; PLAB 2: {{ plab2_upcoming }}</div>
-    </div>
-    <div class="hero-card yellow">
-        <div class="hero-label">Awaiting Results</div>
+    </a>
+    <a href="/operations/test-bookings?view=awaiting" class="hero-card yellow" style="text-decoration:none;cursor:pointer;">
+        <div class="hero-label">Awaiting Results &nbsp;&rsaquo;</div>
         <div class="hero-value">{{ awaiting_results }}</div>
         <div class="hero-sub">{{ recent_passes }} passed (30 days)</div>
-    </div>
+    </a>
 </div>
 
 <!-- ── Client Status Pipeline (matches client profile on PLAB Pathway page) ── -->

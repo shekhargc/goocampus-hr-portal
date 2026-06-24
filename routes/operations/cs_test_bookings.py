@@ -88,6 +88,7 @@ def ops_consulting_test_bookings_list():
     exam_filter = (request.args.get('exam', '') or '').strip()
     status_filter = (request.args.get('status', '') or '').strip()
     reg = (request.args.get('client', '') or '').strip()
+    view_filter = (request.args.get('view', '') or '').strip()  # '' | 'upcoming' | 'awaiting'
 
     records = []
     exams = []
@@ -115,6 +116,17 @@ def ops_consulting_test_bookings_list():
         if status_filter:
             sql += " AND t.exam_status = ? "
             params.append(status_filter)
+        if view_filter in ('upcoming', 'awaiting'):
+            from datetime import date as _date
+            _today = _date.today().isoformat()
+            if view_filter == 'upcoming':
+                sql += " AND t.exam_status = 'Booked' AND t.exam_date >= ? "
+                params.append(_today)
+            else:
+                sql += (" AND (t.exam_result IS NULL OR t.exam_result = '') "
+                        " AND (t.exam_status = 'Attended' "
+                        "      OR (t.exam_status = 'Booked' AND t.exam_date < ?)) ")
+                params.append(_today)
         if search:
             sql += """ AND (
                 p.first_name ILIKE ? OR p.last_name ILIKE ? OR
@@ -157,6 +169,7 @@ def ops_consulting_test_bookings_list():
         search=search,
         exam_filter=exam_filter,
         status_filter=status_filter,
+        view_filter=view_filter,
         client_reg=reg,
         exams=exams,
         statuses=statuses,

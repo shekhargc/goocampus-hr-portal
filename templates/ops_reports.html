@@ -77,6 +77,22 @@
     <h1>Reports</h1>
 </div>
 
+<div class="quick-section" style="margin-bottom:24px;">
+  <h2>Exam Pipeline</h2>
+  <p style="font-size:0.82rem;color:var(--gray-500);margin:0 0 14px;">Upcoming exams and exams awaiting results, across pathways &middot; editable from each list.</p>
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:14px;">
+    {% for pw in [('PLAB / UK','/operations/test-bookings'),('AMC Pathway','/operations/australia/test-bookings'),('Standard Consulting','/operations/consulting/test-bookings')] %}
+    <div style="border:1px solid #E5E7EB;border-radius:10px;padding:14px;">
+      <div style="font-weight:700;color:var(--navy);font-size:0.9rem;margin-bottom:10px;">{{ pw[0] }}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <a href="{{ pw[1] }}?view=upcoming" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:8px;background:#EEF2FF;color:#1e3a8a;text-decoration:none;font-weight:600;font-size:0.82rem;">Upcoming Exams <span>&rsaquo;</span></a>
+        <a href="{{ pw[1] }}?view=awaiting" style="display:flex;justify-content:space-between;align-items:center;padding:9px 12px;border-radius:8px;background:#FEF9C3;color:#854d0e;text-decoration:none;font-weight:600;font-size:0.82rem;">Awaiting Results <span>&rsaquo;</span></a>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+</div>
+
 <!-- Saved Templates Section -->
 <div style="margin-bottom:8px;font-size:0.85rem;font-weight:700;color:var(--navy);">Saved Report Templates</div>
 <div class="templates-grid">

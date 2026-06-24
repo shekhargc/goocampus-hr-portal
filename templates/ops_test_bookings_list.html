@@ -54,6 +54,12 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
         </div>
     </div>
 
+    <div style="display:flex;gap:8px;margin:0 0 18px;flex-wrap:wrap;">
+      <a href="/operations/test-bookings" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if not view_filter %}background:var(--orange);color:#fff;{% else %}background:white;color:var(--gray-600);border:1px solid var(--gray-200);{% endif %}">All Bookings</a>
+      <a href="/operations/test-bookings?view=upcoming" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if view_filter=='upcoming' %}background:var(--orange);color:#fff;{% else %}background:white;color:var(--gray-600);border:1px solid var(--gray-200);{% endif %}">Upcoming Exams</a>
+      <a href="/operations/test-bookings?view=awaiting" style="padding:8px 16px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;{% if view_filter=='awaiting' %}background:var(--orange);color:#fff;{% else %}background:white;color:var(--gray-600);border:1px solid var(--gray-200);{% endif %}">Awaiting Results</a>
+    </div>
+
     <div style="background:white;border-radius:12px;padding:20px;margin-bottom:24px;box-shadow:0 1px 3px rgba(0,0,0,0.1);">
         <form method="GET" style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;align-items:flex-end;">
             <div class="autocomplete-wrap">
