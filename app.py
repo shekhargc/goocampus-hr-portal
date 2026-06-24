@@ -20407,8 +20407,9 @@ def ops_client_search_api():
         # Central Search opts in (?contact=1) to ALSO match mobile + email — a
         # 10-digit number matches inside a stored '+91…' value via substring.
         if request.args.get('contact') in ('1', 'true', 'yes'):
-            inner += " OR mobile ILIKE ? OR email ILIKE ?"
-            params += [f'%{q}%', f'%{q}%']
+            inner += (" OR mobile ILIKE ? OR whatsapp1 ILIKE ? OR whatsapp2 ILIKE ? "
+                      "OR email ILIKE ?")
+            params += [f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%']
         where = "(" + inner + ")"
         if not all_pw:
             where = "COALESCE(pathway, 'plab') = ? AND " + where
