@@ -79,6 +79,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
             <table data-shown-keys='["first_name", "hospital_location", "hospital_name", "last_name", "prefix", "registration_number", "speciality", "start_date"]' style="width:100%;border-collapse:collapse;font-size:14px;">
                 <thead style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
                     <tr>
+                        <th style="width:44px;text-align:center;">#</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Candidate Name</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Reg Number</th>
                         <th style="padding:12px 16px;text-align:left;font-weight:600;color:var(--navy);">Hospital Name</th>
@@ -90,6 +91,7 @@ tr.clickable-row.active-row{background:#FFF7ED!important}
                 <tbody>
                     {% for record in records %}
                     <tr data-rec="{{ rec_json(record) }}" class="clickable-row" id="row-{{ record.id }}" onclick="openObservershipsDetail({{ record.id }})" style="border-bottom:1px solid var(--gray-200);">
+                        <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                         <td style="padding:12px 16px;color:var(--navy);font-weight:500;">{{ record.prefix or '' }} {{ record.first_name or 'N/A' }} {{ record.last_name or '' }}</td>
                         <td style="padding:12px 16px;font-size:13px;color:var(--gray-600);">{{ (record.registration_number or '')|format_reg }}</td>
                         <td style="padding:12px 16px;">{{ record.hospital_name or '—' }}</td>

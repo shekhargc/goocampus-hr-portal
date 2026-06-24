@@ -198,6 +198,7 @@
     {% if sections.payments %}
     <div style="overflow-x:auto;"><table style="width:100%;border-collapse:collapse;font-size:13px;">
       <thead><tr style="background:var(--gray-50);border-bottom:2px solid var(--gray-200);">
+        <th style="width:44px;text-align:center;">#</th>
         <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Date</th>
         <th style="padding:10px;text-align:left;color:var(--navy);font-weight:600;">Instalment</th>
         <th style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">Amount</th>
@@ -208,6 +209,7 @@
       <tbody>
         {% for r in sections.payments %}
         <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
           <td style="padding:10px;color:var(--gray-600);">{{ r.payment_date or '—' }}</td>
           <td style="padding:10px;color:var(--navy);font-weight:600;">{{ r.instalment or '—' }}</td>
           <td style="padding:10px;text-align:right;color:var(--navy);font-weight:600;">{% if r.amount_paid %}&#8377;{{ '{:,.0f}'.format(r.amount_paid|float) }}{% else %}—{% endif %}</td>

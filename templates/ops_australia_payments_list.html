@@ -191,6 +191,7 @@
     <table>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Payment Date</th>
@@ -205,6 +206,7 @@
         <tbody>
         {% for r in records %}
             <tr class="clickable-row" id="row-{{ r.id }}" onclick="openAuPaymentDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

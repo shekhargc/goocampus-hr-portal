@@ -183,6 +183,7 @@
     <table data-shown-keys='["course_provider", "course_status", "course_type", "courses_name", "end_date", "first_name", "last_name", "prefix", "registration_number", "start_date"]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Course Name</th>
@@ -196,6 +197,7 @@
         <tbody>
         {% for r in records %}
             <tr data-rec="{{ rec_json(r) }}" class="clickable-row" id="row-{{ r.id }}" onclick="openCsOcDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

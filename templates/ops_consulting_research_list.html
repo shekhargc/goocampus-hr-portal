@@ -187,6 +187,7 @@
     <table data-shown-keys='["author_position", "first_name", "last_name", "prefix", "published_journal_name", "registration_number", "research_end_date", "research_provider", "research_start_date", "research_status", "research_topic"]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Status</th>
@@ -201,6 +202,7 @@
         <tbody>
         {% for r in records %}
             <tr data-rec="{{ rec_json(r) }}" class="clickable-row" id="row-{{ r.id }}" onclick="openAuDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

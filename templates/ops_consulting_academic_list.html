@@ -188,6 +188,7 @@
     <table data-shown-keys='["country", "first_name", "fmg_medical_college", "img_fmg", "img_medical_college", "internship_hospital", "internship_location", "internship_status", "last_name", "mbbs_status", "prefix", "registration_number", "speciality_interest_1", "speciality_interest_2", "working_hospital_name", "working_status"]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Type</th>
@@ -201,6 +202,7 @@
         <tbody>
         {% for r in records %}
             <tr data-rec="{{ rec_json(r) }}" class="clickable-row" id="row-{{ r.id }}" onclick="openAuAcademicDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

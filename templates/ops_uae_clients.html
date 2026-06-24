@@ -179,6 +179,7 @@
     <table data-default-hidden='[{% for k, lbl in registration_optional_fields %}"{{ lbl }}"{% if not loop.last %}, {% endif %}{% endfor %}]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Mobile</th>
@@ -195,6 +196,7 @@
         <tbody>
         {% for r in records %}
             <tr class="clickable-row" title="Phone: {{ r.mobile or r.whatsapp1 or '—' }}  ·  Email: {{ r.email or '—' }}  ·  DOB: {{ r.dob or '—' }}" id="row-{{ r.id }}" onclick="openCsDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {{ r.prefix or '' }} {{ r.first_name or '' }} {{ r.last_name or '' }}

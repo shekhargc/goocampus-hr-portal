@@ -55,6 +55,7 @@
     <table data-shown-keys='["completed_by", "date_completed", "first_name", "last_name", "prefix", "registration_number", "report_doc"]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Completed By</th>
@@ -65,6 +66,7 @@
         <tbody>
         {% for r in records %}
             <tr data-rec="{{ rec_json(r) }}" class="clickable-row" onclick="window.location='{{ url_for('ops_uae_self_assessment_detail', rid=r.id) }}'">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}

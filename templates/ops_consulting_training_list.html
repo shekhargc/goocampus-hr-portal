@@ -190,6 +190,7 @@
     <table data-shown-keys='["coaching_method", "coaching_status", "course_type", "end_date", "english_training", "first_name", "last_name", "prefix", "registration_number", "start_date", "vendor_provider"]'>
         <thead>
             <tr>
+                <th style="width:44px;text-align:center;">#</th>
                 <th>Reg. No.</th>
                 <th>Candidate</th>
                 <th>Program</th>
@@ -204,6 +205,7 @@
         <tbody>
         {% for r in records %}
             <tr data-rec="{{ rec_json(r) }}" class="clickable-row" id="row-{{ r.id }}" onclick="openAuTrainingDetail({{ r.id }})">
+                <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
                 <td><span class="reg">{{ r.registration_number|format_reg }}</span></td>
                 <td>
                     {% if r.first_name or r.last_name %}
