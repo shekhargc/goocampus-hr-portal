@@ -190,6 +190,12 @@ def inject_manager_status():
             # operations_shared only -> Reports is the safest default
             ops_landing = '/operations/reports'
 
+        # Can this user REQUEST an internal transfer (request-only; approval
+        # stays admin)? Admins always can; otherwise needs the Access Master
+        # grant Clients -> Internal Transfers -> Add. Drives the "Request
+        # Internal Transfer" button on the Operations client profiles.
+        can_xfer = bool(session.get('is_admin') or
+                        (user and has_section_permission(user, 'clients', 'internal_transfers', 'add')))
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -197,11 +203,12 @@ def inject_manager_status():
             'has_operations_access': ops_access,
             'operations_landing_url': ops_landing,
             'current_user_name': (user['name'] if user else ''),
+            'can_request_transfer': can_xfer,
         }
     return {
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
-        'current_user_name': '',
+        'current_user_name': '', 'can_request_transfer': False,
     }
 
 def calculate_monthly_balance(employee_id, year, month):
@@ -21705,7 +21712,10 @@ def admin_internal_transfer_new():
             conn.commit()
             conn.close()
             flash("Transfer request submitted for admin approval. You'll be notified once it's reviewed.", 'success')
-            return redirect(url_for('admin_internal_transfers'))
+            _next = (request.form.get('next') or '').strip()
+            if not _next.startswith('/'):  # only allow same-site relative paths
+                _next = ''
+            return redirect(_next or url_for('admin_internal_transfers'))
         except Exception as e:
             logging.error(f"admin_internal_transfer_new: {e}")
             try: conn.rollback()
@@ -21715,8 +21725,18 @@ def admin_internal_transfer_new():
     products = conn.execute("SELECT id, name, COALESCE(pathway,'') AS pathway FROM products_services WHERE COALESCE(status,'active')='active' ORDER BY pathway, name").fetchall()
     from datetime import date as _date
     conn.close()
+    # When opened from the Operations client profile (?focus=1) — e.g. a sales/ops
+    # rep requesting a transfer — render in the minimal focused layout (top nav
+    # only, no admin Clients sidebar) and send them back to ?next= after submit.
+    _focus = request.args.get('focus')
+    _next = (request.args.get('next') or '').strip()
+    if not _next.startswith('/'):
+        _next = ''
     return render_template('admin_internal_transfer_new.html', products=products,
-        pre_reg=(request.args.get('reg') or ''), today=_date.today().isoformat(), active_section='clients')
+        pre_reg=(request.args.get('reg') or ''), today=_date.today().isoformat(),
+        active_section='clients',
+        base_template=('focus_base.html' if _focus else 'clients_sidebar_base.html'),
+        back_url=_next)
 
 
 def _execute_internal_transfer(conn, t):

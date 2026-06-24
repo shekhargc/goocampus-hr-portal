@@ -1,10 +1,10 @@
-{% extends "clients_sidebar_base.html" %}
+{% extends base_template|default("clients_sidebar_base.html") %}
 {% block title %}New Internal Transfer{% endblock %}
 {% block section_content %}
 <div style="padding:24px;background:var(--gray-50);min-height:100vh;">
   <div style="max-width:760px;margin:0 auto;">
     <div style="margin-bottom:18px;">
-      <a href="{{ url_for('admin_internal_transfers') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">← Internal Transfers</a>
+      <a href="{{ back_url or url_for('admin_internal_transfers') }}" style="font-size:0.82rem;color:var(--gray-500);text-decoration:none;">&larr; Back</a>
       <h1 style="margin:8px 0 0;font-size:1.3rem;font-weight:700;color:var(--navy);">New Internal Transfer</h1>
       <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">Move a client to another pathway: keeps the source record (marked Switched Program), creates a new record with a new registration number, and splits the money into Transfer / Utilized / Refund.</p>
     </div>
@@ -16,6 +16,7 @@
         <label style="font-size:0.78rem;font-weight:700;color:var(--gray-600);display:block;margin-bottom:5px;">Source Client *</label>
         <input type="text" id="clientSearch" autocomplete="off" required placeholder="Search the client to transfer (any pathway)" value="{{ pre_reg }}" style="width:100%;padding:10px 12px;border:1px solid var(--gray-200);border-radius:8px;">
         <input type="hidden" name="from_reg" id="fromReg" value="{{ pre_reg }}">
+        <input type="hidden" name="next" value="{{ back_url or '' }}">
         <div id="clientResults" style="position:absolute;left:0;right:0;top:100%;z-index:20;background:#fff;border:1px solid var(--gray-200);border-radius:8px;box-shadow:0 6px 18px rgba(0,0,0,0.12);max-height:240px;overflow:auto;display:none;"></div>
         <div id="srcInfo" style="display:none;margin-top:10px;background:var(--gray-50);border-radius:8px;padding:10px 12px;font-size:0.84rem;color:var(--gray-700);"></div>
       </div>
