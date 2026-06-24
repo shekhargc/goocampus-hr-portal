@@ -270,12 +270,22 @@ def ops_training_clients_list():
             params,
         ).fetchone()['c']
 
-        records = conn.execute(
+        records = [dict(r) for r in conn.execute(
             f"""SELECT * FROM plab_clients
                  WHERE {where_sql}
                  ORDER BY registration_date DESC NULLS LAST, id DESC""",
             params,
-        ).fetchall()
+        ).fetchall()]
+        if records:
+            _regs = [r['registration_number'] for r in records]
+            _ph = ','.join(['?'] * len(_regs))
+            _pmap = {pr['registration_number']: pr for pr in conn.execute(
+                f"SELECT registration_number, COALESCE(SUM(total_amount_paid),0) AS tp, COALESCE(SUM(amount_paid),0) AS ap, COALESCE(SUM(gst_paid),0) AS gp FROM ops_payments WHERE registration_number IN ({_ph}) GROUP BY registration_number", _regs).fetchall()}
+            for r in records:
+                pr = _pmap.get(r['registration_number'])
+                r['total_paid'] = float(pr['tp']) if pr else 0
+                r['amount_paid'] = float(pr['ap']) if pr else 0
+                r['gst_paid'] = float(pr['gp']) if pr else 0
 
         # Filter dropdown pools
         statuses = [
