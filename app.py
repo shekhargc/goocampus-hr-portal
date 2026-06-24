@@ -20408,8 +20408,8 @@ def ops_client_search_api():
         # 10-digit number matches inside a stored '+91…' value via substring.
         if request.args.get('contact') in ('1', 'true', 'yes'):
             inner += (" OR mobile ILIKE ? OR whatsapp1 ILIKE ? OR whatsapp2 ILIKE ? "
-                      "OR email ILIKE ?")
-            params += [f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%']
+                      "OR father_phone ILIKE ? OR mother_phone ILIKE ? OR email ILIKE ?")
+            params += [f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%', f'%{q}%']
         where = "(" + inner + ")"
         if not all_pw:
             where = "COALESCE(pathway, 'plab') = ? AND " + where
