@@ -115,6 +115,10 @@
           <label style="padding:10px 18px;background:#fff;color:#0f766e;border:1px solid #0f766e;border-radius:6px;cursor:pointer;font-weight:600;font-size:14px;display:inline-block;">&#128206; Upload Contract<input type="file" name="file" accept=".pdf,.doc,.docx,.jpg,.png" onchange="if(this.files.length)this.form.submit()" style="display:none;"></label>
         </form>
         {% endif %}
+        {% if can_request_transfer %}
+        <a href="/admin/internal-transfers/new?reg={{ client.registration_number|urlencode }}&focus=1&next={{ request.path|urlencode }}"
+           style="padding:10px 18px;background:#fff;color:#7c3aed;border:1px solid #7c3aed;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">&#8644; Request Transfer</a>
+        {% endif %}
         <a href="{{ url_for('ops_portfolio_client_edit_page', client_id=client.id) }}", client_id=client.id) }}"
            style="padding:10px 20px;background:var(--orange);color:white;border:none;border-radius:6px;cursor:pointer;text-decoration:none;font-weight:600;font-size:14px;">
           Edit Client

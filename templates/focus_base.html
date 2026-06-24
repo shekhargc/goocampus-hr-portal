@@ -1,0 +1,7 @@
+{# Minimal focused layout: top nav (from base.html) + page content, no section
+   sidebar. Used when an admin/Clients form is opened from elsewhere (e.g. the
+   Operations client profile) so a non-admin doesn't see admin sidebar links. #}
+{% extends "base.html" %}
+{% block content %}
+{% block section_content %}{% endblock %}
+{% endblock %}
