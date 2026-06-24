@@ -206,7 +206,7 @@
     background: white;
     border-radius: 8px;
     border: 1px solid var(--gray-200);
-    overflow: hidden;
+    overflow-x: auto;
   }
 
   .data-table {
@@ -656,6 +656,7 @@
     <table class="data-table" data-default-hidden='[{% for k, lbl in registration_optional_fields %}"{{ lbl }}"{% if not loop.last %}, {% endif %}{% endfor %}]'>
       <thead>
         <tr>
+          <th style="width:44px;text-align:center;">#</th>
           <th>Reg#</th>
           <th>Name</th>
           <th>Stage</th>
@@ -671,6 +672,7 @@
       <tbody>
         {% for client in clients %}
         <tr class="clickable-row" title="Phone: {{ client.mobile or client.whatsapp1 or '—' }}  ·  Email: {{ client.email or '—' }}  ·  DOB: {{ client.dob or '—' }}" id="row-{{ client.id }}" onclick="openPlabDetail({{ client.id }})">
+          <td style="text-align:center;color:var(--gray-400);">{{ loop.index }}</td>
           <td>{{ client.registration_number|format_reg }}</td>
           <td>{{ client.prefix or '' }} {{ client.first_name }} {{ client.last_name }}</td>
           <td>{{ client.current_stage or '–' }}</td>

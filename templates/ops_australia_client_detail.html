@@ -14,19 +14,28 @@
     </div>
   </div>
   {% if records %}
-  <div style="max-height:420px;overflow-y:auto;">
-    {% for r in records[:15] %}
-    <div style="padding:10px 0;border-bottom:1px solid var(--gray-100);display:flex;flex-wrap:wrap;gap:6px 16px;">
-      {% set ns = namespace(c=0) %}
-      {% for col, val in r.items() %}
-        {% if col not in ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] and val not in [none, ''] and ns.c < 6 %}
-        <span style="font-size:12.5px;color:var(--gray-700);"><b style="color:var(--navy);">{{ col.replace('_',' ').title() }}:</b> {{ val }}</span>
-        {% set ns.c = ns.c + 1 %}
-        {% endif %}
-      {% endfor %}
-    </div>
-    {% endfor %}
+  {% set skip = ['id','registration_number','pathway','created_at','created_by','updated_at','first_name','last_name','prefix'] %}
+  {% set cols = [] %}
+  {% for col in records[0].keys() %}{% if col not in skip %}{% set _ = cols.append(col) %}{% endif %}{% endfor %}
+  <div style="overflow-x:auto;max-height:420px;overflow-y:auto;">
+    <table style="width:100%;border-collapse:collapse;font-size:13px;">
+      <thead>
+        <tr style="border-bottom:2px solid var(--gray-200);">
+          <th style="width:44px;text-align:center;padding:10px;color:var(--navy);position:sticky;top:0;background:#fff;">#</th>
+          {% for col in cols %}<th style="text-align:left;padding:10px;color:var(--navy);white-space:nowrap;position:sticky;top:0;background:#fff;">{{ col.replace('_',' ').title() }}</th>{% endfor %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in records[:15] %}
+        <tr style="border-bottom:1px solid var(--gray-100);">
+          <td style="text-align:center;padding:10px;color:var(--gray-400);">{{ loop.index }}</td>
+          {% for col in cols %}<td style="padding:10px;color:var(--gray-700);white-space:nowrap;">{% if r[col] not in [none, ''] %}{{ r[col] }}{% else %}<span style="color:var(--gray-300);">&mdash;</span>{% endif %}</td>{% endfor %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
+  {% if records|length > 15 %}<p style="margin:10px 0 0;font-size:12px;color:var(--gray-500);">Showing first 15 of {{ records|length }} &middot; <a href="{{ view_url }}" style="color:var(--orange);">View all &rarr;</a></p>{% endif %}
   {% else %}<p style="margin:0;color:var(--gray-500);font-size:14px;">No records yet.</p>{% endif %}
 </div>
 {% endmacro %}
