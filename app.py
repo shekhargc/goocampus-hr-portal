@@ -20428,6 +20428,65 @@ def ops_client_search_api():
     return jsonify(results)
 
 
+@app.route('/operations/search')
+@admin_required
+def ops_central_search():
+    """Centralised candidate search — a single search across every pathway."""
+    return render_template('ops_central_search.html',
+                           active_ops_page='central-search')
+
+
+@app.route('/operations/api/candidate-card')
+@admin_required
+def ops_candidate_card_api():
+    """Rich candidate detail for one registration number, for the central
+    search candidate card. Returns the per-pathway profile URL too."""
+    reg = (request.args.get('reg') or '').strip()
+    if not reg:
+        return jsonify({'error': 'missing reg'}), 400
+    conn = get_db()
+    try:
+        c = conn.execute(
+            "SELECT * FROM plab_clients WHERE registration_number = ? LIMIT 1",
+            (reg,)).fetchone()
+        if not c:
+            conn.close()
+            return jsonify({'error': 'not found'}), 404
+        pw = (c['pathway'] or 'plab')
+        name = (f"{c['prefix']} {c['first_name']} {c['last_name']}"
+                if c['prefix'] else f"{c['first_name']} {c['last_name']}").strip()
+        p = c['photo_path'] or ''
+        photo = (p if (p.startswith('http') or p.startswith('/')) else f'/static/photos/{p}') if p else ''
+        if pw == 'plab':
+            profile_url = f"/operations/plab/{c['id']}"
+        else:
+            profile_url = f"/operations/{pw}/clients/by-reg/{reg}"
+        conn.close()
+        return jsonify({
+            'name': name,
+            'reg': format_reg_filter(reg),
+            'pathway': pw,
+            'pathway_label': REFERRAL_PATHWAY_LABELS.get(pw, pw),
+            'photo': photo,
+            'mobile': c['mobile'] or '',
+            'email': c['email'] or '',
+            'city': c['city'] or '',
+            'state': c['state'] or '',
+            'stage': c['current_stage'] or '',
+            'account_status': c['account_status'] or '',
+            'counsellor': c['counsellor'] or '',
+            'plan_type': c['plan_type'] or '',
+            'final_package': c['final_package'] or '',
+            'lead_source': c['lead_source'] or '',
+            'profile_url': profile_url,
+        })
+    except Exception as e:
+        logging.error(f"ops_candidate_card_api: {e}")
+        try: conn.close()
+        except Exception: pass
+        return jsonify({'error': str(e)}), 500
+
+
 # Human-friendly pathway labels for the centralised referrals report.
 REFERRAL_PATHWAY_LABELS = {
     'plab': 'UK Pathway',
