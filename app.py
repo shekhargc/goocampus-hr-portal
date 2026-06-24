@@ -20461,6 +20461,13 @@ def ops_candidate_card_api():
             profile_url = f"/operations/plab/{c['id']}"
         else:
             profile_url = f"/operations/{pw}/clients/by-reg/{reg}"
+        try:
+            tp = conn.execute(
+                "SELECT COALESCE(SUM(amount_paid), 0) AS t FROM ops_payments "
+                "WHERE registration_number = ?", (reg,)).fetchone()
+            total_paid = float(tp['t'] or 0) if tp else 0
+        except Exception:
+            total_paid = 0
         conn.close()
         return jsonify({
             'name': name,
@@ -20477,6 +20484,7 @@ def ops_candidate_card_api():
             'counsellor': c['counsellor'] or '',
             'plan_type': c['plan_type'] or '',
             'final_package': c['final_package'] or '',
+            'total_paid_ex_gst': (f"₹ {total_paid:,.0f}" if total_paid else ''),
             'lead_source': c['lead_source'] or '',
             'profile_url': profile_url,
         })

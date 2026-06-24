@@ -315,6 +315,9 @@
   .ops-central-search-link{display:flex;align-items:center;gap:10px;margin:0 0 12px;padding:11px 14px;border-radius:10px;text-decoration:none;font-weight:700;font-size:.9rem;color:#fff;background:linear-gradient(90deg,#f97316,#ea580c);box-shadow:0 4px 16px rgba(249,115,22,.38);transition:.18s;}
   .ops-central-search-link:hover{transform:translateY(-1px);box-shadow:0 6px 22px rgba(249,115,22,.55);}
   .ops-central-search-link.active{outline:2px solid rgba(255,255,255,.55);outline-offset:1px;}
+  .ops-sidebar.collapsed .ops-central-search-link{justify-content:center;padding:11px 0;}
+  .ops-sidebar.collapsed .ops-sidebar-toggle{width:100%;background:rgba(249,115,22,.85);color:#fff;}
+  .ops-sidebar.collapsed .ops-sidebar-toggle:hover{background:#f97316;}
 </style>
 <div class="ops-layout{% if _embed %} ops-embed{% endif %}">
     {% if not _embed %}
@@ -1135,6 +1138,13 @@ function toggleOpsSidebar() {
             document.getElementById('opsSidebar').classList.add('collapsed');
         }
     } catch(e) {}
+    // Auto-collapse the sidebar when navigating via any sidebar link, so the
+    // new page opens with the menu collapsed (re-open via the toggle arrow).
+    document.querySelectorAll('.ops-sidebar-nav a, .ops-central-search-link, .ops-pathway-option').forEach(function(a){
+        a.addEventListener('click', function(){
+            try { localStorage.setItem('ops_sidebar_collapsed', '1'); } catch(e) {}
+        });
+    });
     // Scroll active sidebar item into view within the sidebar nav only
     var activeItem = document.querySelector('.ops-nav-item.active');
     if (activeItem) {
