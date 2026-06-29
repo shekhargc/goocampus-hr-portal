@@ -321,17 +321,18 @@ def ops_australia_clients_list():
         # Attach per-client payment totals from ops_payments (single source of
         # truth) so the 'Paid' column reflects real payments — for every pathway.
         if records:
-            _regs = [r['registration_number'] for r in records]
-            _ph = ','.join(['?'] * len(_regs))
-            _pmap = {pr['registration_number']: pr for pr in conn.execute(
-                f"""SELECT registration_number,
+            def _nrm(s): return (s or '').strip().upper()
+            _keys = [_nrm(r['registration_number']) for r in records]
+            _ph = ','.join(['?'] * len(_keys))
+            _pmap = {pr['k']: pr for pr in conn.execute(
+                f"""SELECT UPPER(TRIM(registration_number)) AS k,
                            COALESCE(SUM(total_amount_paid), 0) AS tp,
                            COALESCE(SUM(amount_paid), 0)       AS ap,
                            COALESCE(SUM(gst_paid), 0)          AS gp
-                      FROM ops_payments WHERE registration_number IN ({_ph})
-                     GROUP BY registration_number""", _regs).fetchall()}
+                      FROM ops_payments WHERE UPPER(TRIM(registration_number)) IN ({_ph})
+                     GROUP BY UPPER(TRIM(registration_number))""", _keys).fetchall()}
             for r in records:
-                pr = _pmap.get(r['registration_number'])
+                pr = _pmap.get(_nrm(r['registration_number']))
                 r['total_paid']  = float(pr['tp']) if pr else 0
                 r['amount_paid'] = float(pr['ap']) if pr else 0
                 r['gst_paid']    = float(pr['gp']) if pr else 0
@@ -416,8 +417,7 @@ def _payment_totals_for(conn, reg_num):
                   COALESCE(SUM(gst_paid), 0)           AS gst,
                   COALESCE(SUM(total_amount_paid), 0)  AS tot
              FROM ops_payments
-            WHERE registration_number = ?
-              AND COALESCE(pathway, 'plab') = 'australia' """,
+            WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) """,
         (reg_num,),
     ).fetchone()
     return float(row['amt'] or 0), float(row['gst'] or 0), float(row['tot'] or 0)

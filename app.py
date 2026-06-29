@@ -18407,7 +18407,7 @@ def ops_plab_dashboard(client_id):
         COALESCE(SUM(amount_paid), 0) as amount_paid,
         COALESCE(SUM(gst_paid), 0) as gst_paid,
         COALESCE(SUM(total_amount_paid), 0) as total_paid
-        FROM ops_payments WHERE registration_number = ?""", (reg,)).fetchone()
+        FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))""", (reg,)).fetchone()
     amount_paid = float(payments_total['amount_paid'] or 0)
     gst_paid = float(payments_total['gst_paid'] or 0)
     total_paid = float(payments_total['total_paid'] or 0)
@@ -18423,7 +18423,7 @@ def ops_plab_dashboard(client_id):
     test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
     call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
-    payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
+    payments = conn.execute("SELECT * FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
 
