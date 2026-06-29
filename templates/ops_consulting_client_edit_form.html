@@ -177,7 +177,7 @@
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status{% if client.account_status == 'Pending Verification' %} <span style="color:#b45309;font-weight:600;">&#128274; locked until ops verification</span>{% endif %}</label>
                     {% set _status_locked = ((transfer is defined and transfer) or client.account_status == 'Pending Verification') %}
                     {% if _status_locked %}<input type="hidden" name="account_status" value="{{ client.account_status }}">{% endif %}
-                    <select name="account_status" {% if _status_locked %}disabled title="Locked during the verification workflow — becomes an editable dropdown once the client is In Process"{% endif %} style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:{% if _status_locked %}#f3f4f6;color:#9ca3af;cursor:not-allowed{% else %}white{% endif %};">
+                    <select name="account_status" id="account_status" onchange="toggleSwitchedProgram()" {% if _status_locked %}disabled title="Locked during the verification workflow — becomes an editable dropdown once the client is In Process"{% endif %} style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:{% if _status_locked %}#f3f4f6;color:#9ca3af;cursor:not-allowed{% else %}white{% endif %};">
                         <option value="">Select Account Status</option>
                         {% for status in account_statuses %}
                         <option value="{{ status }}" {% if client.account_status == status %}selected{% endif %}>{{ status }}</option>
@@ -195,7 +195,7 @@
                         {% endfor %}
                     </select>
                 </div>
-                <div>
+                <div id="switched_program_wrapper">
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Switched Program</label>
                     <select name="switched_program" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
                         <option value="">Select Switched Program</option>
@@ -369,3 +369,13 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 {% endblock %}
+
+<script>
+// Show the Switched Program field only when Account Status = 'Switched Program'.
+function toggleSwitchedProgram(){
+  var sel=document.getElementById('account_status'), wrap=document.getElementById('switched_program_wrapper');
+  if(!sel||!wrap) return;
+  wrap.style.display = (sel.value==='Switched Program') ? '' : 'none';
+}
+document.addEventListener('DOMContentLoaded', toggleSwitchedProgram);
+</script>
