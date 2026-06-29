@@ -7309,6 +7309,17 @@ def ensure_crm_tables():
             ('internal_transfers',       'approved_by',            'INTEGER'),
             ('internal_transfers',       'approved_at',            'TIMESTAMP'),
             ('internal_transfers',       'rejection_reason',       'TEXT'),
+            # Completion workflow (Phase 2, 2026-06): after an admin approves, the
+            # new pathway record is 'Pending Verification' with blank service/financial
+            # fields. completion_stage drives the hand-off queue: 'awaiting_sales'
+            # (sales fills the balance fields) -> 'awaiting_ops' (ops verifies) ->
+            # 'completed' (record set 'In Process' = live). Existing approved rows
+            # have no stage and are treated as 'awaiting_sales' via COALESCE.
+            ('internal_transfers',       'completion_stage',       "TEXT DEFAULT 'awaiting_sales'"),
+            ('internal_transfers',       'sales_submitted_by',     'INTEGER'),
+            ('internal_transfers',       'sales_submitted_at',     'TIMESTAMP'),
+            ('internal_transfers',       'ops_verified_by',        'INTEGER'),
+            ('internal_transfers',       'ops_verified_at',        'TIMESTAMP'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -18747,8 +18758,13 @@ def ops_plab_edit(client_id):
     except Exception as e:
         logging.error(f"Documents query error (edit) for client {client_id}: {e}")
         documents = []
+    # Phase 2: surface the "Submit for Ops verification" banner if this PLAB
+    # record is a transferred one still being completed.
+    from routes.operations._form_lookups import transfer_for_reg
+    xfer = transfer_for_reg(conn, client.get('registration_number'))
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
+                           transfer=xfer,
                            products=_products_for_pathway('plab'),
                            plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
@@ -21852,9 +21868,11 @@ def _execute_internal_transfer(conn, t):
             (from_reg, amt_ref, transfer_date, t['refund_method'],
              f'Internal-transfer balance (switched to {prod["name"]})', src['pathway'] or 'plab', t['created_by']))
         refund_id = rcur.fetchone()['id']
-    # 5) stamp the created artifacts back onto the transfer row
+    # 5) stamp the created artifacts back onto the transfer row. completion_stage
+    # starts at 'awaiting_sales' so the new (blank) record surfaces in the sales
+    # hand-off queue for its balance/pathway fields to be filled in.
     conn.execute("""UPDATE internal_transfers SET to_reg = ?, registration_number = ?, to_pathway = ?,
-        from_product = ?, to_product = ?, to_payment_id = ?, refund_id = ? WHERE id = ?""",
+        from_product = ?, to_product = ?, to_payment_id = ?, refund_id = ?, completion_stage = 'awaiting_sales' WHERE id = ?""",
         (new_reg, new_reg, to_pathway, from_product, prod['name'], to_payment_id, refund_id, t['id']))
     return new_reg
 
@@ -21886,8 +21904,8 @@ def admin_internal_transfer_approve(tid):
                      (session.get('user_id'), tid))
         if t['created_by']:
             create_notification(conn, t['created_by'], 'Internal transfer approved',
-                f'Your transfer ({t["from_reg"]} → {new_reg}) was approved and processed. New record created (Pending Verification).',
-                'success', url_for('admin_internal_transfers'))
+                f'Your transfer ({t["from_reg"]} → {new_reg}) was approved. Open the transfer queue to fill the new record\'s balance details and submit for ops verification.',
+                'success', url_for('internal_transfer_completion_queue'))
         conn.commit()
         conn.close()
         flash(f'Transfer approved: {t["from_reg"]} → {new_reg}. New record created (Pending Verification); requester notified.', 'success')
@@ -32950,6 +32968,11 @@ ACCESS_ROUTE_MAP = {
     'admin_internal_transfer_approve':              _ap('clients', 'internal_transfers', 'edit'),
     'admin_internal_transfer_reject':               _ap('clients', 'internal_transfers', 'edit'),
     'admin_internal_transfers_reconcile':           _ap('clients', 'internal_transfers', 'edit'),
+    # Phase 2 completion hand-off (routes/internal_transfers_completion.py).
+    'internal_transfer_completion_queue':           _ap('clients', 'internal_transfers'),
+    'internal_transfer_submit_for_ops':             _ap('clients', 'internal_transfers', 'add'),
+    'internal_transfer_verify':                     _ap('clients', 'internal_transfers', 'edit'),
+    'internal_transfer_return_to_sales':            _ap('clients', 'internal_transfers', 'edit'),
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
@@ -37235,6 +37258,10 @@ def sales_twelfthplus_followups_list():
 # ─────────────────────────────────────────────────────────
 from routes.operations import register_operations_modules
 register_operations_modules(app)
+
+# Internal Transfer — Phase 2 completion hand-off (queue + sales/ops actions).
+from routes.internal_transfers_completion import register_internal_transfer_completion
+register_internal_transfer_completion(app)
 
 
 if __name__ == '__main__':

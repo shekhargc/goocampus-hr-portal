@@ -20,6 +20,7 @@
             {% endif %}
         </p>
 
+        {% include '_transfer_submit_banner.html' %}
         <form method="POST" action="{% if mode == 'edit' %}/operations/plab/{{ item.id }}/edit{% else %}/operations/plab/add{% endif %}">
 
             <!-- ===== REGISTRATION DETAILS ===== -->

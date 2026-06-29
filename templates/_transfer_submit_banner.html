@@ -1,0 +1,37 @@
+{# Phase 2 — internal-transfer completion banner.
+   Shown on a pathway client edit form when `transfer` is an open transfer row
+   (set by the *_client_edit_page handlers via transfer_for_reg). Lets sales hand
+   the filled record off to ops. Expects `transfer` in context; renders nothing
+   otherwise. #}
+{% if transfer %}
+{% set _stage = transfer.completion_stage or 'awaiting_sales' %}
+{% if _stage == 'awaiting_sales' %}
+<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+  <div style="min-width:240px;flex:1;">
+    <div style="font-weight:700;color:#92400E;font-size:0.92rem;">Transferred client — needs your details</div>
+    <div style="color:#92400E;font-size:0.82rem;margin-top:3px;">
+      This record was created from internal transfer
+      <strong>{{ transfer.from_reg }} &rarr; {{ transfer.to_reg }}</strong>.
+      Fill in the Product, Package and other balance fields below and <strong>Save</strong>,
+      then submit it for operations to verify and take live.
+    </div>
+  </div>
+  <form method="POST" action="{{ url_for('internal_transfer_submit_for_ops', tid=transfer.id) }}" style="margin:0;">
+    <input type="hidden" name="next" value="{{ request.path }}">
+    <button type="submit" style="background:#D97706;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;"
+            onclick="return confirm('Submit this transferred client for ops verification? Make sure you have saved the details first.');">
+      Submit for Ops verification
+    </button>
+  </form>
+</div>
+{% elif _stage == 'awaiting_ops' %}
+<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;">
+  <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">Awaiting ops verification</div>
+  <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
+    Sales details submitted{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
+    Operations will verify and take this client live (In Process).
+    <a href="{{ url_for('internal_transfer_completion_queue') }}" style="color:#1D4ED8;font-weight:600;">Open the transfer queue &rarr;</a>
+  </div>
+</div>
+{% endif %}
+{% endif %}

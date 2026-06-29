@@ -31,7 +31,7 @@ from core.auth import admin_required
 from core.users import get_user
 from db import get_db
 # Pathway-scoped dropdown options for the Training Registration edit form.
-from routes.operations._form_lookups import section_client_lookups, section_client_products
+from routes.operations._form_lookups import section_client_lookups, section_client_products, transfer_for_reg
 
 
 @admin_required
@@ -492,6 +492,7 @@ def ops_training_client_edit_page(client_id):
         " WHERE id = ? AND COALESCE(pathway, 'plab') = 'training'",
         (client_id,),
     ).fetchone()
+    xfer = transfer_for_reg(conn, client['registration_number']) if client else None
     conn.close()
     if not client:
         flash('Training client not found.', 'error')
@@ -500,6 +501,7 @@ def ops_training_client_edit_page(client_id):
         'ops_training_client_edit_form.html',
         user=user,
         client=client,
+        transfer=xfer,
         pathway_name='Training Pathway',
         active_ops_page='training-clients',
         active_pathway='training',

@@ -72,6 +72,28 @@ def vendor_names_for(category, pathway, fallback_lookup=None):
     return []
 
 
+def transfer_for_reg(conn, reg):
+    """The open internal-transfer row whose destination is this client, or None.
+
+    Used by every pathway's client edit page to show the "Submit for Ops
+    verification" banner when the record is a transferred one still being
+    completed (Phase 2). Returns the row only while it is approved and not yet
+    'completed' (i.e. completion_stage is 'awaiting_sales' or 'awaiting_ops').
+    """
+    if not reg:
+        return None
+    try:
+        return conn.execute(
+            "SELECT * FROM internal_transfers "
+            " WHERE to_reg = ? AND status = 'approved' "
+            "   AND COALESCE(completion_stage, 'awaiting_sales') <> 'completed' "
+            " ORDER BY id DESC LIMIT 1",
+            (reg,),
+        ).fetchone()
+    except Exception:
+        return None
+
+
 def section_client_products(pathway):
     """Active Products/Services for a pathway as {'products': [ {id, name}, ... ]}.
 

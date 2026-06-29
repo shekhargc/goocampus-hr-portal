@@ -12,6 +12,7 @@
             Update Portfolio Pathway client information, payment details, and onboarding status.
         </p>
 
+        {% include '_transfer_submit_banner.html' %}
         <form method="POST" action="{{ url_for('ops_portfolio_client_edit_save', client_id=client.id) }}">
 
             <!-- ===== REGISTRATION DETAILS ===== -->

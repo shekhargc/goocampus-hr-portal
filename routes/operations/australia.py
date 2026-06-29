@@ -23,7 +23,7 @@ from db import get_db
 # Plan Type / Account Status / Current Stage / Counsellor / Lead Source
 # <select>s render the same options PLAB uses (sourced from the AMC tab
 # of Field Manager).
-from routes.operations._form_lookups import section_client_lookups, section_client_products
+from routes.operations._form_lookups import section_client_lookups, section_client_products, transfer_for_reg
 
 
 @admin_required
@@ -541,6 +541,7 @@ def ops_australia_client_edit_page(client_id):
         "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
         (client_id,),
     ).fetchone()
+    xfer = transfer_for_reg(conn, client['registration_number']) if client else None
     conn.close()
     if not client:
         flash('Australia client not found.', 'error')
@@ -553,6 +554,7 @@ def ops_australia_client_edit_page(client_id):
         'ops_australia_client_edit_form.html',
         user=user,
         client=client,
+        transfer=xfer,
         active_ops_page='australia-clients',
         active_pathway='australia',
         # Dropdown options for Plan Type, Account Status, Current Stage,

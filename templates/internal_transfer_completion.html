@@ -1,0 +1,103 @@
+{% extends base_template|default("clients_sidebar_base.html") %}
+{% block title %}Internal Transfer Queue{% endblock %}
+{% block section_content %}
+<div style="padding:24px;background:var(--gray-50);min-height:100vh;">
+  <div style="max-width:1080px;margin:0 auto;">
+
+    <div style="margin-bottom:18px;">
+      <h1 style="margin:0;font-size:1.3rem;font-weight:700;color:var(--navy);">Internal Transfer Queue</h1>
+      <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">
+        Approved transfers waiting to be completed. Sales fill the new record's balance / pathway
+        fields and submit; operations verify and take the client live (In&nbsp;Process).
+      </p>
+    </div>
+
+    {# ─── macro: one queue table ─── #}
+    {% macro queue_table(rows, kind) %}
+      {% if rows %}
+      <div style="overflow-x:auto;background:#fff;border-radius:12px;box-shadow:0 1px 3px rgba(0,0,0,0.08);">
+        <table style="width:100%;border-collapse:collapse;font-size:0.84rem;white-space:nowrap;">
+          <thead>
+            <tr style="background:var(--gray-50);color:var(--gray-500);text-align:left;">
+              <th style="padding:10px 12px;">#</th>
+              <th style="padding:10px 12px;">Client</th>
+              <th style="padding:10px 12px;">Transfer</th>
+              <th style="padding:10px 12px;">Destination</th>
+              <th style="padding:10px 12px;">Transfer ₹</th>
+              <th style="padding:10px 12px;">Requested by</th>
+              <th style="padding:10px 12px;">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {% for r in rows %}
+            <tr style="border-top:1px solid var(--gray-100);">
+              <td style="padding:10px 12px;color:var(--gray-400);">{{ loop.index }}</td>
+              <td style="padding:10px 12px;font-weight:600;color:var(--navy);">{{ r.client_name }}</td>
+              <td style="padding:10px 12px;color:var(--gray-600);">{{ r.from_reg }} &rarr; {{ r.to_reg }}</td>
+              <td style="padding:10px 12px;color:var(--gray-600);">{{ r.product }}<span style="color:var(--gray-400);"> ({{ r.pathway|upper }})</span></td>
+              <td style="padding:10px 12px;">₹{{ '{:,.0f}'.format(r.amount_transferred) }}</td>
+              <td style="padding:10px 12px;color:var(--gray-600);">{{ r.requested_by or '—' }}</td>
+              <td style="padding:10px 12px;">
+                {% if kind == 'sales' %}
+                  {% if r.edit_url %}<a href="{{ r.edit_url }}" style="background:#D97706;color:#fff;border-radius:7px;padding:6px 12px;text-decoration:none;font-weight:600;">Open &amp; fill</a>
+                  {% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}
+                {% elif kind == 'ops' %}
+                  {% if can_verify %}
+                  <div style="display:flex;gap:6px;align-items:center;">
+                    <form method="POST" action="{{ url_for('internal_transfer_verify', tid=r.id) }}" style="margin:0;"
+                          onsubmit="return confirm('Verify {{ r.to_reg }} and take it live (In Process)?');">
+                      <button type="submit" style="background:#059669;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-weight:600;cursor:pointer;">Verify &amp; Go Live</button>
+                    </form>
+                    <button type="button" onclick="document.getElementById('ret-{{ r.id }}').style.display='flex';"
+                            style="background:#fff;color:#92400E;border:1px solid #FCD34D;border-radius:7px;padding:6px 12px;font-weight:600;cursor:pointer;">Return</button>
+                    {% if r.edit_url %}<a href="{{ r.edit_url }}" style="color:var(--gray-500);text-decoration:none;font-size:0.8rem;">Review</a>{% endif %}
+                  </div>
+                  <form method="POST" action="{{ url_for('internal_transfer_return_to_sales', tid=r.id) }}" id="ret-{{ r.id }}"
+                        style="display:none;gap:6px;margin-top:8px;align-items:center;">
+                    <input type="text" name="note" placeholder="Reason / what to fix" style="flex:1;min-width:160px;padding:6px 8px;border:1px solid var(--gray-200);border-radius:6px;">
+                    <button type="submit" style="background:#D97706;color:#fff;border:none;border-radius:7px;padding:6px 12px;font-weight:600;cursor:pointer;">Send back</button>
+                  </form>
+                  {% else %}
+                  <span style="color:var(--gray-400);">awaiting ops</span>
+                  {% endif %}
+                {% elif kind == 'done' %}
+                  <span style="background:#ECFDF5;color:#065F46;border-radius:999px;padding:3px 10px;font-size:0.78rem;font-weight:600;">{{ r.account_status or 'In Process' }}</span>
+                {% elif kind == 'mine' %}
+                  {% if r.stage == 'awaiting_sales' %}<span style="background:#FFFBEB;color:#92400E;border-radius:999px;padding:3px 10px;font-size:0.78rem;font-weight:600;">Awaiting your details</span>
+                  {% elif r.stage == 'awaiting_ops' %}<span style="background:#EFF6FF;color:#1E40AF;border-radius:999px;padding:3px 10px;font-size:0.78rem;font-weight:600;">Awaiting ops verification</span>
+                  {% else %}<span style="background:#ECFDF5;color:#065F46;border-radius:999px;padding:3px 10px;font-size:0.78rem;font-weight:600;">Completed / Live</span>{% endif %}
+                {% endif %}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div style="background:#fff;border-radius:12px;padding:20px;color:var(--gray-400);font-size:0.86rem;box-shadow:0 1px 3px rgba(0,0,0,0.06);">Nothing here right now.</div>
+      {% endif %}
+    {% endmacro %}
+
+    {% macro section(title, hint, rows, kind) %}
+    <div style="margin-top:22px;">
+      <div style="display:flex;align-items:baseline;gap:10px;margin-bottom:8px;">
+        <h2 style="margin:0;font-size:1rem;font-weight:700;color:var(--navy);">{{ title }}</h2>
+        <span style="font-size:0.78rem;color:var(--gray-400);">{{ rows|length }}</span>
+      </div>
+      {% if hint %}<p style="margin:0 0 8px;font-size:0.8rem;color:var(--gray-500);">{{ hint }}</p>{% endif %}
+      {{ queue_table(rows, kind) }}
+    </div>
+    {% endmacro %}
+
+    {% if can_fill %}
+      {{ section('Awaiting your details', 'Open each record, fill the Product / Package / balance fields, save, then submit for ops verification.', awaiting_sales, 'sales') }}
+    {% endif %}
+    {% if can_verify %}
+      {{ section('Awaiting ops verification', 'Sales have completed these. Review and verify to take the client live.', awaiting_ops, 'ops') }}
+    {% endif %}
+    {{ section('My transfer requests', 'Transfers you raised and where they are in the pipeline.', mine, 'mine') }}
+    {{ section('Completed / Live', 'Verified transfers now live as In Process.', completed, 'done') }}
+
+  </div>
+</div>
+{% endblock %}
