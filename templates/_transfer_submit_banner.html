@@ -36,11 +36,24 @@
           el.type === 'checkbox' || el.type === 'radio' || el.closest('[data-vq-banner]')) return;
       var empty = (el.tagName === 'SELECT') ? !el.value : !((el.value || '').trim());
       if (empty) {
+        // To fill: amber highlight, fully editable.
         el.style.background = '#FFFBEB';
         el.style.borderColor = '#F59E0B';
         el.style.boxShadow = '0 0 0 2px rgba(245,158,11,.16)';
       } else {
-        el.style.opacity = '0.55';
+        // Already filled (copied from source) — LOCK it so it can't be changed.
+        // readonly preserves the value on submit for inputs/textarea; selects
+        // can't be readonly, so make them non-interactive (still submit).
+        if (el.tagName === 'SELECT') {
+          el.style.pointerEvents = 'none';
+          el.setAttribute('tabindex', '-1');
+        } else {
+          el.readOnly = true;
+        }
+        el.style.background = '#F3F4F6';
+        el.style.color = '#9CA3AF';
+        el.style.borderColor = '#E5E7EB';
+        el.style.cursor = 'not-allowed';
       }
     });
   }
