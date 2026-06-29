@@ -242,8 +242,10 @@
             <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client Status</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status</label>
-                    <select name="account_status" id="account_status" onchange="toggleSwitchedProgram()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
+                    <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status{% if item and item.account_status == 'Pending Verification' %} <span style="color:#b45309;font-weight:600;">&#128274; locked until ops verification</span>{% endif %}</label>
+                    {% set _status_locked = (item and item.account_status == 'Pending Verification') %}
+                    {% if _status_locked %}<input type="hidden" name="account_status" value="{{ item.account_status }}">{% endif %}
+                    <select name="account_status" id="account_status" onchange="toggleSwitchedProgram()" {% if _status_locked %}disabled title="Locked during the verification workflow — becomes an editable dropdown once the client is In Process"{% endif %} style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:{% if _status_locked %}#f3f4f6;color:#9ca3af;cursor:not-allowed{% else %}white{% endif %};">
                         <option value="">Select Account Status</option>
                         {% for status in account_statuses %}
                         <option value="{{ status }}" {% if item and item.account_status == status %}selected{% endif %}>{{ status }}</option>
