@@ -16201,92 +16201,67 @@ VENDOR_LOOKUP_MAP = {
 }
 
 
+# pathway slug -> the vendors_providers.country label it is stored under.
+PATHWAY_VENDOR_COUNTRIES = {
+    'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway', 'uae': 'UAE Pathway',
+}
+
+
 def sync_vendors_to_lookup_options(conn=None):
-    """Sync vendors_providers → lookup_options for vendor-linked categories.
-    Additive only: adds missing options and deactivates removed vendors, never deletes data.
-    """
+    """Sync vendors_providers -> lookup_options for vendor-linked categories, for
+    EVERY pathway (each scoped to its own pathway row in lookup_options).
+
+    ADDITIVE ONLY: adds missing options and re-activates ones whose vendor is
+    active again. It never edits or deletes an existing option, and never writes
+    across pathways, so manually-entered data is left untouched. Runs on every
+    vendor add/edit."""
     should_close = False
     if conn is None:
         conn = get_db()
         should_close = True
     try:
-        for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
-            # Fetch active vendor names for this mapping
-            country = vlink.get('country', 'UK Pathway')
-            if vlink['type'] == 'service':
-                vendor_rows = conn.execute("""
-                    SELECT DISTINCT vp.name FROM vendors_providers vp
-                    JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
-                    WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
-                    ORDER BY vp.sort_order, vp.name
-                """, (vlink['service'], country)).fetchall()
-            elif vlink['type'] == 'deliverables':
-                # Collect all unique service_names from vendors in this category
-                cat_pattern = '%' + vlink['category'] + '%'
-                vendor_rows = conn.execute("""
-                    SELECT DISTINCT vsm.service_name as name
-                    FROM vendor_service_map vsm
-                    JOIN vendors_providers vp ON vsm.vendor_id = vp.id
-                    WHERE vp.category LIKE ? AND vp.country = ? AND vp.is_active = TRUE
-                    ORDER BY vsm.service_name
-                """, (cat_pattern, country)).fetchall()
-            else:
-                cat_pattern = '%' + vlink['category'] + '%'
-                vendor_rows = conn.execute("""
-                    SELECT name FROM vendors_providers
-                    WHERE category LIKE ? AND country = ? AND is_active = TRUE
-                    ORDER BY sort_order, name
-                """, (cat_pattern, country)).fetchall()
-
-            vendor_names = [r['name'] for r in vendor_rows]
-
-            # Fetch existing lookup_options for this category
-            existing = conn.execute(
-                "SELECT id, value, is_active FROM lookup_options WHERE category = ? ORDER BY sort_order",
-                (lo_category,)
-            ).fetchall()
-            existing_values = {r['value']: r for r in existing}
-
-            # Get current max sort_order
-            max_so = conn.execute(
-                "SELECT COALESCE(MAX(sort_order), 0) as m FROM lookup_options WHERE category = ?",
-                (lo_category,)
-            ).fetchone()['m']
-
-            # Add vendor names not yet in lookup_options
-            for vname in vendor_names:
-                if vname not in existing_values:
-                    max_so += 1
-                    conn.execute(
-                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
-                        (lo_category, vname, vname, max_so)
-                    )
-                    logging.info(f"Vendor sync: added '{vname}' to lookup_options.{lo_category}")
-                elif not existing_values[vname]['is_active']:
-                    # Re-activate if vendor is active but lookup was deactivated
-                    conn.execute(
-                        "UPDATE lookup_options SET is_active = TRUE WHERE id = ?",
-                        (existing_values[vname]['id'],)
-                    )
-                    logging.info(f"Vendor sync: re-activated '{vname}' in lookup_options.{lo_category}")
-
-            # Deactivate lookup_options whose vendor is no longer active (but don't delete)
-            for val, row in existing_values.items():
-                if val not in vendor_names and row['is_active'] and val != 'Other':
-                    # Check if this vendor exists but is inactive
-                    inactive_check = conn.execute(
-                        "SELECT id FROM vendors_providers WHERE name = ? AND is_active = FALSE LIMIT 1",
-                        (val,)
-                    ).fetchone()
-                    if inactive_check:
+        for pathway, country in PATHWAY_VENDOR_COUNTRIES.items():
+            for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
+                if vlink['type'] == 'service':
+                    vendor_rows = conn.execute(
+                        """SELECT DISTINCT vp.name FROM vendors_providers vp
+                             JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+                            WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
+                            ORDER BY vp.sort_order, vp.name""",
+                        (vlink['service'], country)).fetchall()
+                elif vlink['type'] == 'deliverables':
+                    vendor_rows = conn.execute(
+                        """SELECT DISTINCT vsm.service_name AS name FROM vendor_service_map vsm
+                             JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+                            WHERE vp.category LIKE ? AND vp.country = ? AND vp.is_active = TRUE
+                            ORDER BY vsm.service_name""",
+                        ('%' + vlink['category'] + '%', country)).fetchall()
+                else:
+                    vendor_rows = conn.execute(
+                        """SELECT name FROM vendors_providers
+                            WHERE category LIKE ? AND country = ? AND is_active = TRUE
+                            ORDER BY sort_order, name""",
+                        ('%' + vlink['category'] + '%', country)).fetchall()
+                names = [(r['name'] or '').strip() for r in vendor_rows if (r['name'] or '').strip()]
+                if not names:
+                    continue
+                existing = {r['value']: r for r in conn.execute(
+                    "SELECT id, value, is_active FROM lookup_options WHERE category = ? AND COALESCE(pathway,'plab') = ?",
+                    (lo_category, pathway)).fetchall()}
+                max_so = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order), 0) AS m FROM lookup_options WHERE category = ? AND COALESCE(pathway,'plab') = ?",
+                    (lo_category, pathway)).fetchone()['m']
+                for nm in names:
+                    if nm not in existing:
+                        max_so += 1
                         conn.execute(
-                            "UPDATE lookup_options SET is_active = FALSE WHERE id = ?",
-                            (row['id'],)
-                        )
-                        logging.info(f"Vendor sync: deactivated '{val}' in lookup_options.{lo_category} (vendor inactive)")
-
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active, pathway) VALUES (?, ?, ?, ?, TRUE, ?)",
+                            (lo_category, nm, nm, max_so, pathway))
+                    elif not existing[nm]['is_active']:
+                        conn.execute("UPDATE lookup_options SET is_active = TRUE WHERE id = ?", (existing[nm]['id'],))
         conn.commit()
-        logging.info("Vendor ↔ lookup_options sync completed")
+        logging.info("Vendor -> lookup_options sync (all pathways, additive) completed")
     except Exception as e:
         logging.error(f"sync_vendors_to_lookup_options error: {e}")
     finally:
