@@ -163,23 +163,20 @@ def verification_ops():
     if not _can_verify(user):
         flash('Only ops/admin can open the ops verification queue.', 'error')
         return redirect(url_for('verification_sales') if _can_fill(user) else '/')
-    uid = session.get('user_id')
     conn = get_db()
+    # Ops only sees what is ready for VERIFICATION (after sales submits):
+    # new registrations sales-completed & not ops-verified, and transfers at
+    # awaiting_ops. Nothing in the 'fill' stage shows here.
     newreg_verify = _newreg_rows(conn, 'verify')
     transfer_verify = _transfer_rows(conn, 'awaiting_ops')
-    # ops can also be the requester -> their own fill tasks show here too
-    transfer_fill_mine = [t for t in _transfer_rows(conn, 'awaiting_sales')
-                          if (t['requested_by'] == uid) or session.get('is_admin')]
     names = _emp_names(conn)
     conn.close()
-    for lst in (transfer_verify, transfer_fill_mine):
-        for t in lst:
-            t['requested_by_name'] = names.get(t['requested_by'], '')
+    for t in transfer_verify:
+        t['requested_by_name'] = names.get(t['requested_by'], '')
     return render_template('verification_queue.html',
         base_template='focus_base.html', active_section='clients',
         view='ops', title='Ops Team Verification', mode='verify',
-        newreg=newreg_verify, transfers=transfer_verify,
-        transfer_fill_mine=transfer_fill_mine, can_verify=True)
+        newreg=newreg_verify, transfers=transfer_verify, can_verify=True)
 
 
 def register_verification_queues(app):

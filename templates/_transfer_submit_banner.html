@@ -25,13 +25,23 @@
   </form>
 </div>
 {% elif _stage == 'awaiting_ops' %}
-<div data-vq-banner style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;">
-  <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">Awaiting ops verification</div>
-  <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
-    Sales details submitted{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
-    Operations will verify and take this client live (In Process).
-    <a href="{{ url_for('internal_transfer_completion_queue') }}" style="color:#1D4ED8;font-weight:600;">Open the transfer queue &rarr;</a>
+<div data-vq-banner style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+  <div style="min-width:240px;flex:1;">
+    <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">{% if can_verify_transfer %}Verify this transferred client{% else %}Awaiting ops verification{% endif %}</div>
+    <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
+      Sales submitted the details{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
+      {% if can_verify_transfer %}Review all the details below — they're locked — then confirm to take the client live (In Process).{% else %}Operations will verify and take this client live (In Process).{% endif %}
+    </div>
   </div>
+  {% if can_verify_transfer %}
+  <form method="POST" action="{{ url_for('internal_transfer_verify', tid=transfer.id) }}" style="margin:0;">
+    <input type="hidden" name="next" value="{{ url_for('verification_ops') }}">
+    <button type="submit" style="background:#059669;color:#fff;border:none;border-radius:8px;padding:10px 16px;font-size:0.85rem;font-weight:600;cursor:pointer;white-space:nowrap;"
+            onclick="return confirm('Confirm you have verified all the details, and take {{ transfer.to_reg }} live (In Process)?');">
+      &#10003; Verify &amp; Confirm — take live
+    </button>
+  </form>
+  {% endif %}
 </div>
 {% endif %}
 {# Field guidance — runs for BOTH stages (sales fill + ops verify): lock the

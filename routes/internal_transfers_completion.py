@@ -228,7 +228,7 @@ def internal_transfer_verify(tid):
         try: conn.close()
         except Exception: pass
         flash(f'Verification failed: {e}', 'error')
-    return redirect(url_for('internal_transfer_completion_queue'))
+    return redirect(_safe_next())
 
 
 @login_required

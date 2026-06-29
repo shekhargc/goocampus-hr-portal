@@ -27,7 +27,7 @@
 
   <div class="vq-tabs">
     <div class="vq-tab active" data-tab="newreg">New Registration ({{ newreg|length }})</div>
-    <div class="vq-tab" data-tab="transfer">Internal Transfer ({{ transfers|length + (transfer_fill_mine|length if transfer_fill_mine else 0) }})</div>
+    <div class="vq-tab" data-tab="transfer">Internal Transfer ({{ transfers|length }})</div>
   </div>
 
   {# ── New Registration tab ── #}
@@ -53,23 +53,8 @@
 
   {# ── Internal Transfer tab ── #}
   <div class="vq-panel" id="tab-transfer" style="display:none;">
-    {% if mode == 'verify' and transfer_fill_mine %}
-      <div class="vq-sub">Your transfer requests — fill the balance details</div>
-      <table class="vq-table">
-        <thead><tr><th>#</th><th>New Reg</th><th>Client</th><th>Pathway → Product</th><th></th></tr></thead>
-        <tbody>
-          {% for t in transfer_fill_mine %}
-          <tr><td>{{ loop.index }}</td><td>{{ t.reg }}</td><td><b style="color:var(--navy);">{{ t.name }}</b></td>
-            <td>{{ t.pathway|title }} → {{ t.product }}</td>
-            <td style="text-align:right;">{% if t.action_url %}<a href="{{ t.action_url }}" class="vq-btn vq-fill">Fill Details →</a>{% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}</td></tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      <div style="height:18px;"></div>
-    {% endif %}
-
     {% if transfers %}
-      {% if mode == 'verify' %}<div class="vq-sub">Awaiting your verification</div>{% endif %}
+      {% if mode == 'verify' %}<div class="vq-sub">Awaiting your verification — open each one, review all details, then confirm</div>{% endif %}
       <table class="vq-table">
         <thead><tr><th>#</th><th>New Reg</th><th>Client</th><th>Pathway → Product</th><th>Requested by</th><th></th></tr></thead>
         <tbody>
@@ -81,20 +66,13 @@
             <td>{{ t.pathway|title }} → {{ t.product }}</td>
             <td>{{ t.requested_by_name or '—' }}</td>
             <td style="text-align:right;">
-              {% if mode == 'verify' %}
-                <form method="POST" action="{{ url_for('internal_transfer_verify', tid=t.id) }}" style="display:inline;margin:0;">
-                  <input type="hidden" name="next" value="{{ request.path }}">
-                  <button type="submit" class="vq-btn vq-verify" onclick="return confirm('Verify and take {{ t.reg }} live (In Process)?');">Verify &amp; Go Live →</button>
-                </form>
-              {% else %}
-                {% if t.action_url %}<a href="{{ t.action_url }}" class="vq-btn vq-fill">Fill Details →</a>{% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}
-              {% endif %}
+              {% if t.action_url %}<a href="{{ t.action_url }}" class="vq-btn {{ 'vq-verify' if mode == 'verify' else 'vq-fill' }}">{{ 'Review &amp; Verify →' if mode == 'verify' else 'Fill Details →' }}</a>{% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}
             </td>
           </tr>
           {% endfor %}
         </tbody>
       </table>
-    {% elif not (mode == 'verify' and transfer_fill_mine) %}
+    {% else %}
       <div class="vq-empty">Nothing waiting here right now.</div>
     {% endif %}
   </div>
