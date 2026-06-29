@@ -6,7 +6,7 @@
 {% if transfer %}
 {% set _stage = transfer.completion_stage or 'awaiting_sales' %}
 {% if _stage == 'awaiting_sales' %}
-<div style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
+<div data-vq-banner style="background:#FFFBEB;border:1px solid #FCD34D;border-radius:12px;padding:16px 18px;margin-bottom:18px;display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:12px;">
   <div style="min-width:240px;flex:1;">
     <div style="font-weight:700;color:#92400E;font-size:0.92rem;">Transferred client — needs your details</div>
     <div style="color:#92400E;font-size:0.82rem;margin-top:3px;">
@@ -24,6 +24,30 @@
     </button>
   </form>
 </div>
+<script>
+(function(){
+  // Fill-stage guidance: highlight EMPTY fields (sales needs to fill these) and
+  // mute the already-filled ones (copied from the source record). Purely visual —
+  // nothing is disabled, so anything can still be corrected if needed.
+  function paint(){
+    var fields = document.querySelectorAll('form input[name], form select[name], form textarea[name]');
+    fields.forEach(function(el){
+      if (el.disabled || el.type === 'hidden' || el.type === 'file' ||
+          el.type === 'checkbox' || el.type === 'radio' || el.closest('[data-vq-banner]')) return;
+      var empty = (el.tagName === 'SELECT') ? !el.value : !((el.value || '').trim());
+      if (empty) {
+        el.style.background = '#FFFBEB';
+        el.style.borderColor = '#F59E0B';
+        el.style.boxShadow = '0 0 0 2px rgba(245,158,11,.16)';
+      } else {
+        el.style.opacity = '0.55';
+      }
+    });
+  }
+  if (document.readyState !== 'loading') paint();
+  else document.addEventListener('DOMContentLoaded', paint);
+})();
+</script>
 {% elif _stage == 'awaiting_ops' %}
 <div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;">
   <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">Awaiting ops verification</div>
