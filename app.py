@@ -196,6 +196,10 @@ def inject_manager_status():
         # Internal Transfer" button on the Operations client profiles.
         can_xfer = bool(session.get('is_admin') or
                         (user and has_section_permission(user, 'clients', 'internal_transfers', 'add')))
+        # Ops verifier: admin, or Clients > Internal Transfers > Edit. Drives the
+        # "Ops Team Verification" queue link.
+        can_verify_xfer = bool(session.get('is_admin') or
+                        (user and has_section_permission(user, 'clients', 'internal_transfers', 'edit')))
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -204,11 +208,12 @@ def inject_manager_status():
             'operations_landing_url': ops_landing,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
+            'can_verify_transfer': can_verify_xfer,
         }
     return {
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
-        'current_user_name': '', 'can_request_transfer': False,
+        'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
 def calculate_monthly_balance(employee_id, year, month):
@@ -32970,6 +32975,8 @@ ACCESS_ROUTE_MAP = {
     'admin_internal_transfers_reconcile':           _ap('clients', 'internal_transfers', 'edit'),
     # Phase 2 completion hand-off (routes/internal_transfers_completion.py).
     'internal_transfer_completion_queue':           _ap('clients', 'internal_transfers'),
+    'verification_sales':                           _ap('clients', 'internal_transfers'),
+    'verification_ops':                             _ap('clients', 'internal_transfers', 'edit'),
     'internal_transfer_submit_for_ops':             _ap('clients', 'internal_transfers', 'add'),
     'internal_transfer_verify':                     _ap('clients', 'internal_transfers', 'edit'),
     'internal_transfer_return_to_sales':            _ap('clients', 'internal_transfers', 'edit'),
@@ -37262,6 +37269,9 @@ register_operations_modules(app)
 # Internal Transfer — Phase 2 completion hand-off (queue + sales/ops actions).
 from routes.internal_transfers_completion import register_internal_transfer_completion
 register_internal_transfer_completion(app)
+
+from routes.verification_queues import register_verification_queues
+register_verification_queues(app)
 
 
 if __name__ == '__main__':

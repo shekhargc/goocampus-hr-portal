@@ -1,0 +1,115 @@
+{% extends base_template|default("clients_sidebar_base.html") %}
+{% block title %}{{ title }}{% endblock %}
+{% block section_content %}
+<style>
+  .vq-wrap { padding:24px; background:var(--gray-50); min-height:100vh; }
+  .vq-inner { max-width:1040px; margin:0 auto; }
+  .vq-tabs { display:flex; gap:8px; margin:16px 0 0; }
+  .vq-tab { padding:9px 18px; border:1px solid var(--gray-200); background:#fff; border-radius:8px 8px 0 0;
+            font-weight:600; font-size:0.86rem; color:var(--gray-600); cursor:pointer; }
+  .vq-tab.active { background:var(--navy); color:#fff; border-color:var(--navy); }
+  .vq-panel { background:#fff; border:1px solid var(--gray-200); border-radius:0 10px 10px 10px; padding:18px; }
+  .vq-table { width:100%; border-collapse:collapse; font-size:0.85rem; }
+  .vq-table th { text-align:left; padding:9px 10px; color:var(--navy); border-bottom:2px solid var(--gray-200); font-size:0.74rem; text-transform:uppercase; letter-spacing:.3px; }
+  .vq-table td { padding:10px; border-bottom:1px solid var(--gray-100); color:var(--gray-700); }
+  .vq-btn { padding:7px 14px; border-radius:7px; font-weight:600; font-size:0.8rem; text-decoration:none; border:none; cursor:pointer; display:inline-block; }
+  .vq-fill { background:#fff; color:#7c3aed; border:1px solid #7c3aed; }
+  .vq-verify { background:#059669; color:#fff; }
+  .vq-empty { color:var(--gray-500); font-size:0.9rem; padding:18px 4px; }
+  .vq-sub { font-size:0.82rem; font-weight:700; color:var(--navy); margin:4px 0 8px; }
+</style>
+<div class="vq-wrap"><div class="vq-inner">
+  <h1 style="margin:0;font-size:1.4rem;font-weight:700;color:var(--navy);">{{ title }}</h1>
+  <p style="margin:6px 0 0;font-size:0.85rem;color:var(--gray-500);">
+    {% if mode == 'fill' %}Complete the balance details for clients you brought in — new registrations and internal transfers you requested.
+    {% else %}Verify completed registrations and transfers, then take them live. Transfers you requested yourself appear here to fill too.{% endif %}
+  </p>
+
+  <div class="vq-tabs">
+    <div class="vq-tab active" data-tab="newreg">New Registration ({{ newreg|length }})</div>
+    <div class="vq-tab" data-tab="transfer">Internal Transfer ({{ transfers|length + (transfer_fill_mine|length if transfer_fill_mine else 0) }})</div>
+  </div>
+
+  {# ── New Registration tab ── #}
+  <div class="vq-panel" id="tab-newreg">
+    {% if newreg %}
+    <table class="vq-table">
+      <thead><tr><th>#</th><th>Reg No.</th><th>Client</th><th>Product</th><th>{{ 'Submitted' if mode=='fill' else 'Sales done' }}</th><th></th></tr></thead>
+      <tbody>
+        {% for r in newreg %}
+        <tr>
+          <td>{{ loop.index }}</td>
+          <td>{{ r.reg }}</td>
+          <td><b style="color:var(--navy);">{{ r.name }}</b></td>
+          <td>{{ r.product }}</td>
+          <td>{{ (r.when|string)[:10] if r.when else '—' }}</td>
+          <td style="text-align:right;"><a href="{{ r.action_url }}" class="vq-btn {{ 'vq-verify' if mode=='verify' else 'vq-fill' }}">{{ 'Verify &amp; Approve →' if mode=='verify' else 'Fill Details →' }}</a></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}<div class="vq-empty">Nothing waiting here right now.</div>{% endif %}
+  </div>
+
+  {# ── Internal Transfer tab ── #}
+  <div class="vq-panel" id="tab-transfer" style="display:none;">
+    {% if mode == 'verify' and transfer_fill_mine %}
+      <div class="vq-sub">Your transfer requests — fill the balance details</div>
+      <table class="vq-table">
+        <thead><tr><th>#</th><th>New Reg</th><th>Client</th><th>Pathway → Product</th><th></th></tr></thead>
+        <tbody>
+          {% for t in transfer_fill_mine %}
+          <tr><td>{{ loop.index }}</td><td>{{ t.reg }}</td><td><b style="color:var(--navy);">{{ t.name }}</b></td>
+            <td>{{ t.pathway|title }} → {{ t.product }}</td>
+            <td style="text-align:right;">{% if t.action_url %}<a href="{{ t.action_url }}" class="vq-btn vq-fill">Fill Details →</a>{% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}</td></tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      <div style="height:18px;"></div>
+    {% endif %}
+
+    {% if transfers %}
+      {% if mode == 'verify' %}<div class="vq-sub">Awaiting your verification</div>{% endif %}
+      <table class="vq-table">
+        <thead><tr><th>#</th><th>New Reg</th><th>Client</th><th>Pathway → Product</th><th>Requested by</th><th></th></tr></thead>
+        <tbody>
+          {% for t in transfers %}
+          <tr>
+            <td>{{ loop.index }}</td>
+            <td>{{ t.reg }}</td>
+            <td><b style="color:var(--navy);">{{ t.name }}</b></td>
+            <td>{{ t.pathway|title }} → {{ t.product }}</td>
+            <td>{{ t.requested_by_name or '—' }}</td>
+            <td style="text-align:right;">
+              {% if mode == 'verify' %}
+                <form method="POST" action="{{ url_for('internal_transfer_verify', tid=t.id) }}" style="display:inline;margin:0;">
+                  <input type="hidden" name="next" value="{{ request.path }}">
+                  <button type="submit" class="vq-btn vq-verify" onclick="return confirm('Verify and take {{ t.reg }} live (In Process)?');">Verify &amp; Go Live →</button>
+                </form>
+              {% else %}
+                {% if t.action_url %}<a href="{{ t.action_url }}" class="vq-btn vq-fill">Fill Details →</a>{% else %}<span style="color:var(--gray-400);">record missing</span>{% endif %}
+              {% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% elif not (mode == 'verify' and transfer_fill_mine) %}
+      <div class="vq-empty">Nothing waiting here right now.</div>
+    {% endif %}
+  </div>
+</div></div>
+<script>
+  (function(){
+    var tabs = document.querySelectorAll('.vq-tab');
+    tabs.forEach(function(t){
+      t.addEventListener('click', function(){
+        tabs.forEach(function(x){ x.classList.remove('active'); });
+        t.classList.add('active');
+        document.getElementById('tab-newreg').style.display = (t.dataset.tab==='newreg')?'block':'none';
+        document.getElementById('tab-transfer').style.display = (t.dataset.tab==='transfer')?'block':'none';
+      });
+    });
+  })();
+</script>
+{% endblock %}
