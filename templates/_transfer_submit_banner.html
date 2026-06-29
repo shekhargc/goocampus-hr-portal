@@ -24,11 +24,20 @@
     </button>
   </form>
 </div>
+{% elif _stage == 'awaiting_ops' %}
+<div data-vq-banner style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;">
+  <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">Awaiting ops verification</div>
+  <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
+    Sales details submitted{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
+    Operations will verify and take this client live (In Process).
+    <a href="{{ url_for('internal_transfer_completion_queue') }}" style="color:#1D4ED8;font-weight:600;">Open the transfer queue &rarr;</a>
+  </div>
+</div>
+{% endif %}
+{# Field guidance — runs for BOTH stages (sales fill + ops verify): lock the
+   already-filled fields (copied/saved), highlight the empty ones still to fill. #}
 <script>
 (function(){
-  // Fill-stage guidance: highlight EMPTY fields (sales needs to fill these) and
-  // mute the already-filled ones (copied from the source record). Purely visual —
-  // nothing is disabled, so anything can still be corrected if needed.
   function paint(){
     var fields = document.querySelectorAll('form input[name], form select[name], form textarea[name]');
     fields.forEach(function(el){
@@ -41,9 +50,9 @@
         el.style.borderColor = '#F59E0B';
         el.style.boxShadow = '0 0 0 2px rgba(245,158,11,.16)';
       } else {
-        // Already filled (copied from source) — LOCK it so it can't be changed.
-        // readonly preserves the value on submit for inputs/textarea; selects
-        // can't be readonly, so make them non-interactive (still submit).
+        // Already filled — LOCK it so it can't be changed. readonly preserves the
+        // value on submit for inputs/textarea; selects can't be readonly, so make
+        // them non-interactive (still submit).
         if (el.tagName === 'SELECT') {
           el.style.pointerEvents = 'none';
           el.setAttribute('tabindex', '-1');
@@ -61,14 +70,4 @@
   else document.addEventListener('DOMContentLoaded', paint);
 })();
 </script>
-{% elif _stage == 'awaiting_ops' %}
-<div style="background:#EFF6FF;border:1px solid #BFDBFE;border-radius:12px;padding:14px 18px;margin-bottom:18px;">
-  <div style="font-weight:700;color:#1E40AF;font-size:0.9rem;">Awaiting ops verification</div>
-  <div style="color:#1E40AF;font-size:0.82rem;margin-top:3px;">
-    Sales details submitted{% if transfer.sales_submitted_at %} on {{ transfer.sales_submitted_at }}{% endif %}.
-    Operations will verify and take this client live (In Process).
-    <a href="{{ url_for('internal_transfer_completion_queue') }}" style="color:#1D4ED8;font-weight:600;">Open the transfer queue &rarr;</a>
-  </div>
-</div>
-{% endif %}
 {% endif %}
