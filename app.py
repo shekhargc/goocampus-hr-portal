@@ -16466,15 +16466,35 @@ def ops_vendors_providers():
         vd['categories_list'] = cats
         vendors_list.append(vd)
 
-    # Deliverables per category for the multi-select in the modal
+    # Deliverables per category for the multi-select in the modal. Start from a
+    # few sensible defaults, then UNION every course/service already in use
+    # (vendor_service_map) so the checklist reflects real data — not a stale
+    # hardcoded list. Users can still type brand-new ones via the "+ Add" box.
     deliverables = {
         'Training Programs': ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1'],
-        'Online Courses': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS', 'Other'],
+        'Online Courses': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS'],
         'Online Subscriptions': [],
         'Certification Bodies': [],
         'Research & Publications': [],
         'NGO Activities': [],
     }
+    try:
+        dconn = get_db()
+        for row in dconn.execute(
+            """SELECT vp.category AS cats, vsm.service_name AS svc
+                 FROM vendor_service_map vsm
+                 JOIN vendors_providers vp ON vp.id = vsm.vendor_id
+                WHERE COALESCE(vsm.service_name, '') <> ''""").fetchall():
+            svc = (row['svc'] or '').strip()
+            for cat in (row['cats'] or '').split(','):
+                cat = cat.strip()
+                if cat in deliverables and svc and svc not in deliverables[cat]:
+                    deliverables[cat].append(svc)
+        dconn.close()
+        for k in deliverables:
+            deliverables[k] = sorted(set(deliverables[k]), key=str.lower)
+    except Exception as e:
+        logging.warning(f"vendor deliverables union: {e}")
 
     return render_template('ops_vendors_providers.html',
                          vendors=vendors_list,

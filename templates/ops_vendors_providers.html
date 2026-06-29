@@ -297,9 +297,9 @@
             </div>
 
             <div class="vp-fg">
-                <label>Country *</label>
+                <label>Pathway *</label>
                 <select id="fCountry">
-                    <option value="">Select Country</option>
+                    <option value="">Select Pathway</option>
                     {% for c in countries %}
                     <option value="{{ c }}">{{ c }}</option>
                     {% endfor %}
@@ -319,9 +319,13 @@
             </div>
 
             <div class="vp-fg" id="svcGroup">
-                <label>Deliverables <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(select services this vendor provides)</span></label>
+                <label>Deliverables / Courses <span style="font-weight:400;color:var(--gray-400);text-transform:none;">(tick what this vendor provides, or add a new one)</span></label>
                 <div class="vp-checklist" id="svcChecklist">
                     <p class="vp-checklist-empty">Select a category first</p>
+                </div>
+                <div style="display:flex;gap:6px;margin-top:8px;">
+                    <input type="text" id="newSvcInput" placeholder="+ Add a new course / service…" onkeydown="if(event.key==='Enter'){event.preventDefault();addNewService();}" style="flex:1;padding:0.5rem 0.7rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.85rem;">
+                    <button type="button" onclick="addNewService()" style="background:var(--orange);color:#fff;border:none;border-radius:8px;padding:0.5rem 0.9rem;font-weight:600;font-size:0.82rem;cursor:pointer;white-space:nowrap;">+ Add</button>
                 </div>
             </div>
         </div>
@@ -479,6 +483,27 @@ function updateSvcChecklist() {
     ).join('');
 }
 
+// Add a brand-new course/service the user types — appends a checked checkbox.
+// saveVendor sends every checked name; the backend accepts arbitrary services.
+function addNewService() {
+    const inp = document.getElementById('newSvcInput');
+    const val = (inp.value || '').trim();
+    if (!val) return;
+    const container = document.getElementById('svcChecklist');
+    const empty = container.querySelector('.vp-checklist-empty');
+    if (empty) container.innerHTML = '';
+    let exists = false;
+    container.querySelectorAll('input[type=checkbox]').forEach(cb => {
+        if (cb.value.toLowerCase() === val.toLowerCase()) { cb.checked = true; exists = true; }
+    });
+    if (!exists) {
+        const lbl = document.createElement('label');
+        lbl.innerHTML = '<input type="checkbox" name="vp_svc" value="' + escHtml(val) + '" checked> ' + escHtml(val);
+        container.appendChild(lbl);
+    }
+    inp.value = '';
+}
+
 // ── Save ──
 function saveVendor() {
     const editId = document.getElementById('editId').value;
@@ -488,7 +513,7 @@ function saveVendor() {
     const services = getCheckedValues('svcChecklist');
 
     if (!name || !country || categories.length === 0) {
-        alert('Please fill in Name, Country, and select at least one Category.');
+        alert('Please fill in Name, Pathway, and select at least one Category.');
         return;
     }
 
