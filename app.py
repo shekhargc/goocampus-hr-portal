@@ -1429,7 +1429,7 @@ def client_form(reg_id):
         return redirect(url_for('client_form', reg_id=reg_id))
 
     # Load lookup options for academic dropdowns
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = 1 ORDER BY category, sort_order, value").fetchall()
+    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
     lookup_options = {}
     for row in lookup_rows:
         cat = row['category']
@@ -2656,7 +2656,7 @@ def admin_client_detail(reg_id):
           AND field_name <> 'additional_notes'
         ORDER BY step_number, display_order
     ''', (reg['product_id'],)).fetchall()
-    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = 1 ORDER BY category, sort_order, value").fetchall()
+    lookup_rows = conn.execute("SELECT category, value FROM lookup_options WHERE is_active = TRUE ORDER BY category, sort_order, value").fetchall()
     lookup_options = {}
     for row in lookup_rows:
         lookup_options.setdefault(row['category'], []).append(row['value'])
@@ -22561,7 +22561,7 @@ def _bulk_columns(conn, table, pathway=None):
         except Exception:
             cols = []
     try:
-        lookup_cats = {r['c'] for r in conn.execute("SELECT DISTINCT category AS c FROM lookup_options WHERE is_active = 1", []).fetchall()}
+        lookup_cats = {r['c'] for r in conn.execute("SELECT DISTINCT category AS c FROM lookup_options WHERE is_active = TRUE", []).fetchall()}
     except Exception:
         lookup_cats = set()
     out = []
