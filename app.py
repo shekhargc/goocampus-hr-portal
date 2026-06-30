@@ -1186,6 +1186,131 @@ def admin_refund_policy_save():
     return redirect(url_for('admin_refund_policy_edit'))
 
 
+# ── Packages & Services: central definition of what each plan's package
+#    includes (services delivered over time). Surfaces later in Sales, the
+#    client portal, and Operations. ──
+
+@app.route('/admin/packages')
+@admin_required
+def admin_packages():
+    user = get_user()
+    conn = get_db()
+    products = conn.execute(
+        "SELECT id, name, COALESCE(pathway,'') AS pathway FROM products_services "
+        "WHERE status = 'active' ORDER BY name").fetchall()
+    catalogue = conn.execute(
+        "SELECT * FROM service_catalogue WHERE is_active = 1 ORDER BY sort_order, name").fetchall()
+    product_id = request.args.get('product_id', type=int)
+    selected = None
+    plans = []
+    if product_id:
+        selected = conn.execute(
+            "SELECT id, name, COALESCE(pathway,'') AS pathway, sale_price "
+            "FROM products_services WHERE id = ?", (product_id,)).fetchone()
+        if selected:
+            ptypes = conn.execute(
+                "SELECT DISTINCT value FROM lookup_options WHERE category = 'plan_type' "
+                "AND is_active = TRUE AND product_name = ? ORDER BY value", (selected['name'],)).fetchall()
+            for pt in ptypes:
+                pkg = conn.execute(
+                    "SELECT * FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                    (product_id, pt['value'])).fetchone()
+                services = []
+                if pkg:
+                    services = conn.execute(
+                        "SELECT * FROM package_services WHERE plan_package_id = ? ORDER BY sort_order, id",
+                        (pkg['id'],)).fetchall()
+                plans.append({
+                    'plan_type': pt['value'],
+                    'pkg': dict(pkg) if pkg else None,
+                    'services': [dict(s) for s in services],
+                })
+    conn.close()
+    return render_template('admin_packages.html', user=user, products=products,
+                           selected=selected, plans=plans, catalogue=catalogue,
+                           active_section='company')
+
+
+@app.route('/admin/packages/plan/save', methods=['POST'])
+@admin_required
+def admin_packages_plan_save():
+    product_id = request.form.get('product_id', type=int)
+    plan_type = (request.form.get('plan_type') or '').strip()
+    try:
+        amount = float(request.form.get('package_amount') or 0)
+    except ValueError:
+        amount = 0
+    summary = (request.form.get('summary') or '').strip()
+    conn = get_db()
+    existing = conn.execute(
+        "SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+        (product_id, plan_type)).fetchone()
+    if existing:
+        conn.execute("UPDATE plan_packages SET package_amount = ?, summary = ?, "
+                     "updated_at = CURRENT_TIMESTAMP WHERE id = ?", (amount, summary, existing['id']))
+    else:
+        conn.execute("INSERT INTO plan_packages (product_id, plan_type, package_amount, summary) "
+                     "VALUES (?, ?, ?, ?)", (product_id, plan_type, amount, summary))
+    conn.commit()
+    conn.close()
+    flash('Package saved.', 'success')
+    return redirect(url_for('admin_packages', product_id=product_id))
+
+
+def _ensure_plan_package(conn, product_id, plan_type):
+    pkg = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                       (product_id, plan_type)).fetchone()
+    if not pkg:
+        conn.execute("INSERT INTO plan_packages (product_id, plan_type) VALUES (?, ?)",
+                     (product_id, plan_type))
+        conn.commit()
+        pkg = conn.execute("SELECT id FROM plan_packages WHERE product_id = ? AND plan_type = ?",
+                           (product_id, plan_type)).fetchone()
+    return pkg['id']
+
+
+@app.route('/admin/packages/service/add', methods=['POST'])
+@admin_required
+def admin_packages_service_add():
+    product_id = request.form.get('product_id', type=int)
+    plan_type = (request.form.get('plan_type') or '').strip()
+    service_name = (request.form.get('service_name') or '').strip()
+    quantity = (request.form.get('quantity') or '').strip()
+    stage = (request.form.get('delivery_stage') or '').strip()
+    desc = (request.form.get('description') or '').strip()
+    if not service_name:
+        flash('Service name is required.', 'error')
+        return redirect(url_for('admin_packages', product_id=product_id))
+    conn = get_db()
+    pkg_id = _ensure_plan_package(conn, product_id, plan_type)
+    mx = conn.execute("SELECT COALESCE(MAX(sort_order), 0) AS m FROM package_services "
+                      "WHERE plan_package_id = ?", (pkg_id,)).fetchone()['m']
+    conn.execute("INSERT INTO package_services (plan_package_id, service_name, description, "
+                 "quantity, delivery_stage, sort_order) VALUES (?, ?, ?, ?, ?, ?)",
+                 (pkg_id, service_name, desc, quantity, stage, mx + 1))
+    # Add to the reusable catalogue if it's a new name.
+    cat = conn.execute("SELECT id FROM service_catalogue WHERE LOWER(name) = LOWER(?)",
+                       (service_name,)).fetchone()
+    if not cat:
+        conn.execute("INSERT INTO service_catalogue (name) VALUES (?)", (service_name,))
+    conn.commit()
+    conn.close()
+    flash('Service added.', 'success')
+    return redirect(url_for('admin_packages', product_id=product_id))
+
+
+@app.route('/admin/packages/service/delete/<int:sid>', methods=['POST'])
+@admin_required
+def admin_packages_service_delete(sid):
+    product_id = request.form.get('product_id', type=int)
+    conn = get_db()
+    conn.execute("DELETE FROM package_services WHERE id = ?", (sid,))
+    conn.commit()
+    conn.close()
+    flash('Service removed.', 'success')
+    return redirect(url_for('admin_packages', product_id=product_id))
+
+
 @app.route('/client/dashboard')
 @client_required
 def client_dashboard():
@@ -28099,6 +28224,39 @@ def ensure_attendance_table():
         logging.error(f"ensure_attendance_table: {e}")
 
 
+def ensure_package_tables():
+    """Central package/services definition: per (product, plan_type) a package
+    amount + the list of services included (delivered over time). service_catalogue
+    is the reusable master list of service names."""
+    conn = get_db()
+    for ddl in (
+        """CREATE TABLE IF NOT EXISTS service_catalogue (
+            id SERIAL PRIMARY KEY, name TEXT NOT NULL, description TEXT, category TEXT,
+            is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        """CREATE TABLE IF NOT EXISTS plan_packages (
+            id SERIAL PRIMARY KEY, product_id INTEGER NOT NULL, plan_type TEXT NOT NULL,
+            package_amount NUMERIC(14,2) DEFAULT 0, summary TEXT,
+            is_active INTEGER DEFAULT 1, sort_order INTEGER DEFAULT 0,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(product_id, plan_type))""",
+        """CREATE TABLE IF NOT EXISTS package_services (
+            id SERIAL PRIMARY KEY,
+            plan_package_id INTEGER NOT NULL REFERENCES plan_packages(id) ON DELETE CASCADE,
+            service_id INTEGER, service_name TEXT NOT NULL, description TEXT,
+            quantity TEXT, delivery_stage TEXT, sort_order INTEGER DEFAULT 0,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP)""",
+        "CREATE INDEX IF NOT EXISTS idx_plan_packages_product ON plan_packages(product_id)",
+        "CREATE INDEX IF NOT EXISTS idx_package_services_plan ON package_services(plan_package_id)",
+    ):
+        try:
+            conn.execute(ddl); conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+
+
 def ensure_leave_cancel_request_columns():
     """Migration: columns for the 'request cancellation of a past leave' flow.
     The leave stays 'approved' (still counts) while a request is pending; a
@@ -29123,6 +29281,7 @@ except Exception as _sync_err:
 ensure_management_admins()
 ensure_leave_group_column()
 ensure_leave_cancel_request_columns()
+ensure_package_tables()
 ensure_attendance_table()
 
 # ═══════════════════════════════════════════════════════════════
