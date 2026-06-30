@@ -1,6 +1,11 @@
 {% extends "ops_sidebar_base.html" %}
 {% block title %}{{ 'Edit Client' if mode == 'edit' else 'Add Client' }}{% endblock %}
 {% block ops_content %}
+<style>
+.reg-head{display:flex;align-items:center;gap:9px;font-size:0.93rem;font-weight:700;color:var(--navy);margin:1.9rem 0 1rem;padding:0.62rem 0.95rem;background:linear-gradient(90deg,#FFF7ED,#FFFFFF 65%);border-left:4px solid var(--orange);border-radius:9px;letter-spacing:.2px;}
+.reg-head:first-of-type{margin-top:0.5rem;}
+.reg-head .ico{font-size:1.05rem;line-height:1;}
+</style>
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">
         {% if mode == 'edit' %}
@@ -25,7 +30,7 @@
 
             <!-- ===== REGISTRATION DETAILS ===== -->
             {% if mode == 'edit' %}
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <h3 class="reg-head"><span class="ico">📋</span>Registration Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
@@ -52,7 +57,7 @@
             {% endif %}
 
             <!-- ===== PERSONAL DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Details</h3>
+            <h3 class="reg-head"><span class="ico">👤</span>Personal Details</h3>
             <div style="display:grid;grid-template-columns:0.7fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Prefix</label>
@@ -115,6 +120,7 @@
                 </div>
             </div>
 
+            <h3 class="reg-head"><span class="ico">🌐</span>Social Media</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instagram</label>
@@ -132,7 +138,7 @@
             </div>
 
             <!-- ===== PARENTS DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Parents Details</h3>
+            <h3 class="reg-head"><span class="ico">👪</span>Parents Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Name</label>
@@ -161,7 +167,7 @@
             </div>
 
             <!-- ===== PLAN DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan Details</h3>
+            <h3 class="reg-head"><span class="ico">🎯</span>Plan Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Joined Stage</label>
@@ -239,7 +245,7 @@
 
             <!-- ===== CLIENT STATUS (Edit only) ===== -->
             {% if mode == 'edit' %}
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Client Status</h3>
+            <h3 class="reg-head"><span class="ico">🚦</span>Client Status</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Account Status{% if item and item.account_status == 'Pending Verification' %} <span style="color:#b45309;font-weight:600;">&#128274; locked until ops verification</span>{% endif %}</label>
@@ -281,7 +287,7 @@
             {% endif %}
 
             <!-- ===== COUNSELLOR & LEAD STATUS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor & Lead Status</h3>
+            <h3 class="reg-head"><span class="ico">🧭</span>Counsellor & Lead Status</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
@@ -304,7 +310,7 @@
             </div>
 
             <!-- ===== LEAD DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Lead Details</h3>
+            <h3 class="reg-head"><span class="ico">📞</span>Lead Details</h3>
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Lead Source <span style="color:#e53e3e;">*</span></label>
                 <select name="lead_source" id="lead_source" onchange="toggleReferralFields()" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;background:white;">
@@ -333,7 +339,7 @@
             </div>
 
             <!-- ===== PACKAGE & INSTALLMENT ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package & Installment</h3>
+            <h3 class="reg-head"><span class="ico">💰</span>Package & Installment</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package (Mention Plab Actual Package) <span style="color:#e53e3e;">*</span></label>
@@ -436,7 +442,7 @@
 
             <!-- ===== ONBOARDING (Edit only) ===== -->
             {% if mode == 'edit' %}
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Onboarding</h3>
+            <h3 class="reg-head"><span class="ico">📦</span>Onboarding</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Welcome Mail</label>
@@ -521,7 +527,7 @@
             {% endif %}
 
             <!-- ===== ADDRESS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Permanent Address</h3>
+            <h3 class="reg-head"><span class="ico">🏠</span>Permanent Address</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Address Line 1</label>
@@ -556,7 +562,7 @@
                 </select>
             </div>
 
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Communication Address</h3>
+            <h3 class="reg-head"><span class="ico">✉️</span>Communication Address</h3>
             <div style="margin-bottom:1.1rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Is Communication Address same as Permanent?</label>
                 <div style="display:flex;gap:1.5rem;">
@@ -606,7 +612,7 @@
 
             <!-- ===== DOCUMENTS (Edit mode only) ===== -->
             {% if mode == 'edit' %}
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Documents</h3>
+            <h3 class="reg-head"><span class="ico">📄</span>Personal Documents</h3>
             <div style="margin-bottom:1.5rem;">
                 {% for doc_type in plab_doc_types.get('personal', []) %}
                 {% set doc = documents|selectattr('doc_type','equalto',doc_type)|first if documents else none %}
@@ -627,7 +633,7 @@
                 {% endfor %}
             </div>
 
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Academic Documents</h3>
+            <h3 class="reg-head"><span class="ico">🎓</span>Academic Documents</h3>
             <div style="margin-bottom:1.5rem;">
                 {% for doc_type in plab_doc_types.get('academic', []) %}
                 {% set doc = documents|selectattr('doc_type','equalto',doc_type)|first if documents else none %}
@@ -648,7 +654,7 @@
                 {% endfor %}
             </div>
 
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Additional Documents</h3>
+            <h3 class="reg-head"><span class="ico">📎</span>Additional Documents</h3>
             <div id="additional_docs_list" style="margin-bottom:0.8rem;">
                 {% if documents %}
                 {% for doc in documents if doc.doc_category == 'additional' %}
@@ -672,7 +678,7 @@
             {% endif %}
 
             <!-- ===== NOTES ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Notes</h3>
+            <h3 class="reg-head"><span class="ico">📝</span>Notes</h3>
             <div style="margin-bottom:1.5rem;">
                 <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Additional Notes</label>
                 <textarea name="additional_notes" rows="3" maxlength="1000" placeholder="Any additional information or notes about this client" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ item.additional_notes or '' }}</textarea>
