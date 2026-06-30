@@ -51,7 +51,7 @@
         <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
             <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M20 12v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6a2 2 0 012-2h10"/></svg>
         </div>
-        <div><div class="s-card-val" style="color: var(--success);">{{ available_balance }}</div><div class="s-card-lbl">Available Balance</div></div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ available_balance }}</div><div class="s-card-lbl">Leave Balance (paid)</div></div>
     </div>
     <div class="s-card" style="border-left-color: var(--orange);">
         <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
@@ -139,7 +139,7 @@
                 <th style="text-align: center;">Casual</th>
                 <th style="text-align: center;">Total Taken</th>
                 <th style="text-align: center;">Deduction (LOP)</th>
-                <th style="text-align: center;">Balance</th>
+                <th style="text-align: center;">Carried Fwd</th>
             </tr>
         </thead>
         <tbody>
@@ -167,7 +167,7 @@
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_deduction }}</td>
-                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ available_balance }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ current_carry }}</td>
             </tr>
         </tbody>
     </table>
