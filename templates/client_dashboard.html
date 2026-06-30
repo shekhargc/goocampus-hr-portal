@@ -271,7 +271,12 @@
 
         <!-- Welcome Banner -->
         <div class="welcome-banner">
+            {% if first_login %}
+            {% set _full_name = ((account.first_name or '') ~ ' ' ~ (account.last_name or '')) %}
+            <h2>Welcome, {{ _full_name.strip() or account.first_name }}</h2>
+            {% else %}
             <h2>Welcome back, {{ account.first_name }}</h2>
+            {% endif %}
             <p>Manage your registrations and track your application progress below.</p>
         </div>
 
@@ -379,7 +384,7 @@
             {# ── Item C-2: "What you signed up for" -- read-only summary
                 of plan / package / installments + counsellor contact,
                 visible only if Sales captured them upfront. ── #}
-            {% if reg.plan_type or reg.package_amount or reg.counsellor_full_name %}
+            {% if reg.plan_type or reg.package_amount or reg.counsellor_full_name or reg.product_name %}
             <div style="margin-top:1rem;padding:1rem 1.1rem;background:linear-gradient(135deg,#FFF7ED 0%,#FFEDD5 100%);border:1px solid #FED7AA;border-radius:0.75rem;">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.6rem;flex-wrap:wrap;gap:0.4rem;">
                     <h6 style="margin:0;font-size:0.85rem;font-weight:700;color:#9A3412;">
@@ -392,15 +397,26 @@
                     {% endif %}
                 </div>
 
-                {# Counsellor card #}
-                {% if reg.counsellor_full_name %}
-                <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;margin-bottom:0.7rem;">
-                    <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your counsellor</div>
-                    <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.counsellor_full_name }}</div>
-                    <div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;display:flex;flex-wrap:wrap;gap:0.7rem;">
-                        {% if reg.counsellor_email_addr %}<span><i class="bi bi-envelope me-1"></i>{{ reg.counsellor_email_addr }}</span>{% endif %}
-                        {% if reg.counsellor_phone_no %}<span><i class="bi bi-telephone me-1"></i>{{ reg.counsellor_phone_no }}</span>{% endif %}
+                {# Counsellor + Programme cards, side by side #}
+                {% if reg.counsellor_full_name or reg.product_name %}
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:0.7rem;margin-bottom:0.7rem;">
+                    {% if reg.counsellor_full_name %}
+                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;">
+                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your counsellor</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.counsellor_full_name }}</div>
+                        <div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;display:flex;flex-wrap:wrap;gap:0.7rem;">
+                            {% if reg.counsellor_email_addr %}<span><i class="bi bi-envelope me-1"></i>{{ reg.counsellor_email_addr }}</span>{% endif %}
+                            {% if reg.counsellor_phone_no %}<span><i class="bi bi-telephone me-1"></i>{{ reg.counsellor_phone_no }}</span>{% endif %}
+                        </div>
                     </div>
+                    {% endif %}
+                    {% if reg.product_name %}
+                    <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;padding:0.7rem 0.9rem;">
+                        <div style="font-size:0.7rem;text-transform:uppercase;letter-spacing:0.05em;color:#9A3412;font-weight:600;margin-bottom:0.25rem;">Your programme</div>
+                        <div style="font-size:0.95rem;font-weight:700;color:#0F172A;">{{ reg.product_name }}</div>
+                        {% if reg.registration_number %}<div style="font-size:0.78rem;color:#475569;margin-top:0.15rem;"><i class="bi bi-hash me-1"></i>{{ reg.registration_number }}</div>{% endif %}
+                    </div>
+                    {% endif %}
                 </div>
                 {% endif %}
 
@@ -446,7 +462,8 @@
                             <tr>
                                 <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">#</th>
                                 <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Amount</th>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Due Date</th>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">GST (incl.)</th>
+                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Date</th>
                                 <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Note</th>
                                 <th style="text-align:right;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Status</th>
                             </tr>
@@ -456,15 +473,27 @@
                             <tr>
                                 <td style="padding:0.45rem 0.9rem;font-weight:600;color:#0F172A;">{{ inst.n }}</td>
                                 <td style="padding:0.45rem 0.9rem;color:#0F172A;">{% if inst.amount %}₹{{ '{:,.0f}'.format(inst.amount) }}{% else %}—{% endif %}</td>
-                                <td style="padding:0.45rem 0.9rem;color:#475569;">{{ inst.date or '—' }}</td>
+                                <td style="padding:0.45rem 0.9rem;color:#475569;">{% if inst.gst %}₹{{ '{:,.0f}'.format(inst.gst) }}{% else %}—{% endif %}</td>
+                                <td style="padding:0.45rem 0.9rem;color:#475569;">{{ inst.date or '—' }}{% if not inst.received and inst.date %}<div style="font-size:0.64rem;color:#92400E;">due</div>{% endif %}</td>
                                 <td style="padding:0.45rem 0.9rem;color:#64748B;font-size:0.78rem;">{{ inst.note or '—' }}</td>
                                 <td style="padding:0.45rem 0.9rem;text-align:right;">
-                                    {% if inst.paid %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Paid</span>
+                                    {% if inst.received %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Received</span>
                                     {% else %}<span style="background:#FEF3C7;color:#92400E;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Pending</span>{% endif %}
                                 </td>
                             </tr>
                             {% endfor %}
                         </tbody>
+                        <tfoot>
+                            <tr style="background:#FFF7ED;">
+                                <td colspan="6" style="padding:0.6rem 0.9rem;border-top:1px solid #FED7AA;">
+                                    <div style="display:flex;flex-wrap:wrap;gap:1.4rem;font-size:0.76rem;">
+                                        <span><strong style="color:#065F46;">Received:</strong> ₹{{ '{:,.0f}'.format(reg.pay_received_total or 0) }}</span>
+                                        <span><strong style="color:#92400E;">Due:</strong> ₹{{ '{:,.0f}'.format(reg.pay_due_total or 0) }}</span>
+                                        <span><strong style="color:#1e3a5f;">GST paid (18% incl.):</strong> ₹{{ '{:,.0f}'.format(reg.gst_received_total or 0) }}</span>
+                                    </div>
+                                </td>
+                            </tr>
+                        </tfoot>
                     </table>
                 </div>
                 {% endif %}

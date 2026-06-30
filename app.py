@@ -763,6 +763,10 @@ def client_login_page():
             session['is_client'] = True
             session['client_name'] = (acct['first_name'] or '') + ' ' + (acct['last_name'] or '')
             session['client_mobile'] = acct['mobile']
+            # First-ever login → greet with "Welcome"; returning → "Welcome back".
+            # acct was read before the last_login bump below, so a NULL here means
+            # they've never logged in.
+            session['first_login'] = (acct['last_login'] is None)
             # Update last_login
             conn2 = get_db()
             conn2.execute("UPDATE client_accounts SET last_login = CURRENT_TIMESTAMP WHERE id = ?", (acct['id'],))
@@ -899,6 +903,7 @@ def client_register(token):
         session['is_client'] = True
         session['client_name'] = f"{first_name} {last_name}"
         session['client_mobile'] = clean
+        session['first_login'] = True  # account just created → greet with "Welcome"
         flash('Account created successfully! Please complete your registration form.', 'success')
         return redirect(url_for('client_dashboard'))
 
@@ -970,24 +975,45 @@ def client_dashboard():
 
     # Convert to dicts so the template can attach a pre-computed
     # installments list without complicating the SELECT.
+    from datetime import date as _date, datetime as _dt
+    _today = _date.today()
+    def _parse_inst_date(v):
+        if not v:
+            return None
+        if isinstance(v, _dt):
+            return v.date()
+        if isinstance(v, _date):
+            return v
+        try:
+            return _dt.strptime(str(v)[:10], '%Y-%m-%d').date()
+        except Exception:
+            return None
     registrations = []
     for r in registrations_raw:
         d = dict(r)
-        d['installments'] = [
-            {
-                'n': i,
-                'amount':  float(d.get(f'inst{i}_amount') or 0),
-                'date':    d.get(f'inst{i}_date') or '',
-                'note':    d.get(f'inst{i}_note') or '',
-                'paid':    bool(d.get(f'inst{i}_amount') and float(d.get(f'inst{i}_amount') or 0) > 0
-                                and (d.get('total_paid') or 0) >= sum(
-                                    float(d.get(f'inst{j}_amount') or 0) for j in range(1, i + 1))),
-            }
-            for i in (1, 2, 3, 4)
-        ]
+        insts = []
+        for i in (1, 2, 3, 4):
+            amt = float(d.get(f'inst{i}_amount') or 0)
+            draw = d.get(f'inst{i}_date') or ''
+            dparsed = _parse_inst_date(draw)
+            # Date-driven status: a scheduled installment whose date has
+            # arrived/passed is shown as Received; a future date is still Due.
+            received = bool(amt > 0 and dparsed is not None and dparsed <= _today)
+            # Installment amounts are GST-inclusive (18%); surface the GST
+            # component so the client can see how much GST they've paid.
+            gst = round(amt - amt / 1.18) if amt > 0 else 0
+            insts.append({
+                'n': i, 'amount': amt, 'date': draw, 'date_obj': dparsed,
+                'note': d.get(f'inst{i}_note') or '',
+                'received': received, 'gst': gst,
+            })
         # Only keep installments that have an amount or date set so we
         # don't render four empty rows for a single-installment plan.
-        d['installments'] = [it for it in d['installments'] if it['amount'] or it['date']]
+        insts = [it for it in insts if it['amount'] or it['date']]
+        d['installments'] = insts
+        d['pay_received_total'] = sum(it['amount'] for it in insts if it['received'])
+        d['pay_due_total']      = sum(it['amount'] for it in insts if not it['received'])
+        d['gst_received_total'] = sum(it['gst'] for it in insts if it['received'])
 
         # Item D + F: build the 5-step client-facing onboarding
         # timeline. holidays_set lets the helper project the 30-day
@@ -1022,7 +1048,8 @@ def client_dashboard():
     conn.close()
     return render_template('client_dashboard.html',
         account=account, registrations=registrations, doc_requests=doc_requests,
-        plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES)
+        plab_documents=plab_documents, plab_doc_types=PLAB_DOC_TYPES,
+        first_login=session.get('first_login', False))
 
 
 # Columns the dynamic client form may write to, per step. The public form is
@@ -1342,7 +1369,14 @@ def client_invitation_create():
         email_ok = False
         if client_email:
             try:
-                email_ok = _send_client_invite_email(client_email, client_name, invite_url)
+                svc_name = ''
+                try:
+                    pr = conn.execute("SELECT name FROM products_services WHERE id = ?", (product_id,)).fetchone()
+                    if pr: svc_name = pr['name'] or ''
+                except Exception: pass
+                email_ok = _send_client_invite_email(
+                    client_email, client_name, invite_url,
+                    service_name=svc_name, counsellor_name=(user.get('name') or ''))
             except Exception as em_err:
                 logging.error(f"client invite email send failed: {em_err}")
 
@@ -2175,26 +2209,53 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
     # WhatsApp, so clients who gave an email (but no/invalid WhatsApp) got nothing.
     try:
         if client_email:
-            _send_client_invite_email(client_email, client_name, invite_url)
+            svc_name, cns_name = '', ''
+            try:
+                pr = conn.execute("SELECT name FROM products_services WHERE id = ?", (product_id,)).fetchone()
+                if pr: svc_name = pr['name'] or ''
+            except Exception: pass
+            try:
+                if invited_by:
+                    em = conn.execute("SELECT name FROM employees WHERE id = ?", (invited_by,)).fetchone()
+                    if em: cns_name = em['name'] or ''
+            except Exception: pass
+            _send_client_invite_email(client_email, client_name, invite_url,
+                                      service_name=svc_name, counsellor_name=cns_name)
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: email send failed: {e}")
     return token
 
 
-def _send_client_invite_email(email, name, link):
+def _send_client_invite_email(email, name, link, service_name='', counsellor_name=''):
     """Email the client their registration-invitation link via Resend.
     Mirrors the partner-invite email. Returns True if Resend accepted it,
-    False if email isn't configured or the send failed (never raises)."""
+    False if email isn't configured or the send failed (never raises).
+
+    service_name: the product/service the client signed up for, shown in the
+    body so they know exactly what this registration is for.
+    counsellor_name: the counsellor who sent the link, shown as
+    "shared by your counsellor <name>"."""
     if not email:
         return False
     try:
         from email_utils import send_email
+        service_line = (f' for <strong>{service_name}</strong>' if service_name else '')
+        counsellor_block = ''
+        if counsellor_name:
+            counsellor_block = (
+                f'<p style="background:#f0f6ff;border-left:4px solid #1e3a5f;'
+                f'padding:12px 16px;margin:18px 0;border-radius:4px;font-size:14px;">'
+                f'This registration link was shared by your counsellor '
+                f'<strong style="color:#1e3a5f;">{counsellor_name}</strong>, '
+                f'who will guide you through the next steps.</p>'
+            )
         html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
-  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus</h1></div>
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus Edu Solutions</h1></div>
   <div style="padding:30px;background-color:white;">
     <h2 style="color:#1e3a5f;margin-top:0;">Welcome to GooCampus!</h2>
     <p style="font-size:16px;">Hello {name},</p>
-    <p>Thank you for choosing GooCampus. Please click the button below to complete your registration and get started.</p>
+    <p>Thank you for choosing GooCampus{service_line}. Please click the button below to complete your registration and get started.</p>
+    {counsellor_block}
     <div style="text-align:center;margin:30px 0;">
       <a href="{link}" style="background-color:#F58220;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Complete Registration</a>
     </div>
@@ -25296,13 +25357,21 @@ def sales_leads_add():
                             'lead_source':              _f('source') or _f('lead_source'),
                             'additional_notes':         _f('notes') or _f('additional_notes'),
                         }
+                        # The selected Owner is the client's counsellor — use it
+                        # as invited_by so the registration's counsellor_id (and
+                        # the "Your counsellor" card + invite email) reflect the
+                        # chosen counsellor, not whoever happened to be logged in.
+                        try:
+                            _counsellor_id = int(request.form.get('owner_employee_id') or 0) or user['id']
+                        except (TypeError, ValueError):
+                            _counsellor_id = user['id']
                         token = _auto_invite_from_closure(
                             conn,
                             product_id=product_id,
                             client_name=lead_name_new,
                             client_mobile=(request.form.get('phone') or '').strip(),
                             client_email=(request.form.get('email') or '').strip(),
-                            invited_by=user['id'],
+                            invited_by=_counsellor_id,
                             closure_data=closure_data,
                         )
                         if token:
