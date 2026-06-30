@@ -451,50 +451,43 @@
                 </div>
                 {% endif %}
 
-                {# Installments table #}
+                {# Installments — per-installment breakdown (Amount + 18% GST = Total) #}
                 {% if reg.installments %}
                 <div style="background:white;border:1px solid #FED7AA;border-radius:0.5rem;overflow:hidden;">
                     <div style="padding:0.5rem 0.9rem;background:#FFEDD5;font-size:0.7rem;font-weight:600;color:#9A3412;text-transform:uppercase;letter-spacing:0.05em;">
                         Payment Schedule
                     </div>
-                    <table style="width:100%;border-collapse:collapse;font-size:0.82rem;">
-                        <thead>
-                            <tr>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">#</th>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Amount</th>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">GST (incl.)</th>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Date</th>
-                                <th style="text-align:left;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Note</th>
-                                <th style="text-align:right;padding:0.45rem 0.9rem;font-size:0.7rem;font-weight:600;color:#64748B;border-bottom:1px solid #F1F5F9;">Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for inst in reg.installments %}
-                            <tr>
-                                <td style="padding:0.45rem 0.9rem;font-weight:600;color:#0F172A;">{{ inst.n }}</td>
-                                <td style="padding:0.45rem 0.9rem;color:#0F172A;">{% if inst.amount %}₹{{ '{:,.0f}'.format(inst.amount) }}{% else %}—{% endif %}</td>
-                                <td style="padding:0.45rem 0.9rem;color:#475569;">{% if inst.gst %}₹{{ '{:,.0f}'.format(inst.gst) }}{% else %}—{% endif %}</td>
-                                <td style="padding:0.45rem 0.9rem;color:#475569;">{{ inst.date or '—' }}{% if not inst.received and inst.date %}<div style="font-size:0.64rem;color:#92400E;">due</div>{% endif %}</td>
-                                <td style="padding:0.45rem 0.9rem;color:#64748B;font-size:0.78rem;">{{ inst.note or '—' }}</td>
-                                <td style="padding:0.45rem 0.9rem;text-align:right;">
-                                    {% if inst.received %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Received</span>
-                                    {% else %}<span style="background:#FEF3C7;color:#92400E;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.68rem;font-weight:700;">Pending</span>{% endif %}
-                                </td>
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                        <tfoot>
-                            <tr style="background:#FFF7ED;">
-                                <td colspan="6" style="padding:0.6rem 0.9rem;border-top:1px solid #FED7AA;">
-                                    <div style="display:flex;flex-wrap:wrap;gap:1.4rem;font-size:0.76rem;">
-                                        <span><strong style="color:#065F46;">Received:</strong> ₹{{ '{:,.0f}'.format(reg.pay_received_total or 0) }}</span>
-                                        <span><strong style="color:#92400E;">Due:</strong> ₹{{ '{:,.0f}'.format(reg.pay_due_total or 0) }}</span>
-                                        <span><strong style="color:#1e3a5f;">GST paid (18% incl.):</strong> ₹{{ '{:,.0f}'.format(reg.gst_received_total or 0) }}</span>
-                                    </div>
-                                </td>
-                            </tr>
-                        </tfoot>
-                    </table>
+                    <div style="padding:0.8rem;display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:0.7rem;">
+                        {% for inst in reg.installments %}
+                        <div style="border:1px solid #F1F5F9;border-radius:0.5rem;padding:0.75rem 0.9rem;background:#FCFCFD;">
+                            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:0.5rem;">
+                                <span style="font-size:0.86rem;font-weight:700;color:#0F172A;">{{ inst.ordinal }} Installment</span>
+                                {% if inst.received %}<span style="background:#D1FAE5;color:#065F46;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.66rem;font-weight:700;">Received</span>
+                                {% else %}<span style="background:#FEF3C7;color:#92400E;padding:0.15rem 0.5rem;border-radius:999px;font-size:0.66rem;font-weight:700;">Pending</span>{% endif %}
+                            </div>
+                            <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#475569;margin-bottom:0.25rem;">
+                                <span>{{ 'Amount Paid' if inst.received else 'Amount Due' }}</span>
+                                <span style="font-weight:600;color:#0F172A;">₹{{ '{:,.0f}'.format(inst.amount) }}</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:#475569;margin-bottom:0.25rem;">
+                                <span>GST Amount (18%)</span>
+                                <span style="font-weight:600;color:#0F172A;">₹{{ '{:,.0f}'.format(inst.gst) }}</span>
+                            </div>
+                            <div style="display:flex;justify-content:space-between;font-size:0.84rem;padding-top:0.4rem;margin-top:0.25rem;border-top:1px dashed #E2E8F0;">
+                                <span style="font-weight:700;color:#9A3412;">{{ 'Total Amount Paid' if inst.received else 'Total Amount Due' }}</span>
+                                <span style="font-weight:800;color:#9A3412;">₹{{ '{:,.0f}'.format(inst.total) }}</span>
+                            </div>
+                            {% if inst.date %}<div style="font-size:0.72rem;color:#64748B;margin-top:0.45rem;"><i class="bi bi-calendar3 me-1"></i>{{ inst.date }}{% if not inst.received %} <span style="color:#92400E;font-weight:600;">(due)</span>{% endif %}</div>{% endif %}
+                            {% if inst.note %}<div style="font-size:0.72rem;color:#64748B;margin-top:0.2rem;">{{ inst.note }}</div>{% endif %}
+                        </div>
+                        {% endfor %}
+                    </div>
+                    <div style="padding:0.6rem 0.9rem;background:#FFF7ED;border-top:1px solid #FED7AA;display:flex;flex-wrap:wrap;gap:1.4rem;font-size:0.76rem;">
+                        <span><strong style="color:#065F46;">Received (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.pay_received_total or 0) }}</span>
+                        <span><strong style="color:#92400E;">Due (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.pay_due_total or 0) }}</span>
+                        <span><strong style="color:#1e3a5f;">GST received:</strong> ₹{{ '{:,.0f}'.format(reg.gst_received_total or 0) }}</span>
+                        <span><strong style="color:#0F172A;">Grand total (incl. GST):</strong> ₹{{ '{:,.0f}'.format(reg.grand_total or 0) }}</span>
+                    </div>
                 </div>
                 {% endif %}
 
