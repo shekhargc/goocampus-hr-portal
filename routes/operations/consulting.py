@@ -36,7 +36,7 @@ from core.auth import admin_required
 from core.users import get_user
 from db import get_db
 # Pathway-scoped dropdown options for the Consulting Registration edit form.
-from routes.operations._form_lookups import section_client_lookups, section_client_products
+from routes.operations._form_lookups import section_client_lookups, section_client_products, transfer_for_reg
 
 
 @admin_required
@@ -320,12 +320,13 @@ def ops_consulting_clients_list():
             params,
         ).fetchall()]
         if records:
-            _regs = [r['registration_number'] for r in records]
-            _ph = ','.join(['?'] * len(_regs))
-            _pmap = {pr['registration_number']: pr for pr in conn.execute(
-                f"SELECT registration_number, COALESCE(SUM(total_amount_paid),0) AS tp, COALESCE(SUM(amount_paid),0) AS ap, COALESCE(SUM(gst_paid),0) AS gp FROM ops_payments WHERE registration_number IN ({_ph}) GROUP BY registration_number", _regs).fetchall()}
+            def _nrm(s): return (s or '').strip().upper()
+            _keys = [_nrm(r['registration_number']) for r in records]
+            _ph = ','.join(['?'] * len(_keys))
+            _pmap = {pr['k']: pr for pr in conn.execute(
+                f"SELECT UPPER(TRIM(registration_number)) AS k, COALESCE(SUM(total_amount_paid),0) AS tp, COALESCE(SUM(amount_paid),0) AS ap, COALESCE(SUM(gst_paid),0) AS gp FROM ops_payments WHERE UPPER(TRIM(registration_number)) IN ({_ph}) GROUP BY UPPER(TRIM(registration_number))", _keys).fetchall()}
             for r in records:
-                pr = _pmap.get(r['registration_number'])
+                pr = _pmap.get(_nrm(r['registration_number']))
                 r['total_paid'] = float(pr['tp']) if pr else 0
                 r['amount_paid'] = float(pr['ap']) if pr else 0
                 r['gst_paid'] = float(pr['gp']) if pr else 0
@@ -415,8 +416,7 @@ def _cs_payment_totals_for(conn, reg_num):
                       COALESCE(SUM(gst_paid), 0)           AS gst,
                       COALESCE(SUM(total_amount_paid), 0)  AS tot
                  FROM ops_payments
-                WHERE registration_number = ?
-                  AND COALESCE(pathway, 'plab') = 'consulting'""",
+                WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))""",
             (reg_num,),
         ).fetchone()
         return (float(row['amt'] or 0),
@@ -554,6 +554,7 @@ def ops_consulting_client_edit_page(client_id):
         " WHERE id = ? AND COALESCE(pathway, 'plab') = 'consulting'",
         (client_id,),
     ).fetchone()
+    xfer = transfer_for_reg(conn, client['registration_number']) if client else None
     conn.close()
     if not client:
         flash('Consulting client not found.', 'error')
@@ -566,6 +567,7 @@ def ops_consulting_client_edit_page(client_id):
         'ops_consulting_client_edit_form.html',
         user=user,
         client=client,
+        transfer=xfer,
         pathway_name='Standard Consulting',
         active_ops_page='consulting-clients',
         active_pathway='consulting',

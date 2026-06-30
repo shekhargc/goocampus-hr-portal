@@ -399,6 +399,18 @@
                 <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M17 14v7M14 17.5h7"/></svg></span>
                 <span class="ops-nav-text">Bulk Add / Edit</span>
             </a>
+            {% if can_request_transfer %}
+            <a href="/verifications/sales" class="ops-nav-item {% if active_ops_page == 'verify-sales' %}active{% endif %}" data-tooltip="Sales Team Verification — fill balance details (all pathways)">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg></span>
+                <span class="ops-nav-text">Sales Verification</span>
+            </a>
+            {% endif %}
+            {% if can_verify_transfer %}
+            <a href="/verifications/ops" class="ops-nav-item {% if active_ops_page == 'verify-ops' %}active{% endif %}" data-tooltip="Ops Team Verification — verify &amp; go live (all pathways)">
+                <span class="ops-nav-icon"><svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+                <span class="ops-nav-text">Ops Verification</span>
+            </a>
+            {% endif %}
             {% if active_pathway == 'australia' %}
             {# ─── AUSTRALIA PATHWAY SIDEBAR (per-item gated via can_access) ─── #}
             <!-- Overview -->
@@ -1142,11 +1154,16 @@ function toggleOpsSidebar() {
             document.getElementById('opsSidebar').classList.add('collapsed');
         }
     } catch(e) {}
-    // Auto-collapse the sidebar when navigating via any sidebar link, so the
-    // new page opens with the menu collapsed (re-open via the toggle arrow).
-    document.querySelectorAll('.ops-sidebar-nav a, .ops-central-search-link, .ops-pathway-option').forEach(function(a){
+    // Keep the sidebar OPEN on every navigation EXCEPT Central Search (a
+    // full-screen page), which collapses it. Manual collapse stays on the arrow.
+    document.querySelectorAll('.ops-central-search-link').forEach(function(a){
         a.addEventListener('click', function(){
             try { localStorage.setItem('ops_sidebar_collapsed', '1'); } catch(e) {}
+        });
+    });
+    document.querySelectorAll('.ops-sidebar-nav a, .ops-pathway-option').forEach(function(a){
+        a.addEventListener('click', function(){
+            try { localStorage.setItem('ops_sidebar_collapsed', '0'); } catch(e) {}
         });
     });
     // Scroll active sidebar item into view within the sidebar nav only

@@ -406,6 +406,7 @@
 
                 {# Plan + Package summary tiles #}
                 {% if reg.plan_type or reg.package_amount or reg.final_package %}
+                {% set _disc = reg.discount_allowed|float %}
                 <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:0.6rem;margin-bottom:0.7rem;">
                     {% if reg.plan_type %}
                     <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
@@ -419,13 +420,13 @@
                         <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.package_amount|float) }}</div>
                     </div>
                     {% endif %}
-                    {% if reg.discount_allowed %}
+                    {% if _disc > 0 %}
                     <div style="background:white;border:1px solid #FED7AA;border-radius:0.45rem;padding:0.55rem 0.7rem;">
                         <div style="font-size:0.66rem;color:#9A3412;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Discount</div>
-                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">- ₹{{ '{:,.0f}'.format(reg.discount_allowed|float) }}</div>
+                        <div style="font-size:0.92rem;font-weight:700;color:#0F172A;margin-top:0.1rem;">- ₹{{ '{:,.0f}'.format(_disc) }}</div>
                     </div>
                     {% endif %}
-                    {% if reg.final_package %}
+                    {% if reg.final_package and (_disc > 0 or not reg.package_amount) %}
                     <div style="background:#FB923C;border:1px solid #EA580C;border-radius:0.45rem;padding:0.55rem 0.7rem;">
                         <div style="font-size:0.66rem;color:white;font-weight:600;text-transform:uppercase;letter-spacing:0.04em;">Final</div>
                         <div style="font-size:0.96rem;font-weight:700;color:white;margin-top:0.1rem;">₹{{ '{:,.0f}'.format(reg.final_package|float) }}</div>

@@ -23,7 +23,7 @@ from db import get_db
 # Plan Type / Account Status / Current Stage / Counsellor / Lead Source
 # <select>s render the same options PLAB uses (sourced from the AMC tab
 # of Field Manager).
-from routes.operations._form_lookups import section_client_lookups, section_client_products
+from routes.operations._form_lookups import section_client_lookups, section_client_products, transfer_for_reg
 
 
 @admin_required
@@ -321,17 +321,18 @@ def ops_australia_clients_list():
         # Attach per-client payment totals from ops_payments (single source of
         # truth) so the 'Paid' column reflects real payments — for every pathway.
         if records:
-            _regs = [r['registration_number'] for r in records]
-            _ph = ','.join(['?'] * len(_regs))
-            _pmap = {pr['registration_number']: pr for pr in conn.execute(
-                f"""SELECT registration_number,
+            def _nrm(s): return (s or '').strip().upper()
+            _keys = [_nrm(r['registration_number']) for r in records]
+            _ph = ','.join(['?'] * len(_keys))
+            _pmap = {pr['k']: pr for pr in conn.execute(
+                f"""SELECT UPPER(TRIM(registration_number)) AS k,
                            COALESCE(SUM(total_amount_paid), 0) AS tp,
                            COALESCE(SUM(amount_paid), 0)       AS ap,
                            COALESCE(SUM(gst_paid), 0)          AS gp
-                      FROM ops_payments WHERE registration_number IN ({_ph})
-                     GROUP BY registration_number""", _regs).fetchall()}
+                      FROM ops_payments WHERE UPPER(TRIM(registration_number)) IN ({_ph})
+                     GROUP BY UPPER(TRIM(registration_number))""", _keys).fetchall()}
             for r in records:
-                pr = _pmap.get(r['registration_number'])
+                pr = _pmap.get(_nrm(r['registration_number']))
                 r['total_paid']  = float(pr['tp']) if pr else 0
                 r['amount_paid'] = float(pr['ap']) if pr else 0
                 r['gst_paid']    = float(pr['gp']) if pr else 0
@@ -416,8 +417,7 @@ def _payment_totals_for(conn, reg_num):
                   COALESCE(SUM(gst_paid), 0)           AS gst,
                   COALESCE(SUM(total_amount_paid), 0)  AS tot
              FROM ops_payments
-            WHERE registration_number = ?
-              AND COALESCE(pathway, 'plab') = 'australia' """,
+            WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) """,
         (reg_num,),
     ).fetchone()
     return float(row['amt'] or 0), float(row['gst'] or 0), float(row['tot'] or 0)
@@ -541,6 +541,7 @@ def ops_australia_client_edit_page(client_id):
         "SELECT * FROM plab_clients WHERE id = ? AND COALESCE(pathway, 'plab') = 'australia'",
         (client_id,),
     ).fetchone()
+    xfer = transfer_for_reg(conn, client['registration_number']) if client else None
     conn.close()
     if not client:
         flash('Australia client not found.', 'error')
@@ -553,6 +554,7 @@ def ops_australia_client_edit_page(client_id):
         'ops_australia_client_edit_form.html',
         user=user,
         client=client,
+        transfer=xfer,
         active_ops_page='australia-clients',
         active_pathway='australia',
         # Dropdown options for Plan Type, Account Status, Current Stage,

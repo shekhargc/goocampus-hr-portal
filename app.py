@@ -196,6 +196,10 @@ def inject_manager_status():
         # Internal Transfer" button on the Operations client profiles.
         can_xfer = bool(session.get('is_admin') or
                         (user and has_section_permission(user, 'clients', 'internal_transfers', 'add')))
+        # Ops verifier: admin, or Clients > Internal Transfers > Edit. Drives the
+        # "Ops Team Verification" queue link.
+        can_verify_xfer = bool(session.get('is_admin') or
+                        (user and has_section_permission(user, 'clients', 'internal_transfers', 'edit')))
         return {
             'is_manager': mgr,
             'pending_team_count': pending_team,
@@ -204,11 +208,12 @@ def inject_manager_status():
             'operations_landing_url': ops_landing,
             'current_user_name': (user['name'] if user else ''),
             'can_request_transfer': can_xfer,
+            'can_verify_transfer': can_verify_xfer,
         }
     return {
         'is_manager': False, 'pending_team_count': 0, 'has_sales_access': False,
         'has_operations_access': False, 'operations_landing_url': '/operations/uk-pathway',
-        'current_user_name': '', 'can_request_transfer': False,
+        'current_user_name': '', 'can_request_transfer': False, 'can_verify_transfer': False,
     }
 
 def calculate_monthly_balance(employee_id, year, month):
@@ -1327,13 +1332,28 @@ def client_invitation_create():
             (token, product_id, client_name, clean, client_email, user['id']))
         conn.commit()
         invite_url = f"https://goocampus.org/client/register/{token}"
-        flash(f'Invitation created! Link: {invite_url}', 'success')
 
-        # Try to send WhatsApp
+        wa_ok = False
         try:
-            _send_client_invite_wa(clean, client_name, invite_url)
+            wa_ok = _send_client_invite_wa(clean, client_name, invite_url)
         except Exception as wa_err:
             logging.error(f"WA invite send failed: {wa_err}")
+
+        email_ok = False
+        if client_email:
+            try:
+                email_ok = _send_client_invite_email(client_email, client_name, invite_url)
+            except Exception as em_err:
+                logging.error(f"client invite email send failed: {em_err}")
+
+        # Report what was actually delivered, so a silent failure is visible to
+        # the rep — and always show the link so they can share it manually.
+        sent = ([ 'WhatsApp' ] if wa_ok else []) + ([ 'email' ] if email_ok else [])
+        if sent:
+            flash(f"Invitation sent via {' + '.join(sent)}. Link: {invite_url}", 'success')
+        else:
+            flash(f"Invitation created, but automatic delivery failed "
+                  f"(WhatsApp/email) — please share this link manually: {invite_url}", 'warning')
 
     except Exception as e:
         logging.error(f"client_invitation_create: {e}")
@@ -2151,16 +2171,60 @@ def _auto_invite_from_closure(conn, *, product_id, client_name, client_mobile,
         _send_client_invite_wa(mobile, client_name, invite_url)
     except Exception as e:
         logging.warning(f"_auto_invite_from_closure: WA send failed: {e}")
+    # Email the registration link too. Previously the client invite only sent
+    # WhatsApp, so clients who gave an email (but no/invalid WhatsApp) got nothing.
+    try:
+        if client_email:
+            _send_client_invite_email(client_email, client_name, invite_url)
+    except Exception as e:
+        logging.warning(f"_auto_invite_from_closure: email send failed: {e}")
     return token
 
 
+def _send_client_invite_email(email, name, link):
+    """Email the client their registration-invitation link via Resend.
+    Mirrors the partner-invite email. Returns True if Resend accepted it,
+    False if email isn't configured or the send failed (never raises)."""
+    if not email:
+        return False
+    try:
+        from email_utils import send_email
+        html = f'''<html><body style="font-family:Arial,sans-serif;color:#333;line-height:1.6;margin:0;padding:0;">
+  <div style="background-color:#1e3a5f;padding:20px;text-align:center;"><h1 style="color:white;margin:0;font-size:24px;">GooCampus</h1></div>
+  <div style="padding:30px;background-color:white;">
+    <h2 style="color:#1e3a5f;margin-top:0;">Welcome to GooCampus!</h2>
+    <p style="font-size:16px;">Hello {name},</p>
+    <p>Thank you for choosing GooCampus. Please click the button below to complete your registration and get started.</p>
+    <div style="text-align:center;margin:30px 0;">
+      <a href="{link}" style="background-color:#F58220;color:white;padding:14px 32px;text-decoration:none;border-radius:6px;font-weight:bold;font-size:16px;display:inline-block;">Complete Registration</a>
+    </div>
+    <p style="font-size:13px;color:#666;">Or copy this link into your browser:<br><a href="{link}" style="color:#F58220;word-break:break-all;">{link}</a></p>
+    <p style="margin-top:30px;">Best regards,<br><strong style="color:#1e3a5f;">GooCampus Team</strong></p>
+  </div>
+  <div style="background-color:#f5f5f5;padding:15px;text-align:center;border-top:3px solid #F58220;"><p style="color:#999;font-size:11px;margin:0;">GooCampus Edu Solutions Pvt Ltd</p></div>
+</body></html>'''
+        return send_email([email], 'Complete Your GooCampus Registration', html,
+                          from_address="GooCampus <info@goocampus.in>")
+    except Exception as e:
+        logging.error(f"_send_client_invite_email: {e}")
+        return False
+
+
 def _send_client_invite_wa(mobile, name, link):
-    """Send WhatsApp template message with invitation link."""
+    """Send WhatsApp template message with invitation link.
+
+    Returns True if Infobip accepted the message, False otherwise. Unlike the
+    old version (which returned silently and ignored the API response), this
+    logs the REAL reason for any failure — missing config, or the Infobip
+    rejection body (e.g. unapproved template / unregistered sender) — so a
+    delivery problem is visible in the logs instead of looking like success."""
     import os, requests as http_requests
     infobip_key = os.environ.get('INFOBIP_API_KEY', '')
     infobip_base = os.environ.get('INFOBIP_BASE_URL', '')
     if not infobip_key or not infobip_base:
-        return
+        logging.error("WA invite NOT sent: INFOBIP_API_KEY / INFOBIP_BASE_URL "
+                      "not configured on this service")
+        return False
     phone = mobile if mobile.startswith('91') else f'91{mobile}'
     url = f"https://{infobip_base}/whatsapp/1/message/template"
     headers = {"Authorization": f"App {infobip_key}", "Content-Type": "application/json"}
@@ -2176,9 +2240,16 @@ def _send_client_invite_wa(mobile, name, link):
         }]
     }
     try:
-        http_requests.post(url, json=payload, headers=headers, timeout=10)
+        resp = http_requests.post(url, json=payload, headers=headers, timeout=10)
+        if resp.status_code >= 300:
+            logging.error(f"WA invite REJECTED by Infobip ({resp.status_code}) "
+                          f"to {phone}: {resp.text[:600]}")
+            return False
+        logging.info(f"WA invite accepted by Infobip for {phone}: {resp.text[:300]}")
+        return True
     except Exception as e:
         logging.error(f"_send_client_invite_wa: {e}")
+        return False
 
 
 # ── ADMIN: Client Management List ──
@@ -7243,6 +7314,17 @@ def ensure_crm_tables():
             ('internal_transfers',       'approved_by',            'INTEGER'),
             ('internal_transfers',       'approved_at',            'TIMESTAMP'),
             ('internal_transfers',       'rejection_reason',       'TEXT'),
+            # Completion workflow (Phase 2, 2026-06): after an admin approves, the
+            # new pathway record is 'Pending Verification' with blank service/financial
+            # fields. completion_stage drives the hand-off queue: 'awaiting_sales'
+            # (sales fills the balance fields) -> 'awaiting_ops' (ops verifies) ->
+            # 'completed' (record set 'In Process' = live). Existing approved rows
+            # have no stage and are treated as 'awaiting_sales' via COALESCE.
+            ('internal_transfers',       'completion_stage',       "TEXT DEFAULT 'awaiting_sales'"),
+            ('internal_transfers',       'sales_submitted_by',     'INTEGER'),
+            ('internal_transfers',       'sales_submitted_at',     'TIMESTAMP'),
+            ('internal_transfers',       'ops_verified_by',        'INTEGER'),
+            ('internal_transfers',       'ops_verified_at',        'TIMESTAMP'),
         ]:
             try:
                 conn.execute(f"ALTER TABLE {_tbl} ADD COLUMN {_col} {_type}")
@@ -16119,92 +16201,67 @@ VENDOR_LOOKUP_MAP = {
 }
 
 
+# pathway slug -> the vendors_providers.country label it is stored under.
+PATHWAY_VENDOR_COUNTRIES = {
+    'plab': 'UK Pathway', 'australia': 'AMC Pathway', 'consulting': 'Standard Consulting',
+    'portfolio': 'Portfolio Pathway', 'training': 'Training Pathway', 'uae': 'UAE Pathway',
+}
+
+
 def sync_vendors_to_lookup_options(conn=None):
-    """Sync vendors_providers → lookup_options for vendor-linked categories.
-    Additive only: adds missing options and deactivates removed vendors, never deletes data.
-    """
+    """Sync vendors_providers -> lookup_options for vendor-linked categories, for
+    EVERY pathway (each scoped to its own pathway row in lookup_options).
+
+    ADDITIVE ONLY: adds missing options and re-activates ones whose vendor is
+    active again. It never edits or deletes an existing option, and never writes
+    across pathways, so manually-entered data is left untouched. Runs on every
+    vendor add/edit."""
     should_close = False
     if conn is None:
         conn = get_db()
         should_close = True
     try:
-        for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
-            # Fetch active vendor names for this mapping
-            country = vlink.get('country', 'UK Pathway')
-            if vlink['type'] == 'service':
-                vendor_rows = conn.execute("""
-                    SELECT DISTINCT vp.name FROM vendors_providers vp
-                    JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
-                    WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
-                    ORDER BY vp.sort_order, vp.name
-                """, (vlink['service'], country)).fetchall()
-            elif vlink['type'] == 'deliverables':
-                # Collect all unique service_names from vendors in this category
-                cat_pattern = '%' + vlink['category'] + '%'
-                vendor_rows = conn.execute("""
-                    SELECT DISTINCT vsm.service_name as name
-                    FROM vendor_service_map vsm
-                    JOIN vendors_providers vp ON vsm.vendor_id = vp.id
-                    WHERE vp.category LIKE ? AND vp.country = ? AND vp.is_active = TRUE
-                    ORDER BY vsm.service_name
-                """, (cat_pattern, country)).fetchall()
-            else:
-                cat_pattern = '%' + vlink['category'] + '%'
-                vendor_rows = conn.execute("""
-                    SELECT name FROM vendors_providers
-                    WHERE category LIKE ? AND country = ? AND is_active = TRUE
-                    ORDER BY sort_order, name
-                """, (cat_pattern, country)).fetchall()
-
-            vendor_names = [r['name'] for r in vendor_rows]
-
-            # Fetch existing lookup_options for this category
-            existing = conn.execute(
-                "SELECT id, value, is_active FROM lookup_options WHERE category = ? ORDER BY sort_order",
-                (lo_category,)
-            ).fetchall()
-            existing_values = {r['value']: r for r in existing}
-
-            # Get current max sort_order
-            max_so = conn.execute(
-                "SELECT COALESCE(MAX(sort_order), 0) as m FROM lookup_options WHERE category = ?",
-                (lo_category,)
-            ).fetchone()['m']
-
-            # Add vendor names not yet in lookup_options
-            for vname in vendor_names:
-                if vname not in existing_values:
-                    max_so += 1
-                    conn.execute(
-                        "INSERT INTO lookup_options (category, label, value, sort_order, is_active) VALUES (?, ?, ?, ?, TRUE)",
-                        (lo_category, vname, vname, max_so)
-                    )
-                    logging.info(f"Vendor sync: added '{vname}' to lookup_options.{lo_category}")
-                elif not existing_values[vname]['is_active']:
-                    # Re-activate if vendor is active but lookup was deactivated
-                    conn.execute(
-                        "UPDATE lookup_options SET is_active = TRUE WHERE id = ?",
-                        (existing_values[vname]['id'],)
-                    )
-                    logging.info(f"Vendor sync: re-activated '{vname}' in lookup_options.{lo_category}")
-
-            # Deactivate lookup_options whose vendor is no longer active (but don't delete)
-            for val, row in existing_values.items():
-                if val not in vendor_names and row['is_active'] and val != 'Other':
-                    # Check if this vendor exists but is inactive
-                    inactive_check = conn.execute(
-                        "SELECT id FROM vendors_providers WHERE name = ? AND is_active = FALSE LIMIT 1",
-                        (val,)
-                    ).fetchone()
-                    if inactive_check:
+        for pathway, country in PATHWAY_VENDOR_COUNTRIES.items():
+            for lo_category, vlink in VENDOR_LOOKUP_MAP.items():
+                if vlink['type'] == 'service':
+                    vendor_rows = conn.execute(
+                        """SELECT DISTINCT vp.name FROM vendors_providers vp
+                             JOIN vendor_service_map vsm ON vp.id = vsm.vendor_id
+                            WHERE vsm.service_name = ? AND vp.country = ? AND vp.is_active = TRUE
+                            ORDER BY vp.sort_order, vp.name""",
+                        (vlink['service'], country)).fetchall()
+                elif vlink['type'] == 'deliverables':
+                    vendor_rows = conn.execute(
+                        """SELECT DISTINCT vsm.service_name AS name FROM vendor_service_map vsm
+                             JOIN vendors_providers vp ON vsm.vendor_id = vp.id
+                            WHERE vp.category LIKE ? AND vp.country = ? AND vp.is_active = TRUE
+                            ORDER BY vsm.service_name""",
+                        ('%' + vlink['category'] + '%', country)).fetchall()
+                else:
+                    vendor_rows = conn.execute(
+                        """SELECT name FROM vendors_providers
+                            WHERE category LIKE ? AND country = ? AND is_active = TRUE
+                            ORDER BY sort_order, name""",
+                        ('%' + vlink['category'] + '%', country)).fetchall()
+                names = [(r['name'] or '').strip() for r in vendor_rows if (r['name'] or '').strip()]
+                if not names:
+                    continue
+                existing = {r['value']: r for r in conn.execute(
+                    "SELECT id, value, is_active FROM lookup_options WHERE category = ? AND COALESCE(pathway,'plab') = ?",
+                    (lo_category, pathway)).fetchall()}
+                max_so = conn.execute(
+                    "SELECT COALESCE(MAX(sort_order), 0) AS m FROM lookup_options WHERE category = ? AND COALESCE(pathway,'plab') = ?",
+                    (lo_category, pathway)).fetchone()['m']
+                for nm in names:
+                    if nm not in existing:
+                        max_so += 1
                         conn.execute(
-                            "UPDATE lookup_options SET is_active = FALSE WHERE id = ?",
-                            (row['id'],)
-                        )
-                        logging.info(f"Vendor sync: deactivated '{val}' in lookup_options.{lo_category} (vendor inactive)")
-
+                            "INSERT INTO lookup_options (category, label, value, sort_order, is_active, pathway) VALUES (?, ?, ?, ?, TRUE, ?)",
+                            (lo_category, nm, nm, max_so, pathway))
+                    elif not existing[nm]['is_active']:
+                        conn.execute("UPDATE lookup_options SET is_active = TRUE WHERE id = ?", (existing[nm]['id'],))
         conn.commit()
-        logging.info("Vendor ↔ lookup_options sync completed")
+        logging.info("Vendor -> lookup_options sync (all pathways, additive) completed")
     except Exception as e:
         logging.error(f"sync_vendors_to_lookup_options error: {e}")
     finally:
@@ -16384,15 +16441,35 @@ def ops_vendors_providers():
         vd['categories_list'] = cats
         vendors_list.append(vd)
 
-    # Deliverables per category for the multi-select in the modal
+    # Deliverables per category for the multi-select in the modal. Start from a
+    # few sensible defaults, then UNION every course/service already in use
+    # (vendor_service_map) so the checklist reflects real data — not a stale
+    # hardcoded list. Users can still type brand-new ones via the "+ Add" box.
     deliverables = {
         'Training Programs': ['IELTS Training', 'OET Training', 'PLAB 1 Training', 'PLAB 2 Training', 'PLAB 2 Mock', 'MRCP 1'],
-        'Online Courses': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS', 'Other'],
+        'Online Courses': ['Interview skills training', 'Clinical Audit and QIP', 'CCrISP', 'ALS', 'ATLS', 'BLS'],
         'Online Subscriptions': [],
         'Certification Bodies': [],
         'Research & Publications': [],
         'NGO Activities': [],
     }
+    try:
+        dconn = get_db()
+        for row in dconn.execute(
+            """SELECT vp.category AS cats, vsm.service_name AS svc
+                 FROM vendor_service_map vsm
+                 JOIN vendors_providers vp ON vp.id = vsm.vendor_id
+                WHERE COALESCE(vsm.service_name, '') <> ''""").fetchall():
+            svc = (row['svc'] or '').strip()
+            for cat in (row['cats'] or '').split(','):
+                cat = cat.strip()
+                if cat in deliverables and svc and svc not in deliverables[cat]:
+                    deliverables[cat].append(svc)
+        dconn.close()
+        for k in deliverables:
+            deliverables[k] = sorted(set(deliverables[k]), key=str.lower)
+    except Exception as e:
+        logging.warning(f"vendor deliverables union: {e}")
 
     return render_template('ops_vendors_providers.html',
                          vendors=vendors_list,
@@ -18325,7 +18402,7 @@ def ops_plab_dashboard(client_id):
         COALESCE(SUM(amount_paid), 0) as amount_paid,
         COALESCE(SUM(gst_paid), 0) as gst_paid,
         COALESCE(SUM(total_amount_paid), 0) as total_paid
-        FROM ops_payments WHERE registration_number = ?""", (reg,)).fetchone()
+        FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?))""", (reg,)).fetchone()
     amount_paid = float(payments_total['amount_paid'] or 0)
     gst_paid = float(payments_total['gst_paid'] or 0)
     total_paid = float(payments_total['total_paid'] or 0)
@@ -18341,7 +18418,7 @@ def ops_plab_dashboard(client_id):
     test_bookings = conn.execute("SELECT * FROM ops_test_bookings WHERE registration_number = ? ORDER BY exam_date DESC NULLS LAST", (reg,)).fetchall()
     call_notes = conn.execute("SELECT * FROM ops_call_notes WHERE registration_number = ? ORDER BY call_date DESC NULLS LAST LIMIT 20", (reg,)).fetchall()
     call_notes_count = conn.execute("SELECT COUNT(*) as cnt FROM ops_call_notes WHERE registration_number = ?", (reg,)).fetchone()['cnt']
-    payments = conn.execute("SELECT * FROM ops_payments WHERE registration_number = ? ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
+    payments = conn.execute("SELECT * FROM ops_payments WHERE UPPER(TRIM(registration_number)) = UPPER(TRIM(?)) ORDER BY payment_date DESC NULLS LAST", (reg,)).fetchall()
     epic_records = conn.execute("SELECT * FROM ops_epic_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
     gmc_records = conn.execute("SELECT * FROM ops_gmc_registration WHERE registration_number = ? ORDER BY created_at DESC", (reg,)).fetchall()
 
@@ -18681,8 +18758,13 @@ def ops_plab_edit(client_id):
     except Exception as e:
         logging.error(f"Documents query error (edit) for client {client_id}: {e}")
         documents = []
+    # Phase 2: surface the "Submit for Ops verification" banner if this PLAB
+    # record is a transferred one still being completed.
+    from routes.operations._form_lookups import transfer_for_reg
+    xfer = transfer_for_reg(conn, client.get('registration_number'))
     conn.close()
     return render_template('ops_plab_form.html', mode='edit', item=client,
+                           transfer=xfer,
                            products=_products_for_pathway('plab'),
                            plan_types=get_lookup_options('plan_type', 'plab'), joined_stages=get_lookup_options('joined_stage', 'plab'),
                            account_statuses=get_lookup_options('account_status'), plab_stages=get_lookup_options('plab_stage'),
@@ -21786,9 +21868,11 @@ def _execute_internal_transfer(conn, t):
             (from_reg, amt_ref, transfer_date, t['refund_method'],
              f'Internal-transfer balance (switched to {prod["name"]})', src['pathway'] or 'plab', t['created_by']))
         refund_id = rcur.fetchone()['id']
-    # 5) stamp the created artifacts back onto the transfer row
+    # 5) stamp the created artifacts back onto the transfer row. completion_stage
+    # starts at 'awaiting_sales' so the new (blank) record surfaces in the sales
+    # hand-off queue for its balance/pathway fields to be filled in.
     conn.execute("""UPDATE internal_transfers SET to_reg = ?, registration_number = ?, to_pathway = ?,
-        from_product = ?, to_product = ?, to_payment_id = ?, refund_id = ? WHERE id = ?""",
+        from_product = ?, to_product = ?, to_payment_id = ?, refund_id = ?, completion_stage = 'awaiting_sales' WHERE id = ?""",
         (new_reg, new_reg, to_pathway, from_product, prod['name'], to_payment_id, refund_id, t['id']))
     return new_reg
 
@@ -21820,8 +21904,8 @@ def admin_internal_transfer_approve(tid):
                      (session.get('user_id'), tid))
         if t['created_by']:
             create_notification(conn, t['created_by'], 'Internal transfer approved',
-                f'Your transfer ({t["from_reg"]} → {new_reg}) was approved and processed. New record created (Pending Verification).',
-                'success', url_for('admin_internal_transfers'))
+                f'Your transfer ({t["from_reg"]} → {new_reg}) was approved. Open the transfer queue to fill the new record\'s balance details and submit for ops verification.',
+                'success', url_for('internal_transfer_completion_queue'))
         conn.commit()
         conn.close()
         flash(f'Transfer approved: {t["from_reg"]} → {new_reg}. New record created (Pending Verification); requester notified.', 'success')
@@ -25255,6 +25339,7 @@ def sales_leads_add():
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=False,
+                           lead_sources=get_lookup_options('lead_source'),
                     active_section='sales')
 
 
@@ -25402,6 +25487,7 @@ def sales_leads_edit(lead_id):
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=already_has_closure,
+                           lead_sources=get_lookup_options('lead_source'),
                     active_section='sales')
 
 
@@ -25428,19 +25514,45 @@ def sales_leads_delete(lead_id):
 def sales_product_info(pid):
     conn = get_db()
     row = conn.execute(
-        'SELECT id, name, revenue_stream_id, sale_price, product_cost FROM products_services WHERE id = ?',
+        "SELECT id, name, revenue_stream_id, sale_price, product_cost, COALESCE(pathway,'plab') AS pathway FROM products_services WHERE id = ?",
         (pid,)
     ).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         return jsonify({'error': 'not found'}), 404
+    pw = row['pathway'] or 'plab'
+    # Plan types for this product (drives the Plan Type cascade on the sales
+    # closed-client form). Fall back to the pathway's full plan list when the
+    # product has no product-specific plans.
+    try:
+        # Match plan types by product NAME (not pathway): a product's pathway
+        # tag can lag behind where its plan types actually live (e.g. AMC / UK
+        # Consulting are tagged plab but their plans sit under consulting), so
+        # matching on name finds them regardless. Falls back to the product's
+        # pathway list only when nothing is mapped to the name.
+        plans = conn.execute(
+            "SELECT value FROM lookup_options WHERE category='plan_type' "
+            "AND COALESCE(product_name,'')=? "
+            "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (row['name'],)).fetchall()
+        plan_types = [r['value'] for r in plans if r['value']]
+        if not plan_types:
+            plans = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(is_active,true) IS NOT FALSE "
+                "ORDER BY value", (pw,)).fetchall()
+            plan_types = [r['value'] for r in plans if r['value']]
+    except Exception:
+        plan_types = []
+    conn.close()
     return jsonify({
         'id': row['id'],
         'name': row['name'],
         'stream_id': row['revenue_stream_id'],
         'sale_price': float(row['sale_price'] or 0),
         'product_cost': float(row['product_cost'] or 0),
-        'margin': float((row['sale_price'] or 0) - (row['product_cost'] or 0))
+        'margin': float((row['sale_price'] or 0) - (row['product_cost'] or 0)),
+        'pathway': pw,
+        'plan_types': plan_types,
     })
 
 
@@ -32884,6 +32996,13 @@ ACCESS_ROUTE_MAP = {
     'admin_internal_transfer_approve':              _ap('clients', 'internal_transfers', 'edit'),
     'admin_internal_transfer_reject':               _ap('clients', 'internal_transfers', 'edit'),
     'admin_internal_transfers_reconcile':           _ap('clients', 'internal_transfers', 'edit'),
+    # Phase 2 completion hand-off (routes/internal_transfers_completion.py).
+    'internal_transfer_completion_queue':           _ap('clients', 'internal_transfers'),
+    'verification_sales':                           _ap('clients', 'internal_transfers'),
+    'verification_ops':                             _ap('clients', 'internal_transfers', 'edit'),
+    'internal_transfer_submit_for_ops':             _ap('clients', 'internal_transfers', 'add'),
+    'internal_transfer_verify':                     _ap('clients', 'internal_transfers', 'edit'),
+    'internal_transfer_return_to_sales':            _ap('clients', 'internal_transfers', 'edit'),
     # ── Operations: Standard Consulting (S-0 + S-1a + S-1b) ───────
     'ops_consulting_pathway':                       _ap('consulting_pathway', 'dashboard'),
     'ops_consulting_clients_list':                  _ap('consulting_pathway', 'registration'),
@@ -37169,6 +37288,13 @@ def sales_twelfthplus_followups_list():
 # ─────────────────────────────────────────────────────────
 from routes.operations import register_operations_modules
 register_operations_modules(app)
+
+# Internal Transfer — Phase 2 completion hand-off (queue + sales/ops actions).
+from routes.internal_transfers_completion import register_internal_transfer_completion
+register_internal_transfer_completion(app)
+
+from routes.verification_queues import register_verification_queues
+register_verification_queues(app)
 
 
 if __name__ == '__main__':

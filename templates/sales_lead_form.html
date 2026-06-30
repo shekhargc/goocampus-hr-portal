@@ -1,72 +1,86 @@
 {% extends "sales_sidebar_base.html" %}
 {% block title %}{{ 'Edit Client' if mode == 'edit' else 'Add Closed Client' }} - Sales CRM{% endblock %}
 {% block section_content %}
+<style>
+  .slf-inp{width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;}
+  .slf-lbl{display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;}
+  .slf-ro{width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-200);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-700);min-height:1.2rem;}
+  .slf-row{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;}
+  .slf-row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:0.9rem;}
+  .slf-head{display:flex;align-items:center;gap:9px;font-size:0.9rem;font-weight:700;margin:0 0 1rem;}
+</style>
 <div style="max-width:780px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;"><a href="/sales/leads" style="color:var(--orange);font-weight:600;text-decoration:none;font-size:0.85rem;">&larr; Back to Closed Clients</a></div>
     <div style="background:white;border:1px solid var(--gray-200);border-radius:0.85rem;padding:2rem;box-shadow:0 1px 3px rgba(0,0,0,0.04);">
         <h1 style="font-size:1.4rem;font-weight:700;color:var(--navy);margin:0 0 0.4rem 0;">{{ 'Edit Closed Client' if mode == 'edit' else 'Add Closed Client' }}</h1>
-        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Record a finalised client to start onboarding. The closure is recorded automatically and a WhatsApp invitation link is sent to the client.</p>
+        <p style="margin:0 0 1.5rem 0;color:var(--gray-500);font-size:0.85rem;">Record a finalised client to start onboarding. The closure is recorded automatically and an invitation link is sent to the client.</p>
 
         <form method="POST">
-            {# Hidden Closed Won stage -- the backend forces this regardless,
-               but we send the form value too so any extension flows see the
-               intended stage. #}
             <input type="hidden" name="is_hot" value="0" />
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+            {# ===== Sales / lead details ===== #}
+            <div class="slf-row">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Client name *</label>
-                    <input type="text" name="lead_name" required maxlength="120" value="{{ lead.lead_name if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    <label class="slf-lbl">Client name *</label>
+                    <input type="text" name="lead_name" required maxlength="120" value="{{ lead.lead_name if lead else '' }}" class="slf-inp" />
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">WhatsApp number * <span style="color:var(--gray-500);font-weight:400;">(10-digit Indian)</span></label>
-                    <input type="tel" name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" value="{{ lead.phone if lead else '' }}" placeholder="9XXXXXXXXX" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                </div>
-            </div>
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
-                <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Email</label>
-                    <input type="email" name="email" maxlength="160" value="{{ lead.email if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                </div>
-                <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Source</label>
-                    <input type="text" name="source" maxlength="60" value="{{ lead.source if lead else '' }}" placeholder="e.g. Website, Referral, Direct" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    <label class="slf-lbl">WhatsApp number * <span style="color:var(--gray-500);font-weight:400;">(10-digit Indian)</span></label>
+                    <input type="tel" name="phone" required pattern="[6-9][0-9]{9}" maxlength="10" value="{{ lead.phone if lead else '' }}" placeholder="9XXXXXXXXX" class="slf-inp" />
                 </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr;gap:1rem;margin-bottom:1.1rem;">
+            <div class="slf-row">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Owner *</label>
+                    <label class="slf-lbl">Client Email</label>
+                    <input type="email" name="email" maxlength="160" value="{{ lead.email if lead else '' }}" class="slf-inp" />
+                </div>
+                <div>
+                    <label class="slf-lbl">Lead Source</label>
+                    <select name="source" class="slf-inp" style="background:white;">
+                        <option value="">Select Lead Source</option>
+                        {% for ls in lead_sources %}
+                        <option value="{{ ls }}" {% if lead and lead.source == ls %}selected{% endif %}>{{ ls }}</option>
+                        {% endfor %}
+                    </select>
+                </div>
+            </div>
+
+            <div class="slf-row">
+                <div>
+                    <label class="slf-lbl">Owner *</label>
                     {% if role == 'admin' %}
-                    <select name="owner_employee_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                    <select name="owner_employee_id" class="slf-inp" style="background:white;">
                         {% for o in owners %}
                         <option value="{{ o.id }}" {% if lead and lead.owner_employee_id == o.id %}selected{% elif not lead and o.id == user.id %}selected{% endif %}>{{ o.name }}</option>
                         {% endfor %}
                     </select>
                     {% else %}
                     <input type="hidden" name="owner_employee_id" value="{{ user.id }}" />
-                    <input type="text" disabled value="{{ user.name }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;background:var(--gray-50);color:var(--gray-600);" />
+                    <input type="text" disabled value="{{ user.name }}" class="slf-inp" style="background:var(--gray-50);color:var(--gray-600);" />
                     {% endif %}
                 </div>
-            </div>
-
-            {# Stage picker removed 2026-06-02: every new entry is a closed
-               client; backend silently forces stage = Closed Won. #}
-
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Product/Service</label>
-                    <select name="product_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                    <label class="slf-lbl">Product/Service</label>
+                    <select name="product_id" id="productSel" class="slf-inp" style="background:white;">
                         <option value="">— None —</option>
                         {% for p in products %}
                         <option value="{{ p.id }}" {% if lead and lead.product_id == p.id %}selected{% endif %}>{{ p.name }}</option>
                         {% endfor %}
                     </select>
                 </div>
+            </div>
+
+            <div class="slf-row">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Revenue Stream</label>
-                    <select name="stream_id" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
+                    <label class="slf-lbl">Plan Type <span style="color:var(--gray-500);font-weight:400;">(based on product)</span></label>
+                    <select name="plan_type" id="planTypeSel" data-current="{{ lead.plan_type if lead else '' }}" class="slf-inp" style="background:white;">
+                        <option value="">Select a product first</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="slf-lbl">Revenue Stream</label>
+                    <select name="stream_id" id="streamSel" class="slf-inp" style="background:white;">
                         <option value="">— None —</option>
                         {% for s in streams %}
                         <option value="{{ s.id }}" {% if lead and lead.stream_id == s.id %}selected{% endif %}>{{ s.name }}</option>
@@ -75,95 +89,44 @@
                 </div>
             </div>
 
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.1rem;">
+            <div class="slf-row">
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Expected Value (₹)</label>
-                    <input type="number" step="0.01" min="0" name="expected_value" value="{{ lead.expected_value or 0 if lead else 0 }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    <label class="slf-lbl">Package Value (₹)</label>
+                    <input type="number" step="1" min="0" name="expected_value" id="pkgValue" oninput="syncPackage()" value="{{ lead.expected_value or 0 if lead else 0 }}" class="slf-inp" />
                 </div>
                 <div>
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Expected Close Date</label>
-                    <input type="date" name="expected_close_date" value="{{ lead.expected_close_date if lead else '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                    <label class="slf-lbl">Registration Date</label>
+                    <input type="date" name="expected_close_date" value="{{ lead.expected_close_date if lead else '' }}" class="slf-inp" />
                 </div>
             </div>
 
-            <!-- Closure fields — always shown for the closed-client flow -->
-            <div id="closure-fields" style="display:block;margin-bottom:1.1rem;background:var(--green-50, #f0fdf4);border:1px solid var(--green-200, #bbf7d0);border-radius:0.65rem;padding:1.2rem;">
-                <p style="margin:0 0 0.8rem 0;font-size:0.82rem;font-weight:700;color:var(--green-700, #15803d);">
-                    Closure will be auto-recorded. Confirm amounts below:
-                </p>
-                {% if already_has_closure|default(false) %}
-                <p style="margin:0 0 0.6rem 0;font-size:0.8rem;color:var(--gray-500);">A closure already exists for this lead — no duplicate will be created.</p>
-                {% endif %}
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;">
-                    <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Gross Revenue</label>
-                        <input type="number" step="0.01" min="0" name="closure_revenue" id="closure_revenue"
-                               value="{{ lead.expected_value or 0 if lead else 0 }}"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Cost</label>
-                        <input type="number" step="0.01" min="0" name="closure_cost" id="closure_cost" value="0"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
-                    </div>
-                    <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Currency</label>
-                        <select name="closure_currency" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;">
-                            <option value="INR" selected>INR</option>
-                            <option value="USD">USD</option>
-                            <option value="EUR">EUR</option>
-                            <option value="GBP">GBP</option>
-                            <option value="AUD">AUD</option>
-                            <option value="CAD">CAD</option>
-                            <option value="SGD">SGD</option>
-                            <option value="AED">AED</option>
-                        </select>
-                    </div>
-                </div>
-                <p id="closure-margin-preview" style="margin:0.7rem 0 0 0;font-size:0.82rem;color:var(--gray-600);">
-                    Sales Revenue: <strong id="margin-val">0.00</strong>
-                </p>
-            </div>
-
-            <!-- Item C: Service / Package details captured up-front so the
-                 client sees them on their portal as read-only "What you
-                 signed up for" the moment they log in. -->
+            {# ===== Service / Package details — shown to the client on their portal ===== #}
             <div style="margin-bottom:1.1rem;background:#FFF7ED;border:1px solid #FED7AA;border-radius:0.65rem;padding:1.2rem;">
-                <p style="margin:0 0 0.8rem 0;font-size:0.82rem;font-weight:700;color:#9A3412;">
-                    Service / Package details · these are shown to the client on their portal
-                </p>
+                <p class="slf-head" style="color:#9A3412;">&#128722; Service / Package details · these are shown to the client on their portal</p>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:0.9rem;">
+                <div class="slf-row" style="margin-bottom:0.9rem;">
                     <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Plan Type</label>
-                        <input type="text" name="plan_type" placeholder="e.g. Premium, Standard"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                        <label class="slf-lbl">Product/Service</label>
+                        <div id="pkgProductDisplay" class="slf-ro">&mdash;</div>
                     </div>
                     <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Lead Source</label>
-                        <input type="text" name="lead_source" placeholder="e.g. Website, Referral, Walk-in"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                        <label class="slf-lbl">Plan Type</label>
+                        <div id="pkgPlanDisplay" class="slf-ro">&mdash;</div>
                     </div>
                 </div>
 
-                <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:1rem;margin-bottom:0.9rem;">
+                <div class="slf-row3">
                     <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Package Amount (₹)</label>
-                        <input type="number" step="1" min="0" name="package_amount" id="pkgAmount"
-                               oninput="updateFinal()" value="0"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                        <label class="slf-lbl">Package Amount (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                        <input type="number" step="1" min="0" name="package_amount" id="pkgAmount" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                     </div>
                     <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Discount Allowed (₹)</label>
-                        <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed"
-                               oninput="updateFinal()" value="0"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;" />
+                        <label class="slf-lbl">Discount Allowed (₹)</label>
+                        <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed" oninput="updateFinal()" value="0" class="slf-inp" />
                     </div>
                     <div>
-                        <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Final Package (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
-                        <input type="number" step="1" min="0" name="final_package" id="finalPkg"
-                               readonly value="0"
-                               style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;background:var(--gray-50);" />
+                        <label class="slf-lbl">Final Package (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
+                        <input type="number" step="1" min="0" name="final_package" id="finalPkg" readonly value="0" class="slf-inp" style="background:var(--gray-50);" />
                     </div>
                 </div>
 
@@ -180,80 +143,76 @@
                 {% endfor %}
 
                 <div style="margin-top:0.7rem;">
-                    <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Additional Package Notes</label>
+                    <label class="slf-lbl">Additional Package Notes</label>
                     <textarea name="additional_package_notes" rows="2" placeholder="Any package-related notes for the client to see..."
                               style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
                 </div>
             </div>
 
             <div style="margin-bottom:1.5rem;">
-                <label style="display:block;font-size:0.78rem;color:var(--gray-600);font-weight:600;margin-bottom:0.3rem;">Internal Notes <span style="font-weight:400;color:var(--gray-500);">(not shown to client)</span></label>
-                <textarea name="notes" rows="3" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:0.45rem;font-size:0.9rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
+                <label class="slf-lbl">Internal Notes <span style="font-weight:400;color:var(--gray-500);">(not shown to client)</span></label>
+                <textarea name="notes" rows="3" class="slf-inp" style="font-family:inherit;resize:vertical;">{{ lead.notes if lead else '' }}</textarea>
             </div>
 
             <div style="display:flex;gap:0.75rem;">
-                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Add Closed Client &amp; Send Invite' }}</button>
+                <button type="submit" style="flex:1;background:var(--orange);color:white;border:none;padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;cursor:pointer;">{{ 'Save Changes' if mode == 'edit' else 'Submit' }}</button>
                 <a href="/sales/leads" style="flex:1;background:white;color:var(--gray-600);border:1px solid var(--gray-300);padding:0.75rem 1.5rem;border-radius:0.5rem;font-size:0.9rem;font-weight:600;text-align:center;text-decoration:none;">Cancel</a>
             </div>
         </form>
 
         <script>
         (function() {
-            /* Closure box is always visible in the closed-client flow --
-               no stage picker, so no toggling. Just keep the margin
-               preview live. */
-            var revInput = document.getElementById('closure_revenue');
-            var costInput = document.getElementById('closure_cost');
-            var marginVal = document.getElementById('margin-val');
-            var evInput = document.querySelector('input[name="expected_value"]');
+            var productSel = document.getElementById('productSel');
+            var streamSel  = document.getElementById('streamSel');
+            var planSel    = document.getElementById('planTypeSel');
+            var pkgValue   = document.getElementById('pkgValue');
+            var pkgAmount  = document.getElementById('pkgAmount');
+            var discAllowed= document.getElementById('discAllowed');
+            var finalPkg   = document.getElementById('finalPkg');
+            var prodDisp   = document.getElementById('pkgProductDisplay');
+            var planDisp   = document.getElementById('pkgPlanDisplay');
 
-            function updateMargin() {
-                var r = parseFloat(revInput.value) || 0;
-                var c = parseFloat(costInput.value) || 0;
-                marginVal.textContent = (r - c).toFixed(2);
-            }
-            if (revInput) revInput.addEventListener('input', updateMargin);
-            if (costInput) costInput.addEventListener('input', updateMargin);
-            updateMargin();
-
-            // Item C: auto-compute Final Package = Package - Discount.
             window.updateFinal = function() {
-                var p = parseFloat((document.getElementById('pkgAmount')||{}).value) || 0;
-                var d = parseFloat((document.getElementById('discAllowed')||{}).value) || 0;
-                var f = document.getElementById('finalPkg');
-                if (f) f.value = Math.max(0, p - d).toFixed(0);
+                var p = parseFloat(pkgAmount.value) || 0, d = parseFloat(discAllowed.value) || 0;
+                finalPkg.value = Math.max(0, p - d).toFixed(0);
             };
-
-            // --- Auto-fill stream & expected value when product changes ---
-            var productSelect = document.querySelector('select[name="product_id"]');
-            var streamSelect = document.querySelector('select[name="stream_id"]');
-
-            if (productSelect) {
-                productSelect.addEventListener('change', function() {
-                    var pid = this.value;
-                    if (!pid) return;
-                    fetch('/sales/api/product/' + pid)
-                        .then(function(r) { return r.json(); })
-                        .then(function(d) {
-                            if (d.error) return;
-                            // Auto-set stream
-                            if (d.stream_id && streamSelect) {
-                                streamSelect.value = d.stream_id;
-                            }
-                            // Auto-set expected value from Sales Revenue (margin)
-                            if (evInput) {
-                                evInput.value = d.margin || 0;
-                            }
-                            // If closure panel is open, update closure revenue too
-                            if (closureBox.style.display !== 'none' && revInput) {
-                                revInput.value = d.sale_price || 0;
-                                if (costInput) costInput.value = d.product_cost || 0;
-                                updateMargin();
-                            }
-                        })
-                        .catch(function() {});
-                });
+            // Package Amount mirrors the Package Value entered at the top.
+            window.syncPackage = function() {
+                pkgAmount.value = parseFloat(pkgValue.value) || 0;
+                updateFinal();
+            };
+            function updateDisplays() {
+                var po = productSel.options[productSel.selectedIndex];
+                prodDisp.textContent = (po && po.value) ? po.textContent : '—';
+                planDisp.textContent = planSel.value || '—';
             }
+            function loadPlans(keepCurrent) {
+                var pid = productSel.value;
+                if (!pid) { planSel.innerHTML = '<option value="">Select a product first</option>'; updateDisplays(); return; }
+                fetch('/sales/api/product/' + pid).then(function(r){ return r.json(); }).then(function(d){
+                    if (d.error) return;
+                    if (d.stream_id && streamSel) streamSel.value = d.stream_id;
+                    // On a fresh product pick, auto-fill Package Value from the
+                    // product's GROSS REVENUE (sale price). Don't overwrite a
+                    // saved value when re-opening (edit mode, keepCurrent=true).
+                    if (!keepCurrent && pkgValue && d.sale_price != null) {
+                        pkgValue.value = d.sale_price || 0;
+                        syncPackage();
+                    }
+                    var current = keepCurrent ? (planSel.getAttribute('data-current') || '') : '';
+                    var plans = d.plan_types || [];
+                    planSel.innerHTML = '<option value="">Select Plan Type</option>';
+                    var found = false;
+                    plans.forEach(function(p){ var o=document.createElement('option'); o.value=p; o.textContent=p; if(current&&p===current){o.selected=true;found=true;} planSel.appendChild(o); });
+                    if (current && !found) { var o=document.createElement('option'); o.value=current; o.textContent=current; o.selected=true; planSel.appendChild(o); }
+                    updateDisplays();
+                }).catch(function(){});
+            }
+            if (productSel) productSel.addEventListener('change', function(){ loadPlans(false); });
+            if (planSel) planSel.addEventListener('change', updateDisplays);
+            if (productSel && productSel.value) loadPlans(true);
+            syncPackage();
+            updateDisplays();
         })();
         </script>
     </div>
