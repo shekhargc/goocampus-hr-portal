@@ -432,18 +432,22 @@ function openLeaveDetail(reqId) {
     html += `</div>`;
 
     const TODAY = new Date().toISOString().slice(0,10);
-    if (r.leave_date_raw && r.leave_date_raw >= TODAY && (r.status === 'approved' || r.status === 'pending')) {
+    const tActive = (r.status === 'approved' || r.status === 'pending');
+    const tFuture = (r.leave_date_raw && r.leave_date_raw >= TODAY);
+    if (tActive) {
         html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);">`;
-        if (r.group_count_n === 1) {
+        if (r.group_count_n === 1 && tFuture) {
             html += `<a href="/modify-leave/${r.id}" style="padding:0.5rem 1rem;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Modify / Reschedule</a>`;
         }
-        const cc = r.group_count_n > 1
-            ? `Cancel all ${r.group_count_n} day(s) for ${escapeHtml(r.name)}?`
-            : `Cancel this leave for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date_raw)}?`;
+        const pastNote = tFuture ? '' : ' (this date has already passed)';
+        const cc = (r.group_count_n > 1
+            ? `Cancel all ${r.group_count_n} day(s) for ${escapeHtml(r.name)}`
+            : `Cancel this leave for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date_raw)}`) + pastNote + '?';
+        const cancelLabel = tFuture ? 'Cancel' : 'Cancel (past)';
         html += `<form method="POST" action="/cancel-leave/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}"
                        onsubmit="var rs=prompt('Reason for cancelling this leave:',''); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cc}');">
                     <input type="hidden" name="cancel_reason" value="">
-                    <button type="submit" style="padding:0.5rem 1rem;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Cancel</button>
+                    <button type="submit" style="padding:0.5rem 1rem;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">${cancelLabel}</button>
                  </form>`;
         html += `</div>`;
     }
