@@ -1,0 +1,66 @@
+{% extends "company_sidebar_base.html" %}
+
+{% block title %}Refund Policy{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;max-width:980px;margin:0 auto;">
+
+  <h1 style="font-size:1.4rem;font-weight:700;color:#1e3a5f;margin:0 0 0.3rem;">Refund Policy</h1>
+  <p style="color:#64748b;font-size:0.86rem;margin:0 0 1rem;">
+    This is shown to clients at <code>/client/refund-policy</code> and emailed to them when they agree.
+    Current version: <strong>v{{ policy.version or 1 }}</strong>{% if policy.updated_at %} · last updated {{ policy.updated_at.strftime('%d %b %Y, %H:%M') if policy.updated_at.strftime else policy.updated_at }}{% endif %}.
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}{% for category, message in messages %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;background:{{ '#FEE2E2' if category=='error' else '#D1FAE5' }};color:{{ '#991B1B' if category=='error' else '#065F46' }};font-size:0.88rem;">{{ message }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <form method="POST" action="/admin/policies/refund/save"
+        style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;padding:20px;">
+    <div style="margin-bottom:14px;">
+      <label style="font-weight:600;font-size:0.85rem;color:#1e3a5f;display:block;margin-bottom:4px;">Title</label>
+      <input type="text" name="title" value="{{ policy.title or 'Refund Policy' }}"
+             style="width:100%;padding:9px 12px;border:1px solid #d1d5db;border-radius:7px;font-size:0.9rem;box-sizing:border-box;">
+    </div>
+    <div style="margin-bottom:14px;">
+      <label style="font-weight:600;font-size:0.85rem;color:#1e3a5f;display:block;margin-bottom:4px;">Policy body (HTML)</label>
+      <textarea name="body_html" rows="16"
+                style="width:100%;padding:11px 13px;border:1px solid #d1d5db;border-radius:7px;font-size:0.85rem;font-family:ui-monospace,Menlo,monospace;line-height:1.6;box-sizing:border-box;">{{ policy.body_html }}</textarea>
+      <p style="font-size:0.75rem;color:#94a3b8;margin:6px 0 0;">Use simple HTML (<code>&lt;p&gt;</code>, <code>&lt;ul&gt;&lt;li&gt;</code>, <code>&lt;strong&gt;</code>). This renders directly on the client page.</p>
+    </div>
+    <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;color:#334155;margin-bottom:16px;">
+      <input type="checkbox" name="bump_version" value="1">
+      Bump version &amp; require all clients to re-agree (use only for a material change)
+    </label>
+    <button type="submit" style="background:#f97316;color:#fff;border:none;padding:0.6rem 1.6rem;border-radius:7px;font-weight:600;font-size:0.9rem;cursor:pointer;">Save Policy</button>
+  </form>
+
+  <h2 style="font-size:1.05rem;font-weight:700;color:#1e3a5f;margin:1.8rem 0 0.6rem;">Signed agreements ({{ signed|length }})</h2>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
+    <table style="width:100%;border-collapse:collapse;font-size:0.84rem;">
+      <thead><tr style="background:#f8fafc;">
+        <th style="text-align:left;padding:9px 12px;color:#475569;border-bottom:1px solid #e5e7eb;">Client</th>
+        <th style="text-align:left;padding:9px 12px;color:#475569;border-bottom:1px solid #e5e7eb;">Signed name</th>
+        <th style="text-align:left;padding:9px 12px;color:#475569;border-bottom:1px solid #e5e7eb;">Agreed at</th>
+        <th style="text-align:left;padding:9px 12px;color:#475569;border-bottom:1px solid #e5e7eb;">Ver</th>
+        <th style="text-align:left;padding:9px 12px;color:#475569;border-bottom:1px solid #e5e7eb;">IP</th>
+      </tr></thead>
+      <tbody>
+        {% for s in signed %}
+        <tr>
+          <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;">{{ (s.first_name or '') ~ ' ' ~ (s.last_name or '') }}<br><span style="color:#94a3b8;font-size:0.78rem;">{{ s.email or '' }}</span></td>
+          <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;">{{ s.agreed_name }}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;">{{ s.agreed_at.strftime('%d %b %Y, %H:%M') if s.agreed_at.strftime else s.agreed_at }}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;">v{{ s.policy_version }}</td>
+          <td style="padding:9px 12px;border-bottom:1px solid #f1f5f9;color:#94a3b8;">{{ s.ip_address or '—' }}</td>
+        </tr>
+        {% else %}
+        <tr><td colspan="5" style="padding:16px;text-align:center;color:#94a3b8;">No agreements recorded yet.</td></tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</div>
+{% endblock %}
