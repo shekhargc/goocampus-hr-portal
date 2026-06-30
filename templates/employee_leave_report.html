@@ -59,6 +59,18 @@
         </div>
         <div><div class="s-card-val" style="color: var(--orange);">{{ total_taken }}</div><div class="s-card-lbl">Days Taken (FY)</div></div>
     </div>
+    <div class="s-card" style="border-left-color: var(--success);">
+        <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ (total_taken - total_deduction)|round(1) }}</div><div class="s-card-lbl">Paid Leaves Taken</div></div>
+    </div>
+    <div class="s-card" style="border-left-color: var(--danger, #dc3545);">
+        <div class="s-card-icon" style="background: rgba(220,53,69,0.08);">
+            <svg width="20" height="20" fill="none" stroke="var(--danger, #dc3545)" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M15 9l-6 6M9 9l6 6"/></svg>
+        </div>
+        <div><div class="s-card-val" style="color: var(--danger, #dc3545);">{{ total_deduction }}</div><div class="s-card-lbl">Unpaid / Deducted (LOP)</div></div>
+    </div>
     <div class="s-card" style="border-left-color: var(--warning, #f59e0b);">
         <div class="s-card-icon" style="background: rgba(245,158,11,0.08);">
             <svg width="20" height="20" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 7v3M10 13h.01"/></svg>
