@@ -271,6 +271,35 @@ def get_available_balance(employee_id, year, month):
     conn.close()
     return max(0, balance)
 
+
+def get_running_balance_unclamped(employee_id, year, month):
+    """Running leave balance carried into the START of `month` (FY starts
+    April), WITHOUT the max(0, …) floor.
+
+    This is the version used for salary-deduction math. The clamped
+    get_available_balance() resets an over-used (negative) balance back to
+    zero each month, which then lets the next month's allocation be handed
+    out as fresh free leave even after the employee has exhausted/over-used
+    their quota. Keeping the deficit negative here means a month's allocation
+    first fills the deficit (and only a genuine positive remainder is free),
+    so once leaves are exhausted every further day is correctly deductible.
+    """
+    conn = get_db()
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    carry_forward = emp['carry_forward'] if emp else 0
+    balance = carry_forward
+    for m in range(4, month):
+        balance += get_monthly_alloc(m)
+        leaves = conn.execute('''
+            SELECT SUM(days) as total_days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+        ''', (employee_id, str(year if m >= 4 else year - 1), str(m).zfill(2))).fetchone()
+        if leaves['total_days']:
+            balance -= leaves['total_days']
+    conn.close()
+    return balance  # may be negative (carried deficit)
+
 def get_leaves_for_month(employee_id, year, month):
     """Get all approved leaves for a specific month"""
     conn = get_db()
@@ -5449,9 +5478,12 @@ def admin_monthly_report():
 
         days_taken_month = month_leaves['total_days'] if month_leaves['total_days'] else 0
 
-        # Get balance at start of month
-        balance_start = get_available_balance(emp['id'], year, month)
-        balance_available = balance_start + m_alloc
+        # Get balance at start of month. Use the UNCLAMPED running balance so a
+        # carried deficit isn't erased: the allocation fills the deficit first,
+        # and only a real positive remainder is free leave. (Clamping before
+        # adding the allocation wrongly handed out free days after exhaustion.)
+        balance_start = get_running_balance_unclamped(emp['id'], year, month)
+        balance_available = max(0, balance_start + m_alloc)
 
         # Calculate deduction
         deduction = max(0, days_taken_month - balance_available)
@@ -5520,8 +5552,10 @@ def admin_monthly_report_download():
             ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
 
             days_taken_month = month_leaves['total_days'] if month_leaves['total_days'] else 0
-            balance_start = get_available_balance(emp['id'], year, month)
-            balance_available = balance_start + dl_m_alloc
+            # Unclamped running balance so a carried deficit isn't erased — see
+            # the on-screen report above for the rationale.
+            balance_start = get_running_balance_unclamped(emp['id'], year, month)
+            balance_available = max(0, balance_start + dl_m_alloc)
             deduction = max(0, days_taken_month - balance_available)
 
             ws.append([
