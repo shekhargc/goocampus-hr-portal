@@ -1,6 +1,11 @@
 {% extends "ops_sidebar_base.html" %}
 {% block title %}Edit Client - {{ client.first_name }} {{ client.last_name }}{% endblock %}
 {% block ops_content %}
+<style>
+.reg-head{display:flex;align-items:center;gap:9px;font-size:0.93rem;font-weight:700;color:var(--navy);margin:1.9rem 0 1rem;padding:0.62rem 0.95rem;background:linear-gradient(90deg,#FFF7ED,#FFFFFF 65%);border-left:4px solid var(--orange);border-radius:9px;letter-spacing:.2px;}
+.reg-head:first-of-type{margin-top:0.5rem;}
+.reg-head .ico{font-size:1.05rem;line-height:1;}
+</style>
 <div style="max-width:800px;margin:0 auto;padding:2rem 1.5rem;">
     <div style="margin-bottom:1rem;">
         <a href="{{ url_for('ops_uae_client_detail', client_id=client.id) }}" style="color:var(--orange);text-decoration:none;font-weight:600;font-size:0.85rem;">&larr; Back to Client</a>
@@ -16,7 +21,7 @@
         <form method="POST" action="{{ url_for('ops_uae_client_edit_save', client_id=client.id) }}">
 
             <!-- ===== REGISTRATION DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Registration Details</h3>
+            <h3 class="reg-head"><span class="ico">📋</span>Registration Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Registration Number</label>
@@ -29,7 +34,7 @@
             </div>
 
             <!-- ===== PERSONAL DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Personal Details</h3>
+            <h3 class="reg-head"><span class="ico">👤</span>Personal Details</h3>
             <div style="display:grid;grid-template-columns:80px 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Prefix</label>
@@ -78,6 +83,7 @@
                     <input type="text" name="state" value="{{ client.state or '' }}" style="width:100%;padding:0.6rem 0.8rem;border:1px solid var(--gray-300);border-radius:8px;font-size:0.88rem;box-sizing:border-box;" />
                 </div>
             </div>
+            <h3 class="reg-head"><span class="ico">🌐</span>Social Media</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Instagram</label>
@@ -94,7 +100,7 @@
             </div>
 
             <!-- ===== PARENTS DETAILS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Parents Details</h3>
+            <h3 class="reg-head"><span class="ico">👪</span>Parents Details</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Father Name</label>
@@ -121,7 +127,7 @@
             </div>
 
             <!-- ===== PLAN & STAGE ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Plan &amp; Stage</h3>
+            <h3 class="reg-head"><span class="ico">🎯</span>Plan &amp; Stage</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Product / Service</label>
@@ -207,7 +213,7 @@
             </div>
 
             <!-- ===== COUNSELLOR ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Counsellor &amp; Lead Source</h3>
+            <h3 class="reg-head"><span class="ico">🧭</span>Counsellor &amp; Lead Source</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Counsellor</label>
@@ -254,7 +260,7 @@
             </div>
 
             <!-- ===== PACKAGE & FINANCIALS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Package &amp; Financials</h3>
+            <h3 class="reg-head"><span class="ico">💰</span>Package &amp; Financials</h3>
             <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:0.8rem;margin-bottom:1.1rem;">
                 <div>
                     <label style="display:block;font-weight:600;font-size:0.8rem;color:var(--gray-600);margin-bottom:0.4rem;">Package Amount</label>
@@ -271,7 +277,7 @@
             </div>
 
             <!-- ===== INSTALLMENTS ===== -->
-            <h3 style="font-size:1rem;font-weight:700;color:var(--navy);margin:1.5rem 0 0.8rem 0;padding-bottom:0.4rem;border-bottom:2px solid var(--gray-100);">Installments</h3>
+            <h3 class="reg-head"><span class="ico">🧾</span>Installments</h3>
             {% for i in [1, 2, 3, 4] %}
             <div style="display:grid;grid-template-columns:80px 1fr 1fr 2fr;gap:0.8rem;margin-bottom:0.8rem;align-items:end;">
                 <div style="padding-bottom:0.6rem;font-weight:600;color:var(--gray-600);">Inst {{ i }}</div>
@@ -368,8 +374,6 @@ document.addEventListener('DOMContentLoaded', function() {
     });
 });
 </script>
-{% endblock %}
-
 <script>
 // Show the Switched Program field only when Account Status = 'Switched Program'.
 function toggleSwitchedProgram(){
@@ -379,3 +383,6 @@ function toggleSwitchedProgram(){
 }
 document.addEventListener('DOMContentLoaded', toggleSwitchedProgram);
 </script>
+{% endblock %}
+
+
