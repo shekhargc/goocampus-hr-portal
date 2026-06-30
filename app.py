@@ -272,33 +272,65 @@ def get_available_balance(employee_id, year, month):
     return max(0, balance)
 
 
-def get_running_balance_unclamped(employee_id, year, month):
-    """Running leave balance carried into the START of `month` (FY starts
-    April), WITHOUT the max(0, …) floor.
+def leave_month_figures(employee_id, year, month):
+    """Leave figures for a single (year, month) under the GooCampus rule:
 
-    This is the version used for salary-deduction math. The clamped
-    get_available_balance() resets an over-used (negative) balance back to
-    zero each month, which then lets the next month's allocation be handed
-    out as fresh free leave even after the employee has exhausted/over-used
-    their quota. Keeping the deficit negative here means a month's allocation
-    first fills the deficit (and only a genuine positive remainder is free),
-    so once leaves are exhausted every further day is correctly deductible.
+      available = (unused leaves accumulated from prior months, >= 0)
+                  + this month's allocation (April = 3, others = 2)
+                  + old transferred leaves (carry_forward, seeded once at the
+                    FY start in April)
+      deduction = max(0, days_taken - available)        # excess is LOP
+      carried_to_next_month = max(0, available - days_taken)
+
+    A DEFICIT does NOT carry — if an employee over-uses leave in a month, the
+    next month simply starts with its regular allocation (plus any genuine
+    positive surplus). Surplus (unused) leaves DO accumulate forward.
+
+    Walks the fiscal year from April so accumulation/clamping is applied month
+    by month. Returns a dict: balance_start (carried in, >= 0), monthly_alloc,
+    balance_available, days_taken, deduction, balance_end (carried out).
     """
     conn = get_db()
     emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
-    carry_forward = emp['carry_forward'] if emp else 0
-    balance = carry_forward
-    for m in range(4, month):
-        balance += get_monthly_alloc(m)
+    carried = float(emp['carry_forward'] or 0) if emp else 0.0
+    fy_start_year = year if month >= 4 else year - 1
+    cy, cm = fy_start_year, 4
+    result = None
+    while True:
         leaves = conn.execute('''
             SELECT SUM(days) as total_days FROM leave_records
             WHERE employee_id = ? AND status = 'approved'
             AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-        ''', (employee_id, str(year if m >= 4 else year - 1), str(m).zfill(2))).fetchone()
-        if leaves['total_days']:
-            balance -= leaves['total_days']
+        ''', (employee_id, str(cy), str(cm).zfill(2))).fetchone()
+        taken_m = float(leaves['total_days'] or 0)
+        alloc_m = get_monthly_alloc(cm)
+        carried_in = carried
+        available = carried_in + alloc_m
+        deduction = max(0.0, taken_m - available)
+        carried = max(0.0, available - taken_m)  # deficit floored — never carries
+        if cy == year and cm == month:
+            result = {
+                'balance_start': carried_in,
+                'monthly_alloc': alloc_m,
+                'balance_available': available,
+                'days_taken': taken_m,
+                'deduction': deduction,
+                'balance_end': carried,
+            }
+            break
+        cm += 1
+        if cm == 13:
+            cm = 1
+            cy += 1
+        if (cy, cm) > (year, month):  # safety stop
+            break
     conn.close()
-    return balance  # may be negative (carried deficit)
+    if result is None:
+        alloc_m = get_monthly_alloc(month)
+        result = {'balance_start': 0.0, 'monthly_alloc': alloc_m,
+                  'balance_available': alloc_m, 'days_taken': 0.0,
+                  'deduction': 0.0, 'balance_end': alloc_m}
+    return result
 
 def get_leaves_for_month(employee_id, year, month):
     """Get all approved leaves for a specific month"""
@@ -5464,39 +5496,20 @@ def admin_monthly_report():
     employees = conn.execute("SELECT * FROM employees WHERE is_active = 1 AND emp_code != 'admin' ORDER BY name").fetchall()
 
     report_data = []
-    m_alloc = get_monthly_alloc(month)
     for emp in employees:
-        carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
-
-        # Get leaves taken in this month
-        month_leaves = conn.execute('''
-            SELECT SUM(days) as total_days FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-        ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
-
-        days_taken_month = month_leaves['total_days'] if month_leaves['total_days'] else 0
-
-        # Get balance at start of month. Use the UNCLAMPED running balance so a
-        # carried deficit isn't erased: the allocation fills the deficit first,
-        # and only a real positive remainder is free leave. (Clamping before
-        # adding the allocation wrongly handed out free days after exhaustion.)
-        balance_start = get_running_balance_unclamped(emp['id'], year, month)
-        balance_available = max(0, balance_start + m_alloc)
-
-        # Calculate deduction
-        deduction = max(0, days_taken_month - balance_available)
-
+        # Per-month figures under the accrual+accumulation rule: this month's
+        # allocation + accumulated surplus (deficit never carries) − taken;
+        # excess is the salary deduction. See leave_month_figures().
+        fig = leave_month_figures(emp['id'], year, month)
         report_data.append({
             'name': emp['name'],
             'emp_code': emp['emp_code'],
             'department': emp['department'],
-            'monthly_allocation': m_alloc,
-            'balance_start': round(balance_start, 2),
-            'balance_available': round(balance_available, 2),
-            'days_taken': round(days_taken_month, 2),
-            'deduction': round(deduction, 2)
+            'monthly_allocation': fig['monthly_alloc'],
+            'balance_start': round(fig['balance_start'], 2),
+            'balance_available': round(fig['balance_available'], 2),
+            'days_taken': round(fig['days_taken'], 2),
+            'deduction': round(fig['deduction'], 2)
         })
 
     conn.close()
@@ -5539,34 +5552,18 @@ def admin_monthly_report_download():
             cell.font = header_font
             cell.alignment = Alignment(horizontal='center', vertical='center')
 
-        # Data
-        dl_m_alloc = get_monthly_alloc(month)
+        # Data — same accrual+accumulation rule as the on-screen report.
         for emp in employees:
-            carry_forward = emp['carry_forward']
-            total_allocation = 25 + carry_forward
-
-            month_leaves = conn.execute('''
-                SELECT SUM(days) as total_days FROM leave_records
-                WHERE employee_id = ? AND status = 'approved'
-                AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-            ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
-
-            days_taken_month = month_leaves['total_days'] if month_leaves['total_days'] else 0
-            # Unclamped running balance so a carried deficit isn't erased — see
-            # the on-screen report above for the rationale.
-            balance_start = get_running_balance_unclamped(emp['id'], year, month)
-            balance_available = max(0, balance_start + dl_m_alloc)
-            deduction = max(0, days_taken_month - balance_available)
-
+            fig = leave_month_figures(emp['id'], year, month)
             ws.append([
                 emp['name'],
                 emp['emp_code'],
                 emp['department'],
-                dl_m_alloc,
-                round(balance_start, 2),
-                round(balance_available, 2),
-                round(days_taken_month, 2),
-                round(deduction, 2)
+                fig['monthly_alloc'],
+                round(fig['balance_start'], 2),
+                round(fig['balance_available'], 2),
+                round(fig['days_taken'], 2),
+                round(fig['deduction'], 2)
             ])
 
         # Adjust column widths
