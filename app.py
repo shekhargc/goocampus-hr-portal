@@ -1073,7 +1073,7 @@ def client_form(reg_id):
         (reg_id,)
     ).fetchall()
     # States for dropdown
-    states = conn.execute("SELECT DISTINCT state_name FROM states ORDER BY state_name").fetchall()
+    states = conn.execute("SELECT DISTINCT name AS state_name FROM states ORDER BY name").fetchall()
 
     if request.method == 'POST':
         step = int(request.form.get('step', 1))
