@@ -245,6 +245,12 @@
                         {% endif %}
                         <button onclick="document.getElementById('ret-{{ leave.id }}').style.display = document.getElementById('ret-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;">Cancel</button>
                     </div>
+                    {% elif leave.status in ('approved', 'pending') and leave.leave_date < today %}
+                        {% if leave.cancel_requested %}
+                        <span class="badge" style="background:#FEF3C7;color:#92400E;border:1px solid #FDE68A;">Cancellation requested</span>
+                        {% else %}
+                        <button onclick="document.getElementById('req-{{ leave.id }}').style.display = document.getElementById('req-{{ leave.id }}').style.display === 'none' ? 'table-row' : 'none'" class="btn-sm" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;">Request cancellation</button>
+                        {% endif %}
                     {% else %}
                     <span style="color: var(--gray-400); font-size: 0.78rem;">—</span>
                     {% endif %}
@@ -258,6 +264,18 @@
                                style="flex: 1; padding: 0.4rem 0.7rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
                         <button type="submit" class="btn-sm" style="background: #DC2626; color: white; padding: 0.4rem 0.7rem;">Confirm Cancellation{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}</button>
                         <button type="button" onclick="document.getElementById('ret-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Close</button>
+                    </form>
+                </td>
+            </tr>
+            {% elif leave.status in ('approved', 'pending') and leave.leave_date < today and not leave.cancel_requested %}
+            <tr id="req-{{ leave.id }}" style="display: none; background: #FFFBEB;">
+                <td colspan="7">
+                    <form method="POST" action="/request-cancel-leave/{{ leave.id }}{% if leave.group_count > 1 %}?group_id={{ leave.group_id }}{% endif %}" style="display: flex; align-items: center; gap: 0.75rem; padding: 0.3rem 0;">
+                        <span style="font-size:0.8rem;color:#92400E;">This date has passed — request cancellation (your manager approves):</span>
+                        <input type="text" name="cancel_reason" placeholder="Why should this leave be cancelled?" required
+                               style="flex: 1; padding: 0.4rem 0.7rem; border: 1px solid #D1D5DB; border-radius: 0.4rem; font-size: 0.85rem;">
+                        <button type="submit" class="btn-sm" style="background: #D97706; color: white; padding: 0.4rem 0.7rem;">Send Request{% if leave.group_count > 1 %} ({{ leave.group_count }} days){% endif %}</button>
+                        <button type="button" onclick="document.getElementById('req-{{ leave.id }}').style.display='none'" class="btn-sm btn-retrieve" style="padding: 0.4rem 0.6rem;">Close</button>
                     </form>
                 </td>
             </tr>

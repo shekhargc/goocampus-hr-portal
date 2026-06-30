@@ -347,6 +347,8 @@ const LEAVE_REQUESTS = {
         late_reason: {{ (leave.late_reason or '')|tojson }},
         is_late: {{ 'true' if leave.is_late else 'false' }},
         status: {{ (leave.status or '')|tojson }},
+        cancel_requested: {{ (leave.cancel_requested or 0)|tojson }},
+        cancel_reason: {{ (leave.cancel_reason or '')|tojson }},
         original_id: {{ (leave.original_id or 0)|tojson }},
         modification_reason: {{ (leave.modification_reason or '')|tojson }},
         original_reason: {{ (leave.original_reason or '')|tojson }},
@@ -435,7 +437,10 @@ function openLeaveDetail(reqId) {
     const tActive = (r.status === 'approved' || r.status === 'pending');
     const tFuture = (r.leave_date_raw && r.leave_date_raw >= TODAY);
     if (tActive) {
-        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);">`;
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);">`;
+        if (r.cancel_requested) {
+            html += `<div style="flex-basis:100%;font-size:0.8rem;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:6px 10px;"><strong>Cancellation requested</strong>${r.cancel_reason ? ' — ' + escapeHtml(r.cancel_reason) : ''}</div>`;
+        }
         if (r.group_count_n === 1 && tFuture) {
             html += `<a href="/modify-leave/${r.id}" style="padding:0.5rem 1rem;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Modify / Reschedule</a>`;
         }
@@ -443,12 +448,18 @@ function openLeaveDetail(reqId) {
         const cc = (r.group_count_n > 1
             ? `Cancel all ${r.group_count_n} day(s) for ${escapeHtml(r.name)}`
             : `Cancel this leave for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date_raw)}`) + pastNote + '?';
-        const cancelLabel = tFuture ? 'Cancel' : 'Cancel (past)';
+        const cancelLabel = r.cancel_requested ? 'Approve cancellation' : (tFuture ? 'Cancel' : 'Cancel (past)');
         html += `<form method="POST" action="/cancel-leave/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}"
-                       onsubmit="var rs=prompt('Reason for cancelling this leave:',''); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cc}');">
+                       onsubmit="var rs=prompt('Reason for cancelling this leave:', ${JSON.stringify(r.cancel_reason || '')}); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cc}');">
                     <input type="hidden" name="cancel_reason" value="">
                     <button type="submit" style="padding:0.5rem 1rem;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">${cancelLabel}</button>
                  </form>`;
+        if (r.cancel_requested) {
+            html += `<form method="POST" action="/decline-cancel-request/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}"
+                           onsubmit="return confirm('Decline this cancellation request? The leave stays as is.');">
+                        <button type="submit" style="padding:0.5rem 1rem;background:#F3F4F6;color:#374151;border:1px solid #D1D5DB;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Decline request</button>
+                     </form>`;
+        }
         html += `</div>`;
     }
 
