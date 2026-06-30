@@ -192,6 +192,13 @@
                 fetch('/sales/api/product/' + pid).then(function(r){ return r.json(); }).then(function(d){
                     if (d.error) return;
                     if (d.stream_id && streamSel) streamSel.value = d.stream_id;
+                    // On a fresh product pick, auto-fill Package Value from the
+                    // product's GROSS REVENUE (sale price). Don't overwrite a
+                    // saved value when re-opening (edit mode, keepCurrent=true).
+                    if (!keepCurrent && pkgValue && d.sale_price != null) {
+                        pkgValue.value = d.sale_price || 0;
+                        syncPackage();
+                    }
                     var current = keepCurrent ? (planSel.getAttribute('data-current') || '') : '';
                     var plans = d.plan_types || [];
                     planSel.innerHTML = '<option value="">Select Plan Type</option>';
