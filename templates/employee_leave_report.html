@@ -126,6 +126,7 @@
                 <th style="text-align: center;">Sick</th>
                 <th style="text-align: center;">Casual</th>
                 <th style="text-align: center;">Total Taken</th>
+                <th style="text-align: center;">Deduction (LOP)</th>
                 <th style="text-align: center;">Balance</th>
             </tr>
         </thead>
@@ -139,6 +140,7 @@
                 <td style="text-align: center; color: {% if m.sick > 0 %}var(--success){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.sick if m.sick > 0 else '—' }}</td>
                 <td style="text-align: center; color: {% if m.casual > 0 %}var(--orange){% else %}var(--gray-300){% endif %}; font-weight: 600;">{{ m.casual if m.casual > 0 else '—' }}</td>
                 <td style="text-align: center; font-weight: 700; color: {% if m.total > 0 %}var(--navy){% else %}var(--gray-300){% endif %};">{{ m.total if m.total > 0 else '—' }}</td>
+                <td style="text-align: center; font-weight: 700; color: {% if m.deduction and m.deduction > 0 %}var(--danger, #dc3545){% else %}var(--gray-300){% endif %};">{{ m.deduction if m.deduction and m.deduction > 0 else '—' }}</td>
                 <td style="text-align: center; font-weight: 700; color: {% if m.balance >= 0 %}var(--success){% else %}var(--danger, #dc3545){% endif %};">{{ m.balance }}</td>
             </tr>
             {% set ns.fy_annual = ns.fy_annual + m.annual %}
@@ -152,6 +154,7 @@
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_sick }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ ns.fy_casual }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_taken }}</td>
+                <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ total_deduction }}</td>
                 <td style="text-align: center; font-weight: 700; color: white; border: none;">{{ available_balance }}</td>
             </tr>
         </tbody>

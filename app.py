@@ -4573,9 +4573,13 @@ def my_leave_report():
         (user['id'], 'pending')
     ).fetchone()['cnt']
 
-    # Month-wise leave report for the full FY with running balance
+    # Month-wise leave report for the full FY with running balance.
+    # Rule: each month's available = accumulated surplus (>= 0) + that month's
+    # allocation; taken beyond that is the month's deduction (LOP); a deficit
+    # NEVER carries (floored at 0), only surplus accumulates forward.
     monthly_leave_data = []
-    running_balance = carry_forward  # Start with carry forward
+    running_balance = float(carry_forward or 0)  # accumulated surplus (>= 0)
+    current_available = running_balance
     for m in range(12):
         report_month = ((m + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
@@ -4593,7 +4597,11 @@ def my_leave_report():
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
         month_total = month_data['total_days'] or 0
-        running_balance = round(running_balance + m_alloc - month_total, 2)
+        available_this = running_balance + m_alloc
+        deduction = max(0.0, month_total - available_this)
+        running_balance = round(max(0.0, available_this - month_total), 2)  # deficit never carries
+        if (report_year, report_month) <= (today.year, current_month):
+            current_available = running_balance
 
         monthly_leave_data.append({
             'month': calendar.month_name[report_month],
@@ -4605,6 +4613,7 @@ def my_leave_report():
             'casual': month_data['casual'] or 0,
             'count': month_data['count'] or 0,
             'monthly_alloc': m_alloc,
+            'deduction': round(deduction, 2),
             'balance': running_balance
         })
 
@@ -4649,7 +4658,10 @@ def my_leave_report():
     annual_total = sum(m['annual'] for m in monthly_leave_data)
     sick_total = sum(m['sick'] for m in monthly_leave_data)
     casual_total = sum(m['casual'] for m in monthly_leave_data)
-    available_balance = total_allocation - total_taken
+    total_deduction = sum(m['deduction'] for m in monthly_leave_data)
+    # Available balance = accumulated surplus through the current month (>= 0),
+    # not annual entitlement − taken (which over-states it and can go negative).
+    available_balance = current_available
 
     conn.close()
 
@@ -4663,6 +4675,7 @@ def my_leave_report():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
+                         total_deduction=round(total_deduction, 2),
                          available_balance=round(available_balance, 2),
                          pending_count=pending_count,
                          carry_forward=carry_forward,
@@ -6668,6 +6681,7 @@ def admin_employee_leave_report():
     annual_total = 0
     sick_total = 0
     casual_total = 0
+    total_deduction = 0
     available_balance = 0
     pending_count = 0
     carry_forward = 0
@@ -6688,7 +6702,11 @@ def admin_employee_leave_report():
                 (selected_emp_id,)
             ).fetchone()['cnt']
 
-            running_balance = carry_forward  # Start with carry forward
+            # Rule: each month's allocation + accumulated surplus − taken;
+            # deficit never carries (floored at 0), surplus accumulates; the
+            # excess taken in a month is that month's deduction (LOP).
+            running_balance = float(carry_forward or 0)  # accumulated surplus (>= 0)
+            current_available = running_balance
             for m in range(12):
                 report_month = ((m + 3) % 12) + 1
                 report_year = fy_year if report_month >= 4 else fy_year + 1
@@ -6706,7 +6724,11 @@ def admin_employee_leave_report():
                 ''', (selected_emp_id, str(report_year), str(report_month).zfill(2))).fetchone()
 
                 month_total = month_data['total_days'] or 0
-                running_balance = round(running_balance + m_alloc - month_total, 2)
+                available_this = running_balance + m_alloc
+                deduction = max(0.0, month_total - available_this)
+                running_balance = round(max(0.0, available_this - month_total), 2)  # deficit never carries
+                if (report_year, report_month) <= (today.year, current_month):
+                    current_available = running_balance
 
                 monthly_leave_data.append({
                     'month': calendar.month_name[report_month],
@@ -6718,6 +6740,7 @@ def admin_employee_leave_report():
                     'casual': month_data['casual'] or 0,
                     'count': month_data['count'] or 0,
                     'monthly_alloc': m_alloc,
+                    'deduction': round(deduction, 2),
                     'balance': running_balance
                 })
 
@@ -6759,7 +6782,8 @@ def admin_employee_leave_report():
             annual_total = sum(m['annual'] for m in monthly_leave_data)
             sick_total = sum(m['sick'] for m in monthly_leave_data)
             casual_total = sum(m['casual'] for m in monthly_leave_data)
-            available_balance = round(total_allocation - total_taken, 2)
+            total_deduction = round(sum(m['deduction'] for m in monthly_leave_data), 2)
+            available_balance = round(current_available, 2)
 
     conn.close()
 
@@ -6776,6 +6800,7 @@ def admin_employee_leave_report():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
+                         total_deduction=total_deduction,
                          available_balance=available_balance,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
@@ -7086,11 +7111,13 @@ def reports_quarterly():
     ]
 
     quarters = []
-    running_balance = carry_forward
+    running_balance = float(carry_forward or 0)  # accumulated surplus (>= 0)
+    current_available = running_balance
     annual_total = sick_total = casual_total = 0
+    total_deduction = 0.0
 
     for qdef in quarter_defs:
-        q_annual = q_sick = q_casual = q_total = 0
+        q_annual = q_sick = q_casual = q_total = q_deduction = 0
         q_alloc = sum(get_monthly_alloc(m) for m in qdef['months'])
         month_details = []
 
@@ -7111,15 +7138,24 @@ def reports_quarterly():
             m_sick = mdata['sick'] or 0
             m_casual = mdata['casual'] or 0
 
-            q_annual += m_annual; q_sick += m_sick; q_casual += m_casual; q_total += m_total
+            # Per-month accrual + accumulation; deficit never carries.
+            available_this = running_balance + get_monthly_alloc(m)
+            m_deduction = max(0.0, m_total - available_this)
+            running_balance = round(max(0.0, available_this - m_total), 2)
+            if (yr, m) <= (today.year, today.month):
+                current_available = running_balance
+
+            q_annual += m_annual; q_sick += m_sick; q_casual += m_casual
+            q_total += m_total; q_deduction += m_deduction
 
             month_details.append({
                 'name': cal_module.month_name[m],
-                'annual': m_annual, 'sick': m_sick, 'casual': m_casual, 'total': m_total
+                'annual': m_annual, 'sick': m_sick, 'casual': m_casual,
+                'total': m_total, 'deduction': round(m_deduction, 2)
             })
 
-        running_balance += q_alloc - q_total
         annual_total += q_annual; sick_total += q_sick; casual_total += q_casual
+        total_deduction += q_deduction
 
         quarters.append({
             'label': qdef['label'],
@@ -7127,11 +7163,13 @@ def reports_quarterly():
             'months': month_details,
             'annual': q_annual, 'sick': q_sick, 'casual': q_casual,
             'total': q_total, 'alloc': q_alloc,
+            'deduction': round(q_deduction, 2),
             'balance': round(running_balance, 2)
         })
 
     total_taken = annual_total + sick_total + casual_total
-    available_balance = round(total_allocation - total_taken, 2)
+    total_deduction = round(total_deduction, 2)
+    available_balance = round(current_available, 2)
     conn.close()
 
     return render_template('report_quarterly.html',
@@ -7142,6 +7180,7 @@ def reports_quarterly():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
+                         total_deduction=total_deduction,
                          available_balance=available_balance,
                          pending_count=pending_count,
                     active_section='hr')
@@ -7169,8 +7208,11 @@ def reports_annual():
     ).fetchone()['cnt']
 
     import calendar as cal_module
+    # Rule: deficit never carries (floored at 0), surplus accumulates; the
+    # excess taken in a month is that month's deduction (LOP).
     monthly_leave_data = []
-    running_balance = carry_forward
+    running_balance = float(carry_forward or 0)
+    current_available = running_balance
     for m_idx in range(12):
         report_month = ((m_idx + 3) % 12) + 1
         report_year = fy_year if report_month >= 4 else fy_year + 1
@@ -7187,7 +7229,11 @@ def reports_annual():
         ''', (user['id'], str(report_year), str(report_month).zfill(2))).fetchone()
 
         month_total = month_data['total_days'] or 0
-        running_balance = round(running_balance + m_alloc - month_total, 2)
+        available_this = running_balance + m_alloc
+        deduction = max(0.0, month_total - available_this)
+        running_balance = round(max(0.0, available_this - month_total), 2)  # deficit never carries
+        if (report_year, report_month) <= (today.year, today.month):
+            current_available = running_balance
 
         monthly_leave_data.append({
             'month': cal_module.month_name[report_month],
@@ -7197,6 +7243,7 @@ def reports_annual():
             'sick': month_data['sick'] or 0,
             'casual': month_data['casual'] or 0,
             'monthly_alloc': m_alloc,
+            'deduction': round(deduction, 2),
             'balance': running_balance
         })
 
@@ -7212,7 +7259,8 @@ def reports_annual():
     annual_total = sum(m['annual'] for m in monthly_leave_data)
     sick_total = sum(m['sick'] for m in monthly_leave_data)
     casual_total = sum(m['casual'] for m in monthly_leave_data)
-    available_balance = round(total_allocation - total_taken, 2)
+    total_deduction = round(sum(m['deduction'] for m in monthly_leave_data), 2)
+    available_balance = round(current_available, 2)
 
     conn.close()
 
@@ -7225,6 +7273,7 @@ def reports_annual():
                          annual_total=annual_total,
                          sick_total=sick_total,
                          casual_total=casual_total,
+                         total_deduction=total_deduction,
                          available_balance=available_balance,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
