@@ -326,6 +326,10 @@ const LEAVE_REQUESTS = {
     {% for leave in leaves %}
     "{{ leave.group_id }}": {
         group_id: {{ leave.group_id|tojson }},
+        id: {{ leave.id|tojson }},
+        group_ids: {{ leave.group_ids|tojson }},
+        leave_date_raw: {{ (leave.date_from or '')|tojson }},
+        group_count_n: {{ leave.group_count|tojson }},
         name: {{ (leave.employee_name or '')|tojson }},
         emp_code: {{ (leave.emp_code or '')|tojson }},
         department: {{ (leave.department or '')|tojson }},
@@ -426,6 +430,24 @@ function openLeaveDetail(reqId) {
     }
 
     html += `</div>`;
+
+    const TODAY = new Date().toISOString().slice(0,10);
+    if (r.leave_date_raw && r.leave_date_raw >= TODAY && (r.status === 'approved' || r.status === 'pending')) {
+        html += `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:16px;padding-top:14px;border-top:1px solid var(--gray-200);">`;
+        if (r.group_count_n === 1) {
+            html += `<a href="/modify-leave/${r.id}" style="padding:0.5rem 1rem;background:#EEF2FF;color:#4338CA;border:1px solid #C7D2FE;border-radius:0.4rem;text-decoration:none;font-weight:600;font-size:0.85rem;">Modify / Reschedule</a>`;
+        }
+        const cc = r.group_count_n > 1
+            ? `Cancel all ${r.group_count_n} day(s) for ${escapeHtml(r.name)}?`
+            : `Cancel this leave for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date_raw)}?`;
+        html += `<form method="POST" action="/cancel-leave/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}"
+                       onsubmit="var rs=prompt('Reason for cancelling this leave:',''); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cc}');">
+                    <input type="hidden" name="cancel_reason" value="">
+                    <button type="submit" style="padding:0.5rem 1rem;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:0.4rem;font-weight:600;font-size:0.85rem;cursor:pointer;">Cancel</button>
+                 </form>`;
+        html += `</div>`;
+    }
+
     body.innerHTML = html;
 
     document.getElementById('leaveDrawer').classList.add('open');
