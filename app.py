@@ -25525,10 +25525,15 @@ def sales_product_info(pid):
     # closed-client form). Fall back to the pathway's full plan list when the
     # product has no product-specific plans.
     try:
+        # Match plan types by product NAME (not pathway): a product's pathway
+        # tag can lag behind where its plan types actually live (e.g. AMC / UK
+        # Consulting are tagged plab but their plans sit under consulting), so
+        # matching on name finds them regardless. Falls back to the product's
+        # pathway list only when nothing is mapped to the name.
         plans = conn.execute(
             "SELECT value FROM lookup_options WHERE category='plan_type' "
-            "AND COALESCE(pathway,'plab')=? AND COALESCE(product_name,'')=? "
-            "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (pw, row['name'])).fetchall()
+            "AND COALESCE(product_name,'')=? "
+            "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (row['name'],)).fetchall()
         plan_types = [r['value'] for r in plans if r['value']]
         if not plan_types:
             plans = conn.execute(
