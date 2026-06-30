@@ -130,20 +130,32 @@
                     </div>
                 </div>
 
-                <p style="margin:0.4rem 0 0.5rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments</p>
+                <p style="margin:0.4rem 0 0.2rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments <span style="font-weight:400;color:var(--gray-500);">· enter the base amount; 18% GST is added on top for the client</span></p>
+                {% set _ords = ['', '1st', '2nd', '3rd', '4th'] %}
+                <div id="instContainer">
                 {% for i in range(1, 5) %}
                 {% set _amt = closure['inst' ~ i ~ '_amount'] if closure else None %}
                 {% set _dt  = closure['inst' ~ i ~ '_date']   if closure else None %}
                 {% set _nt  = closure['inst' ~ i ~ '_note']   if closure else None %}
-                <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:0.7rem;margin-bottom:0.45rem;">
-                    <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Inst {{ i }} amount" value="{{ '{:.0f}'.format(_amt|float) if _amt else 0 }}"
-                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
-                    <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
-                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
-                    <input type="text" name="inst{{ i }}_note" placeholder="Inst {{ i }} note (optional)" value="{{ _nt or '' }}"
-                           style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                {% set _has = (_amt and _amt|float > 0) or _dt %}
+                {% set _show = (i == 1) or _has %}
+                <div class="inst-row" data-inst="{{ i }}" style="margin-bottom:0.55rem;{% if not _show %}display:none;{% endif %}">
+                    <div style="font-size:0.72rem;font-weight:700;color:#9A3412;margin-bottom:0.25rem;">{{ _ords[i] }} Installment</div>
+                    <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:0.7rem;">
+                        <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Base amount" value="{{ '{:.0f}'.format(_amt|float) if _amt else 0 }}"
+                               oninput="updateInstHint(this)"
+                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                        <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
+                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                        <input type="text" name="inst{{ i }}_note" placeholder="Note (optional)" value="{{ _nt or '' }}"
+                               style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
+                    </div>
+                    <div class="inst-hint" style="font-size:0.7rem;color:var(--gray-500);margin-top:0.2rem;"></div>
                 </div>
                 {% endfor %}
+                </div>
+                <button type="button" id="addInstBtn" onclick="addInstallment()"
+                        style="background:white;color:#9A3412;border:1px dashed #FB923C;padding:0.5rem 0.9rem;border-radius:0.4rem;font-size:0.8rem;font-weight:600;cursor:pointer;margin-bottom:0.4rem;">+ Add another installment</button>
 
                 <div style="margin-top:0.7rem;">
                     <label class="slf-lbl">Additional Package Notes</label>
@@ -216,6 +228,43 @@
             if (productSel && productSel.value) loadPlans(true);
             syncPackage();
             updateDisplays();
+
+            // ── Dynamic installments: show the 1st, reveal more on demand ──
+            window.updateInstHint = function(inp) {
+                var row = inp.closest('.inst-row'); if (!row) return;
+                var hint = row.querySelector('.inst-hint'); if (!hint) return;
+                var base = parseFloat(inp.value) || 0;
+                if (base > 0) {
+                    var gst = Math.round(base * 0.18);
+                    hint.textContent = '+ 18% GST ₹' + gst.toLocaleString('en-IN') +
+                                       ' = Total ₹' + (base + gst).toLocaleString('en-IN');
+                } else { hint.textContent = ''; }
+            };
+            window.addInstallment = function() {
+                var rows = document.querySelectorAll('#instContainer .inst-row');
+                for (var i = 0; i < rows.length; i++) {
+                    if (rows[i].style.display === 'none') {
+                        rows[i].style.display = '';
+                        if (i === rows.length - 1) {
+                            var b = document.getElementById('addInstBtn');
+                            if (b) b.style.display = 'none';
+                        }
+                        return;
+                    }
+                }
+                var b2 = document.getElementById('addInstBtn');
+                if (b2) b2.style.display = 'none';
+            };
+            // Init: compute hints for pre-filled rows; hide the add button if all
+            // four are already visible (e.g. editing a 4-installment plan).
+            document.querySelectorAll('#instContainer .inst-row input[name$="_amount"]').forEach(function(inp){ updateInstHint(inp); });
+            (function(){
+                var rows = document.querySelectorAll('#instContainer .inst-row');
+                var anyHidden = false;
+                rows.forEach(function(r){ if (r.style.display === 'none') anyHidden = true; });
+                var b = document.getElementById('addInstBtn');
+                if (b && !anyHidden) b.style.display = 'none';
+            })();
         })();
         </script>
     </div>

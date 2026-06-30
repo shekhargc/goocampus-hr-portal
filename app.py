@@ -988,32 +988,38 @@ def client_dashboard():
             return _dt.strptime(str(v)[:10], '%Y-%m-%d').date()
         except Exception:
             return None
+    _ORD = {1: '1st', 2: '2nd', 3: '3rd', 4: '4th'}
     registrations = []
     for r in registrations_raw:
         d = dict(r)
         insts = []
         for i in (1, 2, 3, 4):
-            amt = float(d.get(f'inst{i}_amount') or 0)
+            base = float(d.get(f'inst{i}_amount') or 0)
             draw = d.get(f'inst{i}_date') or ''
             dparsed = _parse_inst_date(draw)
             # Date-driven status: a scheduled installment whose date has
             # arrived/passed is shown as Received; a future date is still Due.
-            received = bool(amt > 0 and dparsed is not None and dparsed <= _today)
-            # Installment amounts are GST-inclusive (18%); surface the GST
-            # component so the client can see how much GST they've paid.
-            gst = round(amt - amt / 1.18) if amt > 0 else 0
+            received = bool(base > 0 and dparsed is not None and dparsed <= _today)
+            # Installment amounts are entered as the BASE; 18% GST is added on
+            # top, so the client sees Amount + GST = Total.
+            gst = round(base * 0.18)
+            total = round(base + gst)
             insts.append({
-                'n': i, 'amount': amt, 'date': draw, 'date_obj': dparsed,
+                'n': i, 'ordinal': _ORD[i],
+                'amount': base, 'gst': gst, 'total': total,
+                'date': draw, 'date_obj': dparsed,
                 'note': d.get(f'inst{i}_note') or '',
-                'received': received, 'gst': gst,
+                'received': received,
             })
         # Only keep installments that have an amount or date set so we
         # don't render four empty rows for a single-installment plan.
         insts = [it for it in insts if it['amount'] or it['date']]
         d['installments'] = insts
-        d['pay_received_total'] = sum(it['amount'] for it in insts if it['received'])
-        d['pay_due_total']      = sum(it['amount'] for it in insts if not it['received'])
+        d['pay_received_total'] = sum(it['total'] for it in insts if it['received'])
+        d['pay_due_total']      = sum(it['total'] for it in insts if not it['received'])
         d['gst_received_total'] = sum(it['gst'] for it in insts if it['received'])
+        d['gst_total']          = sum(it['gst'] for it in insts)
+        d['grand_total']        = sum(it['total'] for it in insts)
 
         # Item D + F: build the 5-step client-facing onboarding
         # timeline. holidays_set lets the helper project the 30-day
