@@ -3286,7 +3286,7 @@ def dashboard():
         ).fetchone()['cnt']
         my_leave_data = {
             'total_allocation': total_allocation,
-            'available_balance': round(total_allocation - days_taken, 2),
+            'available_balance': round(leave_type_balances(user['id'], fy_year)['total_balance'], 2),
             'days_taken': days_taken,
             'pending_count': my_pending
         }
@@ -4900,7 +4900,7 @@ def hr_dashboard():
         ).fetchone()['cnt']
         mgmt_leave_data = {
             'total_allocation': total_allocation,
-            'available_balance': round(total_allocation - days_taken, 2),
+            'available_balance': round(leave_type_balances(user['id'], fy_year)['total_balance'], 2),
             'days_taken': days_taken,
             'pending_count': my_pending
         }
@@ -5072,13 +5072,11 @@ def admin_employee_detail(emp_id):
     carry_forward = emp_data['carry_forward'] if emp_data else 0
     total_allocation = 25 + carry_forward
 
-    approved_leaves = conn.execute('''
-        SELECT SUM(days) as total_days FROM leave_records
-        WHERE employee_id = ? AND status = 'approved'
-    ''', (emp_id,)).fetchone()
-
-    days_taken = approved_leaves['total_days'] if approved_leaves['total_days'] else 0
-    available = total_allocation - days_taken
+    # FY leave balance = entitlement − PAID leaves taken (consistent with reports)
+    _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
+    _tb = leave_type_balances(emp_id, _fy)
+    days_taken = _tb['total_taken']
+    available = _tb['total_balance']
 
     conn.close()
 
@@ -6104,13 +6102,10 @@ def api_balance():
     carry_forward = emp['carry_forward']
     total_allocation = 25 + carry_forward
 
-    approved_leaves = conn.execute('''
-        SELECT SUM(days) as total_days FROM leave_records
-        WHERE employee_id = ? AND status = 'approved'
-    ''', (emp_id,)).fetchone()
-
-    days_taken = approved_leaves['total_days'] if approved_leaves['total_days'] else 0
-    available = total_allocation - days_taken
+    _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
+    _tb = leave_type_balances(emp_id, _fy)
+    days_taken = _tb['total_taken']
+    available = _tb['total_balance']
 
     conn.close()
 
@@ -6155,14 +6150,13 @@ def api_employee_profile(emp_id):
         if mgr:
             manager_name = mgr['name']
 
-    # Leave summary
-    approved_leaves = conn.execute(
-        "SELECT SUM(days) as total_days FROM leave_records WHERE employee_id = ? AND status = 'approved'",
-        (emp_id,)).fetchone()
-    days_taken = approved_leaves['total_days'] if approved_leaves and approved_leaves['total_days'] else 0
+    # Leave summary — FY balance = entitlement − PAID leaves taken
     carry_forward = emp['carry_forward'] if emp.get('carry_forward') else 0
     total_allocation = 25 + carry_forward
-    available = max(0, total_allocation - days_taken)
+    _fy = datetime.now().year if datetime.now().month >= 4 else datetime.now().year - 1
+    _tb = leave_type_balances(emp_id, _fy)
+    days_taken = _tb['total_taken']
+    available = max(0, _tb['total_balance'])
 
     conn.close()
 
@@ -6630,17 +6624,11 @@ def admin_annual_report():
     for emp in employees:
         carry_forward = emp['carry_forward']
         total_allocation = 25 + carry_forward
-
-        # Get approved leaves for the entire FY (Apr year to Mar year+1)
-        fy_leaves = conn.execute('''
-            SELECT SUM(days) as total_days FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
-                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) <= '03'))
-        ''', (emp['id'], str(year), str(year + 1))).fetchone()
-
-        total_taken = fy_leaves['total_days'] if fy_leaves['total_days'] else 0
-        remaining_balance = total_allocation - total_taken
+        # Shared rule: balance = entitlement − PAID leaves taken (unpaid/LOP
+        # days don't reduce it). Consistent with every other leave report.
+        _tb = leave_type_balances(emp['id'], year)
+        total_taken = _tb['total_taken']
+        remaining_balance = _tb['total_balance']
 
         # Get monthly breakdown
         monthly_breakdown = []
@@ -6661,6 +6649,7 @@ def admin_annual_report():
             'total_allocation': total_allocation,
             'total_taken': total_taken,
             'remaining_balance': remaining_balance,
+            'deduction': _tb['total_deduction'],
             'monthly_breakdown': monthly_breakdown
         })
 
@@ -6703,16 +6692,10 @@ def admin_annual_report_download():
     for emp in employees:
         carry_forward = emp['carry_forward']
         total_allocation = 25 + carry_forward
-
-        fy_leaves = conn.execute('''
-            SELECT SUM(days) as total_days FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND ((strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) >= '04')
-                 OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) <= '03'))
-        ''', (emp['id'], str(year), str(year + 1))).fetchone()
-
-        total_taken = fy_leaves['total_days'] if fy_leaves['total_days'] else 0
-        remaining_balance = total_allocation - total_taken
+        # Shared rule: balance = entitlement − PAID leaves taken.
+        _tb = leave_type_balances(emp['id'], year)
+        total_taken = _tb['total_taken']
+        remaining_balance = _tb['total_balance']
 
         row = [emp['name'], emp['emp_code'], emp['department'], total_allocation, total_taken, remaining_balance]
 
@@ -6931,28 +6914,17 @@ def team_leave_report():
 
     report_data = []
     for emp in direct_reports:
-        carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
-        monthly_allocation = get_monthly_alloc(month)
-
-        # Get leaves for this month
-        month_leaves = conn.execute('''
-            SELECT SUM(days) as total_days FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-        ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
-
-        days_taken = month_leaves['total_days'] if month_leaves['total_days'] else 0
-        balance_start = get_available_balance(emp['id'], year, month)
-        balance_available = balance_start + monthly_allocation
-
+        # Shared accrual+accumulation rule (deficit never carries); same as the
+        # admin monthly salary-deduction report.
+        fig = leave_month_figures(emp['id'], year, month)
         report_data.append({
             'name': emp['name'],
             'emp_code': emp['emp_code'],
-            'allocation': monthly_allocation,
-            'balance_start': round(balance_start, 2),
-            'balance_available': round(balance_available, 2),
-            'days_taken': days_taken
+            'allocation': fig['monthly_alloc'],
+            'balance_start': round(fig['balance_start'], 2),
+            'balance_available': round(fig['balance_available'], 2),
+            'days_taken': round(fig['days_taken'], 2),
+            'deduction': round(fig['deduction'], 2)
         })
 
     conn.close()
@@ -7000,27 +6972,14 @@ def team_leave_report_download():
         cell.alignment = Alignment(horizontal='center', vertical='center')
 
     for emp in direct_reports:
-        carry_forward = emp['carry_forward']
-        total_allocation = 25 + carry_forward
-        monthly_allocation = get_monthly_alloc(month)
-
-        month_leaves = conn.execute('''
-            SELECT SUM(days) as total_days FROM leave_records
-            WHERE employee_id = ? AND status = 'approved'
-            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
-        ''', (emp['id'], str(year), str(month).zfill(2))).fetchone()
-
-        days_taken = month_leaves['total_days'] if month_leaves['total_days'] else 0
-        balance_start = get_available_balance(emp['id'], year, month)
-        balance_available = balance_start + monthly_allocation
-
+        fig = leave_month_figures(emp['id'], year, month)
         ws.append([
             emp['name'],
             emp['emp_code'],
-            monthly_allocation,
-            round(balance_start, 2),
-            round(balance_available, 2),
-            days_taken
+            fig['monthly_alloc'],
+            round(fig['balance_start'], 2),
+            round(fig['balance_available'], 2),
+            round(fig['days_taken'], 2)
         ])
 
     ws.column_dimensions['A'].width = 20
@@ -7077,7 +7036,8 @@ def reports_monthly():
              OR (strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) < '04'))
     ''', (user['id'], str(fy_year), str(fy_year + 1))).fetchone()
     total_taken = fy_leaves['total'] or 0
-    available_balance = round(total_allocation - total_taken, 2)
+    # Shared rule: balance = entitlement − PAID leaves taken (not all taken).
+    available_balance = round(leave_type_balances(user['id'], fy_year)['total_balance'], 2)
 
     # Leaves for this month
     month_leaves_raw = conn.execute('''
