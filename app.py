@@ -3991,7 +3991,7 @@ def _notify_leave_cancellation(conn, leave_owner, records, reason, actor=None):
               <li><strong>Date(s):</strong> {date_range}</li>
               <li><strong>Reason for cancellation:</strong> {reason or '—'}</li>
             </ul>
-            <p style="color:#6b7280;">Cancelled before the leave date; the day(s) have been freed.</p>
+            <p style="color:#6b7280;">The day(s) have been freed and the leave balance updated.</p>
             <p>— GooCampus HR Portal</p></div>"""
         return send_email(recipients, subject, body)
     except Exception as e:
@@ -4030,13 +4030,19 @@ def cancel_leave(leave_id):
             (group_id, owner_id)).fetchall()
     else:
         rows = [leave]
-    # Only cancel days that are still active (pending/approved) and not yet passed.
+    # A manager or admin may also cancel a PAST (date-passed) leave — e.g. a
+    # team member who forgot to cancel a leave they didn't actually take. The
+    # employee themselves can still only cancel upcoming leaves.
+    allow_past = bool(user.get('is_admin') or owner_id != user['id'])
     cancellable = [r for r in rows
-                   if r['status'] in ('pending', 'approved') and str(r['leave_date']) >= today_str]
+                   if r['status'] in ('pending', 'approved')
+                   and (allow_past or str(r['leave_date']) >= today_str)]
     if not cancellable:
-        flash('This leave can no longer be cancelled — it has already been actioned or the date has passed.', 'error')
+        tail = '.' if allow_past else ' or the date has passed.'
+        flash('This leave can no longer be cancelled — it has already been actioned' + tail, 'error')
         conn.close()
         return redirect(request.referrer or url_for('my_leave_applications'))
+    had_past = any(str(r['leave_date']) < today_str for r in cancellable)
 
     now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
     ids = [r['id'] for r in cancellable]
@@ -4051,7 +4057,8 @@ def cancel_leave(leave_id):
 
     n = len(cancellable)
     by_self = (owner_id == user['id'])
-    msg = f'Leave cancelled ({n} day{"s" if n > 1 else ""}).'
+    label = 'Past leave cancelled' if had_past else 'Leave cancelled'
+    msg = f'{label} ({n} day{"s" if n > 1 else ""}).'
     if notified:
         msg += ' The reporting manager and team member have been notified.' if not by_self else ' Your reporting manager has been notified (you are cc’d).'
     flash(msg, 'success')
