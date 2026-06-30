@@ -74,7 +74,7 @@
             <div class="slf-row">
                 <div>
                     <label class="slf-lbl">Plan Type <span style="color:var(--gray-500);font-weight:400;">(based on product)</span></label>
-                    <select name="plan_type" id="planTypeSel" data-current="{{ lead.plan_type if lead else '' }}" class="slf-inp" style="background:white;">
+                    <select name="plan_type" id="planTypeSel" data-current="{{ closure.plan_type if closure and closure.plan_type else (lead.plan_type if lead else '') }}" class="slf-inp" style="background:white;">
                         <option value="">Select a product first</option>
                     </select>
                 </div>
@@ -122,7 +122,7 @@
                     </div>
                     <div>
                         <label class="slf-lbl">Discount Allowed (₹)</label>
-                        <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed" oninput="updateFinal()" value="0" class="slf-inp" />
+                        <input type="number" step="1" min="0" name="discount_allowed" id="discAllowed" oninput="updateFinal()" value="{{ '{:.0f}'.format(closure.discount_allowed|float) if closure and closure.discount_allowed else 0 }}" class="slf-inp" />
                     </div>
                     <div>
                         <label class="slf-lbl">Final Package (₹) <span style="font-weight:400;color:var(--gray-500);">(auto)</span></label>
@@ -132,12 +132,15 @@
 
                 <p style="margin:0.4rem 0 0.5rem;font-size:0.76rem;color:var(--gray-600);font-weight:600;">Installments</p>
                 {% for i in range(1, 5) %}
+                {% set _amt = closure['inst' ~ i ~ '_amount'] if closure else None %}
+                {% set _dt  = closure['inst' ~ i ~ '_date']   if closure else None %}
+                {% set _nt  = closure['inst' ~ i ~ '_note']   if closure else None %}
                 <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:0.7rem;margin-bottom:0.45rem;">
-                    <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Inst {{ i }} amount" value="0"
+                    <input type="number" step="1" min="0" name="inst{{ i }}_amount" placeholder="Inst {{ i }} amount" value="{{ '{:.0f}'.format(_amt|float) if _amt else 0 }}"
                            style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
-                    <input type="date" name="inst{{ i }}_date"
+                    <input type="date" name="inst{{ i }}_date" value="{{ (_dt|string)[:10] if _dt else '' }}"
                            style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
-                    <input type="text" name="inst{{ i }}_note" placeholder="Inst {{ i }} note (optional)"
+                    <input type="text" name="inst{{ i }}_note" placeholder="Inst {{ i }} note (optional)" value="{{ _nt or '' }}"
                            style="padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;" />
                 </div>
                 {% endfor %}
@@ -145,7 +148,7 @@
                 <div style="margin-top:0.7rem;">
                     <label class="slf-lbl">Additional Package Notes</label>
                     <textarea name="additional_package_notes" rows="2" placeholder="Any package-related notes for the client to see..."
-                              style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;"></textarea>
+                              style="width:100%;padding:0.55rem 0.7rem;border:1px solid var(--gray-300);border-radius:0.4rem;font-size:0.85rem;box-sizing:border-box;font-family:inherit;resize:vertical;">{{ closure.additional_package_notes if closure and closure.additional_package_notes else '' }}</textarea>
                 </div>
             </div>
 
