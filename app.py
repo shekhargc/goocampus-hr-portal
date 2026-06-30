@@ -4659,9 +4659,11 @@ def my_leave_report():
     sick_total = sum(m['sick'] for m in monthly_leave_data)
     casual_total = sum(m['casual'] for m in monthly_leave_data)
     total_deduction = sum(m['deduction'] for m in monthly_leave_data)
-    # Available balance = accumulated surplus through the current month (>= 0),
-    # not annual entitlement − taken (which over-states it and can go negative).
-    available_balance = current_available
+    # Leave balance = annual entitlement − PAID leaves taken. Unpaid (deducted)
+    # days were charged to salary, so they do NOT reduce the paid-leave balance.
+    paid_taken = total_taken - total_deduction
+    available_balance = total_allocation - paid_taken
+    current_carry = round(current_available, 2)  # surplus carried into next month
 
     conn.close()
 
@@ -4677,6 +4679,7 @@ def my_leave_report():
                          casual_total=casual_total,
                          total_deduction=round(total_deduction, 2),
                          available_balance=round(available_balance, 2),
+                         current_carry=current_carry,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
                          monthly_alloc='Apr=3, Others=2',
@@ -6683,6 +6686,7 @@ def admin_employee_leave_report():
     casual_total = 0
     total_deduction = 0
     available_balance = 0
+    current_carry = 0
     pending_count = 0
     carry_forward = 0
     monthly_alloc = 'Apr=3, Others=2'
@@ -6783,7 +6787,10 @@ def admin_employee_leave_report():
             sick_total = sum(m['sick'] for m in monthly_leave_data)
             casual_total = sum(m['casual'] for m in monthly_leave_data)
             total_deduction = round(sum(m['deduction'] for m in monthly_leave_data), 2)
-            available_balance = round(current_available, 2)
+            # Leave balance = entitlement − PAID leaves taken (deducted days were
+            # charged to salary and don't reduce the paid-leave balance).
+            available_balance = round(total_allocation - (total_taken - total_deduction), 2)
+            current_carry = round(current_available, 2)
 
     conn.close()
 
@@ -6802,6 +6809,7 @@ def admin_employee_leave_report():
                          casual_total=casual_total,
                          total_deduction=total_deduction,
                          available_balance=available_balance,
+                         current_carry=current_carry,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
                          monthly_alloc=monthly_alloc,
@@ -7169,7 +7177,8 @@ def reports_quarterly():
 
     total_taken = annual_total + sick_total + casual_total
     total_deduction = round(total_deduction, 2)
-    available_balance = round(current_available, 2)
+    # Leave balance = entitlement − PAID leaves taken (deducted days don't reduce it).
+    available_balance = round(total_allocation - (total_taken - total_deduction), 2)
     conn.close()
 
     return render_template('report_quarterly.html',
@@ -7260,7 +7269,8 @@ def reports_annual():
     sick_total = sum(m['sick'] for m in monthly_leave_data)
     casual_total = sum(m['casual'] for m in monthly_leave_data)
     total_deduction = round(sum(m['deduction'] for m in monthly_leave_data), 2)
-    available_balance = round(current_available, 2)
+    # Leave balance = entitlement − PAID leaves taken (deducted days don't reduce it).
+    available_balance = round(total_allocation - (total_taken - total_deduction), 2)
 
     conn.close()
 
