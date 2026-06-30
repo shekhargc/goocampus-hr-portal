@@ -53,12 +53,6 @@
         </div>
         <div><div class="s-card-val" style="color: var(--success);">{{ available_balance }}</div><div class="s-card-lbl">Leave Balance (paid)</div></div>
     </div>
-    <div class="s-card" style="border-left-color: var(--orange);">
-        <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
-            <svg width="20" height="20" fill="none" stroke="var(--orange)" stroke-width="2"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3"/></svg>
-        </div>
-        <div><div class="s-card-val" style="color: var(--orange);">{{ total_taken }}</div><div class="s-card-lbl">Days Taken (FY)</div></div>
-    </div>
     <div class="s-card" style="border-left-color: var(--success);">
         <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
             <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
@@ -79,25 +73,25 @@
     </div>
 </div>
 
-<!-- Row 2: Leave Type Breakdown -->
+<!-- Row 2: Leave Balance by Type (each = allocation − paid taken; the three sum to Leave Balance) -->
 <div class="stats-grid" style="grid-template-columns: repeat(3, 1fr);">
     <div class="s-card" style="border-left-color: var(--blue);">
         <div class="s-card-icon" style="background: rgba(74,122,181,0.08);">
             <svg width="20" height="20" fill="none" stroke="var(--blue)" stroke-width="2"><rect x="3" y="4" width="14" height="14" rx="2"/><path d="M16 2v4M4 2v4M2 8h16"/></svg>
         </div>
-        <div><div class="s-card-val" style="color: var(--blue);">{{ annual_total }}</div><div class="s-card-lbl">Annual Leave</div></div>
+        <div><div class="s-card-val" style="color: var(--blue);">{{ type_balances.annual }} <span style="font-size:0.62rem;color:var(--gray-400);font-weight:500;">/ {{ type_alloc.annual }}</span></div><div class="s-card-lbl">Annual Leave Balance</div></div>
     </div>
     <div class="s-card" style="border-left-color: var(--success);">
         <div class="s-card-icon" style="background: rgba(16,185,129,0.08);">
             <svg width="20" height="20" fill="none" stroke="var(--success)" stroke-width="2"><path d="M12 2a8 8 0 00-8 8c0 5.3 8 12 8 12s8-6.7 8-12a8 8 0 00-8-8z"/><circle cx="12" cy="10" r="3"/></svg>
         </div>
-        <div><div class="s-card-val" style="color: var(--success);">{{ sick_total }}</div><div class="s-card-lbl">Sick Leave</div></div>
+        <div><div class="s-card-val" style="color: var(--success);">{{ type_balances.sick }} <span style="font-size:0.62rem;color:var(--gray-400);font-weight:500;">/ {{ type_alloc.sick }}</span></div><div class="s-card-lbl">Sick Leave Balance</div></div>
     </div>
     <div class="s-card" style="border-left-color: var(--orange);">
         <div class="s-card-icon" style="background: rgba(245,130,32,0.08);">
             <svg width="20" height="20" fill="none" stroke="var(--orange)" stroke-width="2"><path d="M17 3a2.85 2.85 0 114 4L7.5 20.5 2 22l1.5-5.5z"/></svg>
         </div>
-        <div><div class="s-card-val" style="color: var(--orange);">{{ casual_total }}</div><div class="s-card-lbl">Casual Leave</div></div>
+        <div><div class="s-card-val" style="color: var(--orange);">{{ type_balances.casual }} <span style="font-size:0.62rem;color:var(--gray-400);font-weight:500;">/ {{ type_alloc.casual }}</span></div><div class="s-card-lbl">Casual Leave Balance</div></div>
     </div>
 </div>
 

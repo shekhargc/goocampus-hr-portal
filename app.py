@@ -150,6 +150,87 @@ def get_monthly_alloc(month_num):
     April (month 4) gets 3 days, all other months get 2 days. Base total = 25/year."""
     return 3 if month_num == 4 else 2
 
+
+# Per-type annual leave allocation (days/year). Sums to the 25/year pool;
+# carry_forward is added to the Annual bucket. Edit here to change the split.
+LEAVE_TYPE_ALLOC = {'annual': 13, 'sick': 6, 'casual': 6}
+
+
+def leave_type_balances(employee_id, year):
+    """Per-type leave balances for the FY starting April `year`.
+
+    Each type's balance = its yearly allocation − PAID leaves taken of that
+    type. Whether a day is paid is decided by the monthly accrual (3 in April,
+    2 otherwise, plus carry_forward), consumed chronologically within each
+    month; days taken beyond the available balance are unpaid (LOP) and do NOT
+    reduce the type balance. Carry_forward adds to both the available pool and
+    the Annual allocation. The three type balances sum to the total leave
+    balance (entitlement − total paid taken), and total_deduction here matches
+    the salary-deduction report.
+
+    Returns a dict with per-type alloc/taken/paid/balance plus totals.
+    """
+    conn = get_db()
+    emp = conn.execute('SELECT carry_forward FROM employees WHERE id = ?', (employee_id,)).fetchone()
+    cf = float(emp['carry_forward'] or 0) if emp else 0.0
+    paid = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
+    taken = {'annual': 0.0, 'sick': 0.0, 'casual': 0.0}
+    total_deduction = 0.0
+    carried = cf
+    for offset in range(12):
+        rm = ((offset + 3) % 12) + 1
+        ry = year if rm >= 4 else year + 1
+        available = carried + get_monthly_alloc(rm)
+        rows = conn.execute('''
+            SELECT leave_type, days FROM leave_records
+            WHERE employee_id = ? AND status = 'approved'
+            AND strftime('%Y', leave_date) = ? AND strftime('%m', leave_date) = ?
+            ORDER BY leave_date, id
+        ''', (employee_id, str(ry), str(rm).zfill(2))).fetchall()
+        for r in rows:
+            lt = (r['leave_type'] or '').lower()
+            if lt not in taken:
+                lt = 'casual'  # fallback bucket for any stray type
+            d = float(r['days'] or 0)
+            taken[lt] += d
+            paid_portion = min(d, available) if available > 0 else 0.0
+            paid[lt] += paid_portion
+            available -= paid_portion
+            total_deduction += (d - paid_portion)
+        carried = available  # always >= 0
+    conn.close()
+    alloc = {'annual': LEAVE_TYPE_ALLOC['annual'] + cf,
+             'sick': LEAVE_TYPE_ALLOC['sick'],
+             'casual': LEAVE_TYPE_ALLOC['casual']}
+    bal = {k: alloc[k] - paid[k] for k in alloc}
+    # A type can read negative if its PAID usage exceeded its own share while
+    # the overall monthly pool still had capacity. Borrow the overdraft from a
+    # surplus type (Annual first) so every card shows >= 0 and the three still
+    # sum to the total leave balance.
+    for k in ('casual', 'sick', 'annual'):
+        if bal[k] < -1e-9:
+            deficit = -bal[k]
+            bal[k] = 0.0
+            for src in ('annual', 'sick', 'casual'):
+                if src == k or deficit <= 1e-9:
+                    continue
+                take = min(deficit, max(0.0, bal[src]))
+                bal[src] -= take
+                deficit -= take
+    bal = {k: round(v, 2) for k, v in bal.items()}
+    return {
+        'alloc': {k: round(v, 2) for k, v in alloc.items()},
+        'taken': {k: round(v, 2) for k, v in taken.items()},
+        'paid': {k: round(v, 2) for k, v in paid.items()},
+        'balance': bal,
+        'total_alloc': round(sum(alloc.values()), 2),
+        'total_taken': round(sum(taken.values()), 2),
+        'total_paid': round(sum(paid.values()), 2),
+        'total_deduction': round(total_deduction, 2),
+        'total_balance': round(sum(bal.values()), 2),
+        'carried': round(carried, 2),
+    }
+
 @app.context_processor
 def inject_manager_status():
     """Make is_manager, pending_team_count, has_sales_access, and
@@ -4667,6 +4748,10 @@ def my_leave_report():
 
     conn.close()
 
+    # Per-type leave balances (Annual/Sick/Casual) — each = its allocation
+    # minus paid leaves taken of that type; the three sum to available_balance.
+    tb = leave_type_balances(user['id'], fy_year)
+
     return render_template('employee_leave_report.html',
                          user=user,
                          monthly_leave_data=monthly_leave_data,
@@ -4680,6 +4765,7 @@ def my_leave_report():
                          total_deduction=round(total_deduction, 2),
                          available_balance=round(available_balance, 2),
                          current_carry=current_carry,
+                         type_balances=tb['balance'], type_alloc=tb['alloc'],
                          pending_count=pending_count,
                          carry_forward=carry_forward,
                          monthly_alloc='Apr=3, Others=2',
@@ -6687,6 +6773,8 @@ def admin_employee_leave_report():
     total_deduction = 0
     available_balance = 0
     current_carry = 0
+    type_balances = {'annual': 0, 'sick': 0, 'casual': 0}
+    type_alloc = {'annual': 0, 'sick': 0, 'casual': 0}
     pending_count = 0
     carry_forward = 0
     monthly_alloc = 'Apr=3, Others=2'
@@ -6791,6 +6879,10 @@ def admin_employee_leave_report():
             # charged to salary and don't reduce the paid-leave balance).
             available_balance = round(total_allocation - (total_taken - total_deduction), 2)
             current_carry = round(current_available, 2)
+            # Per-type balances (Annual/Sick/Casual) summing to available_balance.
+            _tb = leave_type_balances(selected_emp_id, fy_year)
+            type_balances = _tb['balance']
+            type_alloc = _tb['alloc']
 
     conn.close()
 
@@ -6810,6 +6902,7 @@ def admin_employee_leave_report():
                          total_deduction=total_deduction,
                          available_balance=available_balance,
                          current_carry=current_carry,
+                         type_balances=type_balances, type_alloc=type_alloc,
                          pending_count=pending_count,
                          carry_forward=carry_forward,
                          monthly_alloc=monthly_alloc,
