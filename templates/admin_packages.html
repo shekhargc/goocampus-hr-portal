@@ -1,0 +1,125 @@
+{% extends "company_sidebar_base.html" %}
+
+{% block title %}Packages &amp; Services{% endblock %}
+
+{% block section_content %}
+<div style="padding:24px;max-width:1040px;margin:0 auto;">
+
+  <h1 style="font-size:1.4rem;font-weight:700;color:#1e3a5f;margin:0 0 0.3rem;">Packages &amp; Services</h1>
+  <p style="color:#64748b;font-size:0.88rem;margin:0 0 1.2rem;">
+    Define, for each Product &amp; Plan Type, the package amount and the services included — what the client is promised and what Operations delivers. One definition here feeds Sales, the client portal, and Ops.
+  </p>
+
+  {% with messages = get_flashed_messages(with_categories=true) %}
+    {% if messages %}{% for category, message in messages %}
+      <div style="padding:10px 14px;border-radius:8px;margin-bottom:12px;background:{{ '#FEE2E2' if category=='error' else '#D1FAE5' }};color:{{ '#991B1B' if category=='error' else '#065F46' }};font-size:0.88rem;">{{ message }}</div>
+    {% endfor %}{% endif %}
+  {% endwith %}
+
+  <form method="GET" action="/admin/packages" style="margin-bottom:1.4rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap;">
+    <label style="font-weight:600;font-size:0.88rem;color:#1e3a5f;">Product / Service</label>
+    <select name="product_id" onchange="this.form.submit()"
+            style="padding:9px 12px;border:1px solid #d1d5db;border-radius:7px;font-size:0.9rem;min-width:260px;background:#fff;">
+      <option value="">— Select a product —</option>
+      {% for p in products %}
+      <option value="{{ p.id }}" {% if selected and selected.id == p.id %}selected{% endif %}>{{ p.name }}{% if p.pathway %} ({{ p.pathway }}){% endif %}</option>
+      {% endfor %}
+    </select>
+  </form>
+
+  {% if not selected %}
+    <div style="background:#fff;border:1px dashed #d1d5db;border-radius:10px;padding:30px;text-align:center;color:#94a3b8;">
+      Pick a product above to define its plan packages and services.
+    </div>
+  {% elif not plans %}
+    <div style="background:#FFF7ED;border:1px solid #FED7AA;border-radius:10px;padding:20px;color:#9A3412;font-size:0.9rem;">
+      <strong>{{ selected.name }}</strong> has no plan types yet. Add plan types first (Sales lookups / plan_type), then they'll appear here to define packages.
+    </div>
+  {% else %}
+    <h2 style="font-size:1.05rem;font-weight:700;color:#1e3a5f;margin:0 0 0.8rem;">{{ selected.name }}{% if selected.pathway %} <span style="font-weight:500;color:#94a3b8;font-size:0.85rem;">· {{ selected.pathway }}</span>{% endif %}</h2>
+
+    {% for plan in plans %}
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;margin-bottom:16px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:12px;">
+        <div style="font-size:1rem;font-weight:700;color:#0F172A;"><i class="bi bi-box-seam" aria-hidden="true"></i> {{ plan.plan_type }}</div>
+        {% if plan.pkg %}<span style="font-size:0.78rem;color:#065F46;background:#D1FAE5;padding:3px 10px;border-radius:999px;">Package ₹{{ '{:,.0f}'.format(plan.pkg.package_amount|float) }}</span>{% else %}<span style="font-size:0.78rem;color:#92400E;background:#FEF3C7;padding:3px 10px;border-radius:999px;">No package defined yet</span>{% endif %}
+      </div>
+
+      <form method="POST" action="/admin/packages/plan/save" style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:14px;background:#F8FAFC;border:1px solid #EEF2F6;border-radius:8px;padding:12px;">
+        <input type="hidden" name="product_id" value="{{ selected.id }}">
+        <input type="hidden" name="plan_type" value="{{ plan.plan_type }}">
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Package amount (₹)</label>
+          <input type="number" step="1" min="0" name="package_amount" value="{{ '{:.0f}'.format(plan.pkg.package_amount|float) if plan.pkg else 0 }}"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:160px;">
+        </div>
+        <div style="flex:1;min-width:220px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Summary (shown to client, optional)</label>
+          <input type="text" name="summary" value="{{ plan.pkg.summary if plan.pkg else '' }}" placeholder="e.g. End-to-end AMC consulting support"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
+        </div>
+        <button type="submit" style="background:#1e3a5f;color:#fff;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:0.85rem;cursor:pointer;">Save</button>
+      </form>
+
+      {% if plan.services %}
+      <table style="width:100%;border-collapse:collapse;font-size:0.85rem;margin-bottom:10px;">
+        <thead><tr style="background:#F8FAFC;">
+          <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Service</th>
+          <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Qty</th>
+          <th style="text-align:left;padding:7px 10px;color:#475569;font-size:0.72rem;text-transform:uppercase;border-bottom:1px solid #e5e7eb;">Delivery stage</th>
+          <th style="border-bottom:1px solid #e5e7eb;"></th>
+        </tr></thead>
+        <tbody>
+          {% for sv in plan.services %}
+          <tr>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#0F172A;font-weight:600;">{{ sv.service_name }}{% if sv.description %}<div style="font-weight:400;color:#94a3b8;font-size:0.78rem;">{{ sv.description }}</div>{% endif %}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.quantity or '—' }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;color:#475569;">{{ sv.delivery_stage or '—' }}</td>
+            <td style="padding:7px 10px;border-bottom:1px solid #f1f5f9;text-align:right;">
+              <form method="POST" action="/admin/packages/service/delete/{{ sv.id }}" onsubmit="return confirm('Remove this service?');" style="display:inline;">
+                <input type="hidden" name="product_id" value="{{ selected.id }}">
+                <button type="submit" style="background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;border-radius:5px;padding:4px 9px;font-size:0.76rem;cursor:pointer;">Remove</button>
+              </form>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <p style="color:#94a3b8;font-size:0.84rem;margin:0 0 10px;">No services added yet.</p>
+      {% endif %}
+
+      <form method="POST" action="/admin/packages/service/add" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;border-top:1px dashed #e5e7eb;padding-top:12px;">
+        <input type="hidden" name="product_id" value="{{ selected.id }}">
+        <input type="hidden" name="plan_type" value="{{ plan.plan_type }}">
+        <div style="flex:1;min-width:200px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Service</label>
+          <input type="text" name="service_name" list="svc-catalogue" required placeholder="e.g. Mock interview"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Qty</label>
+          <input type="text" name="quantity" placeholder="3 / Unlimited"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:110px;">
+        </div>
+        <div>
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Delivery stage</label>
+          <input type="text" name="delivery_stage" placeholder="Month 1 / Before exam"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:160px;">
+        </div>
+        <div style="flex:1;min-width:160px;">
+          <label style="display:block;font-size:0.74rem;color:#64748b;font-weight:600;margin-bottom:3px;">Note (optional)</label>
+          <input type="text" name="description" placeholder="Short detail"
+                 style="padding:8px 10px;border:1px solid #d1d5db;border-radius:6px;font-size:0.88rem;width:100%;box-sizing:border-box;">
+        </div>
+        <button type="submit" style="background:#F58220;color:#fff;border:none;padding:9px 16px;border-radius:7px;font-weight:600;font-size:0.85rem;cursor:pointer;">+ Add service</button>
+      </form>
+    </div>
+    {% endfor %}
+
+    <datalist id="svc-catalogue">
+      {% for cs in catalogue %}<option value="{{ cs.name }}">{% endfor %}
+    </datalist>
+  {% endif %}
+</div>
+{% endblock %}
