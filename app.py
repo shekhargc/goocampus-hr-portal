@@ -918,6 +918,132 @@ def client_logout():
     return redirect(url_for('client_login_page'))
 
 
+# ── Refund Policy: editable policy doc + client digital agreement ──
+
+_DEFAULT_REFUND_POLICY_HTML = '''<p>Cancellations will be considered only if the request is made immediately after enrolment. However, the cancellation request may not be entertained if the services have already been initiated or scheduled on your behalf.</p>
+<p>GOOCAMPUS EDU SOLUTIONS PRIVATE LIMITED does not accept cancellation requests once a service or programme has commenced. However, a refund/adjustment may be made if you establish that the service delivered was not as committed.</p>
+<p>In case of any concern regarding the services delivered, please report the same to our Customer Service team. The request will be entertained once our team has reviewed and verified the matter at their end.</p>
+<p>Any such concern should be reported within 15 days of the service being rendered. If you feel the service received is not as described or as per your expectations, you must bring it to the notice of our customer service within 15 days. The Customer Service team, after looking into your complaint, will take an appropriate decision.</p>
+<p>In case of any refund approved by GOOCAMPUS EDU SOLUTIONS PRIVATE LIMITED, it will take 3&ndash;5 days for the refund to be processed to you.</p>'''
+
+
+def _get_refund_policy(conn):
+    """Load the editable refund-policy document; seed a default on first use."""
+    row = conn.execute("SELECT * FROM policy_documents WHERE doc_key = 'refund_policy'").fetchone()
+    if not row:
+        try:
+            conn.execute(
+                "INSERT INTO policy_documents (doc_key, title, body_html, version) "
+                "VALUES ('refund_policy', ?, ?, 1)",
+                ('Refund Policy', _DEFAULT_REFUND_POLICY_HTML))
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+        row = conn.execute("SELECT * FROM policy_documents WHERE doc_key = 'refund_policy'").fetchone()
+    return row
+
+
+@app.route('/client/refund-policy', methods=['GET'])
+@client_required
+def client_refund_policy():
+    acct_id = session.get('user_id')
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    policy = _get_refund_policy(conn)
+    agreement = conn.execute(
+        "SELECT * FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
+        "ORDER BY id DESC LIMIT 1", (acct_id,)).fetchone()
+    conn.close()
+    return render_template('client_refund_policy.html',
+                           account=account, policy=policy, agreement=agreement)
+
+
+@app.route('/client/refund-policy/agree', methods=['POST'])
+@client_required
+def client_refund_policy_agree():
+    acct_id = session.get('user_id')
+    agreed_name = (request.form.get('agreed_name') or '').strip()
+    if not request.form.get('agree') or not agreed_name:
+        flash('Please tick the agreement box and type your full name to sign.', 'error')
+        return redirect(url_for('client_refund_policy'))
+    conn = get_db()
+    account = conn.execute("SELECT * FROM client_accounts WHERE id = ?", (acct_id,)).fetchone()
+    policy = _get_refund_policy(conn)
+    pver = policy['version'] if policy else 1
+    existing = conn.execute(
+        "SELECT id FROM client_agreements WHERE account_id = ? AND agreement_type = 'refund_policy' "
+        "AND policy_version = ?", (acct_id, pver)).fetchone()
+    if existing:
+        conn.close()
+        flash('You have already agreed to this Refund Policy.', 'info')
+        return redirect(url_for('client_refund_policy'))
+    ip = (request.headers.get('X-Forwarded-For', '') or request.remote_addr or '').split(',')[0].strip()
+    conn.execute(
+        "INSERT INTO client_agreements (account_id, agreement_type, policy_version, agreed_name, ip_address) "
+        "VALUES (?, 'refund_policy', ?, ?, ?)", (acct_id, pver, agreed_name, ip))
+    conn.commit()
+    # Email a copy of the agreed policy for the client's records.
+    try:
+        if account and account['email']:
+            from email_utils import send_email
+            from datetime import datetime as _dt
+            stamp = _dt.now().strftime('%d %b %Y, %H:%M')
+            html = ('<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;">'
+                    '<div style="background:#1e3a5f;padding:18px 28px;color:#fff;">'
+                    '<h2 style="margin:0;font-size:18px;">Refund Policy &mdash; Agreement Confirmation</h2></div>'
+                    '<div style="padding:22px 28px;color:#333;line-height:1.6;">'
+                    '<p>Dear ' + agreed_name + ',</p>'
+                    '<p>This confirms that you have read and agreed to the GooCampus Refund Policy on '
+                    '<strong>' + stamp + '</strong>. A copy of the policy is included below for your records.</p>'
+                    '<hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0;">'
+                    + (policy['body_html'] or '') +
+                    '<hr style="border:none;border-top:1px solid #e5e7eb;margin:18px 0;">'
+                    '<p style="font-size:12px;color:#888;">Digitally agreed by ' + agreed_name +
+                    ' on ' + stamp + ' (account #' + str(acct_id) + ').</p>'
+                    '</div></div>')
+            send_email([account['email']], 'Your GooCampus Refund Policy Agreement', html)
+    except Exception as e:
+        logging.error(f"refund policy agree email: {e}")
+    conn.close()
+    flash('Thank you — your agreement to the Refund Policy has been recorded and a copy emailed to you.', 'success')
+    return redirect(url_for('client_refund_policy'))
+
+
+@app.route('/admin/policies/refund', methods=['GET'])
+@login_required
+def admin_refund_policy_edit():
+    conn = get_db()
+    policy = _get_refund_policy(conn)
+    signed = conn.execute(
+        "SELECT ca.*, acc.first_name, acc.last_name, acc.email FROM client_agreements ca "
+        "LEFT JOIN client_accounts acc ON acc.id = ca.account_id "
+        "WHERE ca.agreement_type = 'refund_policy' ORDER BY ca.agreed_at DESC LIMIT 200").fetchall()
+    conn.close()
+    return render_template('admin_refund_policy.html', policy=policy, signed=signed,
+                           active_section='clients')
+
+
+@app.route('/admin/policies/refund/save', methods=['POST'])
+@login_required
+def admin_refund_policy_save():
+    title = (request.form.get('title') or 'Refund Policy').strip()
+    body = request.form.get('body_html') or ''
+    bump = request.form.get('bump_version')
+    conn = get_db()
+    cur = _get_refund_policy(conn)
+    # Bumping the version re-requires every client to re-agree (use when the
+    # policy materially changes); otherwise edits keep the same version.
+    new_ver = (cur['version'] or 1) + 1 if bump else (cur['version'] or 1)
+    conn.execute("UPDATE policy_documents SET title = ?, body_html = ?, version = ?, "
+                 "updated_at = CURRENT_TIMESTAMP WHERE doc_key = 'refund_policy'",
+                 (title, body, new_ver))
+    conn.commit()
+    conn.close()
+    flash('Refund Policy saved.' + (' Version bumped — clients will be asked to re-agree.' if bump else ''), 'success')
+    return redirect(url_for('admin_refund_policy_edit'))
+
+
 @app.route('/client/dashboard')
 @client_required
 def client_dashboard():
@@ -2554,16 +2680,43 @@ def _notify_onboarding_confirmed(reg_id):
             return
         client_name = f"{reg['prefix'] or ''} {reg['first_name'] or ''} {reg['last_name'] or ''}".strip()
 
-        # 1. Welcome email to client
+        # 1. Welcome email to client — render the editable 'welcome_email'
+        # template (admin can edit it at /admin/email-templates/welcome_email)
+        # with the client's details substituted. Falls back to a built-in body
+        # if the template is missing or disabled.
         if reg['email']:
             from email_utils import send_email
-            client_subject = f"Welcome to GooCampus — {reg['product_name'] or 'Your Program'}!"
-            client_body = f"""<h2>Welcome to GooCampus, {client_name}!</h2>
-            <p>Your onboarding for <strong>{reg['product_name'] or 'your program'}</strong> has been confirmed.</p>
-            <p><strong>Registration #:</strong> {reg['registration_number']}</p>
-            <p>You can log in to your client portal anytime to track your progress, upload documents, and stay updated.</p>
-            <p><a href="https://goocampus.org/client/login">Log in to your portal</a></p>
-            <p>Thank you for choosing GooCampus!</p>"""
+            # Resolve the client's actual counsellor name for {{counsellor_name}}.
+            counsellor_nm = reg['counsellor_name'] or ''
+            if not counsellor_nm and reg['counsellor_id']:
+                _cr = conn.execute("SELECT name FROM employees WHERE id = ?", (reg['counsellor_id'],)).fetchone()
+                counsellor_nm = (_cr['name'] if _cr else '') or ''
+            tpl = conn.execute("SELECT * FROM email_templates WHERE template_key = 'welcome_email'").fetchone()
+            tpl_enabled = bool(tpl and (tpl['enabled'] if 'enabled' in tpl.keys() and tpl['enabled'] is not None else 1))
+            if tpl and tpl_enabled:
+                subs = {
+                    '{{client_name}}': client_name,
+                    '{{counsellor_name}}': counsellor_nm or 'your counsellor',
+                    '{{product_name}}': reg['product_name'] or 'your programme',
+                    '{{registration_number}}': reg['registration_number'] or '',
+                    '{{plan_type}}': reg['plan_type'] or '',
+                    '{{registration_date}}': (reg['created_at'].strftime('%d %b %Y') if hasattr(reg['created_at'], 'strftime') else str(reg['created_at'] or '')[:10]),
+                    '{{portal_login_link}}': 'https://goocampus.org/client/login',
+                    '{{refund_policy_link}}': 'https://goocampus.org/client/refund-policy',
+                }
+                client_subject = tpl['subject'] or 'Welcome to GooCampus'
+                client_body = tpl['body_html'] or ''
+                for _k, _v in subs.items():
+                    client_subject = client_subject.replace(_k, str(_v))
+                    client_body = client_body.replace(_k, str(_v))
+            else:
+                client_subject = f"Welcome to GooCampus — {reg['product_name'] or 'Your Program'}!"
+                client_body = f"""<h2>Welcome to GooCampus, {client_name}!</h2>
+                <p>Your onboarding for <strong>{reg['product_name'] or 'your program'}</strong> has been confirmed.</p>
+                <p><strong>Registration #:</strong> {reg['registration_number']}</p>
+                <p>You can log in to your client portal anytime to track your progress, upload documents, and stay updated.</p>
+                <p><a href="https://goocampus.org/client/login">Log in to your portal</a></p>
+                <p>Thank you for choosing GooCampus!</p>"""
             send_email([reg['email']], client_subject, client_body)
 
         # 2. Welcome WhatsApp to client
@@ -14551,6 +14704,31 @@ def ensure_ops_tables():
             updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )''')
         conn.execute("CREATE INDEX IF NOT EXISTS idx_view_prefs_sec ON view_preferences(section_key, employee_id)")
+
+        # ── Editable policy documents (refund policy etc.), shown in the
+        #    client portal and emailed on agreement. ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS policy_documents (
+            id SERIAL PRIMARY KEY,
+            doc_key TEXT UNIQUE NOT NULL,
+            title TEXT,
+            body_html TEXT,
+            version INTEGER DEFAULT 1,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        # ── Client agreements: a digital "I agree / sign" record against a
+        #    policy version, with who/when/IP for an audit trail. ──
+        conn.execute('''CREATE TABLE IF NOT EXISTS client_agreements (
+            id SERIAL PRIMARY KEY,
+            account_id INTEGER,
+            registration_id INTEGER,
+            agreement_type TEXT NOT NULL,
+            policy_version INTEGER,
+            agreed_name TEXT,
+            agreed_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            ip_address TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )''')
+        conn.execute("CREATE INDEX IF NOT EXISTS idx_client_agreements ON client_agreements(account_id, agreement_type)")
 
         # ── Refunds (for clients backed out / "Dropped and Refunded") ──
         conn.execute('''CREATE TABLE IF NOT EXISTS refunds (
@@ -32151,27 +32329,31 @@ EMAIL_TEMPLATE_STAGES = [
         'key': 'welcome_email',
         'label': 'Welcome Email',
         'stage': 'welcome_email',
-        'subject': 'Welcome to GooCampus - {{client_name}}!',
+        'subject': 'Welcome to GooCampus {{product_name}}',
         'recipients_client': 1,
         'recipients_counsellor': 0,
         'recipients_ops': 0,
         'recipients_parents': 0,
         'enabled': 1,
-        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;background:#fff;">
-  <div style="background:#1e3a5f;padding:24px 32px;text-align:center;">
-    <h1 style="color:#fff;margin:0;font-size:22px;">Welcome to GooCampus</h1>
+        'body_html': '''<div style="font-family:Arial,sans-serif;max-width:620px;margin:0 auto;background:#fff;">
+  <div style="background:#1e3a5f;padding:22px 32px;text-align:center;">
+    <h1 style="color:#fff;margin:0;font-size:22px;">GooCampus Edu Solutions</h1>
   </div>
-  <div style="padding:28px 32px;color:#333;line-height:1.7;">
-    <p>Dear <strong>{{client_name}}</strong>,</p>
-    <p>Welcome to the GooCampus family. We're delighted to have you with us.</p>
-    <p>Your registration details:</p>
-    <table style="width:100%;border-collapse:collapse;margin:16px 0;">
-      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;width:40%;border:1px solid #e5e7eb;">Registration Number</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_number}}</td></tr>
-      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Plan Type</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{plan_type}}</td></tr>
-      <tr><td style="padding:8px 12px;background:#f8fafc;font-weight:600;border:1px solid #e5e7eb;">Registration Date</td><td style="padding:8px 12px;border:1px solid #e5e7eb;">{{registration_date}}</td></tr>
+  <div style="padding:28px 32px;color:#333;line-height:1.7;font-size:15px;">
+    <p>Hello <strong>{{client_name}}</strong>,</p>
+    <p>We&rsquo;d like to officially welcome you to <strong>{{product_name}}</strong>, and assure you that our team will help you every step of the way. <strong>{{counsellor_name}}</strong> will be your designated counsellor and you can get all your queries clarified by them at any point in time.</p>
+    <p>The operations team, headed by <strong>Vipin Vijaraghavan</strong>, our Operations Manager, will reach out to you and assist you with all operational processes, including scheduling classes, webinars, tests etc.</p>
+    <p>Our operations team will be your first point of contact for any issues you may have &mdash; they will be giving you an introductory call within 24 hours from the time of registration. They will also be collecting some documents from you including your current address, copy of passport, copy of your academic certificates, work experience etc. This is done to help our operations team manage your applications &amp; registrations smoothly.</p>
+    <p>For any payment related issues, please interact only with our finance team; their contact number is mentioned below.</p>
+    <p>If you have any queries, please don&rsquo;t hesitate to reach out to us at the numbers mentioned below:</p>
+    <table style="border-collapse:collapse;margin:12px 0;font-size:14px;">
+      <tr><td style="padding:4px 14px 4px 0;color:#475569;">Jeswin Shaju (Counsellor-in-Charge)</td><td style="padding:4px 0;font-weight:600;">+91 63631 42837</td></tr>
+      <tr><td style="padding:4px 14px 4px 0;color:#475569;">Vipin (Operations Manager)</td><td style="padding:4px 0;font-weight:600;">+91 95389 44468</td></tr>
+      <tr><td style="padding:4px 14px 4px 0;color:#475569;">Finance</td><td style="padding:4px 0;font-weight:600;">+91 96119 96500</td></tr>
     </table>
-    <p>Your counsellor will be in touch shortly to schedule your welcome call.</p>
-    <p style="margin-top:24px;">Warm regards,<br><strong>GooCampus Operations Team</strong></p>
+    <p style="margin:18px 0;"><a href="{{portal_login_link}}" style="background:#F58220;color:#fff;padding:11px 26px;text-decoration:none;border-radius:6px;font-weight:bold;display:inline-block;">Log in to your portal</a></p>
+    <p style="font-size:14px;">To check out our refund policy, click <a href="{{refund_policy_link}}" style="color:#F58220;font-weight:600;">Refund Policy</a>.</p>
+    <p style="margin-top:24px;">Thanks and Regards,<br><strong>Team GooCampus</strong><br>GooCampus Edu Solutions Pvt Ltd<br>Bangalore</p>
   </div>
 </div>''',
     },
