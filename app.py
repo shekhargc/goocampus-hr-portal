@@ -25527,6 +25527,65 @@ def sales_leads_edit(lead_id):
                     )
                     flash('Closure auto-recorded from won lead', 'success')
         # -------------------------------------------------------------------
+        # Persist edited Service/Package + installment details back to the
+        # client invitation (closure_metadata) and the client_registration (if
+        # the client already registered), so editing a closed lead actually
+        # updates what the client sees. Only UPDATEs existing rows — never
+        # creates an invitation here.
+        try:
+            import json as _json
+            def _ef(n, d=''):
+                v = request.form.get(n)
+                return v.strip() if isinstance(v, str) else (v if v is not None else d)
+            def _en(n):
+                try: return float(request.form.get(n) or 0)
+                except (TypeError, ValueError): return 0
+            edited = {
+                'plan_type':                _ef('plan_type'),
+                'package_amount':           _en('package_amount'),
+                'discount_allowed':         _en('discount_allowed'),
+                'final_package':            _en('final_package'),
+                'additional_package_notes': _ef('additional_package_notes'),
+                'lead_source':              _ef('source') or _ef('lead_source'),
+                'additional_notes':         _ef('notes') or _ef('additional_notes'),
+            }
+            for i in (1, 2, 3, 4):
+                edited[f'inst{i}_amount'] = _en(f'inst{i}_amount')
+                edited[f'inst{i}_date']   = _ef(f'inst{i}_date')
+                edited[f'inst{i}_note']   = _ef(f'inst{i}_note')
+            _ph = (request.form.get('phone') or lead['phone'] or '').lstrip('+').lstrip('0')
+            if _ph.startswith('91') and len(_ph) == 12:
+                _ph = _ph[2:]
+            if _ph and product_id:
+                inv = conn.execute(
+                    "SELECT id FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
+                    "AND COALESCE(status,'pending') <> 'cancelled' ORDER BY id DESC LIMIT 1",
+                    (_ph, product_id)).fetchone()
+                if inv:
+                    conn.execute("UPDATE client_invitations SET closure_metadata = ? WHERE id = ?",
+                                 (_json.dumps({k: v for k, v in edited.items() if v not in (None, '')}), inv['id']))
+                reg = conn.execute(
+                    "SELECT id FROM client_registrations WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
+                    (_ph, product_id)).fetchone()
+                if reg:
+                    conn.execute('''UPDATE client_registrations SET
+                        plan_type = ?, package_amount = ?, discount_allowed = ?, final_package = ?,
+                        additional_notes = ?,
+                        inst1_amount = ?, inst1_date = ?, inst1_note = ?,
+                        inst2_amount = ?, inst2_date = ?, inst2_note = ?,
+                        inst3_amount = ?, inst3_date = ?, inst3_note = ?,
+                        inst4_amount = ?, inst4_date = ?, inst4_note = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                        WHERE id = ?''',
+                        (edited['plan_type'], edited['package_amount'], edited['discount_allowed'],
+                         edited['final_package'], edited['additional_notes'],
+                         edited['inst1_amount'], edited['inst1_date'], edited['inst1_note'],
+                         edited['inst2_amount'], edited['inst2_date'], edited['inst2_note'],
+                         edited['inst3_amount'], edited['inst3_date'], edited['inst3_note'],
+                         edited['inst4_amount'], edited['inst4_date'], edited['inst4_note'],
+                         reg['id']))
+        except Exception as _pe:
+            logging.warning(f"sales_leads_edit closure persist: {_pe}")
         conn.commit()
         conn.close()
         flash('Lead updated', 'success')
@@ -25551,11 +25610,51 @@ def sales_leads_edit(lead_id):
         ).fetchall()
     else:
         owners = []
+    # Pre-fill the Service/Package + installment fields when editing. These are
+    # NOT stored on sales_leads — they live on the auto-created client invitation
+    # (closure_metadata JSON) and, once the client registers, on the
+    # client_registration row. Read both: invitation JSON as the base, then
+    # overlay the registration values (source of truth once registered).
+    closure = {}
+    try:
+        import json as _json
+        _ph = (lead['phone'] or '').lstrip('+').lstrip('0')
+        if _ph.startswith('91') and len(_ph) == 12:
+            _ph = _ph[2:]
+        if _ph and lead['product_id']:
+            inv = conn.execute(
+                "SELECT closure_metadata FROM client_invitations "
+                "WHERE client_mobile = ? AND product_id = ? "
+                "  AND COALESCE(status,'pending') <> 'cancelled' "
+                "ORDER BY id DESC LIMIT 1", (_ph, lead['product_id'])).fetchone()
+            if inv and inv['closure_metadata']:
+                try:
+                    closure = _json.loads(inv['closure_metadata']) or {}
+                except Exception:
+                    closure = {}
+            reg = conn.execute(
+                "SELECT * FROM client_registrations "
+                "WHERE mobile = ? AND product_id = ? ORDER BY id DESC LIMIT 1",
+                (_ph, lead['product_id'])).fetchone()
+            if reg:
+                closure['plan_type']        = reg['plan_type'] or closure.get('plan_type', '')
+                closure['package_amount']   = reg['package_amount'] if reg['package_amount'] is not None else closure.get('package_amount', 0)
+                closure['discount_allowed'] = reg['discount_allowed'] if reg['discount_allowed'] is not None else closure.get('discount_allowed', 0)
+                closure['final_package']    = reg['final_package'] if reg['final_package'] is not None else closure.get('final_package', 0)
+                closure['additional_notes'] = reg['additional_notes'] or closure.get('additional_notes', '')
+                for i in (1, 2, 3, 4):
+                    closure[f'inst{i}_amount'] = reg[f'inst{i}_amount'] if reg[f'inst{i}_amount'] is not None else closure.get(f'inst{i}_amount', 0)
+                    closure[f'inst{i}_date']   = reg[f'inst{i}_date'] or closure.get(f'inst{i}_date', '')
+                    closure[f'inst{i}_note']   = reg[f'inst{i}_note'] or closure.get(f'inst{i}_note', '')
+    except Exception as _ce:
+        logging.warning(f"sales_leads_edit closure prefill: {_ce}")
+        closure = {}
     conn.close()
     return render_template('sales_lead_form.html', user=user, lead=lead, mode='edit',
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=already_has_closure,
+                           closure=closure,
                            lead_sources=get_lookup_options('lead_source'),
                     active_section='sales')
 
