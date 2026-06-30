@@ -26003,6 +26003,81 @@ def sales_leads_delete(lead_id):
     return redirect(url_for('sales_leads_list'))
 
 
+@app.route('/sales/leads/<int:lead_id>/resend-invite', methods=['POST'])
+@login_required
+@sales_write_required
+def sales_leads_resend_invite(lead_id):
+    """Resend the client registration link for a closed lead. Finds the
+    invitation by mobile + product, re-syncs the counsellor to the lead's
+    current owner (on the invitation and any registration created from it),
+    then re-sends the email + WhatsApp."""
+    user = get_user()
+    role = get_sales_role(user)
+    visible_ids = get_visible_sales_employee_ids(user)
+    conn = get_db()
+    lead = conn.execute('SELECT * FROM sales_leads WHERE id = ?', (lead_id,)).fetchone()
+    if not lead:
+        conn.close(); flash('Lead not found', 'error'); return redirect(url_for('sales_leads_list'))
+    if lead['owner_employee_id'] not in visible_ids and role != 'admin':
+        conn.close(); flash('Access denied', 'error'); return redirect(url_for('sales_leads_list'))
+
+    ph = (lead['phone'] or '').lstrip('+').lstrip('0')
+    if ph.startswith('91') and len(ph) == 12:
+        ph = ph[2:]
+    inv = None
+    if ph and lead['product_id']:
+        inv = conn.execute(
+            "SELECT * FROM client_invitations WHERE client_mobile = ? AND product_id = ? "
+            "AND COALESCE(status,'pending') <> 'cancelled' ORDER BY id DESC LIMIT 1",
+            (ph, lead['product_id'])).fetchone()
+    if not inv:
+        conn.close()
+        flash('No invitation exists for this lead yet — move it to a Won stage (or use Add Closed Client) to generate one.', 'warning')
+        return redirect(url_for('sales_leads_list'))
+
+    # Counsellor = the lead's current owner. Re-sync it onto the invitation and
+    # any registration created from it, so the client portal + email show the
+    # right counsellor even when an old invitation was reused.
+    owner_id = lead['owner_employee_id']
+    svc_name, cns_name = '', ''
+    pr = conn.execute("SELECT name FROM products_services WHERE id = ?", (lead['product_id'],)).fetchone()
+    if pr: svc_name = pr['name'] or ''
+    if owner_id:
+        em = conn.execute("SELECT name FROM employees WHERE id = ?", (owner_id,)).fetchone()
+        if em: cns_name = em['name'] or ''
+        try:
+            conn.execute("UPDATE client_invitations SET invited_by = ? WHERE id = ?", (owner_id, inv['id']))
+            conn.execute(
+                "UPDATE client_registrations SET counsellor_id = ?, counsellor_name = ? "
+                "WHERE mobile = ? AND product_id = ?", (owner_id, cns_name, ph, lead['product_id']))
+            conn.commit()
+        except Exception as e:
+            logging.warning(f"resend-invite counsellor resync: {e}")
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+
+    invite_url = f"https://goocampus.org/client/register/{inv['token']}"
+    wa_ok = email_ok = False
+    try:
+        if inv['client_mobile']:
+            wa_ok = _send_client_invite_wa(inv['client_mobile'], inv['client_name'], invite_url)
+    except Exception as e:
+        logging.error(f"resend-invite WA: {e}")
+    try:
+        if inv['client_email']:
+            email_ok = _send_client_invite_email(inv['client_email'], inv['client_name'], invite_url,
+                                                 service_name=svc_name, counsellor_name=cns_name)
+    except Exception as e:
+        logging.error(f"resend-invite email: {e}")
+    sent = (['WhatsApp'] if wa_ok else []) + (['email'] if email_ok else [])
+    if sent:
+        flash(f"Invitation resent via {' + '.join(sent)} to {inv['client_name']}. Link: {invite_url}", 'success')
+    else:
+        flash(f"Couldn't auto-send (check WhatsApp/email setup) — share this link manually: {invite_url}", 'warning')
+    return redirect(url_for('sales_leads_list'))
+
+
 # ---- Product lookup API (for lead form auto-fill) ----------------------
 @app.route('/sales/api/product/<int:pid>')
 @login_required
