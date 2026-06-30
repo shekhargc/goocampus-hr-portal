@@ -365,6 +365,8 @@ const LEAVE_REQUESTS = {
         late_reason: {{ (leave.late_reason or '')|tojson }},
         is_late: {{ 'true' if leave.is_late else 'false' }},
         status: {{ (leave.status or '')|tojson }},
+        cancel_requested: {{ (leave.cancel_requested or 0)|tojson }},
+        cancel_reason: {{ (leave.cancel_reason or '')|tojson }},
         original_id: {{ (leave.original_id or 0)|tojson }},
         modification_reason: {{ (leave.modification_reason or '')|tojson }},
         original_reason: {{ (leave.original_reason or '')|tojson }},
@@ -473,17 +475,27 @@ function openLeaveDetail(reqId) {
         }
     }
     if (isActive) {
+        if (r.cancel_requested) {
+            actionsHtml += `<div style="flex-basis:100%;font-size:0.8rem;color:#92400E;background:#FEF3C7;border:1px solid #FDE68A;border-radius:6px;padding:6px 10px;margin-bottom:4px;"><strong>Cancellation requested</strong>${r.cancel_reason ? ' — ' + escapeHtml(r.cancel_reason) : ''}</div>`;
+        }
         const pastNote = isFuture ? '' : ' (this date has already passed)';
         const cancelConfirm = (r.group_count > 1
             ? `Cancel all ${r.group_count} day(s) for ${escapeHtml(r.name)}`
             : `Cancel this leave for ${escapeHtml(r.name)} on ${escapeHtml(r.leave_date)}`) + pastNote + '?';
-        const cancelLabel = isFuture ? 'Cancel' : 'Cancel (past)';
+        const cancelLabel = r.cancel_requested ? 'Approve cancellation' : (isFuture ? 'Cancel' : 'Cancel (past)');
         actionsHtml += `
             <form method="POST" action="/cancel-leave/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}" style="flex:1;"
-                  onsubmit="var rs=prompt('Reason for cancelling this leave:',''); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cancelConfirm}');">
+                  onsubmit="var rs=prompt('Reason for cancelling this leave:', ${JSON.stringify(r.cancel_reason || '')}); if(rs===null){return false;} this.cancel_reason.value=rs; return confirm('${cancelConfirm}');">
                 <input type="hidden" name="cancel_reason" value="">
                 <button type="submit" class="btn-action" style="width:100%;background:#FEF2F2;color:#DC2626;border:1px solid #FECACA;">${cancelLabel}</button>
             </form>`;
+        if (r.cancel_requested) {
+            actionsHtml += `
+                <form method="POST" action="/decline-cancel-request/${r.group_ids[0]}?group_id=${encodeURIComponent(r.group_id)}"
+                      onsubmit="return confirm('Decline this cancellation request? The leave stays as is.');">
+                    <button type="submit" class="btn-action" style="background:#F3F4F6;color:#374151;border:1px solid #D1D5DB;">Decline request</button>
+                </form>`;
+        }
     }
     const delLabel = r.group_count > 1 ? `Delete all ${r.group_count} records` : `Delete`;
     const delConfirm = r.group_count > 1

@@ -4048,7 +4048,7 @@ def cancel_leave(leave_id):
     ids = [r['id'] for r in cancellable]
     ph = ','.join(['?'] * len(ids))
     conn.execute(
-        f"UPDATE leave_records SET status='cancelled', modification_reason=?, approved_at=? WHERE id IN ({ph})",
+        f"UPDATE leave_records SET status='cancelled', modification_reason=?, approved_at=?, cancel_requested=0 WHERE id IN ({ph})",
         [reason, now_str] + ids)
     conn.commit()
 
@@ -4112,6 +4112,104 @@ def retrieve_leave(leave_id):
 
     flash('Leave retrieved successfully', 'success')
     return redirect(url_for('my_leave_report'))
+
+
+@app.route('/request-cancel-leave/<int:leave_id>', methods=['POST'])
+@login_required
+def request_cancel_leave(leave_id):
+    """A team member requests cancellation of a PAST (date-passed) leave they
+    forgot to cancel. The leave keeps counting until a manager/admin approves
+    (by cancelling) or declines the request."""
+    user = get_user()
+    conn = get_db()
+    leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
+    if not leave or leave['employee_id'] != user['id']:
+        flash('Leave not found or not yours', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_applications'))
+    reason = (request.form.get('cancel_reason') or '').strip()
+    if not reason:
+        flash('Please give a reason for the cancellation request.', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_applications'))
+    group_id = request.args.get('group_id') or leave['leave_group_id']
+    today_str = datetime.now().strftime('%Y-%m-%d')
+    if group_id:
+        rows = conn.execute("SELECT * FROM leave_records WHERE leave_group_id = ? AND employee_id = ?",
+                            (group_id, user['id'])).fetchall()
+    else:
+        rows = [leave]
+    targets = [r for r in rows if r['status'] in ('approved', 'pending')
+               and str(r['leave_date']) < today_str and not r['cancel_requested']]
+    if not targets:
+        flash('Nothing to request — these days are upcoming, already cancelled, or already requested.', 'error')
+        conn.close()
+        return redirect(url_for('my_leave_applications'))
+    now_str = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+    ids = [r['id'] for r in targets]
+    ph = ','.join(['?'] * len(ids))
+    conn.execute(f"UPDATE leave_records SET cancel_requested=1, cancel_reason=?, cancel_requested_by=?, "
+                 f"cancel_requested_at=? WHERE id IN ({ph})", [reason, user['id'], now_str] + ids)
+    conn.commit()
+    # Notify the reporting manager (in-app + email) so they can approve/decline.
+    try:
+        dr = sorted(str(r['leave_date']) for r in targets)
+        dl = dr[0] if len(dr) == 1 else f"{dr[0]} to {dr[-1]} ({len(dr)} days)"
+        if user.get('reporting_to'):
+            create_notification(conn, user['reporting_to'], 'Leave Cancellation Requested',
+                f"{user['name']} requested to cancel a past leave ({targets[0]['leave_type']}, {dl}). Reason: {reason}",
+                'warning', '/admin/pending-approvals')
+            conn.commit()
+            mgr = conn.execute("SELECT email FROM employees WHERE id = ?", (user['reporting_to'],)).fetchone()
+            if mgr and mgr['email']:
+                from email_utils import send_email
+                send_email([mgr['email']], f"Cancellation request — {user['name']} ({dl})",
+                    f"<div style='font-family:Arial,sans-serif;font-size:14px;color:#333;'>"
+                    f"<p>{user['name']} has requested to cancel a PAST leave they didn't take:</p>"
+                    f"<ul><li>Type: {targets[0]['leave_type']}</li><li>Date(s): {dl}</li>"
+                    f"<li>Reason: {reason}</li></ul>"
+                    f"<p>Open the leave in the portal and either <strong>Cancel (past)</strong> to approve, or <strong>Decline</strong>.</p></div>")
+    except Exception as e:
+        logging.warning(f"request_cancel_leave notify: {e}")
+    conn.close()
+    flash('Cancellation request sent to your reporting manager for approval.', 'success')
+    return redirect(url_for('my_leave_applications'))
+
+
+@app.route('/decline-cancel-request/<int:leave_id>', methods=['POST'])
+@login_required
+def decline_cancel_request(leave_id):
+    """Manager/admin declines a pending past-leave cancellation request; the
+    leave stays as it was."""
+    user = get_user()
+    conn = get_db()
+    leave = conn.execute('SELECT * FROM leave_records WHERE id = ?', (leave_id,)).fetchone()
+    if not leave:
+        flash('Leave not found', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+    allowed, _emp = _leave_action_allowed(user, leave, conn)
+    if not allowed or leave['employee_id'] == user['id']:
+        flash('Only the reporting manager or an admin can decline a cancellation request', 'error')
+        conn.close()
+        return redirect(request.referrer or url_for('pending_approvals'))
+    group_id = request.args.get('group_id') or leave['leave_group_id']
+    if group_id:
+        conn.execute("UPDATE leave_records SET cancel_requested=0 WHERE leave_group_id=? AND employee_id=?",
+                     (group_id, leave['employee_id']))
+    else:
+        conn.execute("UPDATE leave_records SET cancel_requested=0 WHERE id=?", (leave_id,))
+    conn.commit()
+    try:
+        create_notification(conn, leave['employee_id'], 'Cancellation Request Declined',
+            f"Your request to cancel the {leave['leave_type']} leave on {leave['leave_date']} was declined by {user['name']}.",
+            'error', '/my-leaves')
+        conn.commit()
+    except Exception:
+        pass
+    conn.close()
+    flash('Cancellation request declined.', 'success')
+    return redirect(request.referrer or url_for('pending_approvals'))
 
 
 @app.route('/modify-leave/<int:leave_id>', methods=['GET', 'POST'])
@@ -28001,6 +28099,26 @@ def ensure_attendance_table():
         logging.error(f"ensure_attendance_table: {e}")
 
 
+def ensure_leave_cancel_request_columns():
+    """Migration: columns for the 'request cancellation of a past leave' flow.
+    The leave stays 'approved' (still counts) while a request is pending; a
+    manager/admin then cancels (approve) or declines."""
+    conn = get_db()
+    for ddl in (
+        "ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS cancel_requested INTEGER DEFAULT 0",
+        "ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS cancel_reason TEXT",
+        "ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS cancel_requested_by INTEGER",
+        "ALTER TABLE leave_records ADD COLUMN IF NOT EXISTS cancel_requested_at TEXT",
+    ):
+        try:
+            conn.execute(ddl)
+            conn.commit()
+        except Exception:
+            try: conn.rollback()
+            except Exception: pass
+    conn.close()
+
+
 def ensure_leave_group_column():
     """Migration: add leave_group_id column to leave_records and backfill existing multi-day leaves."""
     try:
@@ -29004,6 +29122,7 @@ except Exception as _sync_err:
     logging.error(f"Startup stream->category sync failed: {_sync_err}")
 ensure_management_admins()
 ensure_leave_group_column()
+ensure_leave_cancel_request_columns()
 ensure_attendance_table()
 
 # ═══════════════════════════════════════════════════════════════
