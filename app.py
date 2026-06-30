@@ -25339,6 +25339,7 @@ def sales_leads_add():
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=False,
+                           lead_sources=get_lookup_options('lead_source'),
                     active_section='sales')
 
 
@@ -25486,6 +25487,7 @@ def sales_leads_edit(lead_id):
                            stages=stages, products=products, streams=streams, owners=owners,
                            role=role, won_stage_ids=won_stage_ids,
                            already_has_closure=already_has_closure,
+                           lead_sources=get_lookup_options('lead_source'),
                     active_section='sales')
 
 
@@ -25512,19 +25514,40 @@ def sales_leads_delete(lead_id):
 def sales_product_info(pid):
     conn = get_db()
     row = conn.execute(
-        'SELECT id, name, revenue_stream_id, sale_price, product_cost FROM products_services WHERE id = ?',
+        "SELECT id, name, revenue_stream_id, sale_price, product_cost, COALESCE(pathway,'plab') AS pathway FROM products_services WHERE id = ?",
         (pid,)
     ).fetchone()
-    conn.close()
     if not row:
+        conn.close()
         return jsonify({'error': 'not found'}), 404
+    pw = row['pathway'] or 'plab'
+    # Plan types for this product (drives the Plan Type cascade on the sales
+    # closed-client form). Fall back to the pathway's full plan list when the
+    # product has no product-specific plans.
+    try:
+        plans = conn.execute(
+            "SELECT value FROM lookup_options WHERE category='plan_type' "
+            "AND COALESCE(pathway,'plab')=? AND COALESCE(product_name,'')=? "
+            "AND COALESCE(is_active,true) IS NOT FALSE ORDER BY value", (pw, row['name'])).fetchall()
+        plan_types = [r['value'] for r in plans if r['value']]
+        if not plan_types:
+            plans = conn.execute(
+                "SELECT value FROM lookup_options WHERE category='plan_type' "
+                "AND COALESCE(pathway,'plab')=? AND COALESCE(is_active,true) IS NOT FALSE "
+                "ORDER BY value", (pw,)).fetchall()
+            plan_types = [r['value'] for r in plans if r['value']]
+    except Exception:
+        plan_types = []
+    conn.close()
     return jsonify({
         'id': row['id'],
         'name': row['name'],
         'stream_id': row['revenue_stream_id'],
         'sale_price': float(row['sale_price'] or 0),
         'product_cost': float(row['product_cost'] or 0),
-        'margin': float((row['sale_price'] or 0) - (row['product_cost'] or 0))
+        'margin': float((row['sale_price'] or 0) - (row['product_cost'] or 0)),
+        'pathway': pw,
+        'plan_types': plan_types,
     })
 
 
